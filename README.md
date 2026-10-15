@@ -1,5 +1,32 @@
 # 회화 연습 프로그램 (영어·일본어)
 
+한국어 사용자를 위한 Windows용 영어·일본어 말하기 연습 프로그램입니다. 1년 커리큘럼을 따라 매일 레슨을 풀고, AI 원어민과 대화하고, 내 발음을 녹음해 채점받습니다. 음성 인식·목소리·발음 채점은 내 PC 안에서 돌아가고 비용이 들지 않습니다.
+
+- **다운로드:** https://github.com/Whahan/hoehwa-practice/releases/latest
+- **저장소:** https://github.com/Whahan/hoehwa-practice
+
+![원어민 대화](screenshots/원어민대화.png)
+![발음 채점](screenshots/발음채점.png)
+
+## 할 수 있는 것
+
+| 기능 | 내용 |
+|---|---|
+| 오늘 | 12개월 커리큘럼에서 오늘이 몇 개월차 몇 주차인지, 이번 주 할 일, 연속 공부 일수 |
+| 레슨 | 실제 예문(Tatoeba)으로 매번 새로 만드는 문제 10개: 고르기, 빈칸, 문장 조립, 듣기, 따라 말하기. 정답이 틀릴 일이 없고 바로 만들어집니다. AI 레슨도 선택 가능 |
+| 원어민 대화 | 카페 점원, 편의점 직원 같은 역할을 맡은 AI와 말로 대화. 틀린 문장은 몇 초 뒤 초록색 상자로 고쳐 주고, 끝나면 피드백 |
+| 발음 채점 | 녹음한 내 목소리를 정확도·또렷함·유창성으로 채점. 영어는 억양 그래프(원어민과 내 높낮이 비교)와 소리 단위(음소) 교정까지 |
+| 읽기 | 글을 붙여 넣으면 어려운 단어를 색으로 표시. 누르면 뜻·발음·실제 예문, 복습 목록에 바로 추가 |
+| 복습 | 잊어버릴 때쯤 다시 나오는 간격 반복(FSRS). 레슨에서 틀린 문장, 대화에서 고친 문장, 읽기에서 모은 단어가 쌓입니다 |
+| 로드맵 | 12개월 커리큘럼과 월별 체크리스트 |
+
+## 필요한 것
+
+- Windows 10/11 64비트, 저장 공간 약 15~20GB
+- 마이크
+- 인터넷: 설치할 때, 그리고 기본 AI 엔진(DeepSeek 무료)을 쓸 때
+- NVIDIA 그래픽카드: 없어도 되지만 있으면 음성 인식이 빠릅니다. 오프라인 로컬 AI를 고르면 권장
+
 ## 설치/업데이트
 
 **처음 설치 (한 번만)**
@@ -71,3 +98,24 @@
 | `API.md` | 화면과 서버 사이의 API 규칙 |
 
 다시 설치하려면 PowerShell에서 `backend\setup.ps1`을 실행합니다.
+
+## 사용한 공개 자료와 라이선스
+
+이 프로그램은 다음 공개 프로젝트와 자료를 사용합니다. 각 라이선스를 따릅니다.
+
+| 이름 | 쓰는 곳 | 라이선스 |
+|---|---|---|
+| [Tatoeba](https://tatoeba.org) 예문 | 레슨·읽기 예문 | CC BY 2.0 FR (예문 화면에 출처 표시) |
+| [Godot Engine](https://godotengine.org) | 화면 | MIT |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) / Whisper | 음성 인식 | MIT |
+| [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) | 원어민 목소리 | Apache 2.0 |
+| [wav2vec2 espeak](https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft) | 음소 발음 채점 | Apache 2.0 |
+| [LanguageTool](https://languagetool.org) | 문법 교정 (설치 때 내려받음) | LGPL 2.1 |
+| [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) | 복습 주기 알고리즘 (GDScript로 옮김) | MIT |
+| [pyopenjtalk](https://github.com/r9y9/pyopenjtalk), [spaCy](https://spacy.io), [wordfreq](https://github.com/rspeer/wordfreq) | 일본어 읽기, 단어 원형, 단어 빈도 | 각 프로젝트 라이선스 |
+| [Ollama](https://ollama.com) + Qwen3 8B | 오프라인 로컬 AI | MIT / Apache 2.0 |
+| [OpenCode](https://opencode.ai) (DeepSeek V4.1 Flash 무료) | 기본 AI 엔진 (각 사용자 본인 계정) | OpenCode 이용약관 |
+
+## 라이선스
+
+이 프로그램의 코드는 [MIT 라이선스](LICENSE)입니다. 위 표의 공개 자료와 프로그램은 각자의 라이선스를 따릅니다.
