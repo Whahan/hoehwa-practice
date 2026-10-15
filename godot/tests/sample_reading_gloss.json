@@ -1,0 +1,60 @@
+{
+ "glosses": [
+  {
+   "lemma": "run",
+   "pos": "동사",
+   "ko": "달리다",
+   "ipa": "/rʌn/",
+   "note": "go running = 달리기를 하러 가다"
+  },
+  {
+   "lemma": "reckless",
+   "pos": "형용사",
+   "ko": "무모한",
+   "ipa": "/ˈrɛkləs/",
+   "note": "위험을 생각하지 않는다는 부정적 뉘앙스"
+  },
+  {
+   "lemma": "untangle",
+   "pos": "동사",
+   "ko": "(엉킨 것을) 풀다",
+   "ipa": "/ʌnˈtæŋɡəl/",
+   "note": "생각·문제를 정리한다는 뜻으로도 써요"
+  },
+  {
+   "lemma": "footstep",
+   "pos": "명사",
+   "ko": "발소리, 발걸음",
+   "ipa": "/ˈfʊtstɛp/",
+   "note": ""
+  },
+  {
+   "lemma": "dissolve",
+   "pos": "동사",
+   "ko": "사라지다, 녹다",
+   "ipa": "/dɪˈzɒlv/",
+   "note": "걱정·감정이 서서히 사라질 때도 써요"
+  },
+  {
+   "lemma": "stubborn",
+   "pos": "형용사",
+   "ko": "잘 풀리지 않는, 완고한",
+   "ipa": "/ˈstʌbərn/",
+   "note": ""
+  },
+  {
+   "lemma": "neighbour",
+   "pos": "명사",
+   "ko": "이웃",
+   "ipa": "/ˈneɪbər/",
+   "note": "미국식 철자는 neighbor"
+  },
+  {
+   "lemma": "rhythm",
+   "pos": "명사",
+   "ko": "리듬",
+   "ipa": "/ˈrɪðəm/",
+   "note": ""
+  }
+ ]
+}

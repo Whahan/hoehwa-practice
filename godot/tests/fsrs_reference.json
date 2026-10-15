@@ -1,0 +1,4203 @@
+{
+ "generator": "py-fsrs 6.3.2",
+ "t0": 1767225600,
+ "params": {
+  "parameters": [
+   0.212,
+   1.2931,
+   2.3065,
+   8.2956,
+   6.4133,
+   0.8334,
+   3.0194,
+   0.001,
+   1.8722,
+   0.1666,
+   0.796,
+   1.4835,
+   0.0614,
+   0.2629,
+   1.6483,
+   0.6014,
+   1.8729,
+   0.5425,
+   0.0912,
+   0.0658,
+   0.1542
+  ],
+  "desired_retention": 0.9,
+  "learning_steps_sec": [
+   60,
+   600
+  ],
+  "relearning_steps_sec": [
+   600
+  ],
+  "maximum_interval": 36500,
+  "fuzz": false
+ },
+ "cases": [
+  {
+   "name": "all good, on time",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 950400,
+     "interval": 3974400,
+     "stability": 46.316858440073425,
+     "difficulty": 2.0974554287524403,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3974400,
+     "interval": 14083200,
+     "stability": 162.99981577472244,
+     "difficulty": 2.0905863426205262,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 14083200,
+     "interval": 43027200,
+     "stability": 497.8765551245907,
+     "difficulty": 2.083724125574744,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 43027200,
+     "interval": 116467200,
+     "stability": 1347.918623024373,
+     "difficulty": 2.0768687707460076,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 116467200,
+     "interval": 285033600,
+     "stability": 3298.6456099035986,
+     "difficulty": 2.0700202712721,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 285033600,
+     "interval": 640656000,
+     "stability": 7414.533387817105,
+     "difficulty": 2.0631786202976663,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 640656000,
+     "interval": 1339545600,
+     "stability": 15504.174194818168,
+     "difficulty": 2.056343810974207,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1339545600,
+     "interval": 2632953600,
+     "stability": 30474.466210450308,
+     "difficulty": 2.049515836460071,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2632953600,
+     "interval": 3153600000,
+     "stability": 56786.40798084254,
+     "difficulty": 2.0426946899204492,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "all easy, on time",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 691200,
+     "interval": 5702400,
+     "stability": 65.62422616189994,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 5702400,
+     "interval": 34300800,
+     "stability": 396.7750233497581,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 34300800,
+     "interval": 162000000,
+     "stability": 1874.9169554074524,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 162000000,
+     "interval": 627696000,
+     "stability": 7265.432894791257,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 627696000,
+     "interval": 2067811200,
+     "stability": 23932.922499822544,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 2067811200,
+     "interval": 3153600000,
+     "stability": 68949.18220077343,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 135806.9865065576,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 201827.87661845866,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 266005.83566347085,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "all hard, on time",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 6.7404595108297,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 7.821393497998797,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 8.538967850205447,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 9.015327144165033,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 9.331556641838505,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 9.541484518688746,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 9.680844425980998,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 9.773358026613275,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 9.83477286584677,
+     "state": 1,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "again first then good",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 600,
+     "stability": 0.24668918777567272,
+     "difficulty": 6.402115069296838,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.2842063592758949,
+     "difficulty": 6.3909413235243795,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 172800,
+     "stability": 2.1520782454047453,
+     "difficulty": 6.379778751497693,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 604800,
+     "stability": 6.624321210928598,
+     "difficulty": 6.368627342043034,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 604800,
+     "interval": 1641600,
+     "stability": 19.169022904158798,
+     "difficulty": 6.357487083997829,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "hard first, good, good",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 330,
+     "interval": 600,
+     "stability": 1.3358997622047517,
+     "difficulty": 5.102286904192293,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 1.3771622371865915,
+     "difficulty": 5.0924129865849395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 432000,
+     "stability": 4.655957768535494,
+     "difficulty": 5.082548942895193,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 432000,
+     "interval": 1468800,
+     "stability": 16.73958206104493,
+     "difficulty": 5.072694763249136,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "easy first",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 691200,
+     "interval": 3369600,
+     "stability": 38.90514998232684,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3369600,
+     "interval": 13219200,
+     "stability": 153.00006571733257,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 13219200,
+     "interval": 70934400,
+     "stability": 820.7828490530677,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 70934400,
+     "interval": 195868800,
+     "stability": 2266.884153353123,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "lapse in review",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 950400,
+     "interval": 3974400,
+     "stability": 46.316858440073425,
+     "difficulty": 2.0974554287524403,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 3974400,
+     "interval": 600,
+     "stability": 2.9338452901880046,
+     "difficulty": 7.387715706030851,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 259200,
+     "stability": 2.9338452901880046,
+     "difficulty": 7.375556359621658,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 259200,
+     "interval": 691200,
+     "stability": 7.799102228394648,
+     "difficulty": 7.363409172558875,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 691200,
+     "interval": 1641600,
+     "stability": 18.84991601950064,
+     "difficulty": 7.351274132683154,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1641600,
+     "interval": 3628800,
+     "stability": 41.6976028269057,
+     "difficulty": 7.339151227847309,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "repeated lapses",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 950400,
+     "interval": 600,
+     "stability": 1.53901253028147,
+     "difficulty": 7.389975788014609,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 0.531128080334255,
+     "difficulty": 9.12733115898188,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.5817927501903759,
+     "difficulty": 9.113432197119735,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 86400,
+     "interval": 600,
+     "stability": 0.20946865929057376,
+     "difficulty": 9.693819561151155,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.2439363791442612,
+     "difficulty": 9.679354110886841,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 86400,
+     "stability": 0.7516751092842913,
+     "difficulty": 9.664903126072792,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 86400,
+     "stability": 1.4422710591293315,
+     "difficulty": 9.650466592243557,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "same-day relearning (short-term stability)",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 3.3271887571254206,
+     "difficulty": 7.389975788014609,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 259200,
+     "stability": 3.3271887571254206,
+     "difficulty": 7.377814181523433,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 300,
+     "interval": 259200,
+     "stability": 3.3271887571254206,
+     "difficulty": 7.365664736638748,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 120,
+     "interval": 259200,
+     "stability": 3.3271887571254206,
+     "difficulty": 8.236433861454366,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 900,
+     "interval": 518400,
+     "stability": 5.556696214923849,
+     "difficulty": 7.632360609431308,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "learning steps repeated again",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 60,
+     "interval": 60,
+     "stability": 0.08335671711031604,
+     "difficulty": 8.806304468856837,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 60,
+     "interval": 60,
+     "stability": 0.03485140985964798,
+     "difficulty": 9.592868765339693,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 60,
+     "interval": 330,
+     "stability": 0.03485140985964798,
+     "difficulty": 9.714955683413791,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 120,
+     "interval": 330,
+     "stability": 0.03485140985964798,
+     "difficulty": 9.796002668881759,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 600,
+     "stability": 0.04566983117260317,
+     "difficulty": 9.781435035509714,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 86400,
+     "stability": 0.058791283965570755,
+     "difficulty": 9.766881969771042,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 86400,
+     "stability": 0.30786574523844634,
+     "difficulty": 9.752343457098108,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "learning hard repeat then easy",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 6.7404595108297,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 330,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 7.821393497998797,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 330,
+     "interval": 172800,
+     "stability": 2.2981513617969918,
+     "difficulty": 7.078633097389827,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 518400,
+     "stability": 6.119266926345521,
+     "difficulty": 7.066782833589276,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "learning delayed >1 day",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 259200,
+     "interval": 1209600,
+     "stability": 13.826903694354568,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 1900800,
+     "stability": 22.206974346454885,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1900800,
+     "interval": 7344000,
+     "stability": 85.27829403523096,
+     "difficulty": 2.0974554287524403,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 7344000,
+     "interval": 24192000,
+     "stability": 279.8406201302314,
+     "difficulty": 2.0905863426205262,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "learning step1 delayed then again",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 1,
+     "elapsed": 172800,
+     "interval": 60,
+     "stability": 0.6075801062519337,
+     "difficulty": 7.394502741279718,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 600,
+     "stability": 0.6596743320386499,
+     "difficulty": 7.382336607835277,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.7123687390456581,
+     "difficulty": 7.37018264052428,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 259200,
+     "stability": 2.572709630142675,
+     "difficulty": 7.358040827180594,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "very late reviews",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 34560000,
+     "interval": 5702400,
+     "stability": 65.65392116754259,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 77760000,
+     "interval": 56073600,
+     "stability": 648.5168922724915,
+     "difficulty": 2.0974554287524403,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 172800000,
+     "interval": 600,
+     "stability": 8.747839510184718,
+     "difficulty": 7.387715706030851,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 777600,
+     "stability": 8.747839510184718,
+     "difficulty": 7.375556359621658,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "very early reviews",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 7200,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 18000,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.0974554287524403,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 604800,
+     "stability": 7.326945153189931,
+     "difficulty": 2.0905863426205262,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 72000,
+     "interval": 604800,
+     "stability": 7.326945153189931,
+     "difficulty": 2.083724125574744,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "easy ladder long run",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 691200,
+     "interval": 5702400,
+     "stability": 65.62422616189994,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 5702400,
+     "interval": 34300800,
+     "stability": 396.7750233497581,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 34300800,
+     "interval": 102470400,
+     "stability": 1186.001320566745,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 102470400,
+     "interval": 272246400,
+     "stability": 3150.9038193648107,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 272246400,
+     "interval": 655516800,
+     "stability": 7587.032072810412,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 655516800,
+     "interval": 1452729600,
+     "stability": 16813.79567329887,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1452729600,
+     "interval": 3000067200,
+     "stability": 34722.839063238054,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3000067200,
+     "interval": 3153600000,
+     "stability": 67498.30972217237,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 103177.74425652823,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 138829.85360838124,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 174037.2734813025,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 208719.44414297628,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 242885.0866081322,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3153600000,
+     "interval": 3153600000,
+     "stability": 276567.2108853427,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "hard after lapse",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 950400,
+     "interval": 600,
+     "stability": 1.53901253028147,
+     "difficulty": 7.389975788014609,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 900,
+     "stability": 1.53901253028147,
+     "difficulty": 8.252572670252656,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 900,
+     "interval": 900,
+     "stability": 1.53901253028147,
+     "difficulty": 8.825204677696984,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 900,
+     "interval": 172800,
+     "stability": 1.5718415897918614,
+     "difficulty": 8.811607842316125,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 172800,
+     "interval": 432000,
+     "stability": 5.3771202963614515,
+     "difficulty": 8.39973093158956,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "relearning hard/again",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 950400,
+     "interval": 600,
+     "stability": 1.53901253028147,
+     "difficulty": 7.389975788014609,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 900,
+     "stability": 1.53901253028147,
+     "difficulty": 8.252572670252656,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 0.531128080334255,
+     "difficulty": 9.410860888514728,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 900,
+     "stability": 0.531128080334255,
+     "difficulty": 9.59413037321032,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.5817927501903759,
+     "difficulty": 9.579764612133946,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 86400,
+     "stability": 1.2816680548365442,
+     "difficulty": 9.56541321681865,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "relearning easy shortcut",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 950400,
+     "interval": 600,
+     "stability": 1.53901253028147,
+     "difficulty": 7.389975788014609,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 259200,
+     "stability": 2.7040426177990873,
+     "difficulty": 6.503055692794208,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 259200,
+     "interval": 777600,
+     "stability": 8.677224430684275,
+     "difficulty": 6.491781006398252,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "lots of easies late",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 691200,
+     "interval": 5702400,
+     "stability": 65.62422616189994,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 5702400,
+     "interval": 34300800,
+     "stability": 396.7750233497581,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 34300800,
+     "interval": 162000000,
+     "stability": 1874.9169554074524,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 162000000,
+     "interval": 627696000,
+     "stability": 7265.432894791257,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 259200000,
+     "interval": 1348790400,
+     "stability": 15610.729524003293,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 0",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 330,
+     "interval": 600,
+     "stability": 1.3358997622047517,
+     "difficulty": 5.102286904192293,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 1.3771622371865915,
+     "difficulty": 5.0924129865849395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 432000,
+     "stability": 4.655957768535494,
+     "difficulty": 5.082548942895193,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 7018645,
+     "interval": 4406400,
+     "stability": 50.656096773552946,
+     "difficulty": 5.072694763249136,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 264517,
+     "interval": 5011200,
+     "stability": 57.68273691213052,
+     "difficulty": 5.062850437782726,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 4360618,
+     "interval": 12268800,
+     "stability": 142.31563677828407,
+     "difficulty": 5.053015956641781,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 12268800,
+     "interval": 29548800,
+     "stability": 341.62463715972996,
+     "difficulty": 5.043191309981978,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 29548800,
+     "interval": 65404800,
+     "stability": 756.7823705263381,
+     "difficulty": 5.033376487968835,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 65404800,
+     "interval": 135043200,
+     "stability": 1563.1834229346182,
+     "difficulty": 5.023571480777704,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 135043200,
+     "interval": 262742400,
+     "stability": 3041.2430596671757,
+     "difficulty": 5.013776278593765,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 1",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 60,
+     "interval": 60,
+     "stability": 0.08335671711031604,
+     "difficulty": 8.806304468856837,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 60,
+     "interval": 330,
+     "stability": 0.08335671711031604,
+     "difficulty": 9.192797649512254,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 330,
+     "interval": 600,
+     "stability": 0.10314065007785231,
+     "difficulty": 9.17883322115958,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 1,
+     "elapsed": 103499,
+     "interval": 60,
+     "stability": 0.055880553151423915,
+     "difficulty": 9.715316433026087,
+     "state": 1,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "random 2",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 691200,
+     "interval": 3369600,
+     "stability": 38.90514998232684,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3369600,
+     "interval": 21859200,
+     "stability": 252.59351766241906,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 431318,
+     "interval": 22464000,
+     "stability": 260.02350376978274,
+     "difficulty": 4.010608969296839,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 22464000,
+     "interval": 85190400,
+     "stability": 986.1230122673211,
+     "difficulty": 1.994461961754711,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 73455,
+     "interval": 97804800,
+     "stability": 1132.458609692942,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 3",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 330,
+     "interval": 600,
+     "stability": 1.3358997622047517,
+     "difficulty": 5.102286904192293,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 7478,
+     "interval": 600,
+     "stability": 1.3358997622047517,
+     "difficulty": 6.733898182869418,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 1.3771622371865915,
+     "difficulty": 6.722392653983388,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 10199319,
+     "interval": 1036800,
+     "stability": 11.949228931854098,
+     "difficulty": 7.809399876508687,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 1036800,
+     "interval": 1728000,
+     "stability": 20.145287243798094,
+     "difficulty": 8.53100592535755,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1728000,
+     "interval": 3110400,
+     "stability": 36.310015267644204,
+     "difficulty": 8.51770328872903,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3110400,
+     "interval": 7430400,
+     "stability": 85.99542466729616,
+     "difficulty": 8.007617172145853,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 4",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 4.752858488532557,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 375459,
+     "interval": 1036800,
+     "stability": 12.062594904830508,
+     "difficulty": 4.743333999340863,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2069,
+     "interval": 1036800,
+     "stability": 12.062594904830508,
+     "difficulty": 4.733819034638361,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 295335,
+     "interval": 2419200,
+     "stability": 28.285959018161375,
+     "difficulty": 2.9593351293443257,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 2419200,
+     "interval": 600,
+     "stability": 2.337447456873969,
+     "difficulty": 7.671009702833439,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.337447456873969,
+     "difficulty": 7.658567062427444,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 518400,
+     "stability": 5.598686504510458,
+     "difficulty": 7.646136864661855,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 518400,
+     "interval": 1814400,
+     "stability": 20.53450122913199,
+     "difficulty": 6.844813864150792,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 1814400,
+     "interval": 6307200,
+     "stability": 73.41164114319709,
+     "difficulty": 5.775726058520755,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3483989,
+     "interval": 11836800,
+     "stability": 136.98879003828358,
+     "difficulty": 5.765178701759073,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 11836800,
+     "interval": 26524800,
+     "stability": 307.22005692815833,
+     "difficulty": 5.754641892354152,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 5",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 172800,
+     "interval": 1641600,
+     "stability": 18.534332441919037,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 209920,
+     "interval": 3110400,
+     "stability": 35.63620186175821,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3110400,
+     "interval": 12268800,
+     "stability": 142.2697974594683,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 12268800,
+     "interval": 66528000,
+     "stability": 769.9351713332949,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 6626730,
+     "interval": 76291200,
+     "stability": 882.5777019860599,
+     "difficulty": 4.010608969296839,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 76291200,
+     "interval": 250041600,
+     "stability": 2893.9463746036704,
+     "difficulty": 1.994461961754711,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 250041600,
+     "interval": 571536000,
+     "stability": 6615.466310521445,
+     "difficulty": 1.9876958690897946,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 571536000,
+     "interval": 1212451200,
+     "stability": 14033.14155836282,
+     "difficulty": 1.980936542517543,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1212451200,
+     "interval": 600,
+     "stability": 18.973478299813333,
+     "difficulty": 7.349416740453865,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 2419200,
+     "stability": 28.25769905079176,
+     "difficulty": 6.44894370159028,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 2419200,
+     "interval": 8812800,
+     "stability": 102.14269575133383,
+     "difficulty": 5.247574535182095,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 2875266,
+     "interval": 18403200,
+     "stability": 213.44678634558076,
+     "difficulty": 3.6447637771634502,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 5547221,
+     "interval": 29808000,
+     "stability": 345.02129796610996,
+     "difficulty": 3.6363473826831254,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 29808000,
+     "interval": 74476800,
+     "stability": 862.048836394156,
+     "difficulty": 3.6279394045972806,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 6",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 12607,
+     "interval": 60,
+     "stability": 0.4514029154253082,
+     "difficulty": 8.378632117467106,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 1985,
+     "interval": 600,
+     "stability": 0.4997826535901225,
+     "difficulty": 8.365481854646477,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 1,
+     "elapsed": 992807,
+     "interval": 60,
+     "stability": 0.274632652165851,
+     "difficulty": 9.447973369642522,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 6606,
+     "interval": 600,
+     "stability": 0.314173414386931,
+     "difficulty": 9.433753765569717,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.61284069088135,
+     "difficulty": 9.229769030394479,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 86400,
+     "stability": 1.494626497683393,
+     "difficulty": 9.215767630660922,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 86400,
+     "interval": 172800,
+     "stability": 2.0931865874982636,
+     "difficulty": 9.464618377301147,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3255,
+     "interval": 345600,
+     "stability": 3.6040490320873744,
+     "difficulty": 9.270947157075646,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 8949,
+     "interval": 600,
+     "stability": 1.1760654842463805,
+     "difficulty": 9.745593657386934,
+     "state": 3,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "random 7",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 691200,
+     "interval": 600,
+     "stability": 1.3886324609821161,
+     "difficulty": 7.0269895692968385,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 1.427881680763876,
+     "difficulty": 7.0151909490243805,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1347,
+     "interval": 86400,
+     "stability": 1.4655499580652358,
+     "difficulty": 7.003404127372194,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 86400,
+     "interval": 600,
+     "stability": 0.3994652583430483,
+     "difficulty": 9.00026768281601,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.4458500802568189,
+     "difficulty": 8.986495784430032,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 165601,
+     "interval": 86400,
+     "stability": 1.3780246255643531,
+     "difficulty": 8.972737657942439,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 84934,
+     "interval": 172800,
+     "stability": 2.4388538718963377,
+     "difficulty": 8.614702822948779,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 8",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 60,
+     "interval": 330,
+     "stability": 0.212,
+     "difficulty": 7.604209769076838,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 330,
+     "interval": 86400,
+     "stability": 0.42437996387663374,
+     "difficulty": 6.788876687023917,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 172800,
+     "stability": 2.3489326572380564,
+     "difficulty": 6.777316179633732,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 172800,
+     "interval": 432000,
+     "stability": 4.828635924735077,
+     "difficulty": 7.84586067227168,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 9461,
+     "interval": 432000,
+     "stability": 4.828635924735077,
+     "difficulty": 7.833243180896247,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 171504,
+     "interval": 604800,
+     "stability": 6.558804594781353,
+     "difficulty": 7.820638307012189,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3136103,
+     "interval": 2419200,
+     "stability": 28.24624813799701,
+     "difficulty": 7.808046038002015,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2419200,
+     "interval": 4838400,
+     "stability": 55.9134634120327,
+     "difficulty": 7.795466361260852,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 7634458,
+     "interval": 600,
+     "stability": 3.0887370090729416,
+     "difficulty": 9.260613153072024,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 900,
+     "stability": 3.0887370090729416,
+     "difficulty": 9.49438892487898,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 900,
+     "interval": 600,
+     "stability": 1.0181950642010436,
+     "difficulty": 9.81903744705987,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 1.8382628845719953,
+     "difficulty": 9.743796564019084,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 9",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 4.752858488532557,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 1,
+     "elapsed": 98205,
+     "interval": 60,
+     "stability": 0.5436404120678477,
+     "difficulty": 8.260528635039767,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 60,
+     "interval": 60,
+     "stability": 0.2009119930465142,
+     "difficulty": 9.41347596003969,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 9993,
+     "interval": 60,
+     "stability": 0.07927672798907981,
+     "difficulty": 9.792441905725354,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 600,
+     "stability": 0.09841676436490025,
+     "difficulty": 9.777877833116467,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 4,
+     "elapsed": 6824477,
+     "interval": 172800,
+     "stability": 1.5353496175665082,
+     "difficulty": 9.688883325133803,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 7219,
+     "interval": 172800,
+     "stability": 1.5353496175665082,
+     "difficulty": 9.778694622483608,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 172800,
+     "interval": 345600,
+     "stability": 3.6509785811345163,
+     "difficulty": 9.68997304744506,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 306746,
+     "interval": 432000,
+     "stability": 4.732989996436338,
+     "difficulty": 9.77941803093488,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 432000,
+     "interval": 518400,
+     "stability": 6.235140700558223,
+     "difficulty": 9.838795779111653,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 518400,
+     "interval": 691200,
+     "stability": 7.917467984637893,
+     "difficulty": 9.87821349535446,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 10",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 10158,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 4.752858488532557,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 6.501931317190316,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 314424,
+     "interval": 600,
+     "stability": 5.815242675301345,
+     "difficulty": 7.6630473676471516,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 1128269,
+     "interval": 600,
+     "stability": 13.699994151926928,
+     "difficulty": 8.43385030994835,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 1,
+     "elapsed": 2877,
+     "interval": 60,
+     "stability": 4.094508919986814,
+     "difficulty": 9.470445615994752,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 600,
+     "stability": 4.094508919986814,
+     "difficulty": 9.456203539675595,
+     "state": 1,
+     "step": 1
+    }
+   ]
+  },
+  {
+   "name": "random 11",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 76265,
+     "interval": 600,
+     "stability": 0.24668918777567272,
+     "difficulty": 6.402115069296838,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 4,
+     "elapsed": 8390750,
+     "interval": 950400,
+     "stability": 10.944702489771153,
+     "difficulty": 5.18509795619045,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 950400,
+     "interval": 2160000,
+     "stability": 24.835928802426253,
+     "difficulty": 6.788872018180818,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 3049561,
+     "interval": 8899200,
+     "stability": 103.02538205239522,
+     "difficulty": 5.701091054517638,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 7261418,
+     "interval": 19008000,
+     "stability": 220.06356134955502,
+     "difficulty": 5.690618332759959,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 155526,
+     "interval": 19180800,
+     "stability": 221.75105692956686,
+     "difficulty": 5.680156083724038,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 19180800,
+     "interval": 41472000,
+     "stability": 480.38787671933824,
+     "difficulty": 5.6697042969371525,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 9483621,
+     "interval": 54172800,
+     "stability": 626.645372403478,
+     "difficulty": 5.659262961937054,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 54172800,
+     "interval": 600,
+     "stability": 6.981775396183595,
+     "difficulty": 8.558457621897407,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 604800,
+     "stability": 6.981775396183595,
+     "difficulty": 8.545127533572348,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 604800,
+     "interval": 1728000,
+     "stability": 19.51643049580286,
+     "difficulty": 8.044205321645999,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 7418,
+     "interval": 1728000,
+     "stability": 19.51643049580286,
+     "difficulty": 8.03138948562119,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 387271,
+     "interval": 2160000,
+     "stability": 24.662021137930815,
+     "difficulty": 8.018586465432406,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2160000,
+     "interval": 4147200,
+     "stability": 48.112729629042605,
+     "difficulty": 8.005796248263811,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 407,
+     "interval": 4147200,
+     "stability": 48.112729629042605,
+     "difficulty": 7.993018821312386,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 4147200,
+     "interval": 10800000,
+     "stability": 124.55106554458142,
+     "difficulty": 7.307607606014751,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 9573,
+     "interval": 600,
+     "stability": 32.192242178697725,
+     "difficulty": 9.100257297662164,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 2764800,
+     "stability": 32.192242178697725,
+     "difficulty": 9.08638540966134,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 2764800,
+     "interval": 600,
+     "stability": 2.307031629809299,
+     "difficulty": 9.684929466031734,
+     "state": 3,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "random 12",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 950400,
+     "interval": 6652800,
+     "stability": 77.17021614357262,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1031,
+     "interval": 6652800,
+     "stability": 77.17021614357262,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 13",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 9084,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 950400,
+     "stability": 10.971048263078135,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 950400,
+     "interval": 2764800,
+     "stability": 32.2280185035231,
+     "difficulty": 4.743715608383524,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2764800,
+     "interval": 8035200,
+     "stability": 92.82784750907294,
+     "difficulty": 4.734200262071979,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 8035200,
+     "interval": 600,
+     "stability": 3.658040334707697,
+     "difficulty": 8.254395802878113,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 345600,
+     "stability": 3.658040334707697,
+     "difficulty": 8.241369776372073,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 345600,
+     "interval": 1036800,
+     "stability": 12.397186660935652,
+     "difficulty": 7.63894587710088,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 8180,
+     "interval": 1641600,
+     "stability": 18.987788600961192,
+     "difficulty": 6.83521998364696,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1641600,
+     "interval": 600,
+     "stability": 1.8621001298759148,
+     "difficulty": 8.944986698425705,
+     "state": 3,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "random 14",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 133421,
+     "interval": 259200,
+     "stability": 3.348709732599786,
+     "difficulty": 5.200020369516838,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 259200,
+     "interval": 950400,
+     "stability": 11.249943107231624,
+     "difficulty": 5.190048718444159,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 950400,
+     "interval": 2937600,
+     "stability": 34.402974616376596,
+     "difficulty": 5.1800870390225535,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 2937600,
+     "interval": 12614400,
+     "stability": 145.51643999155488,
+     "difficulty": 3.554725104704711,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 12614400,
+     "interval": 53827200,
+     "stability": 623.4795464675738,
+     "difficulty": 1.3862429538039844,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 7072,
+     "interval": 53827200,
+     "stability": 623.4795464675738,
+     "difficulty": 4.267015040953571,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 9420502,
+     "interval": 600,
+     "stability": 6.257862227043107,
+     "difficulty": 8.100835197555998,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 900,
+     "stability": 6.257862227043107,
+     "difficulty": 8.724474272354716,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 236747,
+     "interval": 777600,
+     "stability": 8.529825234571275,
+     "difficulty": 8.710978167379198,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 777600,
+     "interval": 1123200,
+     "stability": 13.128244221343651,
+     "difficulty": 9.129515608385748,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 4877910,
+     "interval": 600,
+     "stability": 1.8852206630980524,
+     "difficulty": 9.699106069067096,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 896209,
+     "interval": 432000,
+     "stability": 4.978289926807591,
+     "difficulty": 9.684635332294866,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 15",
+   "steps": [
+    {
+     "rating": 1,
+     "elapsed": 0,
+     "interval": 60,
+     "stability": 0.212,
+     "difficulty": 6.4133,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 367904,
+     "interval": 600,
+     "stability": 2.9939088450224105,
+     "difficulty": 6.402115069296838,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 2.9939088450224105,
+     "difficulty": 7.596784690858309,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 432000,
+     "stability": 5.034936358154173,
+     "difficulty": 6.7789704936734,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1400401,
+     "interval": 600,
+     "stability": 1.100741487018985,
+     "difficulty": 8.926497873567927,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 6349,
+     "interval": 86400,
+     "stability": 1.149289910496665,
+     "difficulty": 8.912799744991196,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 172800,
+     "stability": 2.290711778604621,
+     "difficulty": 8.899115314543042,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 345600,
+     "stability": 4.3372473530689994,
+     "difficulty": 8.885444568525337,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 112402,
+     "interval": 518400,
+     "stability": 5.501569330118319,
+     "difficulty": 8.871787493253649,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 98117,
+     "interval": 691200,
+     "stability": 7.656218643348555,
+     "difficulty": 8.48001981749867,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 306436,
+     "interval": 1209600,
+     "stability": 14.299122438353082,
+     "difficulty": 7.957341640880069,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 254390,
+     "interval": 1468800,
+     "stability": 17.157831878682206,
+     "difficulty": 7.944612668536027,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 1468800,
+     "interval": 4320000,
+     "stability": 49.88504463298878,
+     "difficulty": 7.243026372707252,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 5993,
+     "interval": 4320000,
+     "stability": 49.88504463298878,
+     "difficulty": 7.231011715631383,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 4320000,
+     "interval": 8899200,
+     "stability": 102.78147054055884,
+     "difficulty": 7.21900907321259,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 279844,
+     "interval": 9504000,
+     "stability": 110.35302635990682,
+     "difficulty": 6.274959868954265,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 9504000,
+     "interval": 30240000,
+     "stability": 350.11500031250927,
+     "difficulty": 5.015453413325726,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 30240000,
+     "interval": 66960000,
+     "stability": 775.3933330932239,
+     "difficulty": 5.005666329209238,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 16",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 9562,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 172800,
+     "interval": 600,
+     "stability": 0.6077016626638644,
+     "difficulty": 7.392238132342694,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 182625,
+     "interval": 259200,
+     "stability": 3.2705884607227054,
+     "difficulty": 7.38007426350719,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 259200,
+     "interval": 691200,
+     "stability": 8.190033551209673,
+     "difficulty": 7.3679225585405215,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 7663533,
+     "interval": 6998400,
+     "stability": 80.68878505838082,
+     "difficulty": 6.473633301710374,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1880,
+     "interval": 6998400,
+     "stability": 80.68878505838082,
+     "difficulty": 6.4623880377055025,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 2664546,
+     "interval": 13996800,
+     "stability": 162.1156867090961,
+     "difficulty": 5.265511341920963,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 13996800,
+     "interval": 25142400,
+     "stability": 291.0900755072641,
+     "difficulty": 6.842254170892507,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 25142400,
+     "interval": 66182400,
+     "stability": 765.5457654911966,
+     "difficulty": 5.772311035057257,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 7587,
+     "interval": 66182400,
+     "stability": 765.5457654911966,
+     "difficulty": 7.178691424062079,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 8348,
+     "interval": 66182400,
+     "stability": 765.5457654911966,
+     "difficulty": 8.112312263609606,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 10444,
+     "interval": 66182400,
+     "stability": 765.5457654911966,
+     "difficulty": 8.732093283632379,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1733486,
+     "interval": 67132800,
+     "stability": 777.132794486555,
+     "difficulty": 8.718589559645585,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 7531,
+     "interval": 600,
+     "stability": 178.06488791056051,
+     "difficulty": 9.564037471143335,
+     "state": 3,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "random 17",
+   "steps": [
+    {
+     "rating": 4,
+     "elapsed": 0,
+     "interval": 691200,
+     "stability": 8.2956,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 6290576,
+     "interval": 600,
+     "stability": 1.9177978069805854,
+     "difficulty": 7.0269895692968385,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 1.9305521870819362,
+     "difficulty": 7.0151909490243805,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 4926130,
+     "interval": 1036800,
+     "stability": 12.274757469574059,
+     "difficulty": 8.003773029157445,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 8021,
+     "interval": 1036800,
+     "stability": 12.274757469574059,
+     "difficulty": 8.660039881874708,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1036800,
+     "interval": 1900800,
+     "stability": 22.30116435564848,
+     "difficulty": 8.64660821128967,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 10772,
+     "interval": 1900800,
+     "stability": 22.30116435564848,
+     "difficulty": 9.086783831893568,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1900800,
+     "interval": 600,
+     "stability": 1.9648256541709666,
+     "difficulty": 9.685060424710198,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 72641,
+     "interval": 172800,
+     "stability": 1.9747424098100692,
+     "difficulty": 9.670603733582325,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 7459329,
+     "interval": 518400,
+     "stability": 5.834288455566852,
+     "difficulty": 9.76655977778277,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 427457,
+     "interval": 600,
+     "stability": 0.9614752600023827,
+     "difficulty": 9.908498155647544,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 1.7424193929632978,
+     "difficulty": 9.863150872547738,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 7171,
+     "interval": 172800,
+     "stability": 1.7651109229522983,
+     "difficulty": 9.848516090972028,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 180067,
+     "interval": 600,
+     "stability": 0.47281189385965355,
+     "difficulty": 9.935436638489923,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 600,
+     "interval": 86400,
+     "stability": 0.8978128291823785,
+     "difficulty": 9.899090941022738,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 86400,
+     "interval": 86400,
+     "stability": 1.4828374286952084,
+     "difficulty": 9.884420219378553,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 208679,
+     "interval": 259200,
+     "stability": 3.4041647775940564,
+     "difficulty": 9.83102721200948,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 259200,
+     "interval": 432000,
+     "stability": 4.999242029312725,
+     "difficulty": 9.81642455409431,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 5158667,
+     "interval": 1209600,
+     "stability": 13.6318199834781,
+     "difficulty": 9.801836498837053,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 18",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 249316,
+     "interval": 950400,
+     "stability": 10.964332335820698,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 4934703,
+     "interval": 15638400,
+     "stability": 181.1389121767585,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 15638400,
+     "interval": 51062400,
+     "stability": 591.3313153751368,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 51062400,
+     "interval": 146102400,
+     "stability": 1691.0171975891644,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 99445,
+     "interval": 146448000,
+     "stability": 1695.263769493046,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 186129,
+     "interval": 146880000,
+     "stability": 1699.7952833527884,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 146880000,
+     "interval": 576115200,
+     "stability": 6667.585876167492,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 3973,
+     "interval": 576115200,
+     "stability": 6667.585876167492,
+     "difficulty": 4.010608969296839,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 45443,
+     "interval": 600,
+     "stability": 1326.2613812967695,
+     "difficulty": 8.016556265363716,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 8469,
+     "interval": 129081600,
+     "stability": 1493.6609866721346,
+     "difficulty": 7.339010167023143,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 3022,
+     "interval": 600,
+     "stability": 327.84147464143314,
+     "difficulty": 9.11057910592821,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 28339200,
+     "stability": 327.84147464143314,
+     "difficulty": 9.09669689611912,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 28339200,
+     "interval": 49075200,
+     "stability": 567.7941791750729,
+     "difficulty": 8.780083462023608,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 1913118,
+     "interval": 51148800,
+     "stability": 592.20102554906,
+     "difficulty": 8.357672572439405,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 51148800,
+     "interval": 76291200,
+     "stability": 883.1761120927499,
+     "difficulty": 8.344543269163804,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 76291200,
+     "interval": 600,
+     "stability": 7.604094975270194,
+     "difficulty": 9.44109099897675,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 1,
+     "elapsed": 6190044,
+     "interval": 600,
+     "stability": 1.6138715045331802,
+     "difficulty": 9.8015187812417,
+     "state": 3,
+     "step": 0
+    }
+   ]
+  },
+  {
+   "name": "random 19",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 2.111214235785395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 1945249,
+     "interval": 2937600,
+     "stability": 33.894780170586905,
+     "difficulty": 2.1043313908464483,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2937600,
+     "interval": 10713600,
+     "stability": 124.41629070265077,
+     "difficulty": 2.0974554287524403,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 10713600,
+     "interval": 33782400,
+     "stability": 390.94432771524214,
+     "difficulty": 2.0905863426205262,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 49438,
+     "interval": 33782400,
+     "stability": 390.94432771524214,
+     "difficulty": 2.083724125574744,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 133007,
+     "interval": 34041600,
+     "stability": 393.5220685326833,
+     "difficulty": 2.0768687707460076,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 34041600,
+     "interval": 147225600,
+     "stability": 1704.0750287603596,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 147225600,
+     "interval": 376876800,
+     "stability": 4361.786272418743,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 376876800,
+     "interval": 1318204800,
+     "stability": 15256.72674872299,
+     "difficulty": 1.0,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 9972,
+     "interval": 1318204800,
+     "stability": 15256.72674872299,
+     "difficulty": 4.010608969296839,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 1318204800,
+     "interval": 3153600000,
+     "stability": 36876.69037902946,
+     "difficulty": 1.994461961754711,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 20",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 1,
+     "elapsed": 6456401,
+     "interval": 60,
+     "stability": 1.0377079365461142,
+     "difficulty": 7.394502741279718,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 60,
+     "interval": 600,
+     "stability": 1.087688527973552,
+     "difficulty": 7.382336607835277,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 316838,
+     "interval": 432000,
+     "stability": 5.040302546524895,
+     "difficulty": 7.37018264052428,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 432000,
+     "interval": 600,
+     "stability": 0.9345723369238476,
+     "difficulty": 9.120825285995213,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 900,
+     "stability": 0.9345723369238476,
+     "difficulty": 9.401591224598787,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 9074096,
+     "interval": 518400,
+     "stability": 5.928592813033517,
+     "difficulty": 9.387418002671026,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 518400,
+     "interval": 864000,
+     "stability": 9.79056889606472,
+     "difficulty": 9.373258953965193,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 864000,
+     "interval": 1123200,
+     "stability": 13.372964840764368,
+     "difficulty": 9.569168456806189,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 4847866,
+     "interval": 1987200,
+     "stability": 22.775287728894373,
+     "difficulty": 9.699222314174873,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1993,
+     "interval": 600,
+     "stability": 6.582947482882983,
+     "difficulty": 9.886364789254383,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 1839,
+     "interval": 950400,
+     "stability": 10.51139215646209,
+     "difficulty": 9.833621566520856,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 21",
+   "steps": [
+    {
+     "rating": 3,
+     "elapsed": 0,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 2.118103970459016,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 2,
+     "elapsed": 600,
+     "interval": 600,
+     "stability": 2.3065,
+     "difficulty": 4.752858488532557,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 2.3065,
+     "difficulty": 4.743333999340863,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 691200,
+     "stability": 8.40532901519802,
+     "difficulty": 4.733819034638361,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 691200,
+     "interval": 1728000,
+     "stability": 19.957412841208416,
+     "difficulty": 6.489292040456797,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 5800,
+     "interval": 1728000,
+     "stability": 19.957412841208416,
+     "difficulty": 6.478031117713178,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1264918,
+     "interval": 600,
+     "stability": 1.841590651904071,
+     "difficulty": 8.82758114707756,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 600,
+     "interval": 172800,
+     "stability": 1.8587909505214666,
+     "difficulty": 8.81398193522732,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 22",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 4,
+     "elapsed": 330,
+     "interval": 172800,
+     "stability": 2.2981513617969918,
+     "difficulty": 3.4641142975548855,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 172800,
+     "interval": 864000,
+     "stability": 9.641379084534348,
+     "difficulty": 3.455878552554169,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 864000,
+     "interval": 3196800,
+     "stability": 37.21393645085572,
+     "difficulty": 3.4476510432984533,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3196800,
+     "interval": 10368000,
+     "stability": 119.76375110150346,
+     "difficulty": 3.4394317615519934,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 10368000,
+     "interval": 29376000,
+     "stability": 339.87444488406163,
+     "difficulty": 3.43122069908728,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 29376000,
+     "interval": 56678400,
+     "stability": 655.5954820067458,
+     "difficulty": 5.624566564235552,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 3509407,
+     "interval": 61430400,
+     "stability": 711.0079904557972,
+     "difficulty": 5.614170366968155,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 61430400,
+     "interval": 97372800,
+     "stability": 1126.5007953331235,
+     "difficulty": 7.073710279229401,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 160210,
+     "interval": 97372800,
+     "stability": 1127.0735855879384,
+     "difficulty": 8.042620887548326,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 5893875,
+     "interval": 600,
+     "stability": 7.079328285711188,
+     "difficulty": 9.341851165211937,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 4273896,
+     "interval": 1728000,
+     "stability": 20.357852562592168,
+     "difficulty": 9.327737683343562,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 182858,
+     "interval": 1900800,
+     "stability": 21.86794452069999,
+     "difficulty": 9.313638314957057,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 1,
+     "elapsed": 1900800,
+     "interval": 600,
+     "stability": 1.9490192747758364,
+     "difficulty": 9.75962595068268,
+     "state": 3,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 651,
+     "interval": 172800,
+     "stability": 1.9598976232594358,
+     "difficulty": 9.745094694028836,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 172800,
+     "interval": 259200,
+     "stability": 2.6826554522717134,
+     "difficulty": 9.81601034860592,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 259200,
+     "interval": 345600,
+     "stability": 3.6274299120912556,
+     "difficulty": 9.863087464783693,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 345600,
+     "interval": 518400,
+     "stability": 5.548299549793468,
+     "difficulty": 9.848452746615747,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 2,
+     "elapsed": 625306,
+     "interval": 604800,
+     "stability": 7.377251990321091,
+     "difficulty": 9.884624240398363,
+     "state": 2,
+     "step": null
+    }
+   ]
+  },
+  {
+   "name": "random 23",
+   "steps": [
+    {
+     "rating": 2,
+     "elapsed": 0,
+     "interval": 330,
+     "stability": 1.2931,
+     "difficulty": 5.112170705601056,
+     "state": 1,
+     "step": 0
+    },
+    {
+     "rating": 3,
+     "elapsed": 330,
+     "interval": 600,
+     "stability": 1.3358997622047517,
+     "difficulty": 5.102286904192293,
+     "state": 1,
+     "step": 1
+    },
+    {
+     "rating": 3,
+     "elapsed": 571856,
+     "interval": 950400,
+     "stability": 11.099814134038674,
+     "difficulty": 5.0924129865849395,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 950400,
+     "interval": 3024000,
+     "stability": 34.60524500376737,
+     "difficulty": 5.082548942895193,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 4,
+     "elapsed": 5022344,
+     "interval": 17020800,
+     "stability": 196.5031588438537,
+     "difficulty": 3.4245943221268664,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2464,
+     "interval": 17020800,
+     "stability": 196.5031588438537,
+     "difficulty": 3.416398097101578,
+     "state": 2,
+     "step": null
+    },
+    {
+     "rating": 3,
+     "elapsed": 2724,
+     "interval": 17020800,
+     "stability": 196.5031588438537,
+     "difficulty": 3.408210068301315,
+     "state": 2,
+     "step": null
+    }
+   ]
+  }
+ ]
+}

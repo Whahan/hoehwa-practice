@@ -1,0 +1,122 @@
+{
+ "transcript": "Thank you very much.",
+ "score": 100,
+ "accuracy": 100,
+ "clarity": 98,
+ "fluency": 100,
+ "units": [
+  {
+   "t": "thank",
+   "ok": true,
+   "conf": 0.96,
+   "heard": null,
+   "ph": [
+    {
+     "p": "θ",
+     "ok": false,
+     "conf": 0.012,
+     "heard": "s"
+    },
+    {
+     "p": "æ",
+     "ok": true,
+     "conf": 0.725,
+     "heard": null
+    },
+    {
+     "p": "ŋ",
+     "ok": true,
+     "conf": 0.765,
+     "heard": null
+    },
+    {
+     "p": "k",
+     "ok": true,
+     "conf": 0.908,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "you",
+   "ok": true,
+   "conf": 0.992,
+   "heard": null,
+   "ph": [
+    {
+     "p": "j",
+     "ok": true,
+     "conf": 0.982,
+     "heard": null
+    },
+    {
+     "p": "uː",
+     "ok": true,
+     "conf": 0.603,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "very",
+   "ok": true,
+   "conf": 0.988,
+   "heard": null,
+   "ph": [
+    {
+     "p": "v",
+     "ok": true,
+     "conf": 0.999,
+     "heard": null
+    },
+    {
+     "p": "ɛ",
+     "ok": true,
+     "conf": 0.997,
+     "heard": null
+    },
+    {
+     "p": "ɹ",
+     "ok": true,
+     "conf": 0.996,
+     "heard": null
+    },
+    {
+     "p": "i",
+     "ok": true,
+     "conf": 0.523,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "much",
+   "ok": true,
+   "conf": 1.0,
+   "heard": null,
+   "ph": [
+    {
+     "p": "m",
+     "ok": true,
+     "conf": 0.999,
+     "heard": null
+    },
+    {
+     "p": "ʌ",
+     "ok": true,
+     "conf": 0.495,
+     "heard": null
+    },
+    {
+     "p": "tʃ",
+     "ok": true,
+     "conf": 0.916,
+     "heard": null
+    }
+   ]
+  }
+ ],
+ "tips_ko": [
+  "'thank'의 th(θ)가 s로 들렸어요. 혀끝을 윗니 사이에 살짝 내밀고 바람만 내보내요. 혀를 입안에 넣으면 s로 들려요."
+ ]
+}

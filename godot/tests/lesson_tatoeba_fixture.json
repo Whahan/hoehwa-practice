@@ -1,0 +1,7 @@
+{"title": "카페에서 주문하기", "source": "tatoeba", "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR", "exercises": [
+ {"type":"choice","question":"'I'd like a coffee.'의 뜻으로 알맞은 것은?","options":["커피 한 잔 주세요","커피를 싫어해요","커피를 샀어요","커피를 마시고 있어요"],"answer":0,"explain":"I'd like ~ 는 정중하게 원하는 것을 말할 때 써요.","tatoeba_id":1234,"difficulty":"A1","extra_meta":{"any":[1,2]}},
+ {"type":"fill","sentence":"___ I have a menu?","reading":"","ko":"메뉴판 좀 주실래요?","options":["Can","Is","Are","Do"],"answer":0,"explain":"Can I ~? 는 허락을 구하는 표현이에요.","tatoeba_id":5678},
+ {"type":"build","ko":"물 한 잔 주세요.","answer":["Can","I","have","some","water"],"extra":["has","much"],"reading":"","explain":"Can I have ~ 로 부탁해요."},
+ {"type":"build","ko":"계산서 주세요.","answer":["Could","I","have","the","check","please"],"extra":["bill"],"reading":"","explain":"Could I have ~ 는 정중한 요청이에요.","tatoeba_id":9012},
+ {"type":"bogus","question":"this one must be dropped","tatoeba_id":1}
+]}

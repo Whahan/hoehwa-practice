@@ -1,0 +1,45 @@
+# ---- secrets / personal data: must never be committed ----
+secrets.json
+secrets.json.tmp
+**/secrets.json*
+auth.json
+**/auth.json
+.env
+.env.*
+progress.json
+prefs.json
+shots_progress.json
+*.pem
+*.key
+
+# ---- installed / generated on each PC ----
+.venv/
+/runtime/
+backend/models/
+backend/data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+backend/cache/
+backend/logs/
+*.log
+backend/tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---- build outputs ----
+/dist/
+packaging/out/
+packaging/locks/
+godot/.godot/
+*.tmp
+
+# ---- installer / updater state inside an installed copy ----
+/backup/
+/backups/
+/version.txt
+/manifest.json
+/install.log
+/update.log
+.orchestrator_heartbeat

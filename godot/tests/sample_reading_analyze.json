@@ -1,0 +1,1213 @@
+{
+ "tokens": [
+  {
+   "t": "Running",
+   "w": true,
+   "lemma": "run",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "in",
+   "w": true,
+   "lemma": "in",
+   "zipf": 7.4,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "the",
+   "w": true,
+   "lemma": "the",
+   "zipf": 7.7,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "Rain",
+   "w": true,
+   "lemma": "rain",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 0
+  },
+  {
+   "t": "\n\n",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "Every",
+   "w": true,
+   "lemma": "every",
+   "zipf": 6.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "morning",
+   "w": true,
+   "lemma": "morning",
+   "zipf": 5.4,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": ",",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "Maya",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "goes",
+   "w": true,
+   "lemma": "go",
+   "zipf": 6.3,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "running",
+   "w": true,
+   "lemma": "run",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "along",
+   "w": true,
+   "lemma": "along",
+   "zipf": 5.3,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "the",
+   "w": true,
+   "lemma": "the",
+   "zipf": 7.7,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "river",
+   "w": true,
+   "lemma": "river",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "before",
+   "w": true,
+   "lemma": "before",
+   "zipf": 6.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "work",
+   "w": true,
+   "lemma": "work",
+   "zipf": 6.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": ".",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "Yesterday",
+   "w": true,
+   "lemma": "yesterday",
+   "zipf": 5.2,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "the",
+   "w": true,
+   "lemma": "the",
+   "zipf": 7.7,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "sky",
+   "w": true,
+   "lemma": "sky",
+   "zipf": 4.8,
+   "level": "mid",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "was",
+   "w": true,
+   "lemma": "be",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "grey",
+   "w": true,
+   "lemma": "grey",
+   "zipf": 4.3,
+   "level": "mid",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "and",
+   "w": true,
+   "lemma": "and",
+   "zipf": 7.6,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "a",
+   "w": true,
+   "lemma": "a",
+   "zipf": 7.4,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "heavy",
+   "w": true,
+   "lemma": "heavy",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "rain",
+   "w": true,
+   "lemma": "rain",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "began",
+   "w": true,
+   "lemma": "begin",
+   "zipf": 5.2,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "to",
+   "w": true,
+   "lemma": "to",
+   "zipf": 7.6,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "fall",
+   "w": true,
+   "lemma": "fall",
+   "zipf": 5.1,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": ",",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "but",
+   "w": true,
+   "lemma": "but",
+   "zipf": 6.6,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "she",
+   "w": true,
+   "lemma": "she",
+   "zipf": 6.3,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "kept",
+   "w": true,
+   "lemma": "keep",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "running",
+   "w": true,
+   "lemma": "run",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "anyway",
+   "w": true,
+   "lemma": "anyway",
+   "zipf": 5.1,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": ".",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 2
+  },
+  {
+   "t": "Her",
+   "w": true,
+   "lemma": "her",
+   "zipf": 6.4,
+   "level": "easy",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "neighbours",
+   "w": true,
+   "lemma": "neighbour",
+   "zipf": 3.9,
+   "level": "mid",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "thought",
+   "w": true,
+   "lemma": "think",
+   "zipf": 6.0,
+   "level": "easy",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "she",
+   "w": true,
+   "lemma": "she",
+   "zipf": 6.3,
+   "level": "easy",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "was",
+   "w": true,
+   "lemma": "be",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "reckless",
+   "w": true,
+   "lemma": "reckless",
+   "zipf": 3.2,
+   "level": "hard",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "[",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "or",
+   "w": true,
+   "lemma": "or",
+   "zipf": 6.5,
+   "level": "easy",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "maybe",
+   "w": true,
+   "lemma": "maybe",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 3
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "brave",
+   "w": true,
+   "lemma": "brave",
+   "zipf": 4.4,
+   "level": "mid",
+   "s": 3
+  },
+  {
+   "t": "]",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": ".",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "\n\n",
+   "w": false,
+   "s": 3
+  },
+  {
+   "t": "She",
+   "w": true,
+   "lemma": "she",
+   "zipf": 6.3,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "says",
+   "w": true,
+   "lemma": "say",
+   "zipf": 6.0,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "the",
+   "w": true,
+   "lemma": "the",
+   "zipf": 7.7,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "rhythm",
+   "w": true,
+   "lemma": "rhythm",
+   "zipf": 4.1,
+   "level": "mid",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "of",
+   "w": true,
+   "lemma": "of",
+   "zipf": 7.4,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "her",
+   "w": true,
+   "lemma": "her",
+   "zipf": 6.4,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "footsteps",
+   "w": true,
+   "lemma": "footstep",
+   "zipf": 3.0,
+   "level": "hard",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "helps",
+   "w": true,
+   "lemma": "help",
+   "zipf": 5.9,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "her",
+   "w": true,
+   "lemma": "her",
+   "zipf": 6.4,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "untangle",
+   "w": true,
+   "lemma": "untangle",
+   "zipf": 2.3,
+   "level": "hard",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "stubborn",
+   "w": true,
+   "lemma": "stubborn",
+   "zipf": 3.6,
+   "level": "mid",
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "thoughts",
+   "w": true,
+   "lemma": "thought",
+   "zipf": 5.0,
+   "level": "easy",
+   "s": 4
+  },
+  {
+   "t": ".",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 4
+  },
+  {
+   "t": "By",
+   "w": true,
+   "lemma": "by",
+   "zipf": 6.5,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "the",
+   "w": true,
+   "lemma": "the",
+   "zipf": 7.7,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "time",
+   "w": true,
+   "lemma": "time",
+   "zipf": 6.4,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "she",
+   "w": true,
+   "lemma": "she",
+   "zipf": 6.3,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "reaches",
+   "w": true,
+   "lemma": "reach",
+   "zipf": 5.0,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "the",
+   "w": true,
+   "lemma": "the",
+   "zipf": 7.7,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "old",
+   "w": true,
+   "lemma": "old",
+   "zipf": 5.7,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "bridge",
+   "w": true,
+   "lemma": "bridge",
+   "zipf": 4.6,
+   "level": "mid",
+   "s": 5
+  },
+  {
+   "t": ",",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "her",
+   "w": true,
+   "lemma": "her",
+   "zipf": 6.4,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "worries",
+   "w": true,
+   "lemma": "worry",
+   "zipf": 4.6,
+   "level": "mid",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "have",
+   "w": true,
+   "lemma": "have",
+   "zipf": 6.9,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "usually",
+   "w": true,
+   "lemma": "usually",
+   "zipf": 5.2,
+   "level": "easy",
+   "s": 5
+  },
+  {
+   "t": " ",
+   "w": false,
+   "s": 5
+  },
+  {
+   "t": "dissolved",
+   "w": true,
+   "lemma": "dissolve",
+   "zipf": 3.4,
+   "level": "hard",
+   "s": 5
+  },
+  {
+   "t": ".",
+   "w": false,
+   "s": 5
+  }
+ ],
+ "sentences": [
+  {
+   "i": 0,
+   "text": "Running in the Rain"
+  },
+  {
+   "i": 1,
+   "text": "Every morning, Maya goes running along the river before work."
+  },
+  {
+   "i": 2,
+   "text": "Yesterday the sky was grey and a heavy rain began to fall, but she kept running anyway."
+  },
+  {
+   "i": 3,
+   "text": "Her neighbours thought she was reckless [or maybe brave]."
+  },
+  {
+   "i": 4,
+   "text": "She says the rhythm of her footsteps helps her untangle stubborn thoughts."
+  },
+  {
+   "i": 5,
+   "text": "By the time she reaches the old bridge, her worries have usually dissolved."
+  }
+ ],
+ "words": [
+  {
+   "lemma": "run",
+   "count": 3,
+   "zipf": 5.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "in",
+   "count": 1,
+   "zipf": 7.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "the",
+   "count": 6,
+   "zipf": 7.7,
+   "level": "easy"
+  },
+  {
+   "lemma": "rain",
+   "count": 2,
+   "zipf": 4.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "every",
+   "count": 1,
+   "zipf": 6.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "morning",
+   "count": 1,
+   "zipf": 5.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "go",
+   "count": 1,
+   "zipf": 6.3,
+   "level": "easy"
+  },
+  {
+   "lemma": "along",
+   "count": 1,
+   "zipf": 5.3,
+   "level": "easy"
+  },
+  {
+   "lemma": "river",
+   "count": 1,
+   "zipf": 4.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "before",
+   "count": 1,
+   "zipf": 6.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "work",
+   "count": 1,
+   "zipf": 6.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "yesterday",
+   "count": 1,
+   "zipf": 5.2,
+   "level": "easy"
+  },
+  {
+   "lemma": "sky",
+   "count": 1,
+   "zipf": 4.8,
+   "level": "mid"
+  },
+  {
+   "lemma": "be",
+   "count": 2,
+   "zipf": 7.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "grey",
+   "count": 1,
+   "zipf": 4.3,
+   "level": "mid"
+  },
+  {
+   "lemma": "and",
+   "count": 1,
+   "zipf": 7.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "a",
+   "count": 1,
+   "zipf": 7.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "heavy",
+   "count": 1,
+   "zipf": 4.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "begin",
+   "count": 1,
+   "zipf": 5.2,
+   "level": "easy"
+  },
+  {
+   "lemma": "to",
+   "count": 1,
+   "zipf": 7.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "fall",
+   "count": 1,
+   "zipf": 5.1,
+   "level": "easy"
+  },
+  {
+   "lemma": "but",
+   "count": 1,
+   "zipf": 6.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "she",
+   "count": 4,
+   "zipf": 6.3,
+   "level": "easy"
+  },
+  {
+   "lemma": "keep",
+   "count": 1,
+   "zipf": 5.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "anyway",
+   "count": 1,
+   "zipf": 5.1,
+   "level": "easy"
+  },
+  {
+   "lemma": "her",
+   "count": 4,
+   "zipf": 6.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "neighbour",
+   "count": 1,
+   "zipf": 3.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "think",
+   "count": 1,
+   "zipf": 6.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "reckless",
+   "count": 1,
+   "zipf": 3.2,
+   "level": "hard"
+  },
+  {
+   "lemma": "or",
+   "count": 1,
+   "zipf": 6.5,
+   "level": "easy"
+  },
+  {
+   "lemma": "maybe",
+   "count": 1,
+   "zipf": 5.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "brave",
+   "count": 1,
+   "zipf": 4.4,
+   "level": "mid"
+  },
+  {
+   "lemma": "say",
+   "count": 1,
+   "zipf": 6.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "rhythm",
+   "count": 1,
+   "zipf": 4.1,
+   "level": "mid"
+  },
+  {
+   "lemma": "of",
+   "count": 1,
+   "zipf": 7.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "footstep",
+   "count": 1,
+   "zipf": 3.0,
+   "level": "hard"
+  },
+  {
+   "lemma": "help",
+   "count": 1,
+   "zipf": 5.9,
+   "level": "easy"
+  },
+  {
+   "lemma": "untangle",
+   "count": 1,
+   "zipf": 2.3,
+   "level": "hard"
+  },
+  {
+   "lemma": "stubborn",
+   "count": 1,
+   "zipf": 3.6,
+   "level": "mid"
+  },
+  {
+   "lemma": "thought",
+   "count": 1,
+   "zipf": 5.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "by",
+   "count": 1,
+   "zipf": 6.5,
+   "level": "easy"
+  },
+  {
+   "lemma": "time",
+   "count": 1,
+   "zipf": 6.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "reach",
+   "count": 1,
+   "zipf": 5.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "old",
+   "count": 1,
+   "zipf": 5.7,
+   "level": "easy"
+  },
+  {
+   "lemma": "bridge",
+   "count": 1,
+   "zipf": 4.6,
+   "level": "mid"
+  },
+  {
+   "lemma": "worry",
+   "count": 1,
+   "zipf": 4.6,
+   "level": "mid"
+  },
+  {
+   "lemma": "have",
+   "count": 1,
+   "zipf": 6.9,
+   "level": "easy"
+  },
+  {
+   "lemma": "usually",
+   "count": 1,
+   "zipf": 5.2,
+   "level": "easy"
+  },
+  {
+   "lemma": "dissolve",
+   "count": 1,
+   "zipf": 3.4,
+   "level": "hard"
+  }
+ ]
+}

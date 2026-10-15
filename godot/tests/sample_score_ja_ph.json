@@ -1,0 +1,194 @@
+{
+ "transcript": "おばさんが来ました。",
+ "score": 92,
+ "accuracy": 90,
+ "clarity": 93,
+ "fluency": 100,
+ "units": [
+  {
+   "t": "お",
+   "ok": true,
+   "conf": 0.743,
+   "heard": null,
+   "ph": [
+    {
+     "p": "o",
+     "ok": true,
+     "conf": 0.948,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "ば",
+   "ok": true,
+   "conf": 0.963,
+   "heard": null,
+   "ph": [
+    {
+     "p": "b",
+     "ok": true,
+     "conf": 0.979,
+     "heard": null
+    },
+    {
+     "p": "a",
+     "ok": true,
+     "conf": 0.912,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "ー",
+   "ok": false,
+   "conf": 0.0,
+   "heard": null,
+   "ph": [
+    {
+     "p": "ː",
+     "ok": false,
+     "conf": 0.24,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "さ",
+   "ok": true,
+   "conf": 0.973,
+   "heard": null,
+   "ph": [
+    {
+     "p": "s",
+     "ok": true,
+     "conf": 0.984,
+     "heard": null
+    },
+    {
+     "p": "a",
+     "ok": true,
+     "conf": 0.989,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "ん",
+   "ok": true,
+   "conf": 0.973,
+   "heard": null,
+   "ph": [
+    {
+     "p": "n",
+     "ok": true,
+     "conf": 0.992,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "が",
+   "ok": true,
+   "conf": 0.984,
+   "heard": null,
+   "ph": [
+    {
+     "p": "ɡ",
+     "ok": true,
+     "conf": 0.969,
+     "heard": null
+    },
+    {
+     "p": "a",
+     "ok": true,
+     "conf": 0.968,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "き",
+   "ok": true,
+   "conf": 0.711,
+   "heard": null,
+   "ph": [
+    {
+     "p": "k",
+     "ok": true,
+     "conf": 0.99,
+     "heard": null
+    },
+    {
+     "p": "i",
+     "ok": true,
+     "conf": 0.994,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "ま",
+   "ok": true,
+   "conf": 0.998,
+   "heard": null,
+   "ph": [
+    {
+     "p": "m",
+     "ok": true,
+     "conf": 0.995,
+     "heard": null
+    },
+    {
+     "p": "a",
+     "ok": true,
+     "conf": 0.875,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "し",
+   "ok": true,
+   "conf": 0.998,
+   "heard": null,
+   "ph": [
+    {
+     "p": "ɕ",
+     "ok": true,
+     "conf": 0.843,
+     "heard": null
+    },
+    {
+     "p": "i",
+     "ok": true,
+     "conf": 0.098,
+     "heard": null
+    }
+   ]
+  },
+  {
+   "t": "た",
+   "ok": true,
+   "conf": 0.998,
+   "heard": null,
+   "ph": [
+    {
+     "p": "t",
+     "ok": true,
+     "conf": 0.971,
+     "heard": null
+    },
+    {
+     "p": "a",
+     "ok": true,
+     "conf": 0.934,
+     "heard": null
+    }
+   ]
+  }
+ ],
+ "tips_ko": [
+  "장음 'ー'가 짧게 들렸어요. 모음을 한 박 더 길게 끌어 주세요 (예: おばさん / おばあさん)."
+ ]
+}

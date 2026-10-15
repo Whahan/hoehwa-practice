@@ -1,0 +1,7 @@
+{
+  "repo": "Whahan/hoehwa-practice",
+  "channel": "stable",
+  "asset_prefix": "hoehwa-practice",
+  "installer_version": 1,
+  "min_installer_version": 1
+}

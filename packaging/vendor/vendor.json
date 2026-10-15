@@ -1,0 +1,15 @@
+{
+ "python": {
+  "version": "3.10.11",
+  "file": "python-3.10.11-embed-amd64.zip",
+  "url": "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip",
+  "sha256": "608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d",
+  "note": "Official embeddable zip, hash recorded on first download over HTTPS from python.org (2026-10-15); md5 f1c0538b060e03cbb697ab3581cb73bc"
+ },
+ "getpip": {
+  "file": "get-pip.py",
+  "url": "https://bootstrap.pypa.io/get-pip.py",
+  "sha256": "fb24e693bab954209a063d90953621412ccad4a500905a726286e038f508ddf6",
+  "note": "Recorded 2026-10-15; get-pip.py only bootstraps the pip/setuptools versions pinned in bootstrap.lock.txt"
+ }
+}

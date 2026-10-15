@@ -1,0 +1,37 @@
+{
+ "examples": [
+  {
+   "id": 1234,
+   "text": "I run every morning.",
+   "ko": "나는 매일 아침 달린다.",
+   "en": "",
+   "ja": "",
+   "url": "https://tatoeba.org/sentences/show/1234"
+  },
+  {
+   "id": 5678,
+   "text": "She was running to catch the bus.",
+   "ko": "",
+   "en": "",
+   "ja": "彼女はバスに乗るために走っていた。",
+   "url": "https://tatoeba.org/sentences/show/5678"
+  },
+  {
+   "id": 91011,
+   "text": "Don't run in the hallway [please].",
+   "ko": "복도에서 뛰지 마세요.",
+   "en": "",
+   "ja": "",
+   "url": "https://tatoeba.org/sentences/show/91011"
+  },
+  {
+   "id": 1213,
+   "text": "He ran away.",
+   "ko": "그는 도망쳤다.",
+   "en": "",
+   "ja": "",
+   "url": "https://tatoeba.org/sentences/show/1213"
+  }
+ ],
+ "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
+}

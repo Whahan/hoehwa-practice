@@ -1,0 +1,7 @@
+{"title": "카페에서 주문하기", "exercises": [
+ {"type":"choice","question":"'I'd like a coffee.'의 뜻으로 알맞은 것은?","options":["커피 한 잔 주세요","커피를 싫어해요","커피를 샀어요","커피를 마시고 있어요"],"answer":0,"explain":"I'd like ~ 는 정중하게 원하는 것을 말할 때 써요."},
+ {"type":"fill","sentence":"___ I have a menu?","reading":"","ko":"메뉴판 좀 주실래요?","options":["Can","Is","Are","Do"],"answer":0,"explain":"Can I ~? 는 허락을 구하는 표현이에요."},
+ {"type":"build","ko":"물 한 잔 주세요.","answer":["Can","I","have","some","water"],"extra":["has","much"],"reading":"","explain":"Can I have ~ 로 부탁해요."},
+ {"type":"listen","audio":"Nice to meet you.","reading":"","options":["처음 뵙겠습니다","안녕히 가세요","고맙습니다","미안합니다"],"answer":0,"explain":"처음 만났을 때 하는 인사예요."},
+ {"type":"speak","text":"I'd like a large coffee, please.","reading":"","ko":"큰 사이즈 커피 한 잔 주세요."}
+]}

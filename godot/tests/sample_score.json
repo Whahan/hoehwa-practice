@@ -1,0 +1,3 @@
+{"transcript":"I would like a large coffee please","score":82,"accuracy":90,"clarity":75,"fluency":80,
+ "units":[{"t":"I'd","ok":true,"conf":0.9,"heard":null},{"t":"like","ok":true,"conf":0.8,"heard":null},{"t":"a","ok":true,"conf":0.8,"heard":null},{"t":"large","ok":false,"conf":0.3,"heard":"lunch"},{"t":"coffee","ok":true,"conf":0.8,"heard":null},{"t":"please","ok":true,"conf":0.8,"heard":null}],
+ "tips_ko":["'large'가 'lunch'로 들렸어요. 'ar' 소리는 입을 크게 벌려 길게 내요.", "문장 끝 'please'를 조금 더 또렷하게 말해 보세요."]}

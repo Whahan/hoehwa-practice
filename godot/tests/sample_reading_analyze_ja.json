@@ -1,0 +1,502 @@
+{
+ "tokens": [
+  {
+   "t": "朝",
+   "w": true,
+   "lemma": "朝",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 0
+  },
+  {
+   "t": "ごはん",
+   "w": true,
+   "lemma": "ご飯",
+   "zipf": 4.6,
+   "level": "mid",
+   "s": 0
+  },
+  {
+   "t": "を",
+   "w": true,
+   "lemma": "を",
+   "zipf": 7.1,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": "食べ",
+   "w": true,
+   "lemma": "食べる",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 0
+  },
+  {
+   "t": "て",
+   "w": true,
+   "lemma": "て",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": "から",
+   "w": true,
+   "lemma": "から",
+   "zipf": 6.3,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": "、",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "駅",
+   "w": true,
+   "lemma": "駅",
+   "zipf": 4.8,
+   "level": "mid",
+   "s": 0
+  },
+  {
+   "t": "まで",
+   "w": true,
+   "lemma": "まで",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": "歩き",
+   "w": true,
+   "lemma": "歩く",
+   "zipf": 4.6,
+   "level": "mid",
+   "s": 0
+  },
+  {
+   "t": "まし",
+   "w": true,
+   "lemma": "ます",
+   "zipf": 6.5,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": "た",
+   "w": true,
+   "lemma": "た",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 0
+  },
+  {
+   "t": "。",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "\n",
+   "w": false,
+   "s": 0
+  },
+  {
+   "t": "今日",
+   "w": true,
+   "lemma": "今日",
+   "zipf": 5.4,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "は",
+   "w": true,
+   "lemma": "は",
+   "zipf": 7.3,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "雨",
+   "w": true,
+   "lemma": "雨",
+   "zipf": 4.6,
+   "level": "mid",
+   "s": 1
+  },
+  {
+   "t": "が",
+   "w": true,
+   "lemma": "が",
+   "zipf": 7.2,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "降っ",
+   "w": true,
+   "lemma": "降る",
+   "zipf": 4.3,
+   "level": "mid",
+   "s": 1
+  },
+  {
+   "t": "て",
+   "w": true,
+   "lemma": "て",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "い",
+   "w": true,
+   "lemma": "いる",
+   "zipf": 6.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "た",
+   "w": true,
+   "lemma": "た",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "の",
+   "w": true,
+   "lemma": "の",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "で",
+   "w": true,
+   "lemma": "で",
+   "zipf": 6.9,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "、",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "傘",
+   "w": true,
+   "lemma": "傘",
+   "zipf": 3.9,
+   "level": "mid",
+   "s": 1
+  },
+  {
+   "t": "を",
+   "w": true,
+   "lemma": "を",
+   "zipf": 7.1,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "持っ",
+   "w": true,
+   "lemma": "持つ",
+   "zipf": 5.2,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "て",
+   "w": true,
+   "lemma": "て",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "行き",
+   "w": true,
+   "lemma": "行く",
+   "zipf": 5.6,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "まし",
+   "w": true,
+   "lemma": "ます",
+   "zipf": 6.5,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "た",
+   "w": true,
+   "lemma": "た",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 1
+  },
+  {
+   "t": "。",
+   "w": false,
+   "s": 1
+  },
+  {
+   "t": "電車",
+   "w": true,
+   "lemma": "電車",
+   "zipf": 4.5,
+   "level": "mid",
+   "s": 2
+  },
+  {
+   "t": "の",
+   "w": true,
+   "lemma": "の",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "中",
+   "w": true,
+   "lemma": "中",
+   "zipf": 5.8,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "で",
+   "w": true,
+   "lemma": "で",
+   "zipf": 6.9,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "本",
+   "w": true,
+   "lemma": "本",
+   "zipf": 5.3,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "を",
+   "w": true,
+   "lemma": "を",
+   "zipf": 7.1,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "読み",
+   "w": true,
+   "lemma": "読む",
+   "zipf": 4.9,
+   "level": "mid",
+   "s": 2
+  },
+  {
+   "t": "まし",
+   "w": true,
+   "lemma": "ます",
+   "zipf": 6.5,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "た",
+   "w": true,
+   "lemma": "た",
+   "zipf": 7.0,
+   "level": "easy",
+   "s": 2
+  },
+  {
+   "t": "。",
+   "w": false,
+   "s": 2
+  }
+ ],
+ "sentences": [
+  {
+   "i": 0,
+   "text": "朝ごはんを食べてから、駅まで歩きました。"
+  },
+  {
+   "i": 1,
+   "text": "今日は雨が降っていたので、傘を持って行きました。"
+  },
+  {
+   "i": 2,
+   "text": "電車の中で本を読みました。"
+  }
+ ],
+ "words": [
+  {
+   "lemma": "朝",
+   "count": 1,
+   "zipf": 4.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "ご飯",
+   "count": 1,
+   "zipf": 4.6,
+   "level": "mid"
+  },
+  {
+   "lemma": "を",
+   "count": 3,
+   "zipf": 7.1,
+   "level": "easy"
+  },
+  {
+   "lemma": "食べる",
+   "count": 1,
+   "zipf": 4.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "て",
+   "count": 3,
+   "zipf": 7.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "から",
+   "count": 1,
+   "zipf": 6.3,
+   "level": "easy"
+  },
+  {
+   "lemma": "駅",
+   "count": 1,
+   "zipf": 4.8,
+   "level": "mid"
+  },
+  {
+   "lemma": "まで",
+   "count": 1,
+   "zipf": 5.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "歩く",
+   "count": 1,
+   "zipf": 4.6,
+   "level": "mid"
+  },
+  {
+   "lemma": "ます",
+   "count": 3,
+   "zipf": 6.5,
+   "level": "easy"
+  },
+  {
+   "lemma": "た",
+   "count": 4,
+   "zipf": 7.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "今日",
+   "count": 1,
+   "zipf": 5.4,
+   "level": "easy"
+  },
+  {
+   "lemma": "は",
+   "count": 1,
+   "zipf": 7.3,
+   "level": "easy"
+  },
+  {
+   "lemma": "雨",
+   "count": 1,
+   "zipf": 4.6,
+   "level": "mid"
+  },
+  {
+   "lemma": "が",
+   "count": 1,
+   "zipf": 7.2,
+   "level": "easy"
+  },
+  {
+   "lemma": "降る",
+   "count": 1,
+   "zipf": 4.3,
+   "level": "mid"
+  },
+  {
+   "lemma": "いる",
+   "count": 1,
+   "zipf": 6.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "の",
+   "count": 2,
+   "zipf": 7.0,
+   "level": "easy"
+  },
+  {
+   "lemma": "で",
+   "count": 2,
+   "zipf": 6.9,
+   "level": "easy"
+  },
+  {
+   "lemma": "傘",
+   "count": 1,
+   "zipf": 3.9,
+   "level": "mid"
+  },
+  {
+   "lemma": "持つ",
+   "count": 1,
+   "zipf": 5.2,
+   "level": "easy"
+  },
+  {
+   "lemma": "行く",
+   "count": 1,
+   "zipf": 5.6,
+   "level": "easy"
+  },
+  {
+   "lemma": "電車",
+   "count": 1,
+   "zipf": 4.5,
+   "level": "mid"
+  },
+  {
+   "lemma": "中",
+   "count": 1,
+   "zipf": 5.8,
+   "level": "easy"
+  },
+  {
+   "lemma": "本",
+   "count": 1,
+   "zipf": 5.3,
+   "level": "easy"
+  },
+  {
+   "lemma": "読む",
+   "count": 1,
+   "zipf": 4.9,
+   "level": "mid"
+  }
+ ]
+}
