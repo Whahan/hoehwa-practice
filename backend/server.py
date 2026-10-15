@@ -152,11 +152,53 @@ def load_config():
     return cfg
 
 
+_OVERRIDES = {}   # config path -> value forced by a command-line flag (--port, --stt-cpu, --ollama-url, --llm-model)
+
+
+def _cli_override(path, value):
+    """set CFG[path...] = value for this run only: save_config() never writes it to config.json"""
+    node = CFG
+    for k in path[:-1]:
+        node = node[k]
+    node[path[-1]] = value
+    _OVERRIDES[path] = value
+
+
+def _persistable(cfg):
+    """cfg without the command-line overrides: a value that is still the forced one goes back to what config.json holds
+    (or the default)"""
+    out = json.loads(json.dumps(cfg))
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
+            disk = json.load(f)
+    except Exception:
+        disk = {}
+    for path, forced in _OVERRIDES.items():
+        node = out
+        for k in path[:-1]:
+            node = node.get(k) if isinstance(node, dict) else None
+        if not isinstance(node, dict) or node.get(path[-1]) != forced:
+            continue   # changed since (e.g. the user picked another engine in the app): that is a real change
+        for src in (disk, DEFAULT_CONFIG):
+            cur = src
+            for k in path:
+                cur = cur.get(k) if isinstance(cur, dict) else None
+            if cur is not None:
+                node[path[-1]] = cur
+                break
+        else:
+            node.pop(path[-1], None)
+    return out, disk
+
+
 def save_config(cfg):
     with _cfg_lock:
+        out, disk = _persistable(cfg)
+        if out == disk:
+            return   # nothing to change: leave the file (and its formatting) alone
         tmp = CONFIG_PATH + ".tmp"
         with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+            json.dump(out, f, ensure_ascii=False, indent=2)
         os.replace(tmp, CONFIG_PATH)
 
 
@@ -171,20 +213,22 @@ if (CFG.get("openai_api") or {}).get("key_source") == "opencode":  # migration: 
     if not ARG_PORT:
         save_config(CFG)
 if _arg("--ollama-url"):  # test servers: point the local model at another (e.g. a closed) port
-    CFG["ollama_url"] = _arg("--ollama-url")
+    _cli_override(("ollama_url",), _arg("--ollama-url"))
 if ARG_PORT:
-    CFG["port"] = int(ARG_PORT)
+    _cli_override(("port",), int(ARG_PORT))
 if ARG_STT_CPU:
-    CFG["stt"]["device"], CFG["stt"]["compute_type"] = "cpu", "int8"
+    _cli_override(("stt", "device"), "cpu")
+    _cli_override(("stt", "compute_type"), "int8")
 if _arg("--llm-model"):  # test servers: compare local models without touching config.json
-    CFG["llm_model"] = _arg("--llm-model")
-    CFG["llm_provider"] = "ollama"
+    _cli_override(("llm_model",), _arg("--llm-model"))
+    _cli_override(("llm_provider",), "ollama")
 
 
 class ApiError(Exception):
-    def __init__(self, msg, status=400):
+    def __init__(self, msg, status=400, format_error=False):
         self.msg = msg
         self.status = status
+        self.format_error = format_error   # the AI answered, but not with a usable JSON object (ollama_json asks once more)
 
 
 def need_lang(lang):
@@ -764,8 +808,75 @@ def ja_to_kata(text: str) -> str:
     return kata_only(ojt().g2p(text, kana=True))
 
 
+# Chinese-only (simplified) forms and Chinese particles that models leak into Japanese text -> the Japanese equivalent
+# ("" = drop). Only used when pyopenjtalk cannot read the character; a character that is not in the table is dropped.
+SIMP_TO_JA = {
+    "买": "買", "卖": "売", "说": "説", "话": "話", "请": "請", "谢": "謝", "对": "対", "时": "時", "间": "間", "开": "開",
+    "关": "関", "问": "問", "题": "題", "觉": "覚", "见": "見", "现": "現", "样": "様", "电": "電", "车": "車", "东": "東",
+    "饭": "飯", "书": "書", "读": "読", "写": "写", "听": "聞", "钱": "銭", "国": "国", "学": "学", "来": "来", "个": "個",
+    "们": "達", "为": "為", "运": "運", "动": "動", "难": "難", "过": "過", "还": "", "这": "", "那": "", "么": "", "什": "",
+    "吗": "か", "呢": "ね", "吧": "ね", "啊": "ね", "喝": "飲", "吃": "食", "没": "", "会": "会", "页": "頁", "机": "機",
+    "热": "熱", "爱": "愛", "两": "両", "岁": "歳", "实": "実", "际": "際", "业": "業", "务": "務", "发": "発",
+}
+# ideographs: CJK extension A, the main block, compatibility ideographs (﨑 U+FA11) and the extension B-G planes (𠮷 U+20BB7)
+HAN_ANY = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0003134f]")
+# Japanese variant forms (names!) OpenJTalk's dictionary may not know -> the standard form, for the READING only
+VARIANT_TO_STD = {"髙": "高", "﨑": "崎", "𠮷": "吉", "邉": "辺", "邊": "辺", "濵": "浜", "德": "徳", "栁": "柳", "冨": "富", "桒": "桑",
+                  "圓": "円", "眞": "真", "說": "説", "渕": "淵", "彅": "剛", "曻": "昇", "槇": "槙", "增": "増"}
+# simplified characters that Japanese does not use although JIS/cp932 also contain them (so the GB2312 test misses them)
+SIMP_EXTRA = "气怎你您她们这吗呢吧啊么没还请说话谢对时间开关问题觉见现样电车东饭书读听钱为运动难过热爱两岁实际业务发吃喝买卖"
+
+
+def _encodes(c, codec):
+    try:
+        c.encode(codec)
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def is_chinese_only(c):
+    """a simplified-Chinese character that Japanese does not use: listed in SIMP_TO_JA / SIMP_EXTRA, or in GB 2312 but in
+    neither cp932 (JIS X 0208 + NEC/IBM extensions) nor JIS X 0213.
+    Variant forms of Japanese names (髙 﨑 𠮷 邉 ...), old forms (國 體 學) and ordinary kanji are NOT Chinese-only."""
+    if not ("\u4e00" <= c <= "\u9fff") or c in VARIANT_TO_STD:
+        return False
+    return c in SIMP_TO_JA or c in SIMP_EXTRA or (_encodes(c, "gb2312") and not _encodes(c, "cp932") and not _encodes(c, "euc_jis_2004"))
+
+
+# what a hiragana reading may contain: kana, long-vowel mark, punctuation, the ___ blank, spaces
+JA_READING_CHARS = re.compile(r"[ぁ-ゖゝゞー、。，．・…！？!?.,:;~〜\-「」『』（）()\[\]\"'_＿\s]")
+
+
+def ja_text_foreign(text: str):
+    """characters of a Japanese string that OpenJTalk cannot read although they are CJK ideographs, i.e. Chinese-only
+    characters (买 吗 这 ...) that leaked into the model's Japanese. [] for clean Japanese."""
+    text = unicodedata.normalize("NFKC", text or "")
+    bad = []
+    if not HAN_ANY.search(text):
+        return bad
+    try:
+        for m in ojt().run_frontend(text):
+            st, r = m.get("string", ""), m.get("read") or ""
+            if HAN_ANY.search(st) and not re.fullmatch(r"[ァ-ヶー]+", r):
+                bad.extend(c for c in st if is_chinese_only(c))
+    except Exception:
+        log.exception("ja_text_foreign failed")
+    return bad
+
+
+def ja_fix_foreign(text: str) -> str:
+    """replace the Chinese-only characters found by ja_text_foreign with their Japanese form, or drop them"""
+    bad = set(ja_text_foreign(text))
+    if not bad:
+        return text
+    return "".join((SIMP_TO_JA.get(c, "") if c in bad else c) for c in text)
+
+
 def ja_reading(text: str) -> str:
-    """hiragana reading (spelling form: は stays は) of a Japanese string; punctuation kept, ___ kept, spaces dropped."""
+    """hiragana reading (spelling form: は stays は) of a Japanese string; punctuation kept, ___ kept, spaces dropped.
+    Characters OpenJTalk cannot read (Chinese-only ideographs) are replaced by their Japanese form when known, else dropped,
+    so the result never contains ideographs."""
     import jaconv
     text = text or ""
     if not text.strip():
@@ -778,17 +889,28 @@ def ja_reading(text: str) -> str:
         if not seg.strip():
             continue
         try:
-            for m in ojt().run_frontend(unicodedata.normalize("NFKC", seg)):
+            seg = "".join(VARIANT_TO_STD.get(c, c) for c in unicodedata.normalize("NFKC", seg))   # name variants first
+            seg = ja_fix_foreign(seg)
+            for m in ojt().run_frontend(seg):
                 r = m.get("read") or ""
                 st = m.get("string", "")
                 if re.fullmatch(r"[ァ-ヶー]+", r):
                     parts.append(jaconv.kata2hira(r))
                 elif st.strip():
-                    parts.append(st.strip())
+                    parts.append(HAN_ANY.sub("", st.strip()))
         except Exception:
             log.exception("ja_reading failed")
     out = "".join(parts)
     return out.replace(",", "、").replace(".", "。").replace("!", "！").replace("?", "？")
+
+
+def fix_ja_reading(reading, source: str) -> str:
+    """A reading that may come from an AI: kept if it is clean (kana, punctuation, spaces only); if it is empty or mixed
+    with other characters (e.g. "わたしは买います"), it is rebuilt locally from the Japanese `source` text."""
+    r = (reading or "").strip() if isinstance(reading, str) else ""
+    if r and all(JA_READING_CHARS.fullmatch(c) for c in r):
+        return r
+    return "".join(c for c in ja_reading(source) if JA_READING_CHARS.fullmatch(c))  # last resort: allowed characters only
 
 
 def has_kanji_or_kata(s):
@@ -1468,10 +1590,31 @@ def _with_cache(kind, prov, model, messages, schema, opts, fn):
     return data
 
 
+STRICT_JSON_NOTE = ("(Your previous answer could not be read as JSON. Answer again with ONLY one JSON object that matches the schema: "
+                    "it starts with { and ends with }, no code fences, no text before or after it, no comments, double quotes around every key and string.)")
+
+
 def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None):
     """The single LLM entry point: the selected remote engine or local Ollama, with the usage-limit fallback.
     cache_key_kind: e.g. "fix", "translate", "verify", "gloss" -> the result is cached persistently (backend/cache/
-    llm_cache.sqlite) by (kind, provider, model, schema, messages, options). Only for deterministic tasks; default off."""
+    llm_cache.sqlite) by (kind, provider, model, schema, messages, options). Only for deterministic tasks; default off.
+    An answer that holds no usable JSON object (after llm_common.extract_json's repairs) is asked for ONE more time with a
+    stricter instruction; if that fails too, ApiError 502 (Korean message)."""
+    try:
+        return _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind)
+    except ApiError as e:
+        if not e.format_error:
+            raise
+        log.warning("AI answer was not usable JSON; asking once more with a stricter instruction")
+    msgs = [dict(m) for m in messages]
+    if msgs and msgs[-1].get("role") == "user":
+        msgs[-1]["content"] = msgs[-1]["content"] + "\n\n" + STRICT_JSON_NOTE
+    else:
+        msgs.append({"role": "user", "content": STRICT_JSON_NOTE})
+    return _ollama_json_once(msgs, schema, min(temperature, 0.3), num_predict, think, cache_key_kind)
+
+
+def _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind):
     opts = {"temperature": temperature, "num_predict": num_predict, "think": think}
     if remote_route_active():
         try:
@@ -1479,7 +1622,7 @@ def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False
                                lambda: _remote_json(messages, schema, temperature, num_predict))
         except llm_common.LlmError as e:
             if not on_remote_error(e):
-                raise ApiError(e.msg, e.status)
+                raise ApiError(e.msg, e.status, format_error=llm_common.is_format_error(e))
     return _with_cache(cache_key_kind, "ollama", CFG["llm_model"], messages, schema, opts,
                        lambda: _ollama_chat_json(messages, schema, temperature, num_predict, think))
 
@@ -1510,10 +1653,10 @@ def _ollama_chat_json(messages, schema, temperature, num_predict, think):
         raise ApiError("AI 모델 호출에 실패했어요. 잠시 뒤에 다시 시도해 주세요.", 502)
     try:
         content = r.json()["message"]["content"]
-        data = json.loads(content)
+        data = llm_common.extract_json(content)
     except Exception:
         log.warning("ollama returned non-JSON: %s", r.text[:500])
-        raise ApiError("AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.", 502)
+        raise ApiError(llm_common.FORMAT_MSG, 502, format_error=True)
     log.info("ollama call %.1fs (%d chars)", time.time() - t0, len(content))
     _llm_health.update(t=time.time(), ok=True)
     return data
@@ -1616,11 +1759,30 @@ def ko_ok(text, lang="en", required=True):
 
 
 FOREIGN_SCRIPT = re.compile(r"[Ѐ-ӿ؀-ۿ฀-๿֐-׿Ͱ-Ͽ]")
+
+
+def scrub_ko(text, lang="en"):
+    """A Korean field the model mixed with Chinese characters (e.g. "안녕하세요!什么东西要买吗?"): when ko_ok() rejects it
+    and there is Hangul in it, the ideographs / foreign-script letters are removed (and the brackets they leave empty);
+    a text with no Hangul at all that is Chinese / foreign script becomes ""."""
+    text = (text or "").strip()
+    if not text:
+        return text
+    if not HANGUL.search(text):
+        return "" if (HAN.search(text) or FOREIGN_SCRIPT.search(text)) else text
+    if ko_ok(text, lang):
+        return text
+    cleaned = FOREIGN_SCRIPT.sub("", HAN.sub("", text))
+    cleaned = re.sub(r"[(（\[【「]\s*[)）\]】」]", "", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned if HANGUL.search(cleaned) else ""
+
+
 QUESTION_EN = re.compile(r"\?|\b(what|why|how|where|when|who|which|whose|can you|could you|do you|did you|are you|is it|mean|meaning)\b", re.I)
 QUESTION_JA = re.compile(r"[？?]|ですか|ますか|でしょうか|って何|とは|どういう|なに|何|どう|どこ|いつ|だれ|誰|なぜ|どうして")
 
 
-KO_SCHEMA = {"type": "object", "properties": {"ko": {"type": "string"}}, "required": ["ko"]}
+KO_SCHEMA ={"type": "object", "properties": {"ko": {"type": "string"}}, "required": ["ko"]}
 
 
 def translate_ko(text, lang):
@@ -1720,7 +1882,7 @@ def _chat_opencode(req, lang, sys_prompt):
         data, dt, st = llm_opencode.chat_json(CFG, req.conv_id or "", sys_prompt, hist, note, CHAT_SCHEMA)
     except llm_common.LlmError as e:
         log.warning("opencode chat failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
-        if on_remote_error(e):
+        if on_remote_error(e) or llm_common.is_format_error(e):   # a malformed answer: the next path asks again (strict JSON)
             return None
         raise ApiError(e.msg, e.status)
     log.info("opencode chat turn %.1fs %s", dt, st)
@@ -1773,6 +1935,8 @@ def run_chat(req):
             bad = True
         if lang == "en" and HANGUL.search(reply):
             bad = True
+        if lang == "ja" and not bad and ja_text_foreign(reply):   # e.g. 买 / 吗: Chinese-only characters in the Japanese
+            bad = True
         if not ko_ok(ko, lang):
             bad = True
         if not bad:
@@ -1781,9 +1945,14 @@ def run_chat(req):
     else:
         if not reply or (lang == "en" and HANGUL.search(reply)):
             raise ApiError("AI가 대답을 만들지 못했어요. 다시 시도해 주세요.", 502)
-    reading = ja_reading(reply) if lang == "ja" else ""
+    if lang == "ja":
+        reply = ja_fix_foreign(reply)   # still Chinese-only characters after the retry: Japanese form, or dropped
+    # the reading is always made locally (pyopenjtalk is more exact than the model's own "reading"); fix_ja_reading
+    # guarantees that it holds kana / punctuation only
+    reading = fix_ja_reading(ja_reading(reply), reply) if lang == "ja" else ""
     if lang == "ja" and not remote_route_active():  # the remote models translate well inside the reply itself
         ko = translate_ko(reply, lang) or ko
+    ko = scrub_ko(ko, lang)
     fix = fix_ko = ""
     if last_me and not req.skip_fix:
         fix, fix_ko = correct_learner(lang, stage, last_me, prev_ai)
@@ -1814,7 +1983,7 @@ def run_feedback(req):
     prompt += "IMPORTANT: \"summary\", every \"ko\" and every \"why\" MUST be written in Korean (한국어), not English.\n"
     for attempt in range(2):
         data = ollama_json([{"role": "user", "content": prompt}], FEEDBACK_SCHEMA, temperature=0.4 if attempt == 0 else 0.2, num_predict=1500)
-        if ko_ok(str(data.get("summary", "")), "en"):
+        if isinstance(data, dict) and ko_ok(str(data.get("summary", "")), "en"):
             break
         log.info("feedback attempt %d: summary not Korean", attempt + 1)
     sc = data.get("scores") or {}
@@ -1830,7 +1999,7 @@ def run_feedback(req):
             continue
         seen_c.add((norm_text(you, lang), norm_text(better, lang)))
         rd = ja_reading(better) if lang == "ja" else ""
-        corr.append({"you": you, "better": better, "reading": rd, "ko": str(c.get("ko", "") or "").strip(), "why": str(c.get("why", "") or "").strip()})
+        corr.append({"you": you, "better": better, "reading": rd, "ko": scrub_ko(str(c.get("ko", "") or ""), lang), "why": scrub_ko(str(c.get("why", "") or ""), lang)})
     phr = []
     seen_p = set()
     for p in data.get("phrases") or []:
@@ -1839,8 +2008,8 @@ def run_feedback(req):
         seen_p.add(norm_text(str(p["phrase"]), lang))
         ph = str(p["phrase"]).strip()
         rd = ja_reading(ph) if lang == "ja" else ""
-        phr.append({"phrase": ph, "reading": rd, "ko": str(p.get("ko", "") or "").strip()})
-    return {"scores": scores, "summary": str(data.get("summary", "") or "").strip(), "corrections": corr[:6], "phrases": phr[:5]}
+        phr.append({"phrase": ph, "reading": rd, "ko": scrub_ko(str(p.get("ko", "") or ""), lang)})
+    return {"scores": scores, "summary": scrub_ko(str(data.get("summary", "") or ""), "en"), "corrections": corr[:6], "phrases": phr[:5]}
 
 
 # ---- lesson ----
@@ -2834,6 +3003,22 @@ def examples(lang: str = "en", q: str = "", limit: int = 5):
 
 
 # ----------------------------------------------------------------------------------------------
+def prefetch_wordnet():
+    """prefetch stage: WordNet (+ omw-1.4) for the lesson distractor check, whether or not Tatoeba is ready.
+    A failure is only reported (the lessons keep working, the wrong-option check is just less exact); returns True/False."""
+    print("[prefetch] WordNet (nltk wordnet + omw-1.4) ...", flush=True)
+    try:
+        ok = bool(lesson_rules.ensure_wordnet_data())
+        if ok:  # nltk.download() reports a blocked network by returning False; do not trust "no exception" alone
+            ok = all(os.path.exists(os.path.join(lesson_rules.NLTK_DIR, "corpora", pkg + ".zip"))
+                     or os.path.isdir(os.path.join(lesson_rules.NLTK_DIR, "corpora", pkg)) for pkg in lesson_rules.NLTK_PKGS)
+    except Exception as e:
+        log.warning("WordNet prefetch failed: %s", e)
+        ok = False
+    print("[prefetch] WordNet OK" if ok else "[prefetch] WordNet FAILED (레슨은 계속 동작, 오답 보기 검사 정확도만 낮아짐)", flush=True)
+    return ok
+
+
 def prefetch():
     """setup helper: download/verify every local model and record the working STT device in config.json"""
     print("[prefetch] Whisper ...", flush=True)
@@ -2866,6 +3051,7 @@ def prefetch():
             print("[prefetch] Tatoeba examples %s" % ("OK" if code == 0 and readmode.tatoeba_ready() else "FAILED (exit %s)" % code), flush=True)
         except Exception as e:
             print("[prefetch] Tatoeba examples FAILED: %s" % e, flush=True)
+    prefetch_wordnet()
     if readmode.tatoeba_ready():
         try:  # analyse the lesson sentence pool now (about 20 s) instead of at the first app start
             n = len(lesson_rules.pool("en").items) + len(lesson_rules.pool("ja").items)

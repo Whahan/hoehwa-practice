@@ -144,7 +144,8 @@ def check_lesson(lang, k, d):
 HERE = os.path.dirname(os.path.abspath(__file__))
 KNOWN_BAD = [  # (lang, sentence id, answer word the blank hides, distractors that must NEVER be offered)
     ("en", 6854532, "think", {"believe", "feel", "guess", "suppose"}),
-    ("en", 8297100, "think", {"feel", "believe", "guess", "suppose"}),
+    ("en", 1401744, "think", {"feel", "believe", "guess", "suppose"}),   # "I think she'll help me."
+    ("en", 6665344, "think", {"feel", "believe", "guess", "suppose"}),   # "I don't think Tom is sorry."
     ("en", 1037301, "good", {"great", "nice", "fine", "excellent"}),
     ("en", 7325634, "decided", {"planned", "wanted", "tried", "chose"}),
     ("en", 8462381, "happened", {"came", "occurred"}),
@@ -188,6 +189,8 @@ def test_known_bad():
         print("  #%s %-4s blank %-9s distractors seen: %3d  banned present: %s" % (sid, lang, ans, len(got), sorted(hit) or "none"))
         if hit:
             fails.append("known bad #%s: %s offered as distractor for %r" % (sid, sorted(hit), ans))
+        if len(got) < 3:   # a case that never produces distractors proves nothing
+            fails.append("known bad #%s: only %d distractors seen for %r in 150 seeds; the case checks nothing, pick another sentence" % (sid, len(got), ans))
     for lang, sid, banned in KNOWN_BAD_EXTRA:
         got = good[(lang, sid)]["extras"]
         hit = banned & got
@@ -201,9 +204,10 @@ def test_known_bad():
         seen += bool(banned & raw[(lang, sid)]["fills"].get(ans, set()))
     for lang, sid, banned in KNOWN_BAD_EXTRA:
         seen += bool(banned & raw[(lang, sid)]["extras"])
-    print("  negative control (checks off): %d of 8 known bad items show the bad word" % seen)
-    if seen < 6:
-        fails.append("negative control: only %d of 8 known bad items reappear with the checks off; the test cannot detect them" % seen)
+    total = len(KNOWN_BAD) + len(KNOWN_BAD_EXTRA)
+    print("  negative control (checks off): %d of %d known bad items show the bad word" % (seen, total))
+    if seen < total - 2:
+        fails.append("negative control: only %d of %d known bad items reappear with the checks off; the test cannot detect them" % (seen, total))
 
 
 def _strings(e):
@@ -236,16 +240,63 @@ def test_block_list(n=200):
                         seen += 1
                         fails.append("block list hit in %s lesson %d %s: %r" % (lang, k, e["type"], s_[:80]))
         print("  %s: %d strings checked, %d block-list hits" % (lang, checked, seen))
-    # the regexes themselves: each required word must be caught (and an innocent word must not be)
+    # the block list itself: each required word must be caught (and innocent words must not be)
     must = ["terrorist", "Terrorists", "terrorism", "porn", "Pornography", "abuse", "abused", "rape", "suicide", "killed", "murder", "cancer",
-            "bomb", "gun", "guns", "drug", "drugs", "naked", "sex", "sexual", "nazi", "slave", "slavery", "racist", "killing of people"]
-    miss = [w_ for w_ in must if not lr.BLOCK_EN.search("He said %s today." % w_)]
-    miss += [w_ for w_ in ["テロ", "殺", "死ね", "自殺", "ポルノ", "麻薬", "爆弾"] if not lr.BLOCK_JA.search("これは" + w_ + "です")]
+            "bomb", "bombs", "bombed", "gun", "guns", "drug", "drugs", "naked", "sex", "sexual", "sexy", "nazi", "slave", "slavery", "racist",
+            "killing of people", "heroin", "cocaine", "meth", "marijuana", "cannabis", "opium", "addict", "addicted", "addictive", "kidnap",
+            "kidnapped", "kidnapping", "torture", "tortured", "violence", "violent", "abortion", "condom", "condoms", "knife", "knives",
+            "prison", "prisons", "prisoner", "prisoners", "church", "churches", "hate", "hated", "hatred", "ugly", "uglier"]
+    miss = [w_ for w_ in must if not lr.blocked("He said %s today." % w_)]
+    must_sent = ["Tom is addicted to heroin.", "I'm a cocaine addict.", "She had an abortion.", "Do you have a condom?",
+                 "Mary was kidnapped by pirates.", "Gustavo was tied to a chair that was used to torture Rima.", "Fadil had a reputation for violence.",
+                 "Have you already sharpened the knives?", "The prisoners were set free.", "There are two churches on this street."]
+    miss += [t_ for t_ in must_sent if not lr.blocked(t_)]
+    ja_must = ["テロ", "殺", "殺す", "死ね", "自殺", "ポルノ", "麻薬", "爆弾", "虐待", "誘拐", "拷問", "覚醒剤", "中絶", "ヘロイン", "コカイン", "バカ", "ばか", "馬鹿",
+               "くそ", "戦争", "銃", "血", "神", "酔っ払い", "タバコ", "レイプ", "セックス", "死亡", "殺人"]
+    miss += [w_ for w_ in ja_must if not lr.blocked("これは" + w_ + "です。")]
+    miss += [t_ for t_ in ["彼は子供を虐待した。", "彼女は誘拐された。", "拷問を受けた。", "覚醒剤を使った。", "彼女は中絶した。", "バカ野郎！", "テロが起きた。"]
+             if not lr.blocked(t_)]
     if miss:
         fails.append("block list misses: %s" % miss)
-    if lr.BLOCK_EN.search("The grape and the therapist are nice. I like skates and assorted pasta in the classroom."):
-        fails.append("block list matches innocent words (needs word boundaries)")
-    print("  required words all caught: %s" % (not miss))
+    innocent = ["The grape and the therapist are nice. I like skates and assorted pasta in the classroom.", "A sextant is on the ship.",
+                "She flew to Bombay.", "My assistant likes his skill.", "He lives in Essex.", "The class is a grape harvest.", "I'm a method actor.",
+                "The hat is on the table.", "She is pregnant and goes to a funeral.", "Hello, my name is Tom."]
+    ja_innocent = ["ばかり食べている。", "神戸に行きました。", "神社でお参りした。", "神経が太い。", "血液型は何ですか。", "ナチュラルな色ですね。", "テロップが出た。",
+                   "死角に入った。", "彼女は妊娠した。", "葬儀に出た。", "必死に走った。", "バカンスに行く。", "精神が強い。", "血圧が低い。", "献血に行った。"]
+    over = [t_ for t_ in innocent + ja_innocent if lr.blocked(t_)]
+    if over:
+        fails.append("block list matches innocent text: %s" % over)
+    print("  required words all caught: %s; innocent texts all pass: %s" % (not miss, not over))
+
+
+def test_option_words(n=150):
+    """wrong options of fill exercises and extra tiles of build exercises (English) must be independent, reasonably common words"""
+    print("\n== English wrong options / extra tiles over %d lessons: real words only" % n)
+    lr = _inproc()
+    import reading
+    rng = random.Random(41)
+    checked = 0
+    bad_words = {}
+    for k in range(n):
+        m, w = rng.randint(1, 12), rng.randint(1, 4)
+        r = requests.post(BASE + "/lesson", json={"lang": "en", "month": m, "week": w, "stage": (m + 2) // 3, "source": "tatoeba"}, timeout=60)
+        if r.status_code != 200:
+            fails.append("option-word test lesson %d: HTTP %d" % (k, r.status_code))
+            continue
+        for e in r.json()["exercises"]:
+            words = []
+            if e["type"] == "fill":
+                words = [o for j, o in enumerate(e["options"]) if j != e["answer"]]
+            elif e["type"] == "build":
+                words = list(e.get("extra") or [])
+            for w_ in words:
+                checked += 1
+                z = reading.zipf(w_, "en")
+                if w_.lower() in lr.AFFIXES or z < 3.0 or not w_.isalpha():
+                    bad_words[w_] = z
+    print("  %d words checked, %d not real independent words %s" % (checked, len(bad_words), sorted(bad_words)[:12]))
+    if bad_words:
+        fails.append("wrong options / extra tiles that are no independent words: %s" % sorted(bad_words.items()))
 
 
 def test_db_validity():
@@ -457,6 +508,7 @@ def main():
                 fails.append("AI lesson %s failed: %s" % (lang, r.text[:200]))
     if "--no-extra" not in sys.argv:
         test_block_list(200)
+        test_option_words(150)
         test_db_validity()
         test_known_bad()
         test_ai_fallback()

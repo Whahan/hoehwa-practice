@@ -43,18 +43,110 @@ JA_HEAD = {"名詞", "動詞", "形容詞", "形状詞", "副詞", "代名詞", 
 JA_ATTACH = {"助詞", "助動詞", "接尾辞", "補助記号", "記号"}
 
 BLOCK_EN = re.compile(
-    r"\b(kill\w*|die|dies|died|dying|dead|death|murder\w*|suicid\w*|guns?|shoot\w*|shot|blood\w*|damn\w*|hell|fuck\w*|shit\w*|"
-    r"sex\w*|naked|drunk|vodka|whisk(e)?y|drugs?|stupid|idiots?|hate[sd]?|ugly|bitch\w*|bastards?|ass|asshole|crap|piss\w*|"
-    r"wars?|bomb\w*|rap(e|ed|es|ing|ist|ists)|slave\w*|god|jesus|bible|church|prison|jail|devil|nazis?|hitler|weapons?|knife|corpse|"
-    r"cigarettes?|smok\w*|terror\w*|porn\w*|abus\w*|cancer\w*|racis\w*)\b", re.I)
-BLOCK_JA = re.compile(r"死|殺|クソ|くそ|バカ|ばか|馬鹿|アホ|あほ|ブス|酔|血|銃|戦争|自殺|セックス|エッチ|うざ|畜生|地獄|神|麻薬|タバコ|煙草|刑務所|"
-                      r"テロ|ポルノ|爆弾|爆発|爆破|レイプ|強姦|ナチ")
+    r"\b("
+    # violence, death, weapons
+    r"kill\w*|die[sd]?|dying|dead(ly)?|death\w*|murder\w*|suicid\w*|assassin\w*|massacre\w*|genocid\w*|slaughter\w*|lynch\w*|"
+    r"strangl\w*|hostages?|abduct\w*|hanged|assault\w*|kidnap\w*|tortur\w*|violen\w*|"
+    r"guns?|pistols?|rifles?|gun(man|men|fire|shot|shots|point|powder)|shoot\w*|shot|shots|bomb(s|ed|er|ers|ing|ings|ard\w*|shells?)?|"
+    r"wars?|warfare|weapons?|knife|knives|knifed|blood\w*|corpses?|"
+    # sex, abuse, crime
+    r"sex(es|y|ier|iest|ual\w*|ist\w*|ism)?|naked|nude[sd]?|nudity|porn\w*|rap(e|ed|es|ing|ist|ists)|molest\w*|pedophil\w*|paedophil\w*|"
+    r"prostitut\w*|abus\w*|abortions?|condoms?|slave\w*|"
+    # drugs, alcohol, tobacco
+    r"drugs?|drugged|heroin|cocaine|meth|methamphetamine\w*|amphetamines?|marijuana|cannabis|opium|opiates?|narcotics?|overdos\w*|lsd|"
+    r"addict\w*|alcoholics?|alcoholism|drunk\w*|vodka|whisk(e)?y|cigarettes?|smok\w*|"
+    # insults, swearing, hatred
+    r"damn\w*|goddamn\w*|hell|fuck\w*|shit\w*|bullshit\w*|bitch\w*|bastards?|ass(es|holes?)?|crap\w*|piss(ed|es|ing|y)?|cum|"
+    r"stupid\w*|idiot\w*|hat(e[sd]?|ing|red)|ugl(y|ier|iest)|racis\w*|"
+    # religion, politics, illness
+    r"god|gods|goddess\w*|jesus|bible|bibles|church(es)?|devils?|nazis?|hitler|terror\w*|"
+    r"prison\w*|imprison\w*|jail\w*|cancer\w*)\b", re.I)
+
+# Japanese: a stem only counts when it sits on morpheme boundaries (fugashi), so 神戸 / 神社 / 神経 / ばかり / テロップ /
+# ナチュラル / 死角 / 血液型 are fine while 神 / 死ね / バカ / テロ / 殺す are not. BLOCK_JA is only the cheap pre-filter
+# (any stem occurs as a substring); blocked() confirms the hit on the morphemes.
+JA_STEMS = (
+    # death / killing
+    "死 死亡 死体 死刑 死者 死人 死骸 死因 死去 死別 戦死 病死 溺死 餓死 焼死 変死 即死 急死 怪死 殉死 "
+    "殺 殺人 殺し屋 人殺し 殺害 殺意 殺戮 暗殺 射殺 惨殺 毒殺 虐殺 絞殺 撲殺 刺殺 斬殺 自殺 遺体 "
+    # blood, guns, war, bombs, terror
+    "血 出血 流血 吐血 鮮血 銃 拳銃 銃声 機関銃 猟銃 銃弾 銃撃 小銃 散弾銃 戦争 "
+    "爆弾 爆発 爆破 爆撃 テロ テロリスト テロリズム 刑務所 地獄 "
+    # abuse, crime, drugs
+    "虐待 誘拐 拷問 拉致 監禁 暴力 暴行 レイプ 強姦 痴漢 売春 "
+    "麻薬 覚醒剤 覚せい剤 ヘロイン コカイン マリファナ 大麻 阿片 アヘン 中絶 堕胎 "
+    "酔 酔っ払 タバコ たばこ 煙草 喫煙 "
+    # sex
+    "セックス エッチ ポルノ "
+    # insults
+    "クソ くそ バカ ばか 馬鹿 アホ あほ 阿呆 ブス うざい うざったい ウザイ ウザい 畜生 "
+    # religion / politics
+    "神 神々 ナチ ナチス ナチズム ヒトラー"
+).split()
+# stems that may be followed by hiragana okurigana inside the same morpheme (死んだ, 殺し, 酔っ払い, 血まみれ, 神さま)
+JA_STEM_TAIL = {s for s in JA_STEMS if "\u4e00" <= s[-1] <= "\u9fff"}
+BLOCK_JA = re.compile("|".join(re.escape(s) for s in sorted(JA_STEMS, key=len, reverse=True)))
+_JA_STEM_SET = set(JA_STEMS)
+_JA_BY_FIRST = {}
+for _s in sorted(JA_STEMS, key=len, reverse=True):
+    _JA_BY_FIRST.setdefault(_s[0], []).append(_s)
+_HIRA = re.compile(r"[ぁ-ゟ]+")
+_ja_cache = {}
+BLOCK_RULES_VERSION = "2"  # bump when the matching logic (not the word lists) changes: it is part of the pool cache signature
 BLOCK_KO = re.compile(r"죽|살인|섹스|씨발|젠장|멍청|바보|마약|자살|총|전쟁|지옥|감옥|담배|테러|폭탄|포르노|강간")
+
+
+def _ja_blocked(text):
+    """True if the Japanese `text` contains a blocked word on morpheme boundaries (or a morpheme whose dictionary form is one)"""
+    if not BLOCK_JA.search(text):
+        return False
+    hit = _ja_cache.get(text)
+    if hit is not None:
+        return hit
+    try:
+        tg = reading.ja_tagger()
+        with reading._tagger_lock:
+            nodes = [(n.surface, (n.feature.lemma or "").split("-")[0]) for n in tg(text)]
+    except Exception:
+        return True  # cannot analyse -> stay on the safe side
+    starts, ends, lemmas, pos = {}, {}, set(), 0
+    for surf, lem in nodes:
+        i = text.find(surf, pos)
+        if i < 0:
+            continue
+        pos = i + len(surf)
+        starts[i] = pos
+        ends[pos] = i
+        lemmas.add(lem)
+        for k in range(i, pos):
+            ends.setdefault(("in", k), pos)
+    hit = bool(lemmas & _JA_STEM_SET)
+    if not hit:
+        for i in range(len(text)):
+            if i not in starts:
+                continue
+            for st in _JA_BY_FIRST.get(text[i], ()):
+                if not text.startswith(st, i):
+                    continue
+                e = i + len(st)
+                if e in ends:
+                    hit = True
+                elif st in JA_STEM_TAIL:
+                    te = ends.get(("in", e - 1))   # end of the morpheme that contains the stem's last character
+                    hit = te is not None and bool(_HIRA.fullmatch(text[e:te]))
+                if hit:
+                    break
+            if hit:
+                break
+    if len(_ja_cache) > 20000:
+        _ja_cache.clear()
+    _ja_cache[text] = hit
+    return hit
 
 
 def blocked(text):
     """True if `text` (a sentence, option, distractor word or tile in either language) is on the block list"""
-    return bool(BLOCK_EN.search(text) or BLOCK_JA.search(text))
+    return bool(BLOCK_EN.search(text) or _ja_blocked(text))
 
 SEED = {
     "en": {1: "name meet from student work like brother sister family hobby thank sorry nice",
@@ -82,6 +174,36 @@ SEED = {
            11: "本当 少し 大丈夫 無理 断る 頼む",
            12: "駅 道 計画 将来 旅行 意見"},
 }
+
+# ---- English wrong options / extra tiles must be real, independent words
+VOCAB_RULES_VERSION = "1"
+VOCAB_MIN_ZIPF = 3.1       # surface form (not its lemma): "downed" 3.3 is caught by VOCAB_FORM_GAP, "tion" 2.8 is too rare
+VOCAB_FORM_GAP = 1.8       # a rare inflection of a common word ("downed" of "down", "cools", "gon" of "gonna") is no good option
+AFFIXES = set("""anti ante arch auto bi circum co contra counter cross de dis en em epi ex extra fore hetero homo hyper hypo il im in ir
+infra inter intra iso macro mal mega meta micro mid mini mis mono multi neo non omni out over para peri photo poly post pre pro pseudo
+quasi re retro self semi step sub super supra sur syn techno tele trans tri ultra un under uni up vice with""".split())
+NOT_WORDS = set("gon wan ca sha ai ain isn gonna wanna gotta lemme gimme kinda sorta cuz tho thru til mapo".split())
+_vocab_ok = {}
+
+
+def _real_word(surf, lemma, wn):
+    """True if `surf` can stand on its own as an English word: not an affix / contraction stub, common enough as written,
+    not a rare inflection of a common word, and known to WordNet (when it is available)"""
+    key = (surf, lemma)
+    v = _vocab_ok.get(key)
+    if v is not None:
+        return v
+    z, zl = reading.zipf(surf, "en"), reading.zipf(lemma, "en")
+    ok = surf.isalpha() and surf not in AFFIXES and surf not in NOT_WORDS and z >= VOCAB_MIN_ZIPF         and not (zl - z > VOCAB_FORM_GAP and z < 4.0)
+    if ok and wn is not None:
+        with _wn_q_lock:
+            try:
+                ok = bool(wn.synsets(surf) or wn.synsets(lemma))
+            except Exception:
+                pass
+    _vocab_ok[key] = ok
+    return ok
+
 
 _pools = {}
 _pool_lock = threading.Lock()
@@ -123,7 +245,8 @@ def warmup():
 def _db_sig():
     st = os.stat(reading.DB_PATH)
     # the block lists are part of the signature: editing them makes old pool caches refresh
-    bl = hashlib.md5((BLOCK_EN.pattern + BLOCK_JA.pattern + BLOCK_KO.pattern).encode("utf-8")).hexdigest()[:8]
+    bl = hashlib.md5("".join((BLOCK_EN.pattern, BLOCK_JA.pattern, " ".join(JA_STEMS), BLOCK_KO.pattern, BLOCK_RULES_VERSION,
+                                  VOCAB_RULES_VERSION)).encode("utf-8")).hexdigest()[:8]
     return "%s-%s-%d-%d" % (POOL_VERSION, bl, st.st_size, int(st.st_mtime))
 
 
@@ -150,7 +273,9 @@ def ensure_wordnet_data():
             have = os.path.exists(os.path.join(NLTK_DIR, "corpora", pkg + ".zip")) or os.path.isdir(os.path.join(NLTK_DIR, "corpora", pkg))
             if not have:
                 nltk.download(pkg, download_dir=NLTK_DIR, quiet=True)
-        return True
+        # nltk.download() returns False instead of raising when offline: trust only what is on disk
+        return all(os.path.exists(os.path.join(NLTK_DIR, "corpora", pkg + ".zip")) or os.path.isdir(os.path.join(NLTK_DIR, "corpora", pkg))
+                   for pkg in NLTK_PKGS)
     except Exception:
         _log().exception("could not download the WordNet data for the lesson distractor check")
         return False
@@ -593,7 +718,7 @@ def _build_en(rows):
     nlp = reading.en_nlp()
     keep = []
     for sid, text, ko in rows:
-        if not EN_CLEAN.fullmatch(text) or BLOCK_EN.search(text) or not _ko_clean(ko) or "  " in text \
+        if not EN_CLEAN.fullmatch(text) or blocked(text) or not _ko_clean(ko) or "  " in text \
                 or re.search(r"[.!?;]\s+\S", text):  # one sentence only
             continue
         words = text.split()
@@ -648,7 +773,7 @@ def _build_ja(rows):
     tg = reading.ja_tagger()
     out = []
     for sid, text, ko in rows:
-        if not 3 <= len(text) <= 40 or JA_BAD.search(text) or BLOCK_JA.search(text) or not _ko_clean(ko) \
+        if not 3 <= len(text) <= 40 or JA_BAD.search(text) or _ja_blocked(text) or not _ko_clean(ko) \
                 or re.search(r"[。！？!?．]+[^。！？!?．]", text):  # one sentence only
             continue
         with reading._tagger_lock:
@@ -733,6 +858,13 @@ class Pool:
                     if head and len(ch) <= 6 and not re.search(r"[、。！？!?]", ch):
                         self.chunks.setdefault(head[3], []).append((ch, head[2]))
 
+    def refine_vocab(self, wn):
+        """English: drop distractor / extra-tile candidates that are no independent words (see _real_word)"""
+        if self.lang != "en":
+            return
+        for key in list(self.vocab):
+            self.vocab[key] = [v for v in self.vocab[key] if _real_word(v[0], v[1], wn)]
+
     def corpus_taken(self, text, start, cand, loose=False, verb=False):
         """en: True if the sentence `text` with `cand` instead of the word starting at char `start` has the same
         (left word, word, right word) triple as some English Tatoeba sentence. loose: also true if both the
@@ -781,11 +913,11 @@ def pool(lang):
                 if lang == "en":
                     if "--prefetch" in sys.argv:
                         ensure_wordnet_data()  # `server.py --prefetch` downloads wordnet + omw-1.4 into models/nltk_data
+                    np_.refine_vocab(wordnet())  # loads WordNet now (about 1.5 s), not during the first lesson
                     try:
                         np_.bits = _load_bits(np_)
                     except Exception:
                         _log().exception("lesson corpus bit set failed; distractors are checked against the pool and the DB only")
-                    wordnet()  # load now (about 1.5 s), not during the first lesson
                 p = _pools[lang] = np_
     return p
 

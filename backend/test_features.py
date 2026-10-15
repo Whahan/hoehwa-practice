@@ -89,20 +89,37 @@ def flagged(d):
 
 
 def rising_end(wav):
-    """TTS audio whose last 40% of speech is resampled faster and faster -> the pitch glides up at the end"""
+    """Kokoro TTS audio whose pitch glides UP over the last part of the speech.
+    The speech is first slowed (resampled at 0.7x -> a deeper voice, so the rise stays under the pitch tracker's 500 Hz
+    ceiling), then the playback rate ramps linearly from 0.7x to 1.26x over the last 30% (+10 semitones). The old version
+    (rate 1.0 -> 1.8 over the last 40%) did not rise at all: Kokoro ends "Are you ready" with a ~6 semitone fall in the
+    last 160 ms, which cancelled the glide (tail move -1.4 st measured by the server, and falling in an independent
+    librosa.pyin measure), so the engine was right to say "not raised" and the test audio was wrong."""
     x, sr = sf.read(io.BytesIO(wav), dtype="float32")
     n = len(x)
     act = np.where(np.abs(x) > 0.02 * np.abs(x).max())[0]
     s0, s1 = int(act[0]), int(act[-1])
-    rate = np.ones(n)
-    k = s0 + int((s1 - s0) * 0.6)
-    rate[k:s1] = np.linspace(1.0, 1.8, s1 - k)
+    base, top = 0.7, 1.8
+    rate = np.full(n, base)
+    k = s1 - int((s1 - s0) * 0.3)
+    rate[k:s1] = np.linspace(base, base * top, s1 - k)
+    rate[s1:] = base * top
     pos = np.cumsum(rate) - rate[0]
     pos = pos[pos < n - 1]
     y = np.interp(pos, np.arange(n), x).astype(np.float32)
     buf = io.BytesIO()
     sf.write(buf, y, sr, format="WAV", subtype="PCM_16")
     return buf.getvalue()
+
+
+def tail_slope_st(wav):
+    """independent pitch check (librosa.pyin, not the server's code path): semitone change over the last 8 voiced frames"""
+    import librosa
+    x, sr = sf.read(io.BytesIO(wav), dtype="float32")
+    f0, _, _ = librosa.pyin(x, fmin=65, fmax=500, sr=sr, frame_length=2048, hop_length=sr // 50)
+    st = 12 * np.log2(f0 / np.nanmedian(f0))
+    v = st[np.isfinite(st)][-8:]
+    return float(np.polyfit(np.arange(len(v)), v, 1)[0] * (len(v) - 1))
 
 
 def main():
@@ -142,13 +159,17 @@ def main():
     d, _ = prosody(q, "en", w_state)
     print("   text '?' + falling statement audio: tips=%s" % d["tips_ko"])
     check("question text + falling audio -> tip to raise the end", any("올려" in t and "끝" in t for t in d["tips_ko"]))
-    w_rise = rising_end(tts("Are you ready", "en"))
+    w_plain = tts("Are you ready", "en")
+    w_rise = rising_end(w_plain)
+    slope_plain, slope_rise = tail_slope_st(w_plain), tail_slope_st(w_rise)
+    print("   independent pyin tail slope: plain TTS %.1f st, rising_end audio %.1f st" % (slope_plain, slope_rise))
+    audio_rises = slope_rise > 1.5 and slope_plain < 0.5   # the test audio itself must rise, else this check would test nothing
     d, _ = prosody("Are you ready.", "en", w_rise)
     print("   statement text + rising audio: tips=%s" % d["tips_ko"])
-    check("statement text + rising audio -> 'you raised the end' tip", any(t.startswith("문장 끝을 올려 말했어요") for t in d["tips_ko"]))
+    check("statement text + rising audio -> 'you raised the end' tip", audio_rises and any(t.startswith("문장 끝을 올려 말했어요") for t in d["tips_ko"]), "" if audio_rises else "rising_end audio does not rise (independent pyin %.1f st): test bug" % slope_rise)
     d, _ = prosody(q, "en", w_rise)
     print("   question text + rising audio: tips=%s" % d["tips_ko"])
-    check("question text + rising audio -> no raise-the-end complaint", not any("끝을 더 올려" in t or "끝을 올려야" in t for t in d["tips_ko"]))
+    check("question text + rising audio -> no raise-the-end complaint", audio_rises and not any("끝을 더 올려" in t or "끝을 올려야" in t for t in d["tips_ko"]))
 
     print("\n== /score phonemes: correct TTS")
     for lang, text, rd in (("en", "I like milk and bread.", ""), ("en", "Thank you very much.", ""), ("en", "I would like a cup of coffee, please.", ""),
