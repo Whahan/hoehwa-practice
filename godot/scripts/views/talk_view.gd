@@ -398,6 +398,8 @@ func _call_chat() -> void:
 		"history": _history(),
 		"skip_fix": true,
 		"conv_id": conv_id,  # the correction comes from /fix afterwards, so the reply is not held up by it
+		# the server starts synthesizing the reply as soon as it exists, at the user's speed and voice
+		"tts_speed": Tts.normal_speed(), "tts_voice": Tts.voice_for(lang), "presynth": Store.pref_bool("auto_speak"),
 	}
 	_chat_call = Api.post_json("/chat", body, Api.TIMEOUT_LLM, true)
 	var req = _chat_call
@@ -441,7 +443,11 @@ func _apply_reply(d: Dictionary) -> void:
 		"ko": str(d.get("ko", "")), "suggest": sugg,
 	})
 	if Store.pref_bool("auto_speak"):
-		Tts.speak(reply, lang)
+		var tts_chunks: Variant = d.get("tts_chunks", null)
+		if tts_chunks is Array and not (tts_chunks as Array).is_empty():
+			Tts.speak_chunks(tts_chunks, lang) # the chunks the server already pre-synthesized
+		else:
+			Tts.speak(reply, lang)
 	if last is Dictionary and (last as Dictionary)["role"] == "me" and str((last as Dictionary).get("fix", "")) == "":
 		var prev_ai: String = ""
 		var i: int = msgs.size() - 3

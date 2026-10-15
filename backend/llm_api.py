@@ -2,11 +2,10 @@
 """AI engine "openai_api": any OpenAI-compatible HTTP API (POST {base}/chat/completions).
 
 config.json:  "llm_provider": "openai_api",
-              "openai_api": {"preset": "opencode_zen", "base_url": "...", "model": "...", "key_source": "opencode" | "secret"}
-API key (never printed, logged or returned):
-  key_source "opencode": the key saved by `opencode auth login` (%USERPROFILE%\\.local\\share\\opencode\\auth.json,
-                         entry of the preset's OpenCode provider id, e.g. "opencode" for OpenCode Zen)
-  key_source "secret":   backend\\secrets.json {"openai_api": {"<preset>": "<key>"}}, written only by POST /llm
+              "openai_api": {"preset": "opencode_zen", "base_url": "...", "model": "...", "key_source": "secret"}
+API key (never printed, logged or returned): ONLY a key the person typed into this app, stored by POST /llm in
+  backend\\secrets.json {"openai_api": {"<preset>": "<key>"}}. This module never reads the OpenCode login or any other
+  program's credential file (an old config value key_source "opencode" is treated as "secret").
 Errors are raised as llm_common.LlmError with .kind "auth" / "limit" / "overload" / None, so server.py's usage-limit
 fallback to the local model works the same as for the OpenCode engine.
 """
@@ -28,18 +27,18 @@ SECRETS_PATH = os.path.join(BASE, "secrets.json")
 #   Gemini        https://ai.google.dev/gemini-api/docs/openai
 #   OpenRouter    https://openrouter.ai/docs/quickstart
 PRESETS = {
-    "opencode_zen": {"label": "OpenCode Zen", "base_url": "https://opencode.ai/inference/v1", "opencode_id": "opencode",
+    "opencode_zen": {"label": "OpenCode Zen", "base_url": "https://opencode.ai/inference/v1",
                      "model": "deepseek-v4.1-flash",
                      "note": "무료(free) 모델은 OpenCode 프로그램 안에서만 쓸 수 있어요. 이 앱에서는 유료 모델이 필요해요."},
-    "deepseek": {"label": "DeepSeek", "base_url": "https://api.deepseek.com", "opencode_id": "deepseek",
+    "deepseek": {"label": "DeepSeek", "base_url": "https://api.deepseek.com",
                  "model": "deepseek-flash", "note": ""},
     "gemini": {"label": "Google Gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-               "opencode_id": "google", "model": "gemini-2.5-flash", "note": ""},
-    "openrouter": {"label": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "opencode_id": "openrouter",
+               "model": "gemini-2.5-flash", "note": ""},
+    "openrouter": {"label": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
                    "model": "openrouter/auto", "note": ""},
 }
-KEY_SOURCES = ("opencode", "secret")
-DEFAULT = {"preset": "opencode_zen", "model": "", "key_source": "opencode"}
+KEY_SOURCES = ("secret",)
+DEFAULT = {"preset": "opencode_zen", "model": "", "key_source": "secret"}
 
 _session = requests.Session()
 _session.headers.update({"User-Agent": "hoehwa-practice/1.0", "X-Title": "hoehwa-practice"})
@@ -63,15 +62,8 @@ def settings(cfg):
     return {"preset": preset, "label": p["label"],
             "base_url": (raw.get("base_url") or p["base_url"]).rstrip("/"),
             "model": raw.get("model") or p["model"],
-            "key_source": raw["key_source"] if raw["key_source"] in KEY_SOURCES else "opencode",
+            "key_source": "secret",   # the only source: a key typed into this app (secrets.json)
             "note": p["note"]}
-
-
-def opencode_auth_path():
-    # OpenCode 1.x keeps credentials in the XDG data dir; on Windows that is %USERPROFILE%\.local\share\opencode
-    xdg = os.environ.get("XDG_DATA_HOME")
-    root = xdg if xdg else os.path.join(os.path.expanduser("~"), ".local", "share")
-    return os.path.join(root, "opencode", "auth.json")
 
 
 def _read_json(path):
@@ -84,11 +76,7 @@ def _read_json(path):
 
 def get_key(s):
     """API key for settings `s`, or None. Never log the result."""
-    if s["key_source"] == "opencode":
-        e = _read_json(opencode_auth_path()).get(PRESETS[s["preset"]]["opencode_id"]) or {}
-        k = e.get("key") if isinstance(e, dict) and e.get("type", "api") == "api" else None
-    else:
-        k = ((_read_json(SECRETS_PATH).get("openai_api") or {}).get(s["preset"]))
+    k = ((_read_json(SECRETS_PATH).get("openai_api") or {}).get(s["preset"]))
     return _Secret(k.strip()) if isinstance(k, str) and k.strip() else None
 
 
@@ -171,9 +159,7 @@ def call_json(cfg, messages, schema, temperature=0.7, max_tokens=None, timeout=1
                                llm_fallback.classify(raw), raw)
     key = get_key(s)
     if not key:
-        raise llm_common.LlmError("%s API 키가 없어요. %s" % (
-            s["label"], "터미널에서 `opencode auth login`으로 로그인하거나 설정에서 키를 직접 입력해 주세요."
-            if s["key_source"] == "opencode" else "설정에서 API 키를 입력해 주세요."), 503, "auth", "no api key")
+        raise llm_common.LlmError("%s API 키가 없어요. 설정에서 API 키를 입력해 주세요." % s["label"], 503, "auth", "no api key")
     instr = ("Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n"
              + json.dumps(schema, ensure_ascii=False))
     msgs = list(messages) + [{"role": "system", "content": instr}]

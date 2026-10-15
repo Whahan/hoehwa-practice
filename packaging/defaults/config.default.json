@@ -1,0 +1,23 @@
+{
+  "port": 8770,
+  "llm_provider": "opencode",
+  "llm_model": "qwen3:8b",
+  "ollama_url": "http://127.0.0.1:11434",
+  "keep_alive": "30m",
+  "num_ctx": 6144,
+  "stt": {
+    "model": "small",
+    "device": "cuda",
+    "compute_type": "auto"
+  },
+  "tts": {
+    "voice_en": "af_heart",
+    "voice_ja": "jf_alpha",
+    "device": "auto",
+    "cache_max_mb": 300
+  },
+  "opencode": {
+    "model": "deepseek-v4.1-flash-free",
+    "variant": "low"
+  }
+}

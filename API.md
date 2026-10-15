@@ -32,7 +32,7 @@ app/
 `{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "qwen3:8b", "llm_provider": "opencode"|"ollama", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}}`
 각 기능이 준비됐는지. Godot는 시작할 때 이것으로 서버 기동을 확인한다.
 - `grammar`: LanguageTool(오프라인 문법 검사기)과 Java 17+가 있어 쓸 수 있는지.
-- `llm_fallback.active`: 선택한 엔진(무료 DeepSeek)이 한도·권한 문제로 막혀서 `until`까지 로컬 AI가 대신 답하는 중인지. `reason`은 화면에 그대로 보여 줄 한국어 (예: "DeepSeek V4.1 Flash (무료 · OpenCode) 사용 한도에 도달해서 23:21까지 로컬 AI로 답해요.").
+- `llm_fallback.active`: 선택한 엔진(무료 DeepSeek)이 한도·권한 문제로 막혀서 `until`까지 로컬 AI가 대신 답하는 중인지. `reason`은 화면에 그대로 보여 줄 한국어 (예: "DeepSeek V4.1 Flash (무료 · OpenCode) 사용 한도에 도달해서 23:21까지 로컬 AI로 답해요."). 로컬 AI(Ollama)도 연결되지 않으면 `active`는 true이지만 `reason`은 "AI 엔진을 쓸 수 없어요: …"로 시작한다.
 
 ### AI 엔진 (GET/POST /llm, POST /llm/test)
 엔진은 두 가지다. `opencode`(기본): 무료 DeepSeek V4.1 Flash를 OpenCode의 로컬 서버(`opencode serve`, 서버가 필요할 때 자식 프로세스로 띄움)로 쓴다. 로그인은 `opencode auth login`. `ollama`: 오프라인 로컬 qwen3:8b.
@@ -41,7 +41,10 @@ app/
 - `POST /llm/test` → `{"ok", "provider", "seconds", "reply"}` (선택한 엔진 자체를 시험, 로컬 대체 없이)
 - 자동 대체: 무료 모델이 한도(429 등)·권한(무료 모델 거절)·서버 혼잡으로 실패하면 그 요청을 로컬 모델로 다시 처리하고, 오류 문구의 재시도 시각(없으면 30분, 혼잡은 5분)까지 이후 요청도 바로 로컬로 보낸다. 응답 형식은 같다.
 - 대화(`/chat`)는 `conv_id`마다 OpenCode 세션 하나를 유지해 새 메시지만 보낸다(한 턴 약 3~4초).
-- (고급) `"openai_api"`: OpenAI 호환 HTTP API(DeepSeek 공식, OpenRouter, Gemini 등) + API 키. 화면 선택지에는 없고 `POST /llm {"provider": "openai_api", "preset", "model", "key_source": "opencode"|"secret", "api_key"}`로만 고른다. 키는 `backend/secrets.json`에만 저장하고 응답·로그에 나오지 않는다. `GET /llm/models?preset=` → `{"models": [{"id", "free"}]}`.
+- (고급) `"openai_api"`: OpenAI 호환 HTTP API(DeepSeek 공식, OpenRouter, Gemini 등) + API 키. 화면 선택지에는 없고 `POST /llm {"provider": "openai_api", "preset", "model", "api_key"}`로만 고른다. 키는 사용자가 앱에 직접 입력한 것만 `backend/secrets.json`에 저장하고(`key_source`는 항상 `"secret"`), 응답·로그에 나오지 않는다. `GET /llm`의 `openai_api.has_key`도 `secrets.json`만 보고 정한다. **OpenCode 로그인 키(`auth.json`)는 이 앱이 절대 읽지 않는다** (`key_source: "opencode"`는 400). `GET /llm/models?preset=` → `{"models": [{"id", "free"}]}`.
+- OpenCode 작업 폴더: `%LOCALAPPDATA%\hoehwa-practice\opencode\work` (앱 폴더·git 저장소 밖; 에이전트 설정 `opencode.json`만 있다). OpenCode 프로젝트 범위에 앱 파일이 들어가지 않는다.
+- AI가 하나도 없을 때(OpenCode 없음·실패 **그리고** Ollama 꺼짐): `/fix`와 대화 교정은 오류 없이 HTTP 200으로 LanguageTool 결과만 돌려준다 — LanguageTool이 못 찾으면 `{"fix": "", "fix_ko": ""}`. 이때 `/health`·`GET /llm`의 `llm_fallback.reason`은 "AI 엔진을 쓸 수 없어요: …"로 시작하고 로컬 AI가 답한다고 말하지 않는다.
+- 문법 검사(LanguageTool) 신뢰 규칙: 학습자 문장에 자주 틀리는 규칙(대명사 격 바꾸기 `CONFUSION_OF_ME_I` 등)과 고유명사(대문자 단어)를 바꾸는 제안은 쓰지 않고, 고친 문장을 LanguageTool이 다시 검사해 여전히 문제가 있으면 고침을 내놓지 않는다(AI가 있으면 AI가 원문을 직접 본다). `fix_ko`는 규칙 종류(문법/철자/헷갈리는 단어)에 맞게 쓴다.
 - 같은 요청 재사용: 교정(`/fix`), 번역, 레슨 정답 검사 같은 결정적 작업의 AI 결과는 `backend/cache/llm_cache.sqlite`에 (작업, 엔진, 모델, 스키마, 메시지)로 캐시한다. 대화·피드백은 캐시하지 않는다.
 
 ### GET /curriculum
@@ -51,8 +54,15 @@ app/
 텍스트에 마크다운 `**굵게**`가 섞여 있을 수 있다.
 
 ### POST /tts → audio/wav
-요청 `{"text": str, "lang": "en"|"ja", "speed": 1.0}` (speed 0.6~1.3)
-응답: 16-bit PCM 모노 WAV(24kHz) 바이너리. 같은 (text, lang, speed)는 서버가 캐시한다.
+요청 `{"text": str, "lang": "en"|"ja", "speed": 1.0, "voice": "af_heart"}` (speed 0.6~1.3, voice는 선택)
+응답: 16-bit PCM 모노 WAV(24kHz) 바이너리. 같은 (text, lang, speed, voice)는 서버가 디스크에 캐시한다(`backend/cache/tts`, 300 MB 상한, 가장 오래 안 쓴 것부터 삭제 · `config.json`의 `tts.cache_max_mb`).
+같은 키로 동시에 들어온 요청은 합성을 한 번만 하고 결과를 나눠 쓴다. `voice`가 없거나 이 PC에 없는 목소리면 기본 목소리(`af_heart` / `jf_alpha`)로 읽는다.
+
+### GET /tts/voices
+`{"voices": {"en": [{"id": "af_heart", "name": "Heart", "gender": "female"|"male", "default": true}], "ja": [...]}, "default": {"en": "af_heart", "ja": "jf_alpha"}}`
+이 PC의 `models/hf`(Kokoro 스냅샷 `voices/*.pt`)에 이미 있는 목소리만 나온다(영어 `a*`, 일본어 `j*`). 새로 내려받지 않는다.
+
+`/health`에 `"tts_device": "cpu"|"cuda"|""`(Kokoro를 올린 장치, 아직 안 올렸으면 빈 문자열)가 붙는다. `config.json`의 `tts.device`가 `auto`면 torch에 CUDA가 있고 남는 VRAM이 1.5 GB 이상일 때만 GPU를 쓴다.
 
 ### POST /stt
 요청 `{"lang": "en"|"ja", "audio_b64": str}`
@@ -105,6 +115,7 @@ app/
  "scenario": {"id": "cafe", "title": "카페에서 주문", "persona": "Emma, a friendly barista in Seattle", "scene": "The learner orders at the counter."},
  "history": [{"role": "ai"|"me", "text": str}]}
 ```
+요청에 선택 필드 `tts_speed`(기본 1.0), `tts_voice`, `presynth`(기본 true; 앱의 자동 읽기가 꺼져 있으면 false)를 붙이면, 서버가 답을 만드는 즉시 백그라운드에서 답의 문장들을 그 속도·목소리로 합성해 TTS 캐시에 넣는다(첫 문장 먼저). 앱이 곧이어 보내는 `/tts`는 캐시 적중이거나 진행 중인 합성에 합류한다. 응답에 `"tts_chunks": [str, ...]`가 붙는다(읽을 조각 순서; 문장 단위, 첫 문장이 길면 첫 쉼표에서 한 번 더 자른다). 앱은 이 조각을 순서대로 `/tts`로 받아 첫 조각이 오는 대로 재생한다.
 `history`가 비어 있으면 AI가 먼저 첫 마디를 한다. 마지막이 `me`면 그에 대한 답.
 응답 `{"reply": str, "reading": str, "ko": str, "fix": str, "fix_ko": str, "suggest": [str, str]}`
 - `reply`: 목표 언어로 1~3문장. `reading`: 일본어면 히라가나 읽기, 영어면 "".
@@ -134,7 +145,9 @@ Exercise 유형:
 
 요청에 `"source"`를 붙일 수 있다(생략하면 `"tatoeba"`).
 - `"tatoeba"`: AI 없이 규칙으로 만든다. 한국어 번역이 있는 Tatoeba 실제 문장(`backend/data/tatoeba.sqlite`)에서 이달·이번 주 커리큘럼 단어가 든 문장을 단계별 길이(영어 stage1 3~7단어 … stage4 ~14단어, 일본어는 글자 수)로 골라 10문제(choice 2, build 3, listen 2, fill 2, speak 1)를 만든다. 정답이 원문 그대로라서 항상 맞다. 응답에 `"source": "tatoeba"`, `"attribution"`(CC BY 문구, 화면에 표시)이 붙고 각 문제에 `"tatoeba_id"`가 붙는다. 영어 build 토큰에는 문장부호가 없다. `explain`은 `/reading/gloss`로 캐시된 뜻이 있을 때만 채워지고 없으면 `""`. 0.5초 이내. DB가 없으면 `"ai"`로 대신 만든다.
-- `"ai"`: 현재 AI 엔진이 만든다(합격 조건 (a)~(f)를 프롬프트에 넣고, 두 번째 호출이 문제마다 조건별 O/X와 정답을 매겨 X가 하나라도 있거나 정답이 다른 문제를 뺀다).
+- `"ai"`: 현재 AI 엔진이 만든다(합격 조건 (a)~(f)를 프롬프트에 넣고, 두 번째 호출이 문제마다 조건별 O/X와 정답을 매겨 X가 하나라도 있거나 정답이 다른 문제를 뺀다). 검증을 통과하면 응답에 `"source": "ai"`. 검증 호출이 실패(`answer_check_failed`)하거나 문제를 빠뜨리거나(`answer_check_incomplete`) 통과한 문제가 너무 적으면(`too_few_verified_items`) AI 레슨을 버리고 같은 요청으로 Tatoeba 레슨을 만들어 `"source": "tatoeba"`, `"fallback_reason": "<위 값>"`을 붙인다. Tatoeba도 안 되면 503(한국어 메시지).
+- Tatoeba DB가 비었거나 깨졌으면(SQLite로 열리지 않음, 필요한 테이블·행 없음) `/health`의 `tatoeba`가 false, `/examples`는 503, `/lesson`은 AI로 만든다. 500은 내지 않는다.
+- 영어 fill 오답 보기는 정답과 바꿔 넣어도 말이 되는 단어(WordNet 동의어·상하위어, 직접 만든 유의어 묶음, Tatoeba 코퍼스의 앞뒤 단어 조합)를 뺀다. 일본어는 한자를 공유하거나 유의어 표에 있는 단어를 뺀다. 본문·보기·오답·추가 타일 모두 차단 단어 목록을 거친다.
 
 ### 마이크 녹음 (/mic/*)
 Godot는 마이크를 직접 열지 않는다(`audio/driver/enable_input=false`). Godot의 WASAPI 입력이 ZOOM H/F 시리즈 같은 USB 오디오 장치에서 녹음할 때마다 장치를 열고 닫다가 앱 전체를 튕기게 했기 때문이다. 녹음은 서버가 PortAudio(sounddevice, MME 장치)로 한다.

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Tests reading mode (/reading/analyze, /reading/gloss) and Tatoeba examples (/examples) against a RUNNING server.
-Usage:  .venv\\Scripts\\python.exe test_reading.py [--base http://127.0.0.1:8770]
+Usage:  .venv\\Scripts\\python.exe test_reading.py --base http://127.0.0.1:8796
 """
 import sys
 import time
@@ -11,9 +11,18 @@ try:
 except Exception:
     pass
 
-BASE = "http://127.0.0.1:8770"
-if "--base" in sys.argv:
-    BASE = sys.argv[sys.argv.index("--base") + 1]
+def _require_base():
+    """These tests send real requests (some write settings / cache files): they never default to the app's server."""
+    if "--base" not in sys.argv or sys.argv.index("--base") + 1 >= len(sys.argv):
+        sys.exit("--base 가 필요해요 / --base is required. Start your own test server "
+                 "(.venv\\Scripts\\python.exe server.py --port 8796 --tag mytest) and pass --base http://127.0.0.1:8796")
+    base = sys.argv[sys.argv.index("--base") + 1].rstrip("/")
+    if base.endswith(":8770") and "--allow-app-server" not in sys.argv:
+        sys.exit("--base points at the app server (port 8770): refused. Use a test server, or add --allow-app-server.")
+    return base
+
+
+BASE = _require_base()
 
 results, timings = [], []
 

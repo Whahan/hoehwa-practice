@@ -166,6 +166,12 @@ if CFG.get("llm_provider") in ("claude_cli", "codex_cli", "gemini_cli"):  # migr
     CFG.pop("cli_models", None)
     if not ARG_PORT:
         save_config(CFG)
+if (CFG.get("openai_api") or {}).get("key_source") == "opencode":  # migration: the app no longer reads OpenCode's login key
+    CFG["openai_api"]["key_source"] = "secret"
+    if not ARG_PORT:
+        save_config(CFG)
+if _arg("--ollama-url"):  # test servers: point the local model at another (e.g. a closed) port
+    CFG["ollama_url"] = _arg("--ollama-url")
 if ARG_PORT:
     CFG["port"] = int(ARG_PORT)
 if ARG_STT_CPU:
@@ -538,6 +544,12 @@ def _synth_now(text, lang, speed, voice):
     return buf.getvalue()
 
 
+def _wav_ok(data: bytes) -> bool:
+    """A cached clip must be a complete RIFF/WAVE file with at least a header and some samples."""
+    return (len(data) > 44 and data[:4] == b"RIFF" and data[8:12] == b"WAVE"
+            and int.from_bytes(data[4:8], "little") + 8 <= len(data) + 1)
+
+
 def synth_wav(text: str, lang: str, speed: float, voice: str = None) -> bytes:
     text = (text or "").strip()
     if not text:
@@ -553,9 +565,16 @@ def synth_wav(text: str, lang: str, speed: float, voice: str = None) -> bytes:
         try:
             with open(path, "rb") as f:
                 data = f.read()
-            _cache_touch(path)
-            log.info("tts cache hit %s %s %.2f %s '%s'", lang, voice, speed, key[:8], text[:30])
-            return data
+            if _wav_ok(data):
+                _cache_touch(path)
+                log.info("tts cache hit %s %s %.2f %s '%s'", lang, voice, speed, key[:8], text[:30])
+                return data
+            # a zero-byte or truncated file (crash, disk full) would otherwise be served forever
+            log.warning("tts cache file broken (%d bytes), re-synthesizing %s", len(data), key[:8])
+            try:
+                os.remove(path)
+            except OSError:
+                pass
         except FileNotFoundError:
             pass
         with _inflight_lock:
@@ -574,10 +593,13 @@ def synth_wav(text: str, lang: str, speed: float, voice: str = None) -> bytes:
         break
     try:
         # the owner of a finished job may have written the file between our cache check and registration
+        data = None
         if os.path.exists(path):
             with open(path, "rb") as f:
                 data = f.read()
-        else:
+            if not _wav_ok(data):
+                data = None
+        if data is None:
             data = _synth_now(text, lang, speed, voice)
             try:
                 os.makedirs(_cache_dir(), exist_ok=True)
@@ -607,8 +629,11 @@ _EN_TERM = set(".!?")
 _JA_TERM = set("。！？!?")
 
 
+_PUNCT = set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~…—–“”‘’「」『』（）【】。、！？・〜～:;")
+
+
 def _has_letters(s):
-    return any(unicodedata.category(c)[0] in "LN" for c in s)
+    return any(not c.isspace() and c not in _PUNCT for c in s)
 
 
 def split_sentences(text, lang):
@@ -641,6 +666,9 @@ def split_sentences(text, lang):
                     if base in _EN_ABBR or (len(base) == 1 and base.isalpha() and tok[:1].isupper() and base not in ("i", "a")):
                         i = j
                         continue
+            if lang == "ja" and j < n and line[j] == "と":   # 「…。」と言いました: the quote continues
+                i = j
+                continue
             i = j
             out.append(cur.strip())
             cur = ""
@@ -661,18 +689,21 @@ def split_sentences(text, lang):
 
 
 def first_clause_split(s, lang):
-    """Latency: Kokoro on CPU needs ~0.27 s per second of audio, so a long first sentence is cut at its first clause
-    boundary (, ; : / 、) so the first sound starts sooner. Returns [head, tail] or [s]."""
+    """Latency: Kokoro on CPU needs ~0.25 s per second of audio, so a long first sentence is cut at a clause
+    boundary (, ; : / 、) so the first sound starts sooner. The tail must still be ready by the time the head has
+    played (tail length <= ~3.5 x head length). Returns [head, tail] or [s]."""
     if lang == "en":
         words = s.split(" ")
-        if len(words) >= 9:
-            for k in range(3, min(8, len(words) - 3) + 1):
-                if words[k - 1][-1:] in ",;:":
-                    return [" ".join(words[:k]), " ".join(words[k:])]
+        if len(s) >= 30 and len(words) >= 6:
+            for k in range(2, min(10, len(words) - 2) + 1):
+                if words[k - 1] != "" and words[k - 1][-1] in ",;:":
+                    head, tail = " ".join(words[:k]), " ".join(words[k:])
+                    if len(head) >= 8 and len(tail) <= 3.5 * len(head) + 8:
+                        return [head, tail]
     else:
-        if len(s) >= 16:
+        if len(s) >= 12:
             for p, ch in enumerate(s):
-                if ch == "、" and 6 <= p + 1 <= 14 and len(s) - (p + 1) >= 5:
+                if ch == "、" and 5 <= p + 1 <= 14 and len(s) - (p + 1) >= 4 and len(s) - (p + 1) <= 3.5 * (p + 1) + 3:
                     return [s[:p + 1], s[p + 1:]]
     return [s]
 
@@ -1352,22 +1383,50 @@ def _remote_model():
 _local_health = {"t": 0.0, "ok": False}
 
 
+def _local_model_listed():
+    """Ollama answers on ollama_url and has the configured model (no start attempt)."""
+    try:
+        r = requests.get(CFG["ollama_url"] + "/api/tags", timeout=1.5)
+        names = [m.get("name") or m.get("model") for m in r.json().get("models", [])]
+        want = CFG["llm_model"]
+        return want in names or (want + ":latest") in names
+    except Exception:
+        return False
+
+
+_local_start_fail_t = 0.0
+
+
 def local_llm_ready():
-    """The local Ollama model can answer. Starts Ollama if it is installed but not running. Cached 10 s."""
+    """The local Ollama model can answer. Starts Ollama if it is installed but not running (a failed start is not
+    retried for 2 minutes, so a broken Ollama never stalls requests). Cached 10 s."""
+    global _local_start_fail_t
     now = time.time()
     if now - _local_health["t"] < 10:
         return _local_health["ok"]
     ok = False
     if _ollama_installed() or not using_remote():
-        ensure_ollama()
-        try:
-            r = requests.get(CFG["ollama_url"] + "/api/tags", timeout=1.5)
-            names = [m.get("name") or m.get("model") for m in r.json().get("models", [])]
-            want = CFG["llm_model"]
-            ok = want in names or (want + ":latest") in names
-        except Exception:
-            ok = False
+        if _local_model_listed():
+            ok = True
+        elif now - _local_start_fail_t > 120:
+            ensure_ollama()
+            ok = _local_model_listed()
+            if not ok:
+                _local_start_fail_t = time.time()
     _local_health.update(t=time.time(), ok=ok)
+    return ok
+
+
+_local_probe = {"t": 0.0, "ok": False}
+
+
+def local_llm_reachable():
+    """Like local_llm_ready() but never starts anything and answers fast (cached 5 s): for /health and GET /llm."""
+    now = time.time()
+    if now - _local_probe["t"] < 5:
+        return _local_probe["ok"]
+    ok = _local_model_listed()
+    _local_probe.update(t=now, ok=ok)
     return ok
 
 
@@ -1596,7 +1655,11 @@ def correct_learner(lang, stage, text, prev_ai):
     except Exception:
         log.exception("languagetool correction failed")
     if lt is None:
-        return _llm_correct(lang, stage, text, prev_ai)
+        try:
+            return _llm_correct(lang, stage, text, prev_ai)
+        except ApiError as e:   # no AI engine can answer (OpenCode missing/failing and Ollama unreachable): no fix, not an error
+            log.info("no AI available for the correction (%s): no fix", e.msg)
+            return "", ""
     if not CFG.get("grammar_llm_polish", True):
         return lt["fix"], lt["fix_ko"]
     try:
@@ -1942,8 +2005,11 @@ def run_lesson(req):
             break
     if len(good) < 4:
         raise ApiError("레슨을 만들지 못했어요. 잠시 뒤에 다시 시도해 주세요.", 502)
-    good = verify_answers(lang, builds_to_fills(good[:10], lang))
-    return {"title": title or "오늘의 레슨", "exercises": good}
+    try:
+        good = verify_answers(lang, builds_to_fills(good[:10], lang))
+    except LessonUnchecked as e:
+        return lesson_fallback(req, str(e))
+    return {"title": title or "오늘의 레슨", "exercises": good, "source": "ai"}
 
 
 KANA = re.compile(r"[ぁ-んァ-ヶ]")
@@ -2023,6 +2089,26 @@ def fill_from_build(b, lang, pool):
             "explain": b.get("explain", ""), "reading": ja_reading(sentence) if lang == "ja" else ""}
 
 
+class LessonUnchecked(Exception):
+    """the answer checker failed, skipped items or left fewer than 4 good items: the AI lesson must not be shown unchecked"""
+
+
+def lesson_fallback(req, reason):
+    """Rule-based Tatoeba lesson for the same request (used when the AI lesson could not be verified)."""
+    import sqlite3
+    log.warning("AI lesson not verified (%s); falling back to a rule-based Tatoeba lesson", reason)
+    if readmode.tatoeba_ready():
+        try:
+            n = clamp_int(req.month, 1, 12, 1)
+            d = lesson_rules.make_lesson(need_lang(req.lang), n, clamp_int(req.week, 1, 4, 1), clamp_int(req.stage, 1, 4, stage_of(n)))
+            d["source"] = "tatoeba"
+            d["fallback_reason"] = reason
+            return d
+        except (sqlite3.Error, ApiError) as e:
+            log.warning("Tatoeba fallback lesson failed: %s", getattr(e, "msg", e))
+    raise ApiError("레슨을 확인하지 못했어요. 잠시 뒤에 다시 시도해 주세요.", 503)
+
+
 OX = {"type": "string", "enum": ["O", "X"]}
 VERIFY_SCHEMA = S(answers={"type": "array", "items": S(id={"type": "integer"}, answer={"type": "integer"},
                                                        a=OX, b=OX, c=OX, d=OX, e=OX)})
@@ -2064,13 +2150,17 @@ def verify_answers(lang, exs):
     try:
         data = ollama_json([{"role": "user", "content": prompt}], VERIFY_SCHEMA, temperature=0.0, num_predict=4000, think=True,
                            cache_key_kind="verify")
-    except ApiError:
-        log.warning("answer check failed; keeping lesson unchecked")
-        return exs
+    except Exception as e:
+        log.warning("answer check failed: %s", getattr(e, "msg", e))
+        raise LessonUnchecked("answer_check_failed")
     got = {}
     for a in (data.get("answers") or []) if isinstance(data, dict) else []:
         if isinstance(a, dict) and isinstance(a.get("id"), int) and isinstance(a.get("answer"), int):
             got[a["id"]] = (a["answer"], [c for c in VERIFY_CRITERIA if str(a.get(c, "O")).upper() == "X"])
+    missing = [i for i in range(len(exs)) if i not in got]
+    if missing:
+        log.warning("answer check skipped %d of %d items", len(missing), len(exs))
+        raise LessonUnchecked("answer_check_incomplete")
     keep = []
     for i, e in enumerate(exs):
         if i in got:
@@ -2082,7 +2172,9 @@ def verify_answers(lang, exs):
                 log.info("dropping exercise %d (%s): criteria %s marked X", i, e["type"], ",".join(bad))
                 continue
         keep.append(e)
-    return keep if len(keep) >= 4 else exs
+    if len(keep) < 4:
+        raise LessonUnchecked("too_few_verified_items")
+    return keep
 
 
 # ----------------------------------------------------------------------------------------------
@@ -2420,9 +2512,16 @@ def _fallback_status():
     if not using_remote():
         return {"active": False, "until": None, "reason": ""}
     if llm_provider() == "opencode" and not llm_opencode.available():
+        if local_llm_reachable():
+            return {"active": True, "until": None,
+                    "reason": "OpenCode가 설치되어 있지 않아서 무료 DeepSeek 대신 로컬 AI로 답해요. (npm install -g opencode-ai)"}
         return {"active": True, "until": None,
-                "reason": "OpenCode가 설치되어 있지 않아서 무료 DeepSeek 대신 로컬 AI로 답해요. (npm install -g opencode-ai)"}
-    return llm_fallback.status(llm_provider())
+                "reason": "AI 엔진을 쓸 수 없어요: OpenCode가 설치되어 있지 않고 로컬 AI(Ollama)도 연결되지 않아요. "
+                          "문법 검사기만 쓸 수 있어요. (npm install -g opencode-ai)"}
+    st = llm_fallback.status(llm_provider())
+    if st["active"] and not local_llm_reachable():   # the remote engine is blocked and the local model cannot stand in
+        st = llm_fallback.status(llm_provider(), local_ok=False)
+    return st
 
 
 @app.get("/curriculum")
@@ -2707,10 +2806,15 @@ def lesson(req: LessonReq):
     if src not in ("tatoeba", "ai"):
         raise ApiError("source는 'tatoeba' 또는 'ai'여야 해요.", 400)
     if src == "tatoeba":
+        import sqlite3
         if readmode.tatoeba_ready():
             n = clamp_int(req.month, 1, 12, 1)
-            return lesson_rules.make_lesson(need_lang(req.lang), n, clamp_int(req.week, 1, 4, 1), clamp_int(req.stage, 1, 4, stage_of(n)))
-        log.warning("tatoeba DB missing; /lesson falls back to the AI lesson")
+            try:
+                return lesson_rules.make_lesson(need_lang(req.lang), n, clamp_int(req.week, 1, 4, 1), clamp_int(req.stage, 1, 4, stage_of(n)))
+            except sqlite3.Error:
+                log.warning("tatoeba DB unreadable; /lesson falls back to the AI lesson")
+        else:
+            log.warning("tatoeba DB missing or invalid; /lesson falls back to the AI lesson")
     return run_lesson(req)
 
 

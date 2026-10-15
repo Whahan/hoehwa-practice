@@ -1,5 +1,5 @@
 ﻿# Builds the one-click install package:  app\packaging\out\회화연습_설치패키지_<yyyyMMdd>.zip
-#   powershell -ExecutionPolicy Bypass -File build_dist.ps1 [-IncludeModels] [-IncludeProgress] [-SkipExport]
+#   powershell -ExecutionPolicy Bypass -File build_dist.ps1 [-IncludeModels] [-IncludeProgress] [-SkipExport] [-Release 1.2.3 [-NotesFile notes.md]]
 # Re-runnable: everything (exe, backend source, pip lock, model lock) is regenerated from the live state of this PC.
 param(
     [switch]$IncludeModels,    # also pack backend\models\hf (about 2 GB more, fully offline model install)
@@ -9,6 +9,7 @@ param(
     [string]$OutDir,
     [string]$Release,          # x.y.z : also build the update zip + out\release_<x.y.z>\ (GitHub assets, SHA256SUMS.txt)
     [string]$Notes = "",       # release notes (only written into the local latest.json used for testing)
+    [string]$NotesFile,        # same, read from a UTF-8 file (publish_release.ps1 uses this: no quoting problems, no empty argument)
     [string]$TestRequirementsLock  # (tests only) ship this file as vendor\requirements.lock.txt instead of the real lock
 )
 $ErrorActionPreference = "Stop"
@@ -38,6 +39,8 @@ if ($Release) {
 $ZipName = if ($IncludeModels) { "회화연습_설치패키지_${Tag}_모델포함.zip" } else { "회화연습_설치패키지_${Tag}.zip" }
 $ZipPath = Join-Path $OutDir $ZipName
 $utf8Bom = New-Object System.Text.UTF8Encoding($true)
+if ($NotesFile) { $Notes = (Get-Content -LiteralPath $NotesFile -Raw -Encoding UTF8) }
+$DefaultCfg = Join-Path $Pkg "defaults\config.default.json"
 
 function Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
 function Run-Native([string]$exe, [string[]]$a) {
@@ -90,12 +93,19 @@ $rc = Run-Native "robocopy.exe" @($Backend, $bdst, "/E", "/NFL", "/NDL", "/NJH",
     "/XD", ".venv", "models", "cache", "logs", "data", "__pycache__", "test_out", ".pytest_cache",
     "tools",   # LanguageTool (~400 MB): the installer downloads the official zip (models.lock.json "languagetool")
     "/XF", "setup.ps1", "run_backend.bat", "stop_backend.bat", "*.pyc", "*.log",
-    "secrets.json", "secrets.json.tmp")   # API keys never leave this PC
+    "secrets.json", "secrets.json.tmp",   # API keys never leave this PC
+    "test_*.py", "build_curriculum.py", "requirements.txt", ".gitignore")   # dev files (kept in git, not shipped)
 if ($rc -ge 8) { throw "robocopy failed ($rc)" }
+# the package ships a neutral config, never this PC's backend\config.json (robocopy copied it; it is replaced right here)
+if (-not (Test-Path -LiteralPath $DefaultCfg)) { throw "defaults\config.default.json not found" }
+Copy-Item -LiteralPath $DefaultCfg -Destination (Join-Path $bdst "config.json") -Force
 # safety net: no API key file and no key-looking value in config.json may reach the package
 if (Get-ChildItem -LiteralPath $bdst -Recurse -File -Filter "secrets.json*" -ErrorAction SilentlyContinue) { throw "secrets.json was copied into the package" }
 $cfgTxt = Get-Content -LiteralPath (Join-Path $bdst "config.json") -Raw -Encoding UTF8
 if ($cfgTxt -match '(?i)"(api_key|apikey|token|secret)"\s*:' -or $cfgTxt -match '(sk-[A-Za-z0-9_\-]{16,}|AIza[0-9A-Za-z_\-]{20,})') { throw "config.json looks like it contains an API key" }
+if ((Get-FileHash -LiteralPath (Join-Path $bdst "config.json") -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $DefaultCfg -Algorithm SHA256).Hash) { throw "backend\config.json in the package is not the default config" }
+$devFiles = Get-ChildItem -LiteralPath $bdst -Recurse -File | Where-Object { $_.Name -match '^test_.*\.py$|^build_curriculum\.py$|^\.gitignore$|^requirements\.txt$' }
+if ($devFiles) { throw ("dev files in the package: " + ($devFiles.Name -join ", ")) }
 Copy-Item (Join-Path $Pkg "defaults\run_backend.bat") $bdst -Force
 Copy-Item (Join-Path $Pkg "defaults\stop_backend.bat") $bdst -Force
 Get-ChildItem $bdst -File | ForEach-Object { Write-Host ("    {0}  ({1:N0} B)" -f $_.Name, $_.Length) }
@@ -172,6 +182,10 @@ $code = Run-Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "make_zip.py"), $Stag
 if ($code -ne 0) { throw "zip failed" }
 $z = Get-Item -LiteralPath $ZipPath
 Write-Host ("    full installer: {0} ({1:N1} MB)" -f $z.Name, ($z.Length / 1MB))
+$zcArgs = @("-X", "utf8", (Join-Path $Pkg "check_zip.py"), $ZipPath, $DefaultCfg)
+if ($IncludeModels) { $zcArgs += "--allow-models" }
+if ($IncludeProgress) { $zcArgs += "--allow-progress" }
+if ((Run-Native $VenvPy $zcArgs) -ne 0) { throw "setup zip check failed" }
 
 if ($Release) {
     # update package: only app files (manifest in_update), at the zip root, plus manifest.json
@@ -191,6 +205,7 @@ if ($Release) {
     $code = Run-Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "make_zip.py"), $UStage, ".", $UZip)
     if ($code -ne 0) { throw "update zip failed" }
     Remove-Item -LiteralPath $UStage -Recurse -Force
+    if ((Run-Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "check_zip.py"), $UZip, $DefaultCfg)) -ne 0) { throw "update zip check failed" }
     # GitHub release assets: ASCII names (GitHub rewrites non-ASCII asset names), SHA256SUMS.txt, and a
     # latest.json in the GitHub API shape so update.ps1 -Source <folder> can test the exact same flow locally.
     $RelDir = Join-Path $OutDir "release_$Version"

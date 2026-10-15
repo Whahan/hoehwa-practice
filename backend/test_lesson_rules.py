@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """Tests the rule-based Tatoeba lessons (POST /lesson, source "tatoeba" = default) against a RUNNING server.
 Every exercise is checked against the original sentence in data/tatoeba.sqlite.
-Usage:  .venv\\Scripts\\python.exe test_lesson_rules.py [--base http://127.0.0.1:8770] [--n 50] [--ai]
-  --ai  also generates one LLM lesson per language (source "ai") and checks its shape.
+Usage:  .venv\\Scripts\\python.exe test_lesson_rules.py --base http://127.0.0.1:8796 [--n 50] [--ai]
+  --ai          also generates one LLM lesson per language (source "ai") and checks its shape.
+  --no-extra    skip the in-process checks (known bad items, block list, DB validity, AI fallback with a stubbed LLM).
+  --corrupt-db  only for a test server started with HOEHWA_TATOEBA_DB=<empty / non-SQLite file> HOEHWA_TEST_HOOKS=1:
+                /lesson must answer with a lesson or a Korean 5xx error, never 500.
 """
 import os
 import re
@@ -18,9 +21,18 @@ try:
 except Exception:
     pass
 
-BASE = "http://127.0.0.1:8770"
-if "--base" in sys.argv:
-    BASE = sys.argv[sys.argv.index("--base") + 1]
+def _require_base():
+    """These tests send real requests (some write settings / cache files): they never default to the app's server."""
+    if "--base" not in sys.argv or sys.argv.index("--base") + 1 >= len(sys.argv):
+        sys.exit("--base 가 필요해요 / --base is required. Start your own test server "
+                 "(.venv\\Scripts\\python.exe server.py --port 8796 --tag mytest) and pass --base http://127.0.0.1:8796")
+    base = sys.argv[sys.argv.index("--base") + 1].rstrip("/")
+    if base.endswith(":8770") and "--allow-app-server" not in sys.argv:
+        sys.exit("--base points at the app server (port 8770): refused. Use a test server, or add --allow-app-server.")
+    return base
+
+
+BASE = _require_base()
 N = int(sys.argv[sys.argv.index("--n") + 1]) if "--n" in sys.argv else 50
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "tatoeba.sqlite")
 con = sqlite3.connect("file:%s?mode=ro" % DB.replace("\\", "/"), uri=True)
@@ -126,6 +138,222 @@ def check_lesson(lang, k, d):
                 bad(lang, k, e, "distractor %r is another exercise's sentence" % o)
 
 
+# ---------------------------------------------------------------------------------------------
+# extra checks: known bad items, block list, corrupted DB, AI fallback
+# ---------------------------------------------------------------------------------------------
+HERE = os.path.dirname(os.path.abspath(__file__))
+KNOWN_BAD = [  # (lang, sentence id, answer word the blank hides, distractors that must NEVER be offered)
+    ("en", 6854532, "think", {"believe", "feel", "guess", "suppose"}),
+    ("en", 8297100, "think", {"feel", "believe", "guess", "suppose"}),
+    ("en", 1037301, "good", {"great", "nice", "fine", "excellent"}),
+    ("en", 7325634, "decided", {"planned", "wanted", "tried", "chose"}),
+    ("en", 8462381, "happened", {"came", "occurred"}),
+    ("ja", 1273307, "人", {"者", "方"}),
+]
+KNOWN_BAD_EXTRA = [("en", 3869718, {"nice", "great", "fine"}), ("en", 17424, {"designed"})]
+
+
+def _inproc():
+    sys.path.insert(0, HERE)
+    import lesson_rules
+    if not lesson_rules.H:
+        cur = json.load(open(os.path.join(HERE, "curriculum.json"), encoding="utf-8-sig"))
+        lesson_rules.init(curriculum=lambda: cur, plain=lambda s: str(s or "").replace("**", "").replace("`", ""),
+                          ja_reading=lambda s: "", log=None, ApiError=Exception)
+    return lesson_rules
+
+
+def _forced(lr, filters_on=True):
+    """{(lang, sid): result of lesson_rules.make_items_for_id}; filters_on=False disables the distractor checks (negative control)"""
+    saved = (lr.Maker.fits, lr.Maker.slot_taken)
+    if not filters_on:
+        lr.Maker.fits = lambda self, *a, **k: False
+        lr.Maker.slot_taken = lambda self, *a, **k: False
+    try:
+        out = {}
+        for lang, sid in {(b[0], b[1]) for b in KNOWN_BAD} | {(b[0], b[1]) for b in KNOWN_BAD_EXTRA}:
+            out[(lang, sid)] = lr.make_items_for_id(lang, sid, seeds=range(150))
+        return out
+    finally:
+        lr.Maker.fits, lr.Maker.slot_taken = saved
+
+
+def test_known_bad():
+    print("\n== known bad items (forced generation, 150 seeds each)")
+    lr = _inproc()
+    good = _forced(lr, True)
+    for lang, sid, ans, banned in KNOWN_BAD:
+        got = good[(lang, sid)]["fills"].get(ans, set())
+        hit = banned & got
+        print("  #%s %-4s blank %-9s distractors seen: %3d  banned present: %s" % (sid, lang, ans, len(got), sorted(hit) or "none"))
+        if hit:
+            fails.append("known bad #%s: %s offered as distractor for %r" % (sid, sorted(hit), ans))
+    for lang, sid, banned in KNOWN_BAD_EXTRA:
+        got = good[(lang, sid)]["extras"]
+        hit = banned & got
+        print("  #%s %-4s extra tiles seen: %3d  banned present: %s" % (sid, lang, len(got), sorted(hit) or "none"))
+        if hit:
+            fails.append("known bad #%s: %s offered as extra tile" % (sid, sorted(hit)))
+    # negative control: with the checks switched off the same test must see the bad words (otherwise the test proves nothing)
+    raw = _forced(lr, False)
+    seen = 0
+    for lang, sid, ans, banned in KNOWN_BAD:
+        seen += bool(banned & raw[(lang, sid)]["fills"].get(ans, set()))
+    for lang, sid, banned in KNOWN_BAD_EXTRA:
+        seen += bool(banned & raw[(lang, sid)]["extras"])
+    print("  negative control (checks off): %d of 8 known bad items show the bad word" % seen)
+    if seen < 6:
+        fails.append("negative control: only %d of 8 known bad items reappear with the checks off; the test cannot detect them" % seen)
+
+
+def _strings(e):
+    out = []
+    for k in ("question", "sentence", "audio", "text", "ko", "answer", "options", "extra"):
+        v = e.get(k)
+        if isinstance(v, str):
+            out.append(v)
+        elif isinstance(v, list):
+            out += [x for x in v if isinstance(x, str)]
+    return out
+
+
+def test_block_list(n=200):
+    print("\n== block list over %d lessons per language (sentences, options, distractors, extra tiles)" % n)
+    lr = _inproc()
+    rng = random.Random(23)
+    for lang in ("en", "ja"):
+        seen = checked = 0
+        for k in range(n):
+            m, w = rng.randint(1, 12), rng.randint(1, 4)
+            r = requests.post(BASE + "/lesson", json={"lang": lang, "month": m, "week": w, "stage": (m + 2) // 3, "source": "tatoeba"}, timeout=60)
+            if r.status_code != 200:
+                fails.append("block test %s lesson %d: HTTP %d" % (lang, k, r.status_code))
+                continue
+            for e in r.json()["exercises"]:
+                for s_ in _strings(e):
+                    checked += 1
+                    if lr.blocked(s_) or lr.BLOCK_KO.search(s_):
+                        seen += 1
+                        fails.append("block list hit in %s lesson %d %s: %r" % (lang, k, e["type"], s_[:80]))
+        print("  %s: %d strings checked, %d block-list hits" % (lang, checked, seen))
+    # the regexes themselves: each required word must be caught (and an innocent word must not be)
+    must = ["terrorist", "Terrorists", "terrorism", "porn", "Pornography", "abuse", "abused", "rape", "suicide", "killed", "murder", "cancer",
+            "bomb", "gun", "guns", "drug", "drugs", "naked", "sex", "sexual", "nazi", "slave", "slavery", "racist", "killing of people"]
+    miss = [w_ for w_ in must if not lr.BLOCK_EN.search("He said %s today." % w_)]
+    miss += [w_ for w_ in ["テロ", "殺", "死ね", "自殺", "ポルノ", "麻薬", "爆弾"] if not lr.BLOCK_JA.search("これは" + w_ + "です")]
+    if miss:
+        fails.append("block list misses: %s" % miss)
+    if lr.BLOCK_EN.search("The grape and the therapist are nice. I like skates and assorted pasta in the classroom."):
+        fails.append("block list matches innocent words (needs word boundaries)")
+    print("  required words all caught: %s" % (not miss))
+
+
+def test_db_validity():
+    print("\n== tatoeba_ready() on bad files (in-process)")
+    import tempfile
+    sys.path.insert(0, HERE)
+    import reading
+    saved = reading.DB_PATH
+    tmp = tempfile.mkdtemp(prefix="lessonfix_")
+    try:
+        cases = {}
+        p = os.path.join(tmp, "empty.sqlite"); open(p, "wb").close(); cases["empty file"] = (p, False)
+        p = os.path.join(tmp, "text.sqlite"); open(p, "wb").write(b"this is not a database" * 500); cases["text file"] = (p, False)
+        p = os.path.join(tmp, "notables.sqlite"); c = sqlite3.connect(p); c.execute("CREATE TABLE x(a)"); c.commit(); c.close(); cases["sqlite without the tables"] = (p, False)
+        p = os.path.join(tmp, "trunc.sqlite"); open(p, "wb").write(open(DB, "rb").read(300000)); cases["truncated real DB"] = (p, False)
+        cases["missing file"] = (os.path.join(tmp, "nope.sqlite"), False)
+        cases["the real DB"] = (DB, True)
+        for name, (path, want) in cases.items():
+            reading.DB_PATH = path
+            reading._ready["key"] = None
+            got = reading.tatoeba_ready()
+            print("  %-28s -> %s" % (name, got))
+            if got != want:
+                fails.append("tatoeba_ready() for %s = %s (want %s)" % (name, got, want))
+    finally:
+        reading.DB_PATH = saved
+        reading._ready["key"] = None
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_ai_fallback():
+    """The checker call fails / skips items / leaves < 4 items -> a Tatoeba lesson with fallback_reason, never the unchecked AI lesson."""
+    print("\n== AI lesson fallback (in-process server module, stubbed LLM)")
+    sys.argv += ["--port", "8799", "--tag", "unit_fallback", "--stt-cpu"]  # server.py: no config writes, own log file
+    sys.path.insert(0, HERE)
+    cwd = os.getcwd()
+    os.chdir(HERE)
+    try:
+        import server
+    finally:
+        os.chdir(cwd)
+    AI = {"title": "AI 레슨", "exercises": [
+        {"type": "choice", "question": "What does 'apple' mean?", "options": ["사과", "배", "포도", "귤"], "answer": 0, "explain": "사과예요."},
+        {"type": "listen", "audio": "I eat an apple every morning.", "options": ["나는 매일 아침 사과를 먹는다", "나는 학교에 간다", "그는 책을 읽는다", "비가 온다"], "answer": 0, "explain": "듣기"},
+        {"type": "build", "ko": "나는 학생이에요.", "answer": ["I", "am", "a", "student"], "extra": ["is", "an"], "explain": "빌드"},
+        {"type": "speak", "text": "Nice to meet you.", "ko": "만나서 반가워요.", "explain": ""},
+        {"type": "choice", "question": "Which one is a color?", "options": ["red", "run", "eat", "sit"], "answer": 0, "explain": "색"},
+        {"type": "build", "ko": "그는 의사예요.", "answer": ["He", "is", "a", "doctor"], "extra": ["are", "an"], "explain": "빌드"},
+    ]}
+    req = server.LessonReq(lang="en", month=1, week=1, source="ai")
+    saved = server.ollama_json
+    saved_ready = server.readmode.tatoeba_ready
+
+    def make_stub(verify):
+        def stub(messages, schema, **kw):
+            if kw.get("cache_key_kind") == "verify":
+                return verify(messages[0]["content"])
+            return json.loads(json.dumps(AI))
+        return stub
+
+    def verify_ok(prompt):  # solve the items: the right option is the one the stub lesson marks correct
+        items = json.loads(prompt[prompt.index("[{"):prompt.index("\n\nReply with JSON")])
+        right = {"What does 'apple' mean?": "사과", "I eat an apple every morning.": "나는 매일 아침 사과를 먹는다", "Which one is a color?": "red"}
+        out = []
+        for it in items:
+            key = it.get("question") or it.get("sentence")
+            ans = it["options"].index(right[key]) if "options" in it and key in right else -1
+            out.append({"id": it["id"], "answer": ans, "a": "O", "b": "O", "c": "O", "d": "O", "e": "O"})
+        return {"answers": out}
+
+    def run(name, verify, want_fallback, ready=True, want_503=False):
+        server.ollama_json = make_stub(verify)
+        server.readmode.tatoeba_ready = saved_ready if ready else (lambda: False)
+        try:
+            try:
+                d = server.lesson(req)
+                err = None
+            except server.ApiError as e:
+                d, err = None, e
+        finally:
+            server.ollama_json = saved
+            server.readmode.tatoeba_ready = saved_ready
+        if want_503:
+            ok = err is not None and err.status == 503 and re.search(r"[가-힣]", err.msg)
+            print("  %-34s -> %s" % (name, ("HTTP %s %s" % (err.status, err.msg)) if err else "no error!"))
+        elif want_fallback:
+            ok = (err is None and d.get("source") == "tatoeba" and d.get("fallback_reason") and len(d["exercises"]) >= 4
+                  and all(e.get("tatoeba_id") for e in d["exercises"]))
+            print("  %-34s -> source=%s fallback_reason=%s exercises=%d" % (name, d and d.get("source"), d and d.get("fallback_reason"), d and len(d["exercises"]) or 0))
+        else:
+            ok = err is None and d.get("source") == "ai" and "fallback_reason" not in d and len(d["exercises"]) >= 4
+            print("  %-34s -> source=%s exercises=%d" % (name, d and d.get("source"), d and len(d["exercises"]) or 0))
+        if not ok:
+            fails.append("AI fallback case failed: " + name)
+
+    def boom(_p):
+        raise server.ApiError("checker down", 502)
+
+    run("checker call fails (ApiError)", boom, True)
+    run("checker call fails (other error)", lambda _p: (_ for _ in ()).throw(RuntimeError("x")), True)
+    run("checker skips items", lambda p: {"answers": verify_ok(p)["answers"][:3]}, True)
+    run("checker returns nothing", lambda _p: {"answers": []}, True)
+    run("checker rejects all but 3 items", lambda p: {"answers": [dict(a, a="X") if a["id"] >= 3 else a for a in verify_ok(p)["answers"]]}, True)
+    run("checker passes everything (control)", verify_ok, False)
+    run("checker fails + Tatoeba not ready", boom, False, ready=False, want_503=True)
+
+
 def show(lang, d):
     print("\n--- sample %s lesson: %s" % (lang, d["title"]))
     for e in d["exercises"]:
@@ -145,8 +373,48 @@ def show(lang, d):
             print("        explain: %s" % e["explain"])
 
 
+def test_corrupt_server():
+    """For a test server started with HOEHWA_TATOEBA_DB=<empty or non-SQLite file> (and HOEHWA_TEST_HOOKS=1 + --ollama-url on a closed
+    port so the AI path fails fast): /lesson must answer with a lesson or a Korean error, never 500."""
+    print("\n== server with a corrupted Tatoeba DB:", BASE)
+    h = requests.get(BASE + "/health", timeout=30).json()
+    print("  /health tatoeba =", h.get("tatoeba"))
+    if h.get("tatoeba") is not False:
+        fails.append("/health says tatoeba=%r for a corrupted DB" % h.get("tatoeba"))
+    real = "--real-llm" in sys.argv  # no simulated engine failure: the AI path really runs (slow; 2 requests only)
+    if not real:
+        requests.post(BASE + "/debug/engine_limit", json={"message": "usage limit reached"}, timeout=30)  # needs HOEHWA_TEST_HOOKS=1
+    for lang in ("en", "ja"):
+        for src in ((None,) if real else (None, "tatoeba", "ai")):
+            body = {"lang": lang, "month": 2, "week": 1}
+            if src:
+                body["source"] = src
+            r = requests.post(BASE + "/lesson", json=body, timeout=600)
+            try:
+                d = r.json()
+            except Exception:
+                d = {}
+            msg = d.get("error", "")
+            ok = (r.status_code == 200 and len(d.get("exercises") or []) >= 4) or \
+                 (r.status_code in (502, 503, 504) and re.search(r"[가-힣]", msg))
+            print("  /lesson %s source=%-7s -> HTTP %d %s" % (lang, src, r.status_code, msg[:60] or ("%d exercises" % len(d.get("exercises") or []))))
+            if not ok or r.status_code == 500:
+                fails.append("corrupt DB: /lesson %s %s -> HTTP %d %s" % (lang, src, r.status_code, r.text[:120]))
+    r = requests.get(BASE + "/examples", params={"lang": "en", "q": "house"}, timeout=30)
+    print("  /examples -> HTTP", r.status_code)
+    if r.status_code != 503:
+        fails.append("corrupt DB: /examples -> HTTP %d (want 503)" % r.status_code)
+    requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=30)
+    print("\n%d problem(s)" % len(fails))
+    for f in fails:
+        print("  FAIL", f)
+    sys.exit(1 if fails else 0)
+
+
 def main():
     print("server:", BASE)
+    if "--corrupt-db" in sys.argv:
+        test_corrupt_server()
     rng = random.Random(7)
     for lang in ("en", "ja"):
         r = requests.post(BASE + "/lesson", json={"lang": lang, "month": 1, "week": 1}, timeout=120)  # warm the pool
@@ -187,6 +455,11 @@ def main():
             print("AI lesson %s: HTTP %d, %d exercises, %.1fs, source=%s" % (lang, r.status_code, n, time.time() - t0, d.get("source")))
             if r.status_code != 200 or n < 4 or d.get("source") == "tatoeba":
                 fails.append("AI lesson %s failed: %s" % (lang, r.text[:200]))
+    if "--no-extra" not in sys.argv:
+        test_block_list(200)
+        test_db_validity()
+        test_known_bad()
+        test_ai_fallback()
     print("\n%d problem(s)" % len(fails))
     for f in fails[:40]:
         print("  FAIL", f)

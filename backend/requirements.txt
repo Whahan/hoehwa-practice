@@ -35,3 +35,6 @@ wordfreq==3.1.1
 # --- pronunciation analysis: pitch (pyin) + wav2vec2 phoneme recognizer (model downloaded by server.py --prefetch, ~1.3 GB) ---
 librosa==0.11.0
 transformers==5.19.0
+
+# --- rule-based lessons: WordNet (synonym check for fill-in distractors); wordnet + omw-1.4 data is downloaded by server.py --prefetch ---
+nltk==3.9.2

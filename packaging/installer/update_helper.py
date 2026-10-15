@@ -8,6 +8,9 @@
                                                                            (run with the app's runtime python)
     python update_helper.py mergecfg <user_config.json> <new_default_config.json> <out.json>
     python update_helper.py languagetool <models.lock.json> <backend_dir>
+    python update_helper.py dirsize <root> [--skip rel ...]                -> total bytes of a folder tree
+    python update_helper.py prunehf <models.lock.json> <hf_dir> [--apply]  -> list (and with --apply delete) model files the lock does not use
+    python update_helper.py setcfg <config.json> <key> <value>             -> sets one top-level string value
 
 The same hashing code is used when the release is built and when an installed copy is updated, so
 "did the requirements / models / LanguageTool lock change?" is answered identically on both sides.
@@ -115,14 +118,51 @@ def manifest(root, version, min_installer, installer_schema, out, exclude_from_u
     print("manifest: %d files (%d in update), version %s" % (len(files), sum(1 for f in files.values() if f["in_update"]), version))
 
 
+# user data / installed components that an update package may never write to
+PROTECTED_PREFIXES = ("runtime/", "backup/", "backend/models/", "backend/data/", "backend/cache/", "backend/logs/",
+                      "backend/tools/", "backend/.venv/")
+PROTECTED_FILES = ("version.txt", "install.log", "update.log")
+
+
+def unsafe_reason(rel, for_update=True):
+    """Why a manifest path must not be used, or None when it is a plain relative path inside the app folder."""
+    if not isinstance(rel, str) or not rel.strip():
+        return "empty path"
+    if rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel):
+        return "absolute path or drive letter"
+    if ":" in rel or "\\" in rel or any(ord(c) < 32 or c in '*?"<>|' for c in rel):
+        return "illegal character"
+    for seg in rel.split("/"):
+        if seg in ("", ".", ".."):
+            return "'..' or empty path segment"
+        if seg.endswith((".", " ")):
+            return "segment ends with dot or space"
+    if for_update:
+        low = rel.lower()
+        if low.startswith(PROTECTED_PREFIXES) or low in PROTECTED_FILES or re.match(r"^backend/secrets\.json", low):
+            return "protected location"
+    return None
+
+
 def verify(staging, manifest_path):
     m = json.load(open(manifest_path, encoding="utf-8"))
     bad = []
     n = 0
+    root = os.path.abspath(staging)
     for rel, f in m["files"].items():
-        if not f.get("in_update", True):
+        in_update = f.get("in_update", True)
+        why = unsafe_reason(rel, for_update=in_update)
+        if why:
+            print("BADPATH %r: %s" % (rel, why))
+            bad.append(rel)
             continue
-        p = os.path.join(staging, *rel.split("/"))
+        if not in_update:
+            continue
+        p = os.path.abspath(os.path.join(staging, *rel.split("/")))
+        if os.path.commonpath([root, p]) != root:
+            print("BADPATH %r: outside the update folder" % rel)
+            bad.append(rel)
+            continue
         n += 1
         if not os.path.isfile(p) or os.path.getsize(p) != f["size"] or sha256_file(p) != f["sha256"]:
             bad.append(rel)
@@ -158,6 +198,7 @@ def pipsync(lock, boot, wheels):
     env_ok = True
     os.environ["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
     os.environ["PIP_NO_INPUT"] = "1"
+    os.environ["PIP_NO_CACHE_DIR"] = "1"   # nothing is cached: "updating should not grow the app"
     # 1. pip / setuptools pins
     want_boot = parse_req(lock_lines(boot))
     r = subprocess.run([sys.executable, "-X", "utf8", "-m", "pip", "list", "--format=freeze"],
@@ -165,7 +206,7 @@ def pipsync(lock, boot, wheels):
     have_all = parse_req(r.stdout.splitlines())
     boot_todo = [line for k, (v, line) in want_boot.items() if have_all.get(k, (None,))[0] != v]
     if boot_todo:
-        pip(["install", "--no-warn-script-location", "--disable-pip-version-check"] + boot_todo)
+        pip(["install", "--no-cache-dir", "--no-warn-script-location", "--disable-pip-version-check"] + boot_todo)
     # 2. app packages: only what differs from the lock
     want = parse_req(lock_lines(lock))
     r = subprocess.run([sys.executable, "-X", "utf8", "-m", "pip", "freeze"],
@@ -181,7 +222,7 @@ def pipsync(lock, boot, wheels):
     if extra:
         pip(["uninstall", "-y"] + extra)
     if todo:
-        args = ["install", "--no-deps", "--no-warn-script-location", "--progress-bar", "off", "--disable-pip-version-check"]
+        args = ["install", "--no-deps", "--no-cache-dir", "--no-warn-script-location", "--progress-bar", "off", "--disable-pip-version-check"]
         if wheels and os.path.isdir(wheels):
             args += ["--find-links", wheels]
         if any("+cpu" in t for t in todo):
@@ -223,8 +264,8 @@ def merge(default, user):
 
 
 def mergecfg(user_path, new_path, out_path):
-    new = json.load(open(new_path, encoding="utf-8"))
-    user = json.load(open(user_path, encoding="utf-8")) if os.path.isfile(user_path) else {}
+    new = json.load(open(new_path, encoding="utf-8-sig"))
+    user = json.load(open(user_path, encoding="utf-8-sig")) if os.path.isfile(user_path) else {}
     res = merge(new, user)
     added = [k for k in new if k not in user]
     tmp = out_path + ".tmp"
@@ -232,6 +273,185 @@ def mergecfg(user_path, new_path, out_path):
         json.dump(res, f, ensure_ascii=False, indent=2)
     os.replace(tmp, out_path)
     print("config merged: kept %d user keys, added %s" % (len(user), ", ".join(added) or "nothing"))
+
+
+def setcfg(path, key, value):
+    cfg = json.load(open(path, encoding="utf-8-sig"))
+    cfg[key] = value
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    print("config: %s = %s" % (key, value))
+
+
+# ---------------------------------------------------------------------------------------------- folder size
+def dirsize(root, skips=()):
+    """Total bytes of all files below root (symlinks are not followed). `skips` are folders (relative to root) to leave out."""
+    root = os.path.abspath(root)
+    skip = set(os.path.normcase(os.path.abspath(os.path.join(root, s))) for s in skips)
+    total = 0
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        if os.path.normcase(d) in skip:
+            continue
+        try:
+            with os.scandir(("\\\\?\\" + d) if os.name == "nt" and not d.startswith("\\\\?\\") else d) as it:
+                for e in it:
+                    try:
+                        if e.is_symlink():
+                            continue
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(os.path.join(d, e.name))
+                        elif e.is_file(follow_symlinks=False):
+                            total += e.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return total
+
+
+# ---------------------------------------------------------------------------------------------- model cleanup
+def _tree_bytes(path):
+    if os.path.islink(path) or os.path.isfile(path):
+        try:
+            return os.lstat(path).st_size
+        except OSError:
+            return 0
+    return dirsize(path)
+
+
+def _rm_path(path):
+    """Delete a file, a symlink (never its target) or a folder tree."""
+    if os.path.islink(path):
+        try:
+            os.unlink(path)
+        except OSError:
+            os.rmdir(path)
+        return
+    if os.path.isdir(path):
+        def onerr(func, p, exc):
+            os.chmod(p, 0o700)
+            func(p)
+        shutil.rmtree(path, onerror=onerr)
+    else:
+        try:
+            os.remove(path)
+        except PermissionError:
+            os.chmod(path, 0o700)
+            os.remove(path)
+
+
+def prunehf(lock_path, hf_dir, apply=False):
+    """Deletes what models.lock.json does not reference inside hf_dir (and nothing outside it):
+       - whole models--* repos that are not in the lock
+       - snapshots of other revisions, files of the locked snapshot that the lock does not list,
+         blobs nothing refers to, trees/*.json of other revisions
+       - download caches (xet, .locks) that only the installer needs
+       The plan is always printed first; files are removed only with apply=True."""
+    lock = json.load(open(lock_path, encoding="utf-8-sig"))
+    entries = lock.get("hf") or []
+    if not entries:
+        print("PRUNE_RESULT SKIP (lock lists no models)")
+        return 0
+    hf = os.path.abspath(hf_dir)
+    if not os.path.isdir(hf):
+        print("PRUNE_RESULT SKIP (no model folder)")
+        return 0
+    hf_n = os.path.normcase(os.path.realpath(hf))
+
+    def inside(path):
+        p = os.path.normcase(os.path.realpath(os.path.dirname(path) if os.path.islink(path) else path))
+        return p != hf_n and p.startswith(hf_n + os.sep)
+
+    keep = {}
+    for e in entries:
+        base = os.path.join(hf, e.get("cache_subdir") or "")
+        keep[os.path.normcase(os.path.abspath(os.path.join(base, "models--" + e["repo_id"].replace("/", "--"))))] = e
+
+    plan = []   # (path, bytes, why)
+
+    def add(path, why):
+        plan.append((path, _tree_bytes(path), why))
+
+    # models--* repo folders live in hf_dir itself and in its direct sub folders (cache_subdir, e.g. "whisper")
+    repos, cache_dirs = [], []
+    scan = [hf] + [os.path.join(hf, d) for d in sorted(os.listdir(hf))
+                   if os.path.isdir(os.path.join(hf, d)) and not os.path.islink(os.path.join(hf, d))
+                   and not d.startswith("models--") and d not in ("xet", ".locks")]
+    for d in scan:
+        for name in sorted(os.listdir(d)):
+            full = os.path.join(d, name)
+            if name.startswith("models--"):
+                repos.append(full)
+            elif name in ("xet", ".locks"):
+                cache_dirs.append(full)
+    for full in repos:
+        e = keep.get(os.path.normcase(os.path.abspath(full)))
+        if e is None:
+            add(full, "repo not in lock")
+            continue
+        if os.path.islink(full):
+            continue
+        want_files = set(f["path"].replace("\\", "/") for f in e["files"])
+        want_blobs = set(f["sha256"] for f in e["files"])
+        snaps = os.path.join(full, "snapshots")
+        if os.path.isdir(snaps):
+            for rev in sorted(os.listdir(snaps)):
+                rp = os.path.join(snaps, rev)
+                if rev != e["revision"]:
+                    add(rp, "other revision")
+                    continue
+                for dp, dn, fns in os.walk(rp):
+                    for fn in sorted(fns):
+                        fp = os.path.join(dp, fn)
+                        rel = os.path.relpath(fp, rp).replace("\\", "/")
+                        if rel not in want_files:
+                            add(fp, "file not in lock")
+                        elif os.path.islink(fp):
+                            want_blobs.add(os.path.basename(os.path.realpath(fp)))
+        blobs = os.path.join(full, "blobs")
+        if os.path.isdir(blobs):
+            for b in sorted(os.listdir(blobs)):
+                if b not in want_blobs:
+                    add(os.path.join(blobs, b), "unreferenced blob")
+        trees = os.path.join(full, "trees")
+        if os.path.isdir(trees):
+            for t in sorted(os.listdir(trees)):
+                if t != e["revision"] + ".json":
+                    add(os.path.join(trees, t), "tree of other revision")
+    for c in cache_dirs:
+        add(c, "download cache")
+
+    total = sum(b for _, b, _ in plan)
+    for path, b, why in plan:
+        print("PRUNE %s %s (%.1f MB) [%s]" % ("delete" if apply else "would delete", os.path.relpath(path, hf), b / 1e6, why), flush=True)
+    if not apply:
+        print("PRUNE_RESULT DRYRUN (%d items, %.1f MB)" % (len(plan), total / 1e6))
+        return 0
+    errors = 0
+    for path, b, why in plan:
+        if not inside(path):
+            print("PRUNE refused (outside the model folder): %s" % path)
+            errors += 1
+            continue
+        try:
+            _rm_path(path)
+        except OSError as ex:
+            print("PRUNE error %s: %s" % (os.path.relpath(path, hf), ex))
+            errors += 1
+    # remove sub folders the deletions emptied
+    for full in repos:
+        for dp, dn, fns in os.walk(full, topdown=False):
+            if dp != full and not os.path.islink(dp) and not os.listdir(dp):
+                try:
+                    os.rmdir(dp)
+                except OSError:
+                    pass
+    print("PRUNE_RESULT %s (deleted %d items, %.1f MB)" % ("OK" if not errors else "ERRORS %d" % errors, len(plan) - errors, total / 1e6))
+    return 0
 
 
 # ---------------------------------------------------------------------------------------------- LanguageTool
@@ -298,6 +518,18 @@ def main():
         return 0
     if cmd == "languagetool":
         return languagetool(a[1], a[2])
+    if cmd == "dirsize":
+        skips = []
+        if "--skip" in a:
+            i = a.index("--skip")
+            skips, a = a[i + 1:], a[:i]
+        print(dirsize(a[1], skips))
+        return 0
+    if cmd == "prunehf":
+        return prunehf(a[1], a[2], "--apply" in a)
+    if cmd == "setcfg":
+        setcfg(a[1], a[2], a[3])
+        return 0
     print("unknown command", cmd)
     return 2
 

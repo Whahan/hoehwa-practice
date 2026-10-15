@@ -1,0 +1,33 @@
+# Line endings: Windows scripts must be CRLF, everything Godot / Python touches stays LF.
+* text=auto
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Windows: .bat/.cmd break with LF endings; .ps1 is shipped to users as UTF-8 with BOM (build_dist adds it)
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# source / data
+*.gd text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.tscn text eol=lf
+*.tres text eol=lf
+*.cfg text eol=lf
+*.godot text eol=lf
+*.uid text eol=lf
+*.import text eol=lf
+*.svg text eol=lf
+
+# binary
+*.zip binary
+*.png binary
+*.exe binary
+*.wav binary
+*.ttf binary
+*.jpg binary
+*.ico binary
+*.pck binary
+*.sqlite binary

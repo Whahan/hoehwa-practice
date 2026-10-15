@@ -10,10 +10,13 @@ data/tatoeba.sqlite and cached in cache/lesson_pool_<lang>.json (rebuilt when th
 """
 import os
 import re
+import sys
 import json
 import time
 import random
 import sqlite3
+import zlib
+import hashlib
 import difflib
 import threading
 
@@ -21,7 +24,7 @@ import reading
 
 H = {}  # injected by server.py: log, ApiError, ja_reading, curriculum, plain
 
-POOL_VERSION = "3"
+POOL_VERSION = "4"
 CACHE_DIR = os.path.join(reading.BASE, "cache")
 TYPES = ["choice", "build", "listen", "fill", "build", "choice", "listen", "fill", "build", "speak"]
 
@@ -40,12 +43,18 @@ JA_HEAD = {"名詞", "動詞", "形容詞", "形状詞", "副詞", "代名詞", 
 JA_ATTACH = {"助詞", "助動詞", "接尾辞", "補助記号", "記号"}
 
 BLOCK_EN = re.compile(
-    r"\b(kill\w*|die|dies|died|dying|dead|death|murder\w*|suicide|guns?|shoot\w*|shot|blood\w*|damn\w*|hell|fuck\w*|shit\w*|"
+    r"\b(kill\w*|die|dies|died|dying|dead|death|murder\w*|suicid\w*|guns?|shoot\w*|shot|blood\w*|damn\w*|hell|fuck\w*|shit\w*|"
     r"sex\w*|naked|drunk|vodka|whisk(e)?y|drugs?|stupid|idiots?|hate[sd]?|ugly|bitch\w*|bastards?|ass|asshole|crap|piss\w*|"
-    r"wars?|bombs?|rape\w*|slaves?|god|jesus|bible|church|prison|jail|devil|nazis?|hitler|weapons?|knife|corpse|"
-    r"cigarettes?|smok\w*)\b", re.I)
-BLOCK_JA = re.compile(r"死|殺|クソ|くそ|バカ|ばか|馬鹿|アホ|あほ|ブス|酔|血|銃|戦争|自殺|セックス|エッチ|うざ|畜生|地獄|神|麻薬|タバコ|煙草|刑務所")
-BLOCK_KO = re.compile(r"죽|살인|섹스|씨발|젠장|멍청|바보|마약|자살|총|전쟁|지옥|감옥|담배")
+    r"wars?|bomb\w*|rap(e|ed|es|ing|ist|ists)|slave\w*|god|jesus|bible|church|prison|jail|devil|nazis?|hitler|weapons?|knife|corpse|"
+    r"cigarettes?|smok\w*|terror\w*|porn\w*|abus\w*|cancer\w*|racis\w*)\b", re.I)
+BLOCK_JA = re.compile(r"死|殺|クソ|くそ|バカ|ばか|馬鹿|アホ|あほ|ブス|酔|血|銃|戦争|自殺|セックス|エッチ|うざ|畜生|地獄|神|麻薬|タバコ|煙草|刑務所|"
+                      r"テロ|ポルノ|爆弾|爆発|爆破|レイプ|強姦|ナチ")
+BLOCK_KO = re.compile(r"죽|살인|섹스|씨발|젠장|멍청|바보|마약|자살|총|전쟁|지옥|감옥|담배|테러|폭탄|포르노|강간")
+
+
+def blocked(text):
+    """True if `text` (a sentence, option, distractor word or tile in either language) is on the block list"""
+    return bool(BLOCK_EN.search(text) or BLOCK_JA.search(text))
 
 SEED = {
     "en": {1: "name meet from student work like brother sister family hobby thank sorry nice",
@@ -97,6 +106,10 @@ def warmup():
             for m in range(1, 13):
                 for w in range(1, 5):
                     target_vocab(lang, m, w)
+        try:
+            _prime_wordnet(pool("en"))
+        except Exception:
+            _log().exception("WordNet priming failed")
         # The pools (and the models loaded before this warmup step) are long-lived: move them out of the cyclic
         # GC's reach, otherwise an occasional full collection pauses a request for 0.3-0.7 s.
         import gc
@@ -109,7 +122,467 @@ def warmup():
 # ----------------------------------------------------------------------------------------------
 def _db_sig():
     st = os.stat(reading.DB_PATH)
-    return "%s-%d-%d" % (POOL_VERSION, st.st_size, int(st.st_mtime))
+    # the block lists are part of the signature: editing them makes old pool caches refresh
+    bl = hashlib.md5((BLOCK_EN.pattern + BLOCK_JA.pattern + BLOCK_KO.pattern).encode("utf-8")).hexdigest()[:8]
+    return "%s-%s-%d-%d" % (POOL_VERSION, bl, st.st_size, int(st.st_mtime))
+
+
+# ----------------------------------------------------------------------------------------------
+# "could this distractor also be right?" -- offline checks (no LLM)
+#   English: WordNet (shared synset / direct hypernym / hyponym / similar-to), curated "never mix" groups, and the
+#            whole English Tatoeba corpus (the sentence with the distractor, or the word triple around the blank, exists).
+#   Japanese: shares a kanji with the answer, or is a near-synonym from a small table.
+# ----------------------------------------------------------------------------------------------
+NLTK_DIR = os.path.join(reading.BASE, "models", "nltk_data")
+NLTK_PKGS = ("wordnet", "omw-1.4")
+_wn_state = {"wn": None, "tried": False}
+_wn_lock = threading.Lock()      # guards loading
+_wn_q_lock = threading.Lock()    # NLTK's WordNet reader seeks in shared file handles: one query at a time
+_rel_cache = {}
+
+
+def ensure_wordnet_data():
+    """Download wordnet + omw-1.4 into backend/models/nltk_data (only done by `server.py --prefetch`, never at run time)."""
+    try:
+        import nltk
+        os.makedirs(NLTK_DIR, exist_ok=True)
+        for pkg in NLTK_PKGS:
+            have = os.path.exists(os.path.join(NLTK_DIR, "corpora", pkg + ".zip")) or os.path.isdir(os.path.join(NLTK_DIR, "corpora", pkg))
+            if not have:
+                nltk.download(pkg, download_dir=NLTK_DIR, quiet=True)
+        return True
+    except Exception:
+        _log().exception("could not download the WordNet data for the lesson distractor check")
+        return False
+
+
+def wordnet():
+    """the nltk WordNet reader, or None if nltk / the data is missing (the curated groups still apply then)"""
+    if _wn_state["tried"]:
+        return _wn_state["wn"]
+    with _wn_lock:
+        if _wn_state["tried"]:
+            return _wn_state["wn"]
+        try:
+            import nltk
+            if NLTK_DIR not in nltk.data.path:
+                nltk.data.path.insert(0, NLTK_DIR)
+            from nltk.corpus import wordnet as wn
+            wn.synsets("test")  # loads the data (about 1.5 s)
+            _wn_state["wn"] = wn
+        except Exception:
+            _log().warning("WordNet is not available (pip install nltk + server.py --prefetch); using the curated synonym groups only")
+        _wn_state["tried"] = True
+    return _wn_state["wn"]
+
+
+def _groups(lines):
+    out = {}
+    for gi, line in enumerate(lines):
+        for w in line.split():
+            out.setdefault(w, set()).add(gi)
+    return out
+
+
+# Words of one line are interchangeable in many sentences ("never mix" them as answer + distractor).
+EN_GROUP_LINES = [
+    # evaluation adjectives
+    "good great nice fine excellent wonderful lovely pleasant terrific fantastic awesome amazing marvelous superb splendid brilliant "
+    "perfect super cool decent neat impressive outstanding beautiful pretty gorgeous sweet charming attractive handsome cute fabulous",
+    "bad terrible awful horrible dreadful lousy poor nasty rotten",
+    "big large huge enormous giant massive vast great tremendous gigantic",
+    "small little tiny",
+    "fast quick rapid swift speedy",
+    "happy glad pleased delighted cheerful joyful content",
+    "sad unhappy sorrowful miserable depressed",
+    "angry mad upset furious annoyed irritated",
+    "afraid scared frightened terrified fearful",
+    "tired exhausted weary sleepy",
+    "hard difficult tough challenging",
+    "easy simple effortless",
+    "strange odd weird unusual peculiar curious funny",
+    "important essential crucial vital serious significant necessary",
+    "sure certain positive confident",
+    "real true actual genuine",
+    "wrong incorrect mistaken false",
+    "right correct proper accurate",
+    "interesting fascinating exciting entertaining amusing funny",
+    "boring dull tedious",
+    "clever smart intelligent bright wise",
+    "kind nice friendly gentle generous polite",
+    "famous popular well-known",
+    "rich wealthy",
+    "cheap inexpensive",
+    "expensive costly pricey",
+    "old ancient elderly aged",
+    "new fresh modern recent",
+    "hot warm",
+    "cold cool chilly freezing",
+    "dirty filthy messy",
+    "quiet silent calm peaceful still",
+    "loud noisy",
+    "dangerous risky unsafe",
+    "safe secure",
+    "careful cautious",
+    "ready prepared",
+    "different various",
+    "same identical similar",
+    "whole entire full complete total",
+    "sick ill",
+    "free available",
+    "busy occupied",
+    "clean tidy neat",
+    "empty vacant",
+    "beautiful pretty lovely gorgeous",
+    # adverbs
+    "very really quite extremely pretty so highly truly rather fairly",
+    "quickly fast rapidly soon promptly",
+    "usually normally generally typically often frequently commonly regularly",
+    "always constantly forever",
+    "sometimes occasionally",
+    "almost nearly practically",
+    "just only simply merely",
+    "maybe perhaps possibly probably",
+    "hardly barely scarcely rarely seldom",
+    "well nicely fine",
+    "badly poorly",
+    "finally eventually lastly",
+    "recently lately",
+    "carefully cautiously",
+    "slowly gradually",
+    # mental / opinion verbs ("I ___ that ...")
+    "think believe feel guess suppose imagine assume reckon expect hope suspect consider know realize understand find say see hear "
+    "remember doubt mean figure notice learn",
+    # verbs followed by "to ..." ("why Layla ___ to take off ...")
+    "decide plan want need try choose refuse agree promise prefer wish intend hope begin start continue like love hate offer manage fail "
+    "forget learn seem appear tend attempt dare expect threaten prepare arrange determine resolve hesitate aim ask afford bother claim demand deserve long pretend proceed seek swear volunteer struggle propose vow happen "
+    "happen",
+    "happen occur come",
+    "say tell speak talk",
+    "look seem appear sound",
+    "see watch notice look",
+    "hear listen",
+    "buy purchase get",
+    "make create build produce",
+    "get receive obtain gain",
+    "take bring carry",
+    "give offer provide present",
+    "show display demonstrate",
+    "help assist aid",
+    "use utilize employ",
+    "stop quit cease finish end",
+    "start begin commence",
+    "keep hold retain",
+    "leave depart",
+    "arrive reach",
+    "ask request",
+    "answer reply respond",
+    "call phone",
+    "find discover",
+    "lose miss",
+    "stay remain",
+    "live reside",
+    "love like enjoy adore",
+    "hate dislike",
+    "go walk run drive ride travel fly sail move come hurry head",
+    "eat have",
+    "study learn",
+    "put place set lay",
+    "send mail",
+    "win beat",
+    "pick choose select",
+    "fix repair mend",
+    "break destroy",
+    "allow let permit",
+    "forbid ban prohibit",
+    "need require",
+    "cry weep",
+    "laugh smile",
+    "sleep rest",
+    "wash clean",
+    "change alter",
+    "catch grab",
+    "hit strike beat",
+    "increase rise raise grow",
+    "decrease drop fall reduce",
+    "explain describe",
+    "check examine",
+    "buy pay",
+    "wait stay",
+    "open begin",
+    "close shut",
+    "do make",
+    # nouns
+    "people persons beings folks humans citizens",
+    "today tonight",
+    "company firm business corporation",
+    "group team band crew",
+    "story article",
+    "weekend holiday vacation",
+    "quick fast",
+    "begin start",
+    "live lead spend",
+    "village town city",
+    "doctor surgeon physician",
+    "lawyer attorney",
+    "student pupil",
+    "hospital clinic",
+    "stomach belly",
+    "picture painting drawing",
+    "supper dinner",
+    "wife woman",
+    "husband man",
+    "man guy fellow gentleman male",
+    "woman lady female",
+    "boy lad",
+    "child kid",
+    "house home building",
+    "car vehicle automobile",
+    "job work occupation career",
+    "problem trouble issue difficulty",
+    "idea thought notion",
+    "mistake error fault",
+    "answer reply response",
+    "trip journey voyage tour",
+    "shop store market",
+    "picture photo photograph image",
+    "film movie",
+    "friend pal buddy",
+    "money cash",
+    "price cost fee fare charge",
+    "story tale",
+    "reason cause",
+    "city town",
+    "country nation",
+    "road street way path",
+    "dinner supper meal",
+    "sofa couch",
+    "mom mother",
+    "dad father",
+    "teacher instructor",
+    "doctor physician",
+    "boss manager",
+    "pain ache",
+    "plan scheme",
+    "gift present",
+    "holiday vacation",
+    "party celebration",
+    "voice sound noise",
+    "chance opportunity",
+    "danger risk",
+    "luck fortune",
+    "habit custom",
+    "coat jacket",
+    "pants trousers",
+    "ship boat",
+    "bike bicycle",
+    "letter mail",
+]
+EN_GROUP = _groups(EN_GROUP_LINES)
+
+JA_GROUP_LINES = [
+    "人 者 方 人間 人物",
+    "物 もの 品 品物 やつ モノ 代物",
+    "奴 やつ 野郎",
+    "事 思い 考え",
+    "事 こと 件",
+    "時 頃 ころ とき 時間 時刻",
+    "家 家庭 うち 住宅 自宅",
+    "店 お店 商店 店舗 屋",
+    "先生 教師 教授",
+    "子供 子ども こども 児童 子",
+    "女 女性 女の人",
+    "男 男性 男の人",
+    "車 自動車 クルマ",
+    "道 道路 通り",
+    "国 国家 祖国",
+    "仕事 職 職業 業務 勤め",
+    "会社 企業 商社",
+    "言葉 言語 語 単語 ことば",
+    "本 書物 書籍",
+    "お金 金 金銭 おかね",
+    "病気 疾患 病",
+    "写真 画像 フォト",
+    "勉強 学習",
+    "問題 課題 トラブル",
+    "意見 考え 見解 思い",
+    "理由 訳 わけ 原因",
+    "気持ち 気分 感情 心",
+    "食べ物 食物 料理 食事 ご飯 ごはん",
+    "部屋 室",
+    "所 場所 ところ 所",
+    "今日 本日",
+    "昨日 きのう",
+    "去年 昨年",
+    "友達 友人 仲間 ともだち",
+    "彼 彼女 彼ら",
+    "君 あなた お前 貴方",
+    "僕 私 俺 わたし",
+    "話 お話 会話 物語",
+    "音 音声 声",
+    "夢 願い 希望",
+    "朝 午前",
+    "夜 晩 夕方",
+    "駅 停車場",
+    "お母さん 母 ママ 母親",
+    "お父さん 父 パパ 父親",
+    "兄 お兄さん 兄さん",
+    "姉 お姉さん 姉さん",
+    "犬 いぬ",
+    "猫 ねこ",
+    "水 お水",
+    "雨 雨天",
+    "天気 天候",
+    "使い方 用法",
+    "習慣 癖 慣習",
+    "間違い ミス 誤り",
+    "答え 返事 回答",
+    "旅行 旅 ツアー",
+    "海 海洋",
+    "山 峰",
+    "お茶 茶",
+    "辞書 事典",
+]
+JA_GROUP = _groups(JA_GROUP_LINES)
+KANJI = re.compile(r"[一-鿿々]")
+
+
+def _pos_letter(tag):
+    c = (tag or "")[:1]
+    return {"V": "v", "N": "n", "J": "a", "R": "r"}.get(c)
+
+
+def en_related(a, b, tag):
+    """True if lemma `b` could replace lemma `a` (same word class `tag`) so that the sentence stays correct: same curated
+    group, or in WordNet a shared synset / direct hypernym / hyponym / similar-to / also-see / verb-group link."""
+    if a == b:
+        return True
+    key = (a, b, tag[:1])
+    hit = _rel_cache.get(key)
+    if hit is not None:
+        return hit
+    ga, gb = EN_GROUP.get(a), EN_GROUP.get(b)
+    res = bool(ga and gb and ga & gb)
+    if not res:
+        wn = wordnet()
+        pos = _pos_letter(tag)
+        if wn is not None and pos:
+            with _wn_q_lock:
+                try:
+                    sa = set(wn.synsets(a, pos))
+                    sb = set(wn.synsets(b, pos))
+                    if sa & sb:
+                        res = True
+                    else:
+                        for s in sa:
+                            near = set(s.hypernyms()) | set(s.hyponyms()) | set(s.similar_tos()) | set(s.also_sees()) | set(s.verb_groups())
+                            if near & sb:
+                                res = True
+                                break
+                except Exception:
+                    res = False
+    _rel_cache[key] = res
+    return res
+
+
+def _prime_wordnet(P):
+    """read the WordNet entries of every candidate word once at start-up, so the first lessons are not slower"""
+    wn = wordnet()
+    if wn is None:
+        return
+    t0 = time.time()
+    n = 0
+    with _wn_q_lock:
+        for tag, lst in P.vocab.items():
+            pos = _pos_letter(tag)
+            if not pos:
+                continue
+            for _surf, lemma, _z in lst:
+                for s in wn.synsets(lemma, pos)[:6]:
+                    s.hypernyms(), s.hyponyms(), s.similar_tos(), s.also_sees()
+                n += 1
+    _log().info("WordNet primed for %d candidate words (%.1fs)", n, time.time() - t0)
+
+
+def ja_related(a_surf, a_lemma, c_surf, c_lemma):
+    """Japanese: shares a kanji, or both in one near-synonym group (人/者/方, 物/もの, 事/こと, 時/頃 ...)"""
+    if a_surf == c_surf or a_lemma == c_lemma:
+        return True
+    if set(KANJI.findall(a_surf + a_lemma)) & set(KANJI.findall(c_surf + c_lemma)):
+        return True
+    ga = JA_GROUP.get(a_surf, set()) | JA_GROUP.get(a_lemma, set())
+    gc = JA_GROUP.get(c_surf, set()) | JA_GROUP.get(c_lemma, set())
+    return bool(ga & gc)
+
+
+# ---- the whole English Tatoeba corpus as a Bloom-style bit set of word triples around candidate words
+_TOK = re.compile(r"[a-z]+(?:['-][a-z]+)*|[,;:.!?]")
+BIT_BITS = 27
+BIT_MASK = (1 << BIT_BITS) - 1
+
+
+def _en_seq(text):
+    """[(token, char offset)] of a lower-cased English sentence; the final . ! ? is dropped (it is the sentence end)"""
+    toks = [(m.group(0), m.start()) for m in _TOK.finditer(text.lower().replace("’", "'"))]
+    while toks and toks[-1][0] in (".", "!", "?"):
+        toks.pop()
+    return toks
+
+
+def _bkey(l, m, r):
+    return zlib.crc32(("%s\x1f%s\x1f%s" % (l, m, r)).encode("utf-8")) & BIT_MASK
+
+
+def _bit_set(bits, k):
+    bits[k >> 3] |= 1 << (k & 7)
+
+
+def _bit_get(bits, k):
+    return bool(bits[k >> 3] & (1 << (k & 7)))
+
+
+def _load_bits(P):
+    """bit set with (left, word, right), (left, word, *) and (*, word, right) of every English Tatoeba sentence, for the
+    words that can be distractors (P.vocab). Cached in cache/lesson_tri_en.bin next to the pool."""
+    want = {surf for lst in P.vocab.values() for surf, _l, _z in lst}
+    sig = "%s-%d-%d" % (_db_sig(), len(want), BIT_BITS)
+    path = os.path.join(CACHE_DIR, "lesson_tri_en.bin")
+    try:
+        with open(path, "rb") as f:
+            head = f.readline().decode("utf-8").strip()
+            if head == sig:
+                data = f.read()
+                if len(data) == 1 << (BIT_BITS - 3):
+                    return bytearray(data)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        _log().exception("lesson corpus bit set unreadable; rebuilding")
+    t0 = time.time()
+    bits = bytearray(1 << (BIT_BITS - 3))
+    con = reading._db()
+    n = 0
+    try:
+        for (text,) in con.execute("SELECT text FROM sent WHERE lang='en'"):
+            words = ["<s>"] + [w for w, _p in _en_seq(text)] + ["</s>"]
+            n += 1
+            for i in range(1, len(words) - 1):
+                m = words[i]
+                if m in want:
+                    l, r = words[i - 1], words[i + 1]
+                    _bit_set(bits, _bkey(l, m, r))
+                    _bit_set(bits, _bkey(l, m, "*"))
+                    _bit_set(bits, _bkey("*", m, r))
+    finally:
+        con.close()
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(sig.encode("utf-8") + b"\n")
+        f.write(bytes(bits))
+    os.replace(tmp, path)
+    _log().info("lesson corpus bit set: %d English sentences, %d candidate words (%.1fs)", n, len(want), time.time() - t0)
+    return bits
 
 
 def _ko_clean(ko):
@@ -235,6 +708,7 @@ class Pool:
         self.chunks = {}      # ja: head pos1 -> [(chunk, head lemma)]
         self.by_n = {}        # length -> items
         self.tri = set()      # (left, word, right) seen in the pool
+        self.bits = None      # en: bit set of word triples of the whole English corpus (see _load_bits)
         seen = set()
         for it in items:
             toks = it["toks"]
@@ -258,6 +732,24 @@ class Pool:
                     head = next((t for t in toks if ch.startswith(t[0]) and t[3] in JA_HEAD), None)
                     if head and len(ch) <= 6 and not re.search(r"[、。！？!?]", ch):
                         self.chunks.setdefault(head[3], []).append((ch, head[2]))
+
+    def corpus_taken(self, text, start, cand, loose=False, verb=False):
+        """en: True if the sentence `text` with `cand` instead of the word starting at char `start` has the same
+        (left word, word, right word) triple as some English Tatoeba sentence. loose: also true if both the
+        (left, word) and (word, right) pairs exist."""
+        if self.bits is None:
+            return False
+        seq = _en_seq(text)
+        i = next((k for k, (_w, p) in enumerate(seq) if p == start), None)
+        if i is None:
+            return False
+        l = seq[i - 1][0] if i > 0 else "<s>"
+        r = seq[i + 1][0] if i + 1 < len(seq) else "</s>"
+        if _bit_get(self.bits, _bkey(l, cand, r)):
+            return True
+        if verb and r in ("to", "that") and _bit_get(self.bits, _bkey("*", cand, r)):
+            return True  # a verb that is followed by "to" / "that" somewhere in the corpus takes the same complement
+        return bool(loose and _bit_get(self.bits, _bkey(l, cand, "*")) and _bit_get(self.bits, _bkey("*", cand, r)))
 
     def norm(self, s):
         return s.lower().replace("’", "'") if self.lang == "en" else s
@@ -285,7 +777,16 @@ def pool(lang):
         with _pool_lock:
             p = _pools.get(lang)
             if p is None:
-                p = _pools[lang] = Pool(lang, _load_pool(lang))
+                np_ = Pool(lang, _load_pool(lang))
+                if lang == "en":
+                    if "--prefetch" in sys.argv:
+                        ensure_wordnet_data()  # `server.py --prefetch` downloads wordnet + omw-1.4 into models/nltk_data
+                    try:
+                        np_.bits = _load_bits(np_)
+                    except Exception:
+                        _log().exception("lesson corpus bit set failed; distractors are checked against the pool and the DB only")
+                    wordnet()  # load now (about 1.5 s), not during the first lesson
+                p = _pools[lang] = np_
     return p
 
 
@@ -462,6 +963,18 @@ class Maker:
         return {"type": "build", "ko": it["ko"], "answer": list(bt), "extra": extra, "reading": self.reading(joined),
                 "explain": self.explain_for(it)}
 
+    def bad_word(self, w):
+        return blocked(w)
+
+    def fits(self, it, t, cs, cl):
+        """True if the word `cs` (lemma `cl`) could stand in for token `t` of sentence `it` and still give a correct
+        sentence: a synonym / near relative (WordNet, curated groups, shared kanji), or the same neighbours occur in the corpus."""
+        if self.lang == "en":
+            if en_related(t[2], cl, t[3]) or en_related(t[0].lower(), cs, t[3]):
+                return True
+            return self.P.corpus_taken(it["text"], t[1], cs, loose=LOOSE_PAIRS, verb=t[3].startswith("VB"))
+        return ja_related(t[0], t[2], cs, cl)
+
     def build_extra(self, it):
         lemmas = set(it["lemmas"])
         have = {x.lower() for x in it["bt"]}
@@ -474,8 +987,14 @@ class Maker:
                         and v[0] not in have and v[0] not in out and v[0].isalpha()]
                 if not pool:
                     continue
-                v = self.rng.choice(pool)
-                out.append(v[0])
+                # an extra tile must not be able to replace ANY word of its class in the sentence ("well maintained" / "well designed")
+                same = [t for t in it["toks"] if t[3] == h[3] and t[0].isalpha()] or [h]
+                self.rng.shuffle(pool)
+                for v in pool[:25]:
+                    if self.bad_word(v[0]) or any(self.fits(it, t, v[0], v[1]) for t in same):
+                        continue
+                    out.append(v[0])
+                    break
                 if len(out) == 2:
                     return out
             return None
@@ -485,29 +1004,57 @@ class Maker:
             pool = [c for c in self.P.chunks.get(h[3], []) if c[1] not in lemmas and c[0] not in have and c[0] not in out]
             if not pool:
                 continue
-            out.append(self.rng.choice(pool)[0])
+            same = [t for t in it["toks"] if t[3] == h[3] and t[6]] or [h]
+            self.rng.shuffle(pool)
+            for c in pool[:25]:
+                if self.bad_word(c[0]) or any(ja_related(t[0], t[2], c[0], c[1]) for t in same):
+                    continue
+                out.append(c[0])
+                break
             if len(out) == 2:
                 return out
         return None
 
-    def slot_taken(self, left, cand, right):
+    def _texts_of(self, cand):
+        key = (self.lang, cand)
+        v = _texts_cache.get(key)
+        if v is None:
+            row = self.con.execute("SELECT id FROM vocab WHERE lang=? AND w=?", (self.lang, cand)).fetchone()
+            v = [r[0] for r in self.con.execute("SELECT s.text FROM post p JOIN sent s ON s.id = p.sid WHERE p.wid=?", (row[0],))] if row else []
+            if len(_texts_cache) > 1500:
+                _texts_cache.clear()
+            _texts_cache[key] = v
+        return v
+
+    def slot_taken(self, it, t, cand, left, right):
         """True if `cand` already appears between the same neighbours in a real sentence: it could fit the blank."""
         if (left, cand, right) in self.P.tri:
             return True
-        row = self.con.execute("SELECT id FROM vocab WHERE lang=? AND w=?", (self.lang, cand)).fetchone()
-        if not row:
+        texts = self._texts_of(cand)
+        if not texts:
             return False
-        texts = [r[0] for r in self.con.execute("SELECT s.text FROM post p JOIN sent s ON s.id = p.sid WHERE p.wid=?", (row[0],))]
         if self.lang == "en":
-            l = r"^\W*" if left == "<s>" else r"(?<![A-Za-z'])" + re.escape(left) + r"\W+"
-            r_ = r"\W*$" if right == "</s>" else r"\W+" + re.escape(right) + r"(?![A-Za-z'])"
-            rx = re.compile(l + re.escape(cand) + r_, re.I)
+            text = it["text"].replace("’", "'")
+            s, e = t[1], t[1] + len(t[0])
+            m = re.search(r"(\S+)\s*$", text[:s])
+            if m:
+                lp = r"(?<!\S)" + re.escape(m.group(1)).replace("'", "['’]") + r"\s+"
+            else:
+                lp = r"^"
+            m2 = re.match(r"(\s*)(\S+)", text[e:])
+            if not m2 or re.fullmatch(r"[.!?]+", m2.group(2)):
+                rp = r"[.!?]*\s*$"
+            else:
+                rp = (r"\s+" if m2.group(1) else "") + re.escape(m2.group(2)).replace("'", "['’]") + \
+                     (r"(?![A-Za-z'’])" if m2.group(2)[-1].isalnum() else "")
+            rx = re.compile(lp + re.escape(cand) + rp, re.I)
         else:
             rx = re.compile((r"^" if left == "<s>" else re.escape(left)) + re.escape(cand) +
                             (r"[。！？!?]*$" if right == "</s>" else re.escape(right)))
-        return any(rx.search(t) for t in texts)
+        return any(rx.search(x) for x in texts)
 
-    def fill(self, it):
+    def fill_all(self, it):
+        """yield every possible fill exercise of the sentence (one per usable blank, best target word first)"""
         toks = it["toks"]
         words = [t for t in toks if self.P.is_wordtok(t)]
         blanks = []
@@ -542,9 +1089,11 @@ class Maker:
                 continue
             sentence = it["text"][:b[1]] + "___" + it["text"][b[1] + len(b[0]):]
             opts, ans = self.options(b[0], ds)
-            return {"type": "fill", "sentence": sentence, "reading": self.reading(sentence), "ko": it["ko"], "options": opts,
-                    "answer": ans, "explain": self.explain_for(it, b[2])}
-        return None
+            yield {"type": "fill", "sentence": sentence, "reading": self.reading(sentence), "ko": it["ko"], "options": opts,
+                   "answer": ans, "explain": self.explain_for(it, b[2])}
+
+    def fill(self, it):
+        return next(self.fill_all(it), None)
 
     def fill_distractors(self, it, b, left, right):
         lemmas = set(it["lemmas"])
@@ -565,13 +1114,43 @@ class Maker:
             return None
         self.rng.shuffle(pool)
         out = []
-        for v in pool[:30]:
-            if v[0] in out or self.slot_taken(left, v[0], right):
+        for v in pool[:60]:
+            # cheap checks first: block list, synonyms / near relatives, then the corpus lookups
+            if v[0] in out or self.bad_word(v[0]) or self.fits(it, b, v[0], v[1]) or self.slot_taken(it, b, v[0], left, right):
                 continue
             out.append(v[0])
             if len(out) == 3:
                 return out
         return None
+
+
+_texts_cache = {}
+LOOSE_PAIRS = True  # also treat "(left, word) and (word, right) both exist in the corpus" as a fit (stricter, drops more items)
+
+
+def make_items_for_id(lang, sid, seeds=range(40), stage=2, month=1, week=1):
+    """Test hook: build the fill and build exercises for one Tatoeba sentence id with many random seeds, ignoring the
+    lesson picker. Returns {"text": ..., "fills": {answer: set(distractors)}, "extras": set(tiles)}."""
+    if not reading.tatoeba_ready():
+        raise _err("예문 데이터가 아직 준비되지 않았어요.", 503)
+    P = pool(lang)
+    it = P.by_id.get(sid)
+    if it is None:
+        raise KeyError("sentence %s is not in the %s lesson pool" % (sid, lang))
+    target = target_vocab(lang, month, week)
+    out = {"text": it["text"], "fills": {}, "extras": set()}
+    con = reading._db()
+    try:
+        for seed in seeds:
+            mk = Maker(lang, stage, random.Random(seed), P, con, target, {})
+            for ex in mk.fill_all(it):
+                ans = ex["options"][ex["answer"]]
+                out["fills"].setdefault(ans, set()).update(o for j, o in enumerate(ex["options"]) if j != ex["answer"])
+            if it["bt"]:
+                out["extras"].update(mk.build_extra(it) or [])
+    finally:
+        con.close()
+    return out
 
 
 def _eligible(P, stage):
@@ -585,6 +1164,16 @@ def _eligible(P, stage):
 
 
 def make_lesson(lang, month, week, stage, seed=None):
+    """a rule-based lesson; raises sqlite3.Error if the Tatoeba DB turned out to be unreadable (the caller falls back)"""
+    try:
+        return _make_lesson(lang, month, week, stage, seed)
+    except sqlite3.Error:
+        reading.invalidate_tatoeba_ready()
+        _log().exception("Tatoeba DB unreadable while making a lesson")
+        raise
+
+
+def _make_lesson(lang, month, week, stage, seed=None):
     t0 = time.time()
     if not reading.tatoeba_ready():
         raise _err("예문 데이터가 아직 준비되지 않았어요.", 503)

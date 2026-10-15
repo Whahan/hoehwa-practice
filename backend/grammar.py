@@ -9,7 +9,7 @@ the backend is killed hard), and stopped by PID at exit. Never by image name.
 Files:  backend/tools/languagetool/<LanguageTool-x.y>/languagetool-server.jar  (+ lt.json, written by the installer)
 Java:   17+; backend/tools/jre*, JAVA_HOME, PATH, C:\\Program Files\\{Java,Eclipse Adoptium,Microsoft,Zulu}\\*
 
-correct(lang, text) -> {"fix", "fix_ko", "changes": [...]} or None (nothing to fix / LanguageTool unavailable)
+correct(lang, text) -> {"fix", "fix_ko", "changes": [...]} or None (nothing to fix / not trustworthy / LanguageTool unavailable)
 """
 import atexit
 import glob
@@ -345,7 +345,45 @@ def _keep(m, text):
         # spelling: do not "correct" names (capitalized word that is not the first word) or very short tokens
         if orig[:1].isupper() and text[:off].strip():
             return False
+    if UNRELIABLE_RE.search(rid):
+        return False
+    pos = _pick(m, text)
+    rep = m["replacements"][pos].get("value", "")
+    if _swaps_pronoun(orig, rep) or _changes_name(text, off, orig, rep):
+        return False
     return True
+
+
+# LanguageTool rules whose first suggestion is often wrong for a learner's sentence: they swap a pronoun by its case
+# ("Me and him goes" -> "I and him goes", "Me is Tom" -> "I is Tom", "Them are" -> "Then are") without seeing the whole
+# structure. Better no LanguageTool fix than a worse one (the AI, when available, checks the sentence itself).
+UNRELIABLE_RE = re.compile(r"CONFUSION_OF_(ME|MY|I|HE|HIM|SHE|HER|WE|US|THEM|THEY)(_|$)|PRP_AT_SENT_START|"
+                           r"^SENT_START_(THEM|ME|HIM|HER|US)$|NOMINATIVE|ACCUSATIVE|^PRONOUN_CASE")
+WORD_RE = re.compile(r"[A-Za-z][A-Za-z'’]*")
+PRONOUNS = frozenset("i me my mine myself he him his himself she her hers herself they them their theirs we us our ours "
+                     "you your yours it its".split())
+
+
+def _swaps_pronoun(orig, rep):
+    """The suggestion replaces one pronoun by another (case/person swap)."""
+    a = [w.lower() for w in WORD_RE.findall(orig)]
+    b = [w.lower() for w in WORD_RE.findall(rep)]
+    gone = [w for w in a if w not in b]
+    new = [w for w in b if w not in a]
+    return any(w in PRONOUNS for w in gone) and any(w in PRONOUNS for w in new)
+
+
+def _changes_name(text, off, orig, rep):
+    """The suggestion removes a capitalized word that is not at the start of a sentence (a name, a place, a title)."""
+    kept = set(WORD_RE.findall(rep))
+    for mm in WORD_RE.finditer(orig):
+        w = mm.group(0)
+        if w in kept or not w[0].isupper() or re.fullmatch(r"I(['’](m|d|ll|ve))?", w):
+            continue
+        before = text[:off + mm.start()].rstrip()
+        if before and before[-1] not in ".!?:\"“(":
+            return True
+    return False
 
 
 PAST_TIME_EN = re.compile(r"\b(yesterday|ago|last (night|week|weekend|month|year|summer|winter|spring|fall|autumn|time|"
@@ -435,11 +473,14 @@ KO_PATTERNS = [
      "동사의 형태나 시제를 고쳤어요."),
     (r"PREP", "전치사를 고쳤어요."),
     (r"ORDER", "단어 순서를 고쳤어요."),
-    (r"MORFOLOGIK|HUNSPELL|SPELL|TYPO", "철자를 고쳤어요."),
     (r"REPEAT|DUPLICATE", "같은 말이 반복됐어요."),
 ]
+SPELL_RE = re.compile(r"MORFOLOGIK|HUNSPELL|SPELL|^TYPO")   # real spelling rules; LanguageTool's TYPOS category also
+                                                              # holds word-confusion rules that are not spelling
 KO_CATEGORIES = {
-    "TYPOS": "철자를 고쳤어요.",
+    "TYPOS": "헷갈리기 쉬운 단어를 바로잡았어요.",
+    "STYLE": "표현을 더 자연스럽게 고쳤어요.",
+    "REDUNDANCY": "군더더기를 줄였어요.",
     "CONFUSED_WORDS": "헷갈리기 쉬운 단어를 바로잡았어요.",
     "COLLOCATIONS": "함께 쓰는 단어 조합을 자연스럽게 고쳤어요.",
     "GRAMMAR": "문법을 고쳤어요.",
@@ -462,41 +503,57 @@ def explain(lang, m):
         return KO_PAST
     if rid in KO_RULES:
         return KO_RULES[rid]
+    if lang != "ja" and SPELL_RE.search(rid):
+        return "철자를 고쳤어요."
     for pat, ko in (KO_JA if lang == "ja" else []) + KO_PATTERNS:
         if re.search(pat, rid):
             return ko
     return KO_CATEGORIES.get(cat, KO_DEFAULT)
 
 
+MAX_ROUNDS = 2   # a second pass may fix what the first fix uncovered ("He go" -> "He goes" ... ); never more
+
+
 def correct(lang, text):
     """LanguageTool correction of one learner sentence.
-    Returns {"fix", "fix_ko", "changes": [{"from", "to", "rule", "category", "ko"}]} or None."""
+    Returns {"fix", "fix_ko", "changes": [{"from", "to", "rule", "category", "ko"}]} or None.
+    None also when the corrected sentence would still be flagged by LanguageTool itself after MAX_ROUNDS passes: a
+    dubious fix is worse than none (the AI, when available, then checks the original sentence)."""
     if lang not in LANG_CODE or not text.strip():
         return None
     t0 = time.time()
     matches = check(lang, text)
     if matches is None:
         return None
-    kept = [m for m in matches if _keep(m, text)]
-    if not kept:
-        _info("languagetool %s: no fix (%d raw matches) %.2fs", lang, len(matches), time.time() - t0)
+    cur, changes, raw_n = text, [], len(matches)
+    for rnd in range(MAX_ROUNDS + 1):
+        kept = [m for m in matches if _keep(m, cur)]
+        if not kept:
+            break
+        if rnd == MAX_ROUNDS:   # still flagged after the fixes: do not offer a half-fixed sentence
+            _info("languagetool %s: fixed sentence %r is still flagged -> no fix %.2fs", lang, cur, time.time() - t0)
+            return None
+        fixed, chosen = apply(cur, kept)
+        if fixed.strip() == cur.strip():
+            break
+        for m in chosen:
+            rule = m.get("rule") or {}
+            changes.append({"from": cur[m["offset"]:m["offset"] + m["length"]], "to": m["_rep"], "rule": rule.get("id", ""),
+                            "category": (rule.get("category") or {}).get("id", ""), "ko": explain(lang, m)})
+        cur = fixed
+        matches = check(lang, cur)
+        if matches is None:   # LanguageTool went away between the calls: keep what we have
+            break
+    if not changes or cur.strip() == text.strip():
+        _info("languagetool %s: no fix (%d raw matches) %.2fs", lang, raw_n, time.time() - t0)
         return None
-    fixed, chosen = apply(text, kept)
-    if fixed.strip() == text.strip():
-        return None
-    changes, seen_ko, parts = [], set(), []
-    for m in chosen:
-        orig = text[m["offset"]:m["offset"] + m["length"]]
-        rep = m["_rep"]
-        ko = explain(lang, m)
-        rule = m.get("rule") or {}
-        changes.append({"from": orig, "to": rep, "rule": rule.get("id", ""),
-                        "category": (rule.get("category") or {}).get("id", ""), "ko": ko})
-        if ko not in seen_ko and len(parts) < 3:
-            seen_ko.add(ko)
-            parts.append("'%s' → '%s': %s" % (orig.strip() or "(없음)", rep.strip() or "(빼기)", ko))
+    seen_ko, parts = set(), []
+    for c in changes:
+        if c["ko"] not in seen_ko and len(parts) < 3:
+            seen_ko.add(c["ko"])
+            parts.append("'%s' → '%s': %s" % (c["from"].strip() or "(없음)", c["to"].strip() or "(빼기)", c["ko"]))
     _info("languagetool %s: %d fix(es) %s %.2fs", lang, len(changes), [c["rule"] for c in changes], time.time() - t0)
-    return {"fix": fixed, "fix_ko": " / ".join(parts), "changes": changes}
+    return {"fix": cur, "fix_ko": " / ".join(parts), "changes": changes}
 
 
 def status():

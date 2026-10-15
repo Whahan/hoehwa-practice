@@ -172,6 +172,51 @@ func _lang_card(l: String, pos: Dictionary) -> Control:
 	return card
 
 
+const VOICE_SAMPLE := {
+	"en": "Really? That sounds amazing! Where did you go?",
+	"ja": "えっ、本当？すごいね！どこに行ったの？",
+}
+
+
+## One row of the voice settings: dropdown of the voices installed for `l` + a preview button.
+func _voice_row(l: String) -> Control:
+	var row := UI.hbox(12)
+	var cap := UI.label("영어" if l == "en" else "일본어", "Muted", false)
+	cap.custom_minimum_size = Vector2(60, 0)
+	row.add_child(cap)
+	var ob := UI.option_button([], -1)
+	ob.custom_minimum_size = Vector2(260, 0)
+	_fill_voice_option(ob, l)
+	ob.item_selected.connect(func(idx: int) -> void:
+		Store.set_pref("tts_voice_" + l, str(ob.get_item_metadata(idx))))
+	row.add_child(ob)
+	var pv := UI.button("미리 듣기", "default")
+	pv.pressed.connect(func() -> void:
+		if ob.selected >= 0:
+			Tts.speak(str(VOICE_SAMPLE[l]), l, false, str(ob.get_item_metadata(ob.selected))))
+	row.add_child(pv)
+	if Tts.voices.is_empty():
+		Tts.voices_loaded.connect(func() -> void:
+			if is_instance_valid(ob):
+				_fill_voice_option(ob, l), CONNECT_ONE_SHOT)
+		Tts.load_voices()
+	return row
+
+
+func _fill_voice_option(ob: OptionButton, l: String) -> void:
+	ob.clear()
+	var saved: String = Tts.voice_for(l)
+	var sel := 0
+	var lst: Array = Tts.voices_for(l)
+	for i in lst.size():
+		var v: Dictionary = lst[i]
+		ob.add_item(Tts.voice_label(v))
+		ob.set_item_metadata(i, str(v["id"]))
+		if str(v["id"]) == saved:
+			sel = i
+	ob.select(sel)
+
+
 func _week_dots(l: String) -> Control:
 	var acc: Color = Pal.accent(l)
 	var row := UI.hbox(6)
@@ -266,6 +311,10 @@ func _settings_panel() -> Control:
 	srow.add_child(t1)
 	srow.add_child(t2)
 	sp.add_child(srow)
+	sp.add_child(UI.label("목소리", "Strong"))
+	sp.add_child(_voice_row("en"))
+	sp.add_child(_voice_row("ja"))
+	sp.add_child(UI.label("이 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요.", "Small"))
 	card.body.add_child(sp)
 	card.body.add_child(UI.hline())
 
@@ -424,6 +473,9 @@ func _load_engines() -> void:
 	_engine_ob.select(sel)
 	_engine_ob.disabled = false
 	_engine_note.text = _engine_note_text(str(d.get("provider", "opencode")))
+	var fb = d.get("llm_fallback", {})
+	if fb is Dictionary and bool((fb as Dictionary).get("active", false)) and str((fb as Dictionary).get("reason", "")) != "":
+		_engine_note.text += "\n" + str((fb as Dictionary)["reason"])  # e.g. "AI 엔진을 쓸 수 없어요: …" when no AI answers at all
 	UI.fix_cjk(_engine_ob)
 
 

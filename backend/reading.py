@@ -20,7 +20,7 @@ import unicodedata
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
-DB_PATH = os.path.join(DATA_DIR, "tatoeba.sqlite")
+DB_PATH = os.environ.get("HOEHWA_TATOEBA_DB") or os.path.join(DATA_DIR, "tatoeba.sqlite")  # env var: tests only
 GLOSS_CACHE = os.path.join(BASE, "cache", "gloss.json")
 ATTRIBUTION = "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
 MAX_CHARS = 20000
@@ -555,8 +555,54 @@ def gloss(lang, items):
 # ----------------------------------------------------------------------------------------------
 # /examples (Tatoeba)
 # ----------------------------------------------------------------------------------------------
+_ready = {"key": None, "ok": False}
+_ready_lock = threading.Lock()
+DB_TABLES = {"sent", "vocab", "post", "en_forms", "meta"}
+
+
+def _db_valid():
+    """The file opens as SQLite and has the tables the examples / lessons read (an empty, truncated or foreign file does not)."""
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % DB_PATH.replace("\\", "/").replace("?", "%3f").replace("#", "%23"), uri=True)
+        try:
+            names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if not DB_TABLES <= names:
+                return False
+            return (con.execute("SELECT 1 FROM sent LIMIT 1").fetchone() is not None
+                    and con.execute("SELECT 1 FROM post LIMIT 1").fetchone() is not None)
+        finally:
+            con.close()
+    except Exception:
+        return False
+
+
 def tatoeba_ready():
-    return os.path.isfile(DB_PATH)
+    """True if the Tatoeba DB exists AND is a usable SQLite file (checked once per file size/mtime, then cached)."""
+    try:
+        st = os.stat(DB_PATH)
+    except OSError:
+        return False
+    if not os.path.isfile(DB_PATH):
+        return False
+    key = (DB_PATH, st.st_size, st.st_mtime_ns)
+    c = _ready
+    if c["key"] == key:
+        return c["ok"]
+    with _ready_lock:
+        ok = _db_valid()
+        c["key"], c["ok"] = key, ok
+    if not ok:
+        try:
+            _log().warning("Tatoeba DB %s is not a valid database; examples and rule-based lessons are off", DB_PATH)
+        except Exception:
+            pass
+    return ok
+
+
+def invalidate_tatoeba_ready():
+    """a query on the DB raised sqlite3.DatabaseError (corrupted after the check): re-check on the next call"""
+    _ready["key"] = None
+    _ready["ok"] = False
 
 
 def _db():

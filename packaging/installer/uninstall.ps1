@@ -1,6 +1,6 @@
 # 회화 연습 제거 스크립트. 보통은 제거.bat 을 더블클릭해서 실행합니다.
 # 지우는 것: 이 폴더 안의 runtime, backend\models, backend\logs, backend\cache, backend\tools(LanguageTool), backend\secrets.json(API 키), install.log
-# 지우지 않는 것: Ollama 와 AI 모델, 학습 기록/설정(%APPDATA%\Godot\app_userdata\회화 연습), 프로그램 파일 자체
+# 지우지 않는 것: Ollama 와 AI 모델, OpenCode/Node.js, 학습 기록/설정(%APPDATA%\Godot\app_userdata\회화 연습), 프로그램 파일 자체
 param([switch]$Yes)
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
@@ -13,7 +13,7 @@ foreach ($t in $targets) {
     $p = Join-Path $Root $t
     if (Test-Path -LiteralPath $p) { Write-Host "  - $t" }
 }
-Write-Host "지우지 않는 것: Ollama 와 AI 모델, 학습 기록과 설정, 프로그램(exe) 자체" -ForegroundColor Gray
+Write-Host "지우지 않는 것: Ollama 와 AI 모델, OpenCode/Node.js, 학습 기록과 설정, 프로그램(exe) 자체" -ForegroundColor Gray
 if (-not $Yes) {
     $a = Read-Host "정말 제거할까요? (Y/N)"
     if ($a -notmatch '^[yY]') { Write-Host "취소했습니다."; exit 0 }

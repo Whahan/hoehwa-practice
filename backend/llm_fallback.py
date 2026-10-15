@@ -17,7 +17,7 @@ OVERLOAD_MINUTES = 5
 MAX_SECONDS = 7 * 24 * 3600
 
 _lock = threading.Lock()
-_state = {"provider": None, "until": 0.0, "reason": "", "kind": "", "since": 0.0, "message": ""}
+_state = {"provider": None, "until": 0.0, "reason": "", "kind": "", "since": 0.0, "message": "", "cause": "", "when": ""}
 
 LIMIT_RE = re.compile(r"usage limit|rate[ _-]?limit|limit reached|hit your (usage )?limit|\b429\b|too many requests|quota|"
                       r"resource[ _]exhausted|insufficient_quota|limit will reset|out of (credits|usage)|"
@@ -82,10 +82,11 @@ def mark(provider, kind, raw, friendly="", label=None):
         until = now + 60 * {"limit": DEFAULT_MINUTES, "auth": AUTH_MINUTES, "overload": OVERLOAD_MINUTES}.get(kind, DEFAULT_MINUTES)
     until = min(max(until, now + 60), now + MAX_SECONDS)
     why = {"limit": "사용 한도에 도달해서", "auth": "로그인이나 사용 권한 문제로", "overload": "서버가 바빠서"}.get(kind, "호출에 실패해서")
-    reason = "%s %s %s까지 로컬 AI로 답해요." % (label or provider, why,
-                                           _dt.datetime.fromtimestamp(until).strftime("%H:%M" if until - now < 20 * 3600 else "%m/%d %H:%M"))
+    cause = "%s %s" % (label or provider, why)
+    when = _dt.datetime.fromtimestamp(until).strftime("%H:%M" if until - now < 20 * 3600 else "%m/%d %H:%M")
+    reason = "%s %s까지 로컬 AI로 답해요." % (cause, when)
     with _lock:
-        _state.update(provider=provider, until=until, reason=reason, kind=kind, since=now,
+        _state.update(provider=provider, until=until, reason=reason, kind=kind, since=now, cause=cause, when=when,
                       message=(friendly or raw or "")[:300])
     return until
 
@@ -95,20 +96,26 @@ def active_for(provider):
         if _state["provider"] == provider and time.time() < _state["until"]:
             return True
         if _state["provider"] and time.time() >= _state["until"]:
-            _state.update(provider=None, until=0.0, reason="", kind="", since=0.0, message="")
+            _state.update(provider=None, until=0.0, reason="", kind="", since=0.0, message="", cause="", when="")
         return False
 
 
 def clear():
     with _lock:
-        _state.update(provider=None, until=0.0, reason="", kind="", since=0.0, message="")
+        _state.update(provider=None, until=0.0, reason="", kind="", since=0.0, message="", cause="", when="")
 
 
-def status(provider=None):
-    """{"active", "until" (ISO 8601 local time or None), "reason"} for /health and GET /llm."""
+def status(provider=None, local_ok=True):
+    """{"active", "until" (ISO 8601 local time or None), "reason"} for /health and GET /llm.
+    local_ok=False: the local model cannot answer either, so the reason must not claim that it does."""
     with _lock:
         live = bool(_state["provider"]) and time.time() < _state["until"] and (provider is None or _state["provider"] == provider)
         if not live:
             return {"active": False, "until": None, "reason": ""}
         until = _dt.datetime.fromtimestamp(_state["until"]).astimezone().isoformat(timespec="seconds")
-        return {"active": True, "until": until, "reason": _state["reason"]}
+        if local_ok:
+            reason = _state["reason"]
+        else:
+            reason = "AI 엔진을 쓸 수 없어요: %s %s까지 쓸 수 없고, 로컬 AI(Ollama)도 연결되지 않아요. 문법 검사기만 쓸 수 있어요." % (
+                _state["cause"], _state["when"])
+        return {"active": True, "until": until, "reason": reason}

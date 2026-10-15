@@ -15,6 +15,8 @@ const CURRICULUM_BUNDLED := "res://data/curriculum.json"
 const DEFAULT_PREFS := {
 	"lang": "en",
 	"tts_speed": 1.0,
+	"tts_voice_en": "af_heart",
+	"tts_voice_ja": "jf_alpha",
 	"mic_device": "Default",
 	"auto_speak": true,
 	"show_fix": true,

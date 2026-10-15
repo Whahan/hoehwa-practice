@@ -5,11 +5,20 @@
     .venv\\Scripts\\python.exe server.py --port 8787 --tag gramcache --stt-cpu
     .venv\\Scripts\\python.exe test_offline_ai.py --base http://127.0.0.1:8787 [--tag gramcache]
 
+(--base is REQUIRED: pass the URL of YOUR test server; there is deliberately no default, the app's own server must never
+be used by a test.)
+
 1. LanguageTool grammar correction (/fix with AI polish off = LanguageTool only), English + Japanese
 2. /fix result cache: the second identical call is a cache hit (timing + server log line)
 3. usage limit of the remote engine (simulated) -> answered by the local model, /health.llm_fallback.active
 4. openai_api engine against a mock OpenAI-compatible server
 5. opencode engine (opencode serve + free DeepSeek V4.1 Flash): en/ja chat latency, /fix, /lesson source ai, limit fallback
+6. (--no-ai-server) a server whose OpenCode is hidden (APPDATA/PATH without it) and whose Ollama URL is closed:
+   /fix gives an empty fix (HTTP 200) when LanguageTool finds nothing, the LanguageTool fix when it does, and
+   /health.llm_fallback.reason does not claim that a local AI answers
+
+The openai_api engine is tested ONLY against a local mock server and a key typed into the app (secrets.json); no test
+reads or uses the OpenCode login or any real API key.
 """
 import json
 import os
@@ -25,9 +34,11 @@ try:
 except Exception:
     pass
 
-BASE = "http://127.0.0.1:8787"
-if "--base" in sys.argv:
-    BASE = sys.argv[sys.argv.index("--base") + 1]
+if "--base" not in sys.argv or sys.argv.index("--base") + 1 >= len(sys.argv):
+    print("usage: test_offline_ai.py --base http://127.0.0.1:<port of YOUR test server> [--tag TAG] [--no-api] [--no-opencode] [--no-ai-server]\n"
+          "--base is required (there is no default: never test against the app's own server).")
+    sys.exit(2)
+BASE = sys.argv[sys.argv.index("--base") + 1].rstrip("/")
 TAG = sys.argv[sys.argv.index("--tag") + 1] if "--tag" in sys.argv else "gramcache"
 LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "server-%s.log" % TAG)
 HANGUL = re.compile(r"[가-힣]")
@@ -39,6 +50,15 @@ def check(name, cond, detail=""):
     results.append((name, bool(cond)))
     print("  [%s] %s%s" % ("PASS" if cond else "FAIL", name, (" -- " + str(detail)) if detail != "" else ""))
     return bool(cond)
+
+
+def has_keys(d, keys):
+    """The response has at least these keys (extra keys such as /chat's tts_chunks are allowed)."""
+    return isinstance(d, dict) and set(keys) <= set(d)
+
+
+FIX_KEYS = ("fix", "fix_ko")
+CHAT_KEYS = ("reply", "reading", "ko", "fix", "fix_ko", "suggest")
 
 
 def call(method, path, label=None, **kw):
@@ -86,11 +106,15 @@ def main():
     print("  health:", json.dumps({k: h.get(k) for k in ("llm", "llm_provider", "grammar", "llm_fallback")}, ensure_ascii=False))
     check("health has grammar=true", h.get("grammar") is True, h.get("grammar"))
     check("health has llm_fallback {active, until, reason}", isinstance(h.get("llm_fallback"), dict)
-          and set(h["llm_fallback"]) == {"active", "until", "reason"}, h.get("llm_fallback"))
+          and has_keys(h["llm_fallback"], ("active", "until", "reason")), h.get("llm_fallback"))
     r = requests.post(BASE + "/debug/config", json={}, timeout=10)
     if not check("test hooks enabled (HOEHWA_TEST_HOOKS=1)", r.status_code == 200, r.status_code):
         return 2
     requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
+    test_no_credential_reads()
+    if "--no-ai-server" in sys.argv:   # server started without any usable AI engine: only section 6
+        test_no_ai()
+        return finish()
 
     # ------------------------------------------------------------------ 1. LanguageTool only
     print("\n== 1. LanguageTool only (AI polish off): English")
@@ -99,7 +123,7 @@ def main():
         r, dt = call("POST", "/fix", "fix LT en %d" % i, json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
         d = r.json()
         print("   %-28s -> %-32s %.2fs | %s" % (s, d.get("fix"), dt, d.get("fix_ko")))
-        ok = r.status_code == 200 and set(d) == {"fix", "fix_ko"} and all(n.lower() in d["fix"].lower() for n in need)
+        ok = r.status_code == 200 and has_keys(d, FIX_KEYS) and all(n.lower() in d["fix"].lower() for n in need)
         check("LT fixes %r" % s, ok and bool(HANGUL.search(d["fix_ko"])), d)
         check("LT %r is fast (< 2 s)" % s, dt < 2.0 or i == 0, "%.2fs" % dt)
     print("\n== 1b. LanguageTool only: Japanese (LanguageTool's Japanese rules are few)")
@@ -108,6 +132,9 @@ def main():
         d = r.json()
         print("   %-14s -> %-16s %.2fs | %s" % (s, d.get("fix"), dt, d.get("fix_ko")))
     check("LT ja fixes これわ -> これは", "これは" in (call("POST", "/fix", "fix LT ja korewa", json={"lang": "ja", "stage": 1, "text": JA[0]})[0].json().get("fix") or ""))
+
+    print("\n== 1d. LanguageTool guard against dubious fixes (in-process LanguageTool)")
+    test_lt_guard()
 
     print("\n== 1c. LanguageTool + AI polish (default)")
     requests.post(BASE + "/debug/config", json={"grammar_llm_polish": True}, timeout=10)
@@ -147,13 +174,13 @@ def main():
                                                                            "history": [], "conv_id": "fallback-test-%d" % reset})
         d = r.json()
         print("   /chat opening -> %s (%.1fs)" % (json.dumps(d, ensure_ascii=False)[:200], dt))
-        check("limit: /chat answers with the same shape", r.status_code == 200 and set(d) == {"reply", "reading", "ko", "fix", "fix_ko", "suggest"}, r.text[:200])
+        check("limit: /chat answers with the same shape", r.status_code == 200 and has_keys(d, CHAT_KEYS), r.text[:200])
         # then a JSON call (/fix, sentence LanguageTool does not catch) goes straight to local
         s = "Yesterday I eat pizza with %d friends" % random.randint(10, 99)
         r, dt = call("POST", "/fix", "fix during engine limit (local)", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
         d = r.json()
         print("   /fix %r -> %s (%.1fs)" % (s, d, dt))
-        check("limit: /fix still answers (HTTP 200, same shape)", r.status_code == 200 and set(d) == {"fix", "fix_ko"}, r.text[:200])
+        check("limit: /fix still answers (HTTP 200, same shape)", r.status_code == 200 and has_keys(d, FIX_KEYS), r.text[:200])
         h = call("GET", "/health")[0].json()
         fb = h.get("llm_fallback") or {}
         print("   health.llm_fallback:", fb)
@@ -177,7 +204,10 @@ def main():
         test_openai_api()
     if "--no-opencode" not in sys.argv:
         test_opencode()
+    return finish()
 
+
+def finish():
     print("\n================ SUMMARY ================")
     for k, v in timings:
         print("%-40s %8.2f" % (k, v))
@@ -188,8 +218,124 @@ def main():
     return 1 if failed else 0
 
 
+CORRECT_EN = ["I went to the store yesterday.", "She is my sister.", "We are going to Tokyo next week.",
+              "Could you tell me where the station is?", "I have been studying English for two years.",
+              "He doesn't like coffee.", "They played soccer in the park.", "My name is Jiho and I live in Seoul.",
+              "I like Seoul and Busan.", "Can I have a cup of coffee, please?"]
+DUBIOUS_EN = ["Me and him goes to school together", "Me and Tom went home", "My friend and me went to the park",
+              "Me is Tom", "Them are my friends"]
+
+
+def test_no_credential_reads():
+    """No backend code may read the OpenCode login (auth.json in OpenCode's data dir) or any XDG data dir."""
+    import glob
+    here = os.path.dirname(os.path.abspath(__file__))
+    pat = re.compile(r"auth\.json|\.local[/\\]+share|XDG_DATA_HOME")
+    bad = []
+    for fn in sorted(glob.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(fn) == os.path.basename(__file__):
+            continue
+        with open(fn, encoding="utf-8", errors="replace") as f:
+            for i, line in enumerate(f, 1):
+                if pat.search(line):
+                    bad.append("%s:%d" % (os.path.basename(fn), i))
+    check("backend code never touches auth.json / ~/.local/share / XDG_DATA_HOME", not bad, bad)
+
+
+def test_lt_guard():
+    """LanguageTool itself (own child process, not the server): no worse-than-the-original fixes, no false fixes."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        import grammar
+    except Exception as e:
+        print("   cannot import grammar (%s): skipped" % e)
+        return
+    if not (grammar.find_jar() and grammar.find_java()):
+        print("   LanguageTool/Java not installed: skipped")
+        return
+    try:
+        for s in DUBIOUS_EN:
+            r = grammar.correct("en", s)
+            print("   %-40s -> %s" % (s, r and r["fix"]))
+            check("LT guard: no fix for %r (pronoun-case rules are unreliable)" % s, r is None, r)
+        for s in CORRECT_EN:
+            r = grammar.correct("en", s)
+            check("LT: correct sentence %r gets no fix" % s, r is None, r and r["fix"])
+        for s, need in EN:
+            r = grammar.correct("en", s)
+            check("LT still fixes %r" % s, bool(r) and all(n.lower() in r["fix"].lower() for n in need), r and r["fix"])
+        r = grammar.correct("en", "I have a apple")
+        check("LT label: grammar fix is not called spelling", bool(r) and "철자" not in r["fix_ko"], r and r["fix_ko"])
+        r = grammar.correct("en", "Starbuks is good")
+        check("LT label: real misspelling is called spelling", bool(r) and "철자" in r["fix_ko"], r and r["fix_ko"])
+        r = grammar.correct("en", "Tomas go to school")
+        check("LT keeps a name (Tomas) untouched", bool(r) and r["fix"].startswith("Tomas "), r and r["fix"])
+    finally:
+        grammar.stop()
+
+
+def test_no_ai():
+    """Server without any AI engine (OpenCode hidden, Ollama unreachable): LanguageTool only, never an error."""
+    print("\n== 6. no AI engine available (LanguageTool only)")
+    h = call("GET", "/health")[0].json()
+    fb = h.get("llm_fallback") or {}
+    print("   health: llm=%s provider=%s llm_fallback=%s" % (h.get("llm"), h.get("llm_provider"), fb))
+    check("no-AI: /health.llm is false", h.get("llm") is False, h.get("llm"))
+    check("no-AI: /health.llm_fallback.reason does not claim a local AI answers",
+          fb.get("active") is True and "로컬 AI로 답해요" not in fb.get("reason", "") and "AI 엔진을 쓸 수 없어요" in fb.get("reason", ""), fb)
+    g = call("GET", "/llm")[0].json()
+    check("no-AI: GET /llm.llm_fallback.reason agrees", "로컬 AI로 답해요" not in (g.get("llm_fallback") or {}).get("reason", "") and g["llm_fallback"]["active"], g.get("llm_fallback"))
+    requests.post(BASE + "/debug/config", json={"grammar_llm_polish": True}, timeout=10)
+    for s in CORRECT_EN:
+        r, dt = call("POST", "/fix", "no-AI fix correct", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
+        check("no-AI: %r -> HTTP 200, empty fix" % s, r.status_code == 200 and r.json() == {"fix": "", "fix_ko": ""}, r.text[:200])
+    for s in DUBIOUS_EN:
+        r, dt = call("POST", "/fix", "no-AI fix dubious", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
+        d = r.json()
+        check("no-AI: %r -> HTTP 200, no 'I and him' fix" % s, r.status_code == 200 and has_keys(d, FIX_KEYS) and "I and" not in d["fix"], d)
+    for s, need in EN:
+        r, dt = call("POST", "/fix", "no-AI fix LT", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
+        d = r.json()
+        print("   %-28s -> %-32s %.2fs | %s" % (s, d.get("fix"), dt, d.get("fix_ko")))
+        check("no-AI: LT fixes %r" % s, r.status_code == 200 and all(n.lower() in d.get("fix", "").lower() for n in need) and bool(HANGUL.search(d.get("fix_ko", ""))), d)
+    r, dt = call("POST", "/fix", "no-AI fix, after the failures were recorded", json={"lang": "en", "stage": 1, "text": "I went to the store yesterday."})
+    check("no-AI: a repeated call is still fast and empty (< 2 s)", r.status_code == 200 and r.json()["fix"] == "" and dt < 2.0, "%.2fs" % dt)
+    # an engine that is installed but fails (here: the API engine without a key) and no local AI: the recorded failure
+    # must not be reported as "local AI answers"
+    secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets.json")
+    try:
+        with open(secrets_path, encoding="utf-8") as f:
+            has_real_key = bool((json.load(f).get("openai_api") or {}).get("opencode_zen"))
+    except Exception:
+        has_real_key = False
+    if has_real_key:
+        print("   secrets.json has an opencode_zen key: skipped the failing-API-engine check")
+        return
+    requests.post(BASE + "/debug/config", json={"llm_provider": "openai_api"}, timeout=10)
+    try:
+        r, dt = call("POST", "/fix", "no-AI fix, failing API engine", json={"lang": "en", "stage": 1, "text": "I went to the store yesterday."})
+        check("no-AI: failing engine -> /fix HTTP 200, empty fix", r.status_code == 200 and r.json() == {"fix": "", "fix_ko": ""}, r.text[:200])
+        fb = call("GET", "/health")[0].json().get("llm_fallback") or {}
+        print("   llm_fallback after the engine failure:", fb)
+        check("no-AI: failing engine -> reason says AI is unavailable, not that a local AI answers",
+              fb.get("active") is True and fb.get("reason", "").startswith("AI 엔진을 쓸 수 없어요") and "로컬 AI로 답해요" not in fb["reason"], fb)
+        r, dt = call("POST", "/fix", "no-AI fix LT, failing API engine", json={"lang": "en", "stage": 1, "text": "I have a apple"})
+        check("no-AI: failing engine -> LanguageTool fix still returned", r.status_code == 200 and "an apple" in r.json().get("fix", ""), r.text[:200])
+    finally:
+        requests.post(BASE + "/debug/config", json={"llm_provider": "opencode"}, timeout=10)
+
+
 # ---------------------------------------------------------------------------------------------- 4. openai_api
-MOCK_PORT = 8799
+def _free_port():
+    import socket
+    sk = socket.socket()
+    sk.bind(("127.0.0.1", 0))
+    port = sk.getsockname()[1]
+    sk.close()
+    return port
+
+
+MOCK_PORT = _free_port()   # a free local port: parallel test runs never collide
 MOCK_KEY = "test-key-" + "%06d" % random.randint(0, 999999)
 MOCK_SEEN = {"auth_ok": 0, "auth_bad": 0, "json_mode": 0, "plain": 0}
 
@@ -270,14 +416,30 @@ def start_mock():
 
 
 def test_openai_api():
-    print("\n== 4. openai_api engine (mock OpenAI-compatible server on :%d, then the real OpenCode Zen /models)" % MOCK_PORT)
+    print("\n== 4. openai_api engine (mock OpenAI-compatible server on :%d only; no real network, no OpenCode login)" % MOCK_PORT)
     before = call("GET", "/health")[0].json().get("llm_provider")
+    secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets.json")
+    try:  # the test writes a fake key into secrets.json: put the file back exactly as it was afterwards
+        with open(secrets_path, "rb") as f:
+            secrets_before = f.read()
+    except OSError:
+        secrets_before = None
     srv = start_mock()
     pos = log_size()
     try:
         g = call("GET", "/llm")[0].json()
         api = g.get("openai_api") or {}
-        check("GET /llm lists openai_api with presets", any(o.get("id") == "openai_api" for o in g.get("options", []))
+        try:
+            stored = json.loads(secrets_before or b"{}").get("openai_api", {})
+        except Exception:
+            stored = {}
+        if not stored.get(api.get("preset")):
+            check("GET /llm openai_api.has_key is false while secrets.json has no key (nothing else is consulted)",
+                  api.get("has_key") is False, api.get("has_key"))
+        check("GET /llm openai_api.key_source is 'secret' (OpenCode's login is never read)", api.get("key_source") == "secret", api.get("key_source"))
+        r, _ = call("POST", "/llm", json={"provider": "openai_api", "key_source": "opencode"})
+        check("POST /llm refuses key_source 'opencode'", r.status_code == 400, r.status_code)
+        check("GET /llm has openai_api settings with presets (not in the picker options)", not any(o.get("id") == "openai_api" for o in g.get("options", []))
               and {p["id"] for p in api.get("presets", [])} >= {"opencode_zen", "deepseek", "gemini", "openrouter"}, api.get("presets"))
         # store a (fake) key through POST /llm -> backend/secrets.json, then point the preset at the mock
         r, _ = call("POST", "/llm", json={"provider": "openai_api", "preset": "openrouter", "key_source": "secret", "api_key": MOCK_KEY})
@@ -294,7 +456,7 @@ def test_openai_api():
         scen = {"id": "cafe", "persona": "Emma, a barista", "scene": "ordering"}
         r, dt = call("POST", "/chat", "chat openai_api mock", json={"lang": "en", "stage": 1, "history": [], "scenario": scen})
         d = r.json()
-        check("/chat via API: same shape", r.status_code == 200 and set(d) == {"reply", "reading", "ko", "fix", "fix_ko", "suggest"}, r.text[:200])
+        check("/chat via API: same shape", r.status_code == 200 and has_keys(d, CHAT_KEYS), r.text[:200])
         # JSON mode unsupported -> retried as prompt-only JSON, fenced output still parsed
         requests.post(BASE + "/debug/config", json={"openai_api": {"model": "mock-nojson"}}, timeout=10)
         r, _ = call("POST", "/llm/test", "llm/test no json mode")
@@ -316,7 +478,7 @@ def test_openai_api():
         h = call("GET", "/health")[0].json()
         fb = h.get("llm_fallback") or {}
         print("   /fix ->", r.json(), "(%.1fs)" % dt, "| llm_fallback:", fb)
-        check("API 429 -> /fix answered locally (HTTP 200)", r.status_code == 200 and set(r.json()) == {"fix", "fix_ko"}, r.text[:200])
+        check("API 429 -> /fix answered locally (HTTP 200)", r.status_code == 200 and has_keys(r.json(), FIX_KEYS), r.text[:200])
         check("API 429 -> llm_fallback active, Korean reason", fb.get("active") is True and "API" in fb.get("reason", "")
               and "로컬 AI" in fb.get("reason", ""), fb)
         check("API 429 -> until from Retry-After (~10 min)", bool(fb.get("until")) and 300 < time.mktime(time.strptime(fb["until"][:19], "%Y-%m-%dT%H:%M:%S")) - time.time() < 700, fb.get("until"))
@@ -326,21 +488,21 @@ def test_openai_api():
         cfg_txt = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"), encoding="utf-8").read()
         check("key not in server log / config.json / GET /llm", MOCK_KEY not in lg and MOCK_KEY not in cfg_txt and MOCK_KEY not in call("GET", "/llm")[0].text)
         check("mock saw the key on every call", MOCK_SEEN["auth_bad"] == 0 and MOCK_SEEN["auth_ok"] > 0, MOCK_SEEN)
-        # real OpenCode Zen (key from `opencode auth login`), free model list only; free-tier chat is refused outside OpenCode
         call("POST", "/llm", json={"provider": "openai_api", "api_key": ""})  # remove the fake key from secrets.json
-        r, _ = call("POST", "/llm", json={"provider": "openai_api", "preset": "opencode_zen", "key_source": "opencode"})
-        if (r.json().get("openai_api") or {}).get("has_key"):
-            r, dt = call("GET", "/llm/models?preset=opencode_zen&key_source=opencode", "opencode zen /models")
-            ms = r.json().get("models", []) if r.status_code == 200 else []
-            print("   OpenCode Zen models (%d, %.1fs): free=%s" % (len(ms), dt, [m["id"] for m in ms if m["free"]]))
-            check("OpenCode Zen /models with the OpenCode login key", r.status_code == 200 and len(ms) > 5, r.text[:200])
-            call("POST", "/llm", json={"provider": "openai_api", "model": "deepseek-v4.1-flash-free"})
-            r, dt = call("POST", "/llm/test", "opencode zen free model test")
-            print("   deepseek-v4.1-flash-free ->", r.status_code, r.json(), "(%.1fs)" % dt)
-        else:
-            print("   no OpenCode login key: skipped the real OpenCode Zen check")
+        g = call("GET", "/llm")[0].json()
+        if not stored.get(api.get("preset")) and not stored.get("openrouter"):
+            check("fake key removed again -> has_key false", (g.get("openai_api") or {}).get("has_key") is False, (g.get("openai_api") or {}).get("has_key"))
     finally:
         srv.shutdown()
+        try:
+            if secrets_before is None:
+                if os.path.exists(secrets_path):
+                    os.remove(secrets_path)
+            else:
+                with open(secrets_path, "wb") as f:
+                    f.write(secrets_before)
+        except OSError:
+            pass
         call("POST", "/llm", json={"provider": before or "ollama"})
         requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
 
@@ -368,7 +530,7 @@ def test_opencode():
             d = r.json()
             lat.append(dt)
             print("   [%.1fs] %s -> %s" % (dt, said or "(opening)", json.dumps(d, ensure_ascii=False)[:260]))
-            ok = r.status_code == 200 and set(d) == {"reply", "reading", "ko", "fix", "fix_ko", "suggest"} and d["reply"] and HANGUL.search(d["ko"])
+            ok = r.status_code == 200 and has_keys(d, CHAT_KEYS) and d["reply"] and HANGUL.search(d["ko"])
             check("opencode chat en turn %d shape + Korean ko" % (len(lat) - 1), ok, r.text[:200])
             if not ok:
                 break
@@ -404,7 +566,7 @@ def test_opencode():
         r, dt = call("POST", "/chat", "opencode chat during limit (local)", json={"lang": "en", "stage": 1, "scenario": scen, "history": [], "conv_id": conv + "-lim"})
         fb = call("GET", "/health")[0].json().get("llm_fallback") or {}
         print("   [%.1fs] chat during limit -> %s | llm_fallback %s" % (dt, r.status_code, fb))
-        check("opencode limit -> chat answered locally, same shape", r.status_code == 200 and set(r.json()) == {"reply", "reading", "ko", "fix", "fix_ko", "suggest"}, r.text[:200])
+        check("opencode limit -> chat answered locally, same shape", r.status_code == 200 and has_keys(r.json(), CHAT_KEYS), r.text[:200])
         check("opencode limit -> Korean notice in llm_fallback.reason", fb.get("active") is True and "DeepSeek" in fb.get("reason", "") and "로컬 AI" in fb.get("reason", ""), fb)
     finally:
         requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)

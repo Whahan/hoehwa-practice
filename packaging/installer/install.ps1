@@ -1,12 +1,12 @@
 ﻿# 회화 연습 설치 스크립트 (재실행 안전). 보통은 설치.bat 을 더블클릭해서 실행합니다.
-#   powershell -ExecutionPolicy Bypass -File install.ps1 [-Yes] [-NoShortcut] [-TestPort 8790]
+#   powershell -ExecutionPolicy Bypass -File install.ps1 [-Yes] [-NoShortcut] [-TestPort 8790] [-Engine deepseek|local] [-DryRun]
 param(
     [switch]$Yes,          # 모든 질문에 자동으로 Y (무인 설치)
     [switch]$NoShortcut,   # 바탕화면 바로가기 질문 건너뛰기
     [int]$TestPort = 8790, # 마지막 동작 확인용 임시 서버 포트(사용 중이면 다음 빈 포트)
-    [ValidateSet("", "local", "claude", "codex", "gemini")]
-    [string]$Engine = "",  # AI 엔진: local(Ollama) | claude | codex | gemini. 비우면 질문 (-Yes 이면 local)
-    [switch]$CliDetectOnly # (검증용) CLI 엔진: 설치 여부만 확인하고 로그인/테스트 호출 없이 종료
+    [ValidateSet("", "deepseek", "local")]
+    [string]$Engine = "",  # AI 엔진: deepseek (OpenCode 의 무료 DeepSeek V4.1 Flash, 기본) | local (Ollama + qwen3:8b). 비우면 질문 (-Yes 이면 deepseek)
+    [switch]$DryRun        # (검증용) 엔진 선택과 config.json 기록만 확인한다. 파이썬·패키지·모델·Node.js·OpenCode 설치와 로그인은 하지 않는다
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -81,11 +81,16 @@ function Test-Url([string]$url, [int]$timeout = 10) {
 }
 
 # ------------------------------------------------------------------ 단계 실행기
-function Step([int]$n, [string]$title, [string]$key, [scriptblock]$Body, [switch]$Always) {
+function Step([int]$n, [string]$title, [string]$key, [scriptblock]$Body, [switch]$Always, [switch]$DryOK) {
     Say ""
     Say ("[{0}/{1}] {2}" -f $n, $TotalSteps, $title) "Cyan"
+    if ($DryRun -and -not $DryOK) {
+        Say "    [DryRun] 이 단계는 실제로 실행하지 않습니다." "Yellow"
+        $script:Timings.Add([pscustomobject]@{ N = $n; Title = $title; Sec = 0; Result = "DryRun 건너뜀" })
+        return
+    }
     $marker = Join-Path $StateDir ("{0:00}-{1}.ok" -f $n, $key)
-    if (-not $Always -and (Test-Path -LiteralPath $marker)) {
+    if (-not $Always -and -not $DryRun -and (Test-Path -LiteralPath $marker)) {
         Say "    이미 끝난 단계입니다. 건너뜁니다." "Green"
         $script:Timings.Add([pscustomobject]@{ N = $n; Title = $title; Sec = 0; Result = "건너뜀" })
         return
@@ -93,7 +98,7 @@ function Step([int]$n, [string]$title, [string]$key, [scriptblock]$Body, [switch
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     & $Body
     $sw.Stop()
-    if (-not $Always) {
+    if (-not $Always -and -not $DryRun) {
         New-Item -ItemType Directory -Force $StateDir | Out-Null
         Write-Utf8 $marker (Get-Date -Format "o")
     }
@@ -126,34 +131,26 @@ function Ensure-OllamaRunning([string]$exe) {
     return $false
 }
 
-# ------------------------------------------------------------------ AI 엔진 선택 / Node.js / CLI 도우미
+# ------------------------------------------------------------------ AI 엔진 선택 / Node.js / OpenCode 도우미
+$OpenCodePkg = "opencode-ai"
+$OpenCodeVer = "1.19.0"
+$OpenCodeModel = "opencode/deepseek-v4.1-flash-free"
 $EngineInfo = @{
-    local  = @{ Provider = "ollama"; Name = "로컬 AI (Ollama + qwen3:8b)" }
-    claude = @{ Provider = "claude_cli"; Name = "Claude Code CLI"; Pkg = "@anthropic-ai/claude-code"; Ver = "2.1.300"; Cmd = "claude"
-                Extra = @("--allow-scripts=@anthropic-ai/claude-code"); Login = @("auth", "login")
-                Test = @("-p", "Reply with OK", "--tools", '""', "--no-session-persistence", "--setting-sources", '""')
-                Account = "Claude 구독 계정" }
-    codex  = @{ Provider = "codex_cli"; Name = "Codex CLI"; Pkg = "@openai/codex"; Ver = "0.162.1"; Cmd = "codex"
-                Extra = @(); Login = @("login")
-                Test = @("exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "Reply with OK")
-                Account = "ChatGPT 구독 계정" }
-    gemini = @{ Provider = "gemini_cli"; Name = "Gemini CLI"; Pkg = "@google/gemini-cli"; Ver = "0.64.0"; Cmd = "gemini"
-                Extra = @(); Login = @()
-                Test = @("-p", "Reply with OK", "--skip-trust")
-                Account = "구글 계정" }
+    deepseek = @{ Provider = "opencode"; Name = "DeepSeek V4.1 Flash 무료 (OpenCode)" }
+    local    = @{ Provider = "ollama";   Name = "오프라인 로컬 (Ollama + qwen3:8b)" }
 }
 
 function Select-Engine {
     Say ""
     Say "AI 엔진을 골라 주세요" "Cyan"
-    Say "  1) 로컬 AI (무료, 인터넷 불필요, Ollama + qwen3:8b 약 5GB, NVIDIA 그래픽카드 권장)"
-    Say "  2) Claude Code CLI (Claude 구독 계정으로 로그인)"
-    Say "  3) Codex CLI (ChatGPT 구독 계정으로 로그인)"
-    Say "  4) Gemini CLI (구글 계정 로그인)"
-    Say "     ※ 구글이 무료 개인 사용을 중단해서 유료 플랜이 아니면 동작하지 않을 수 있습니다." "Yellow"
+    Say "  1) DeepSeek V4.1 Flash 무료 (기본, 추천)"
+    Say "       인터넷이 필요합니다. 설치: Node.js(없으면) + OpenCode. 각자 본인의 OpenCode 계정으로 로그인합니다." "Gray"
+    Say "  2) 오프라인 로컬 (qwen3:8b, 약 5GB, NVIDIA 그래픽카드 권장)"
+    Say "       인터넷 없이 동작합니다. 설치: Ollama + 모델 약 5GB." "Gray"
     while ($true) {
-        $a = (Read-Host "번호를 입력하세요 (1-4, 그냥 Enter 는 1)").Trim()
-        switch ($a) { "" { return "local" } "1" { return "local" } "2" { return "claude" } "3" { return "codex" } "4" { return "gemini" } }
+        $a = Read-Host "번호를 입력하세요 (1-2, 그냥 Enter 는 1)"
+        if ($null -eq $a) { return "deepseek" }   # 입력이 끊긴 경우(자동 실행)
+        switch ($a.Trim()) { "" { return "deepseek" } "1" { return "deepseek" } "2" { return "local" } }
     }
 }
 
@@ -175,6 +172,7 @@ function Get-NodeMajor {
 }
 function Install-NodeLts {
     $ok = $false
+    $msi = $null
     try {
         $idx = Invoke-RestMethod "https://nodejs.org/dist/index.json" -TimeoutSec 30
         $rel = $idx | Where-Object { $_.lts -and [int]($_.version.TrimStart("v").Split(".")[0]) -ge 22 } | Select-Object -First 1
@@ -189,15 +187,15 @@ function Install-NodeLts {
         $line = ($sums -split "`n" | Where-Object { $_ -match "node-$([regex]::Escape($ver))-x64\.msi" } | Select-Object -First 1)
         if (-not $line) { throw "SHASUMS256.txt 에서 MSI 해시를 찾지 못했습니다." }
         $want = ($line.Trim() -split "\s+")[0].ToLower()
-        if ((Get-Sha256 $msi) -ne $want) { Remove-Item $msi -Force -ErrorAction SilentlyContinue; throw "MSI 의 SHA256 이 공식 값과 다릅니다. 보안을 위해 중단합니다." }
+        if ((Get-Sha256 $msi) -ne $want) { throw "MSI 의 SHA256 이 공식 값과 다릅니다. 보안을 위해 중단합니다." }
         Info "SHA256 확인 OK"
         Info "설치 중... (관리자 권한 확인 창이 뜨면 '예' 를 눌러 주세요)"
         $p = Start-Process msiexec.exe -ArgumentList @("/i", "`"$msi`"", "/qn", "/norestart") -Verb RunAs -Wait -PassThru
         Log "msiexec 종료 코드: $($p.ExitCode)"
-        Remove-Item $msi -Force -ErrorAction SilentlyContinue
         Refresh-Path
         if ((Get-NodeMajor) -ge 22) { $ok = $true }
     } catch { Warn ("공식 MSI 설치 실패: " + $_.Exception.Message) }
+    finally { if ($msi) { Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue } }   # 성공해도 실패해도 MSI 는 남기지 않는다
     if (-not $ok -and (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
         Info "winget 으로 Node.js LTS 설치를 시도합니다."
         Invoke-Native "winget.exe" @("install", "--id", "OpenJS.NodeJS.LTS", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements") | Out-Null
@@ -212,23 +210,116 @@ function Get-NpmGlobalVersion([string]$pkg) {
     Invoke-Native $npm.Source @("ls", "-g", $pkg, "--depth=0", "--json") -Quiet | Out-Null
     try { $j = ($script:LastOutput -join "`n") | ConvertFrom-Json; return $j.dependencies.$pkg.version } catch { return $null }
 }
-# CLI 한 번 호출 (시간 제한). 로그인 정보는 CLI 가 알아서 쓰며 이 스크립트는 다루지 않는다.
-function Test-CliCall($info, [int]$timeoutSec = 180) {
-    $cmd = Get-Command $info.Cmd -ErrorAction SilentlyContinue
-    if (-not $cmd) { return $false }
-    $job = Start-Job -ScriptBlock {
-        param($exe, [string[]]$a)
-        $ErrorActionPreference = "Continue"
-        $t = (& $exe @a 2>&1 | Out-String)
-        [pscustomobject]@{ Code = $LASTEXITCODE; Text = $t }
-    } -ArgumentList $cmd.Source, ([string[]]$info.Test)
-    if (-not (Wait-Job $job -Timeout $timeoutSec)) {
-        Stop-Job $job; Remove-Job $job -Force
-        Log "CLI 테스트 시간 초과"; return $false
+function Find-OpenCode {
+    foreach ($n in @("opencode.cmd", "opencode.exe")) {
+        $c = Get-Command $n -ErrorAction SilentlyContinue
+        if ($c) { return $c.Source }
     }
-    $r = Receive-Job $job; Remove-Job $job -Force
-    Log ("CLI 테스트 종료 코드 $($r.Code), 출력: " + (($r.Text) -replace "\s+", " ").Trim())
-    return ($r.Code -eq 0 -and $r.Text -match "(?i)\bOK\b")
+    $p = Join-Path $env:APPDATA "npm\opencode.cmd"
+    if (Test-Path -LiteralPath $p) { return $p }
+    return $null
+}
+function Strip-Ansi([string]$t) { return ($t -replace "\x1b\[[0-9;?]*[A-Za-z]", "") }
+# `opencode auth list` 는 로그인한 서비스 이름만 보여 준다 (키는 나오지 않는다)
+function Test-OpenCodeLogin([string]$oc) {
+    $code = Invoke-Native $oc @("auth", "list") -Quiet
+    if ($code -ne 0) { return $false }
+    return ((Strip-Ansi ($script:LastOutput -join "`n")) -match "(?im)\bOpenCode(\s+Zen)?\s+(api|oauth|wellknown)\b")
+}
+function Test-OpenCodeModel([string]$oc) {
+    $code = Invoke-Native $oc @("models", "opencode") -Quiet
+    if ($code -ne 0) { return $false }
+    return (@($script:LastOutput | ForEach-Object { (Strip-Ansi $_).Trim() }) -contains $OpenCodeModel)
+}
+
+# ------------------------------------------------------------------ Java 17+ (LanguageTool 문법 검사기용, 선택)
+# backend\grammar.py 가 찾는 곳과 같은 규칙: backend\tools\jre*|jdk*, JAVA_HOME, Program Files 의 JDK/JRE 폴더, PATH
+function Get-JavaMajor([string]$exe) {
+    $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { $t = (& $exe -version 2>&1 | Out-String) } catch { $t = "" }
+    $ErrorActionPreference = $old
+    if ($t -match 'version "(\d+)(?:\.(\d+))?') {
+        $m = [int]$Matches[1]
+        if ($m -eq 1 -and $Matches[2]) { $m = [int]$Matches[2] }   # 1.8 -> 8
+        return $m
+    }
+    return 0
+}
+function Find-Java17 {
+    if ($env:HOEHWA_TEST_NO_JAVA -eq "1") { return $null }   # (테스트용) Java 가 없는 PC 흉내
+    $c = New-Object System.Collections.Generic.List[string]
+    $tools = Join-Path $Backend "tools"
+    if (Test-Path -LiteralPath $tools) {
+        Get-ChildItem -LiteralPath $tools -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "jre*" -or $_.Name -like "jdk*" } |
+            Sort-Object Name -Descending | ForEach-Object { $c.Add((Join-Path $_.FullName "bin\java.exe")) }
+    }
+    if ($env:JAVA_HOME) { $c.Add((Join-Path $env:JAVA_HOME "bin\java.exe")) }
+    foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if (-not $root) { continue }
+        foreach ($v in @("Java", "Eclipse Adoptium", "Microsoft", "Zulu", "Amazon Corretto", "BellSoft", "Semeru")) {
+            $vd = Join-Path $root $v
+            if (Test-Path -LiteralPath $vd) {
+                Get-ChildItem -LiteralPath $vd -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | ForEach-Object { $c.Add((Join-Path $_.FullName "bin\java.exe")) }
+            }
+        }
+    }
+    $w = Get-Command java.exe -ErrorAction SilentlyContinue
+    if ($w) { $c.Add($w.Source) }
+    foreach ($e in $c) { if ((Test-Path -LiteralPath $e) -and (Get-JavaMajor $e) -ge 17) { return $e } }
+    return $null
+}
+# 공식 Adoptium API 에서 Temurin 21 JRE x64 zip 의 주소와 SHA256 을 읽는다. zip 은 backend\tools 안에 풀기만 하면 되고
+# (MSI 와 달리 관리자 권한 확인 창이 없다) backend\grammar.py 가 backend\tools\jre*|jdk* 를 자동으로 찾는다.
+function Get-TemurinJreInfo {
+    $api = "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse"
+    $meta = Invoke-RestMethod $api -TimeoutSec 30
+    $pkg = @($meta | Where-Object { $_.binary.image_type -eq "jre" -and $_.binary.os -eq "windows" -and $_.binary.architecture -eq "x64" -and $_.binary.package.name -like "*.zip" }) |
+        Select-Object -First 1 | ForEach-Object { $_.binary.package }
+    if (-not $pkg) { throw "Adoptium 에서 Temurin 21 JRE zip 정보를 찾지 못했습니다." }
+    if ($pkg.link -notmatch '^https://(github\.com/adoptium/|api\.adoptium\.net/)') { throw "예상과 다른 다운로드 주소입니다: $($pkg.link)" }
+    if ($pkg.checksum -notmatch '^[0-9a-fA-F]{64}$') { throw "SHA256 값을 읽지 못했습니다." }
+    return $pkg
+}
+function Install-TemurinJre {
+    $pkg = Get-TemurinJreInfo
+    $tools = Join-Path $Backend "tools"
+    New-Item -ItemType Directory -Force $tools | Out-Null
+    $zip = Join-Path $env:TEMP ("temurin-jre-{0}.zip" -f $PID)
+    $tmp = Join-Path $tools "_jre_extract"
+    try {
+        Info ("다운로드: {0} ({1:N0} MB)" -f $pkg.name, ($pkg.size / 1MB))
+        $code = Invoke-Native "curl.exe" @("-L", "--fail", "--retry", "3", "-sS", "-o", $zip, $pkg.link) -Quiet
+        if ($code -ne 0) { throw "다운로드 실패" }
+        if ((Get-Sha256 $zip) -ne $pkg.checksum.ToLower()) { throw "SHA256 이 공식 값과 다릅니다. 보안을 위해 설치하지 않습니다." }
+        Info "SHA256 확인 OK"
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $tmp)
+        $dir = Get-ChildItem -LiteralPath $tmp -Directory | Select-Object -First 1
+        if (-not $dir -or -not (Test-Path -LiteralPath (Join-Path $dir.FullName "bin\java.exe"))) { throw "압축 안에 bin\java.exe 가 없습니다." }
+        $dst = Join-Path $tools $dir.Name
+        if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Recurse -Force }
+        Move-Item -LiteralPath $dir.FullName -Destination $dst
+        return $true
+    } finally {
+        Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+function Ensure-Java {
+    $j = Find-Java17
+    if ($j) { Info ("Java 17 이상 확인: " + $j + " (버전 " + (Get-JavaMajor $j) + ")"); return }
+    Info "Java 17 이상이 없습니다. 문법 검사기(LanguageTool)는 Java 17 이상이 있어야 켜집니다."
+    if ($DryRun) {
+        try { $pkg = Get-TemurinJreInfo; Info ("[DryRun] 여기서 설치 여부를 물어볼 예정입니다: Eclipse Temurin 21 JRE x64 ({0}, {1:N0} MB, SHA256 {2}...) 을 backend\tools 안에 풀기만 합니다 (관리자 권한 불필요)." -f $pkg.name, ($pkg.size / 1MB), $pkg.checksum.Substring(0, 12)) }
+        catch { Info ("[DryRun] 설치 정보를 읽지 못했습니다 (인터넷 문제일 수 있음): " + $_.Exception.Message) }
+        return
+    }
+    $q = "Eclipse Temurin 21 JRE(약 50 MB, 공식 adoptium.net 에서 SHA256 확인)를 이 프로그램 폴더(backend\tools) 안에 설치할까요? 관리자 권한은 필요 없습니다. 안 하면 AI 가 문법을 고칩니다. (Y/N, 그냥 Enter 는 Y)"
+    if (-not (Ask-YN $q $true)) { Info "Java 설치를 건너뜁니다. 문법 교정은 AI 가 합니다. (설치.bat 을 다시 실행하면 다시 물어봅니다)"; return }
+    try {
+        if ((Install-TemurinJre) -and (Find-Java17)) { Info ("Java 설치 완료: " + (Find-Java17)) }
+        else { Warn "Java 를 설치했지만 찾지 못했습니다. 문법 교정은 AI 가 합니다." }
+    } catch { Warn ("Java 설치에 실패했습니다: " + $_.Exception.Message + " 문법 교정은 AI 가 합니다. 직접 설치하려면 https://adoptium.net 의 JRE 17 이상을 설치하세요 (프로그램이 자동으로 찾습니다).") }
 }
 
 # =================================================================== 본문
@@ -244,7 +335,7 @@ try {
     Say "자세한 기록은 install.log 에 남습니다. 중간에 멈춰도 설치.bat 을 다시 실행하면 이어서 진행합니다."
 
     # ---------------------------------------------------------------- 1. 사전 점검
-    Step 1 "사전 점검 (윈도우, 디스크, 인터넷, 그래픽카드)" "check" -Always {
+    Step 1 "사전 점검 (윈도우, 디스크, 인터넷, 그래픽카드)" "check" -Always -DryOK {
         if (-not [Environment]::Is64BitOperatingSystem) { Fail "64비트 윈도우가 필요합니다." }
         if ([Environment]::OSVersion.Version.Major -lt 10) { Fail "윈도우 10 이상이 필요합니다." }
         Info ("윈도우 " + [Environment]::OSVersion.Version + " (64비트) 확인")
@@ -280,7 +371,7 @@ try {
         }
         # 인터넷
         $net = @{}
-        foreach ($h in @("https://pypi.org", "https://huggingface.co", "https://ollama.com")) {
+        foreach ($h in @("https://pypi.org", "https://huggingface.co")) {
             $net[$h] = Test-Url $h
             Info ("인터넷 연결 {0}: {1}" -f $h, $(if ($net[$h]) { "OK" } else { "안 됨" }))
         }
@@ -294,17 +385,17 @@ try {
     }
 
     # ---------------------------------------------------------------- AI 엔진 선택
-    New-Item -ItemType Directory -Force $StateDir | Out-Null
+    if (-not $DryRun) { New-Item -ItemType Directory -Force $StateDir | Out-Null }
     $engineFile = Join-Path $StateDir "engine.txt"
     if ($Engine -eq "") {
-        if (Test-Path -LiteralPath $engineFile) {
+        if (-not $DryRun -and (Test-Path -LiteralPath $engineFile)) {
             $Engine = (Get-Content -LiteralPath $engineFile -Raw).Trim()
-            if (-not $EngineInfo.ContainsKey($Engine)) { $Engine = "" }
-            if ($Engine -ne "") { Say ""; Say ("이전에 고른 AI 엔진을 이어서 사용합니다: " + $EngineInfo[$Engine].Name + "  (바꾸려면 설치.bat -Engine local|claude|codex|gemini)") "Gray" }
+            if (-not $EngineInfo.ContainsKey($Engine)) { $Engine = "" }   # 예전 버전이 적어 둔 다른 값은 무시하고 다시 묻는다
+            if ($Engine -ne "") { Say ""; Say ("이전에 고른 AI 엔진을 이어서 사용합니다: " + $EngineInfo[$Engine].Name + "  (바꾸려면 설치.bat -Engine deepseek 또는 -Engine local)") "Gray" }
         }
     }
-    if ($Engine -eq "") { $Engine = if ($Yes) { "local" } else { Select-Engine } }
-    Write-Utf8 $engineFile $Engine
+    if ($Engine -eq "") { $Engine = if ($Yes) { "deepseek" } else { Select-Engine } }
+    if (-not $DryRun) { Write-Utf8 $engineFile $Engine }
     $EngInfo = $EngineInfo[$Engine]
     Say ("AI 엔진: " + $EngInfo.Name) "Green"
     Log "engine=$Engine provider=$($EngInfo.Provider)"
@@ -312,7 +403,6 @@ try {
         $sysFree = [math]::Round((New-Object System.IO.DriveInfo($env:SystemDrive.Substring(0, 1))).AvailableFreeSpace / 1GB, 1)
         Info ("(Ollama 와 AI 모델은 사용자 폴더에 저장됩니다. C: 여유 {0} GB, 약 7 GB 필요)" -f $sysFree)
     }
-    if ($Engine -eq "gemini") { Warn "Gemini CLI: 구글이 무료 개인 사용을 중단해서 유료 플랜이 아니면 동작하지 않을 수 있습니다." }
 
     # ---------------------------------------------------------------- 2. 파이썬
     Step 2 "파이썬 3.10.11 (포터블) 풀기" "python" {
@@ -356,11 +446,12 @@ try {
     Step 4 "파이썬 패키지 설치 (PyTorch, Whisper, Kokoro 등 - 가장 오래 걸립니다)" "packages" {
         $env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
         $env:PIP_NO_INPUT = "1"
+        $env:PIP_NO_CACHE_DIR = "1"   # 다운로드 캐시를 남기지 않는다
         $lock = Join-Path $Vendor "requirements.lock.txt"
         $wheels = Join-Path $Vendor "wheels"
         $n = @(Get-Content -LiteralPath $lock -Encoding UTF8 | Where-Object { $_.Trim() -ne "" -and -not $_.StartsWith("#") }).Count
         Info "$n 개 패키지를 개발 PC 와 똑같은 버전으로 설치합니다. 10~30분 걸릴 수 있습니다."
-        $pipArgs = @("-X", "utf8", "-m", "pip", "install", "--no-deps", "--no-warn-script-location",
+        $pipArgs = @("-X", "utf8", "-m", "pip", "install", "--no-deps", "--no-cache-dir", "--no-warn-script-location",
                   "--progress-bar", "off", "--disable-pip-version-check", "-r", $lock)
         if (Test-Path -LiteralPath $wheels) { $pipArgs += @("--find-links", $wheels) }
         if ((Get-Content -LiteralPath $lock -Raw) -match "\+cpu") { $pipArgs += @("--extra-index-url", "https://download.pytorch.org/whl/cpu") }
@@ -381,71 +472,62 @@ try {
     # ---------------------------------------------------------------- 5. Ollama
     $script:OllamaExe = $null
     $modelsLock = Get-Content -LiteralPath (Join-Path $Vendor "models.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($Engine -ne "local") {
-    # ================= CLI 엔진 (Ollama 는 설치하지 않습니다) =================
-    Step 5 "Node.js 확인 (22 이상 필요)" "node" {
+    if ($Engine -eq "deepseek") {
+    # ================= DeepSeek 무료 (OpenCode). Ollama 는 설치하지 않습니다 =================
+    Step 5 "Node.js 확인 (22 이상 필요)" "node" -DryOK {
         Refresh-Path
         $major = Get-NodeMajor
         if ($major -ge 22) { Info ("Node.js v$major 사용 가능") }
         else {
             if ($major -gt 0) { Info "설치된 Node.js 가 너무 오래되었습니다 (v$major)." } else { Info "Node.js 가 설치되어 있지 않습니다." }
-            if (-not (Ask-YN "$($EngInfo.Name) 를 쓰려면 Node.js 22 이상(공식 LTS)이 필요합니다. 지금 설치할까요? (Y/N)")) {
-                Fail "Node.js 없이는 $($EngInfo.Name) 를 설치할 수 없습니다. https://nodejs.org 에서 LTS 를 설치한 뒤 다시 실행하거나, 로컬 AI 를 고르세요."
+            if ($DryRun) { Info "[DryRun] 여기서 Node.js 22 이상(공식 LTS MSI, SHA256 확인)을 설치할 예정입니다. 실제로는 설치하지 않습니다."; return }
+            if (-not (Ask-YN "OpenCode 를 설치하려면 Node.js 22 이상(공식 LTS)이 필요합니다. 지금 설치할까요? (Y/N)")) {
+                Fail "Node.js 없이는 OpenCode 를 설치할 수 없습니다. https://nodejs.org 에서 LTS 를 설치한 뒤 다시 실행하거나, 오프라인 로컬 AI 를 고르세요 (설치.bat -Engine local)."
             }
             if (-not (Install-NodeLts)) { Fail "Node.js 설치에 실패했습니다. https://nodejs.org 에서 직접 설치한 뒤 설치.bat 을 다시 실행해 주세요." }
             Info ("Node.js 설치 완료: v" + (Get-NodeMajor))
         }
         if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { Fail "npm 을 찾지 못했습니다. Node.js 를 다시 설치해 주세요." }
     }
-    Step 6 ("{0} 설치와 로그인" -f $EngInfo.Name) ("cli-" + $Engine) -Always {
+    Step 6 "OpenCode 설치와 로그인 (무료 DeepSeek V4.1 Flash)" "opencode" -Always -DryOK {
         Refresh-Path
-        $have = Get-NpmGlobalVersion $EngInfo.Pkg
-        if ($have -eq $EngInfo.Ver) { Info ("$($EngInfo.Pkg)@$have 이(가) 이미 설치되어 있습니다 (고정 버전과 같음).") }
+        $have = Get-NpmGlobalVersion $OpenCodePkg
+        $npmArgs = @("install", "-g", "$OpenCodePkg@$OpenCodeVer", "--allow-scripts=$OpenCodePkg")
+        if ($have -eq $OpenCodeVer) { Info "$OpenCodePkg@$have 이(가) 이미 설치되어 있습니다 (고정 버전과 같음)." }
         else {
-            if ($have) { Info "다른 버전이 설치되어 있습니다 ($have). 고정 버전 $($EngInfo.Ver) 으로 맞춥니다." }
-            if ($CliDetectOnly) { Info "[검증용] 설치되어 있지 않아 여기서 중단합니다 (설치 명령: npm install -g $($EngInfo.Pkg)@$($EngInfo.Ver) $($EngInfo.Extra -join ' '))"; $script:LogW.Close(); exit 0 }
-            $npmArgs = @("install", "-g", "$($EngInfo.Pkg)@$($EngInfo.Ver)") + @($EngInfo.Extra)
+            if ($have) { Info "다른 버전이 설치되어 있습니다 ($have). 고정 버전 $OpenCodeVer 으로 맞춥니다." }
+            if ($DryRun) { Info "[DryRun] 설치 예정: npm $($npmArgs -join ' ')"; return }
             $ok = $false
             for ($try = 1; $try -le 3 -and -not $ok; $try++) {
                 if ($try -gt 1) { Warn "다시 시도합니다 ($try/3)..."; Start-Sleep -Seconds 5 }
                 $code = Invoke-Native (Get-Command npm.cmd).Source $npmArgs
                 if ($code -eq 0) { $ok = $true }
             }
-            if (-not $ok) { Fail "$($EngInfo.Pkg) 설치에 실패했습니다. install.log 를 확인해 주세요." }
+            if (-not $ok) { Fail "$OpenCodePkg 설치에 실패했습니다. install.log 를 확인해 주세요." }
             Refresh-Path
         }
-        if (-not (Get-Command $EngInfo.Cmd -ErrorAction SilentlyContinue)) { Fail "$($EngInfo.Cmd) 명령을 찾지 못했습니다. 새 창에서 설치.bat 을 다시 실행해 보세요." }
-        if ($CliDetectOnly) {
-            Info "[검증용] $($EngInfo.Pkg)@$have 감지 완료. 로그인/테스트 호출 없이 여기서 종료합니다."
-            $script:LogW.Close(); exit 0
-        }
-        # 이미 로그인되어 있으면 테스트 호출이 바로 성공한다
-        Info "간단한 테스트 호출을 해 봅니다 (계정에 로그인되어 있는지 확인)..."
-        $good = Test-CliCall $EngInfo
-        if (-not $good) {
-            if ($Yes) { Warn "$($EngInfo.Name) 에 로그인되어 있지 않은 것 같습니다. 무인 설치라 로그인은 건너뜁니다. 나중에 직접 로그인해 주세요." }
-            else {
-                Say ""
-                Say ("$($EngInfo.Account)으로 로그인해야 합니다. 로그인은 $($EngInfo.Name) 가 직접 진행하며, 이 설치 프로그램은 계정 정보를 다루지 않습니다.") "Yellow"
-                if ($Engine -eq "gemini") {
-                    Say "Gemini CLI 가 열리면 안내에 따라 구글 로그인을 마친 뒤, /quit 를 입력하거나 Ctrl+C 를 두 번 눌러 종료해 주세요." "Yellow"
-                    Read-Host "준비되면 Enter 를 누르세요" | Out-Null
-                    & (Get-Command $EngInfo.Cmd).Source
-                } else {
-                    Say "잠시 뒤 브라우저가 열리면 로그인해 주세요." "Yellow"
-                    Read-Host "준비되면 Enter 를 누르세요" | Out-Null
-                    $loginArgs = [string[]]$EngInfo.Login
-                    & (Get-Command $EngInfo.Cmd).Source @loginArgs
-                }
-                Log "CLI 로그인 종료 코드: $LASTEXITCODE"
-                Info "로그인 후 다시 테스트 호출을 해 봅니다..."
-                $good = Test-CliCall $EngInfo
-            }
-        }
-        if ($good) { Info "테스트 호출 성공: $($EngInfo.Name) 가 정상적으로 응답했습니다." }
+        $oc = Find-OpenCode
+        if (-not $oc) { Fail "opencode 명령을 찾지 못했습니다. 새 창에서 설치.bat 을 다시 실행해 보세요." }
+        Info "OpenCode: $oc"
+        # 로그인: 사람이 직접 한다. 이 스크립트는 계정 정보를 보거나 저장하지 않는다.
+        if (Test-OpenCodeLogin $oc) { Info "OpenCode 에 이미 로그인되어 있습니다." }
+        elseif ($DryRun) { Info "[DryRun] 로그인 필요: opencode auth login (실제로는 실행하지 않습니다)" }
+        elseif ($Yes) { Warn "OpenCode 에 로그인되어 있지 않은 것 같습니다. 무인 설치라 로그인은 건너뜁니다. 나중에 터미널에서 'opencode auth login' 을 실행해 주세요." }
         else {
-            Warn "테스트 호출에 실패했습니다. 로그인하지 않았거나 구독/사용량 한도 문제일 수 있습니다. 설치는 계속하지만, 프로그램의 AI 대화는 로그인 후에야 동작합니다."
-            if ($Engine -eq "gemini") { Warn "Gemini CLI 는 유료 플랜이 아니면 동작하지 않을 수 있습니다." }
+            Say ""
+            Say "무료 DeepSeek 을 쓰려면 OpenCode 에 로그인해야 합니다. 각자 본인의 OpenCode 계정을 씁니다." "Yellow"
+            Say "곧 'opencode auth login' 이 열립니다. 목록에서 OpenCode 를 고르고, 안내에 따라 본인 계정으로 로그인해 주세요." "Yellow"
+            Say "로그인은 OpenCode 가 직접 처리하며, 이 설치 프로그램은 계정 정보를 보거나 저장하지 않습니다." "Yellow"
+            Read-Host "준비되면 Enter 를 누르세요" | Out-Null
+            & $oc auth login
+            Log "opencode auth login 종료 코드: $LASTEXITCODE"
+            if (Test-OpenCodeLogin $oc) { Info "로그인을 확인했습니다." }
+            else { Warn "로그인을 확인하지 못했습니다. 나중에 터미널에서 'opencode auth login' 을 실행해 주세요. 그 전에는 AI 대화가 동작하지 않습니다." }
+        }
+        # 무료 모델이 OpenCode 에 아직 있는지 확인 (무료 제공 여부는 OpenCode 가 정한다)
+        if (Test-OpenCodeModel $oc) { Info "무료 모델 확인: $OpenCodeModel" }
+        else {
+            Warn "OpenCode 모델 목록에서 $OpenCodeModel 을(를) 찾지 못했습니다. 무료 제공이 바뀌었거나 인터넷/로그인 문제일 수 있습니다. 오프라인 로컬 AI 를 설치해 두면 프로그램이 자동으로 그쪽으로 바꿔 답합니다 (설치.bat -Engine local)."
         }
     }
     } else {
@@ -517,6 +599,9 @@ try {
         New-Item -ItemType Directory -Force $HfDir | Out-Null
         $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "install_models.py"), (Join-Path $Vendor "models.lock.json"), $HfDir)
         if ($code -ne 0) { Fail "음성 모델을 받거나 검증하지 못했습니다 (위 [FAIL] 줄 참고). 다시 실행하면 이어서 받습니다." }
+        # 받기에만 쓰는 임시 캐시(xet, .locks)는 지운다. 목록에 없는 모델은 건드리지 않는다고 확인된 것만 지운다.
+        $null = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "prunehf", (Join-Path $Vendor "models.lock.json"), $HfDir, "--apply") -Quiet
+        Info ((@($script:LastOutput | Where-Object { $_ -like "PRUNE_RESULT*" }) | Select-Object -Last 1))
     }
 
     # ---------------------------------------------------------------- 8. prefetch
@@ -545,9 +630,10 @@ try {
     # ---------------------------------------------------------------- 9. LanguageTool (문법 검사기, 선택)
     # 공식 zip 을 받아 models.lock.json 의 SHA256 으로 검증한다. 실패하거나 Java 17+ 가 없으면 경고만 하고
     # 계속한다 (문법 교정은 AI 가 대신 한다). 매번 확인하지만 이미 설치되어 있으면 바로 넘어간다.
-    Step 9 "문법 검사기 LanguageTool 받기 (약 250 MB, Java 17 이상 필요)" "languagetool" -Always {
+    Step 9 "문법 검사기 LanguageTool 받기 (약 250 MB, Java 17 이상 필요)" "languagetool" -Always -DryOK {
         $lt = $modelsLock.languagetool
         if (-not $lt) { Info "설치 패키지에 LanguageTool 정보가 없어 건너뜁니다 (문법 교정은 AI 가 합니다)."; return }
+        if ($DryRun) { Info "[DryRun] LanguageTool 은 받지 않습니다. Java 17 이상 확인만 합니다."; Ensure-Java; return }
         $ltRoot = Join-Path $Backend "tools\languagetool"
         $jar = Join-Path $ltRoot ($lt.dir + "\languagetool-server.jar")
         $manifest = Join-Path $ltRoot "lt.json"
@@ -591,22 +677,29 @@ try {
             Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
             Info ("LanguageTool {0} 설치 완료" -f $lt.version)
         }
-        # Java 17+ (서버와 같은 검색 규칙: backend\grammar.py)
+        # Java 17+: 없으면 설치를 물어본다 (서버는 backend\grammar.py 의 규칙으로 같은 곳을 찾는다)
+        Ensure-Java
         $code = Invoke-Native $Py @("-X", "utf8", "-c", "import grammar; j = grammar.find_java(); print('JAVA=' + (j or '') + ' ' + (grammar._java.get('version') or ''))") -Quiet
         $jline = ($script:LastOutput | Where-Object { $_ -like "JAVA=*" } | Select-Object -First 1)
-        if ($code -eq 0 -and $jline -and $jline -ne "JAVA= ") { Info ("Java: " + $jline.Substring(5)) }
-        else { Warn "Java 17 이상을 찾지 못했습니다. 문법 검사기는 Java 를 설치하면 자동으로 켜지고, 그 전까지는 AI 가 문법을 고칩니다 (https://adoptium.net 의 JRE 17+ 권장)." }
+        if ($code -eq 0 -and $jline -and $jline -ne "JAVA= ") { Info ("서버가 찾는 Java: " + $jline.Substring(5)) }
+        else { Warn "Java 17 이상을 찾지 못했습니다. 문법 검사기는 Java 를 설치하면 자동으로 켜지고, 그 전까지는 AI 가 문법을 고칩니다." }
     }
 
     # ---------------------------------------------------------------- 10. 설정
-    Step 10 "설정 파일 (프로그램 기본 설정, AI 엔진)" "prefs" -Always {
+    Step 10 "설정 파일 (프로그램 기본 설정, AI 엔진)" "prefs" -Always -DryOK {
         # AI 엔진 종류를 backend\config.json 에 기록 (다른 설정은 그대로 둔다)
         $cfgPath = Join-Path $Backend "config.json"
         $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($cfg.PSObject.Properties.Name -contains "llm_provider") { $cfg.llm_provider = $EngInfo.Provider }
         else { $cfg | Add-Member -NotePropertyName "llm_provider" -NotePropertyValue $EngInfo.Provider }
+        if ($Engine -eq "local" -and $modelsLock.ollama -and $modelsLock.ollama.model) {
+            # 로컬 엔진은 방금 받은 모델 태그를 쓴다 (업데이트 때 태그가 바뀌면 이 값을 기준으로 옛 모델을 지운다)
+            if ($cfg.PSObject.Properties.Name -contains "llm_model") { $cfg.llm_model = $modelsLock.ollama.model }
+            else { $cfg | Add-Member -NotePropertyName "llm_model" -NotePropertyValue $modelsLock.ollama.model }
+        }
         Write-Utf8 $cfgPath ($cfg | ConvertTo-Json -Depth 8)
         Info ("config.json: llm_provider = " + $EngInfo.Provider)
+        if ($DryRun) { Info "[DryRun] 학습 기록/설정 기본값 복사는 건너뜁니다."; return }
         $dataDir = Join-Path $env:APPDATA "Godot\app_userdata\회화 연습"
         New-Item -ItemType Directory -Force $dataDir | Out-Null
         foreach ($name in @("prefs.json", "progress.json")) {
@@ -621,7 +714,7 @@ try {
     # ---------------------------------------------------------------- 11. 동작 확인
     Step 11 "동작 확인 (임시 서버를 켜서 음성 인식 / 목소리 / AI 확인)" "verify" -Always {
         if ($Engine -eq "local" -and -not (Ensure-OllamaRunning $script:OllamaExe)) { Fail "Ollama 서버가 응답하지 않습니다." }
-        Refresh-Path   # CLI 엔진: 방금 설치한 node / npm 전역 경로가 서버에 전달되도록
+        Refresh-Path   # DeepSeek(OpenCode): 방금 설치한 node / npm 전역 경로가 서버에 전달되도록
         $port = $TestPort
         for ($p = $TestPort; $p -lt $TestPort + 50; $p++) {
             try { $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $p); $l.Start(); $l.Stop(); $port = $p; break } catch {}
@@ -639,7 +732,8 @@ try {
                 try {
                     $h = Invoke-RestMethod "http://127.0.0.1:$port/health" -TimeoutSec 5
                     $last = $h
-                    if ($h.ok -and $h.stt -and $h.tts.en -and $h.tts.ja -and $h.llm) { $good = $true; break }
+                    # 로컬 엔진은 AI 도 준비되어야 합격. DeepSeek 은 로그인/무료 제공 여부가 이 설치 밖의 일이라 경고만 한다
+                    if ($h.ok -and $h.stt -and $h.tts.en -and $h.tts.ja -and ($h.llm -or $Engine -eq "deepseek")) { $good = $true; break }
                 } catch {}
                 if (([int]$sw.Elapsed.TotalSeconds) % 10 -lt 2) { Info ("서버 준비 중... {0}초" -f [int]$sw.Elapsed.TotalSeconds) }
             }
@@ -652,15 +746,16 @@ try {
         if (-not $good) {
             $lg = Join-Path $Backend "logs\server-install.log"
             if (Test-Path $lg) { Log "---- server-install.log (끝부분) ----"; Get-Content $lg -Tail 25 -Encoding UTF8 | ForEach-Object { Log $_ } }
-            $why = if ($last -and -not $last.llm) { "AI 엔진(Ollama 또는 CLI 로그인)이 준비되지 않았습니다." } elseif ($last) { "음성 인식 또는 목소리가 준비되지 않았습니다." } else { "서버가 켜지지 않았습니다." }
+            $why = if ($last -and -not $last.llm) { "AI 엔진(Ollama)이 준비되지 않았습니다." } elseif ($last) { "음성 인식 또는 목소리가 준비되지 않았습니다." } else { "서버가 켜지지 않았습니다." }
             Fail "동작 확인에 실패했습니다: $why`n    backend\logs\server-install.log 와 install.log 를 확인해 주세요."
         }
-        Info ("/health 정상: 음성 인식 OK, 목소리(영어/일본어) OK, AI 엔진({0}) OK, 채점 {1}" -f $last.llm_model, $last.score)
+        if ($last.llm) { Info ("/health 정상: 음성 인식 OK, 목소리(영어/일본어) OK, AI 엔진({0}) OK, 채점 {1}" -f $last.llm_model, $last.score) }
+        else { Warn "음성 인식과 목소리는 정상이지만 DeepSeek(OpenCode)에는 아직 연결되지 않았습니다. 터미널에서 'opencode auth login' 으로 로그인했는지 확인해 주세요. 그 전에는 인터넷이 없을 때처럼 AI 대화가 동작하지 않습니다." }
         Info ("문법 검사기(LanguageTool): " + $(if ($last.grammar) { "사용" } else { "꺼짐 (AI 가 문법을 고칩니다)" }))
     }
 
     # ---------------------------------------------------------------- 바로가기
-    if (-not $NoShortcut) {
+    if (-not $NoShortcut -and -not $DryRun) {
         Say ""
         if (Ask-YN "바탕화면에 바로가기를 만들까요? (Y/N)") {
             $desktop = [Environment]::GetFolderPath("Desktop")
@@ -694,7 +789,11 @@ if ($script:Warnings.Count -gt 0) {
     Say "주의 사항:" "Yellow"
     foreach ($w in $script:Warnings) { Say "  - $w" "Yellow" }
 }
-if ($exitCode -eq 0) {
+if ($exitCode -eq 0 -and $DryRun) {
+    Say ""
+    Say "[DryRun] 확인 끝: AI 엔진 = $($EngInfo.Name), config.json 에 llm_provider 를 기록했습니다. 아무것도 설치하지 않았습니다." "Green"
+}
+elseif ($exitCode -eq 0) {
     # 설치된 버전 기록 (업데이트.bat 이 GitHub 최신 릴리스와 비교한다)
     try {
         $mf = Join-Path $Root "manifest.json"
@@ -709,6 +808,7 @@ if ($exitCode -eq 0) {
     Say ""
     Say "설치가 끝났습니다! 회화연습.exe 를 더블클릭해서 시작하세요. (사용법.txt 참고)" "Green"
     Say "새 버전이 나오면 이 폴더의 업데이트.bat 을 더블클릭하면 됩니다." "Green"
+    if ($Engine -eq "deepseek") { Say "인터넷이 안 될 때도 쓰려면 설치.bat -Engine local 로 오프라인 로컬 AI 를 추가로 설치할 수 있습니다." "Gray" }
 }
 Log "==================== 설치 종료 (코드 $exitCode) ===================="
 $script:LogW.Close()

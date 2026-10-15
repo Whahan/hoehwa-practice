@@ -1,0 +1,213 @@
+[
+ {
+  "lang": "en",
+  "text": "Hello there.",
+  "chunks": [
+   "Hello there."
+  ],
+  "sentences": [
+   "Hello there."
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "Really? That sounds amazing! Where did you go?",
+  "chunks": [
+   "Really?",
+   "That sounds amazing!",
+   "Where did you go?"
+  ],
+  "sentences": [
+   "Really?",
+   "That sounds amazing!",
+   "Where did you go?"
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "Oh, that sounds like a great weekend, did you go with your friends?",
+  "chunks": [
+   "Oh, that sounds like a great weekend,",
+   "did you go with your friends?"
+  ],
+  "sentences": [
+   "Oh, that sounds like a great weekend, did you go with your friends?"
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "Mr. Smith lives in the U.S. and likes tea. He pays 3.5 dollars.",
+  "chunks": [
+   "Mr. Smith lives in the U.S. and likes tea.",
+   "He pays 3.5 dollars."
+  ],
+  "sentences": [
+   "Mr. Smith lives in the U.S. and likes tea.",
+   "He pays 3.5 dollars."
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "I met J. K. Rowling yesterday. She was nice.",
+  "chunks": [
+   "I met J. K. Rowling yesterday.",
+   "She was nice."
+  ],
+  "sentences": [
+   "I met J. K. Rowling yesterday.",
+   "She was nice."
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "Wait... what? No way!!",
+  "chunks": [
+   "Wait...",
+   "what?",
+   "No way!!"
+  ],
+  "sentences": [
+   "Wait...",
+   "what?",
+   "No way!!"
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "She said \"stop.\" Then she left.",
+  "chunks": [
+   "She said \"stop.\"",
+   "Then she left."
+  ],
+  "sentences": [
+   "She said \"stop.\"",
+   "Then she left."
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "First line.\nSecond line without a stop\nThird one!",
+  "chunks": [
+   "First line.",
+   "Second line without a stop",
+   "Third one!"
+  ],
+  "sentences": [
+   "First line.",
+   "Second line without a stop",
+   "Third one!"
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "That is great, but I have a long day tomorrow, so I should go to bed early tonight.",
+  "chunks": [
+   "That is great, but I have a long day tomorrow,",
+   "so I should go to bed early tonight."
+  ],
+  "sentences": [
+   "That is great, but I have a long day tomorrow, so I should go to bed early tonight."
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "No commas here but it is a fairly long sentence that goes on and on.",
+  "chunks": [
+   "No commas here but it is a fairly long sentence that goes on and on."
+  ],
+  "sentences": [
+   "No commas here but it is a fairly long sentence that goes on and on."
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "  Spaces   everywhere .  Really ?  ",
+  "chunks": [
+   "Spaces everywhere .",
+   "Really ?"
+  ],
+  "sentences": [
+   "Spaces everywhere .",
+   "Really ?"
+  ]
+ },
+ {
+  "lang": "en",
+  "text": "",
+  "chunks": [],
+  "sentences": []
+ },
+ {
+  "lang": "ja",
+  "text": "えっ、本当？すごいね！どこに行ったの？",
+  "chunks": [
+   "えっ、本当？",
+   "すごいね！",
+   "どこに行ったの？"
+  ],
+  "sentences": [
+   "えっ、本当？",
+   "すごいね！",
+   "どこに行ったの？"
+  ]
+ },
+ {
+  "lang": "ja",
+  "text": "こんにちは。はじめまして。週末はどうでしたか。",
+  "chunks": [
+   "こんにちは。",
+   "はじめまして。",
+   "週末はどうでしたか。"
+  ],
+  "sentences": [
+   "こんにちは。",
+   "はじめまして。",
+   "週末はどうでしたか。"
+  ]
+ },
+ {
+  "lang": "ja",
+  "text": "昨日は友達と一緒に、新宿でおいしいラーメンを食べました。",
+  "chunks": [
+   "昨日は友達と一緒に、",
+   "新宿でおいしいラーメンを食べました。"
+  ],
+  "sentences": [
+   "昨日は友達と一緒に、新宿でおいしいラーメンを食べました。"
+  ]
+ },
+ {
+  "lang": "ja",
+  "text": "「ありがとう。」と言いました。それから帰りました。",
+  "chunks": [
+   "「ありがとう。」と言いました。",
+   "それから帰りました。"
+  ],
+  "sentences": [
+   "「ありがとう。」と言いました。",
+   "それから帰りました。"
+  ]
+ },
+ {
+  "lang": "ja",
+  "text": "短いです。",
+  "chunks": [
+   "短いです。"
+  ],
+  "sentences": [
+   "短いです。"
+  ]
+ },
+ {
+  "lang": "ja",
+  "text": "はい!そうです?",
+  "chunks": [
+   "はい!",
+   "そうです?"
+  ],
+  "sentences": [
+   "はい!",
+   "そうです?"
+  ]
+ }
+]

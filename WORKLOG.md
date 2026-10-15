@@ -9,10 +9,10 @@
 
 ## 남은 작업 (위에서부터 순서대로)
 
-1. [진행 중] 배포·업데이터: 검토 불합격(공개 스크립트 비밀검사 오판, -Notes 빈값). worker-hard가 6번(설치 2선택지·찌꺼기 정리·중립 config·.gitattributes)과 함께 수정 중. 끝나면 reviewer 재검토.
-2. [진행 중] 규칙 기반 레슨 독립 검토(reviewer) 결과 확인. 같은 방식.
+1. [완료] 배포·업데이터: 재검토 합격(2026-10-16, 합격 조건 1~8 전부 O). 경미한 후속(v1.0.x): 롤백 시 HF `refs/main` 미복구, 실패 시 OllamaSetup.exe·LT `_download.zip`·`packaging\out\staging` 잔재, publish 정리 실패가 조용함, 테스트용 환경변수(HOEHWA_*) 배포본 잔존, prunehf가 사용자 추가 음성 팩 삭제 가능, npm 없음 시 null 오류, 재설치 시 engine.txt가 앱에서 바꾼 엔진을 덮어씀, README에 "-Yes는 deepseek 기본·로그인은 나중" 한 줄.
+2. [진행 중] 규칙 기반 레슨: 지적 사항(동의어 오답·차단어·깨진 DB 500·AI 검증 fail-open·--base 필수) worker-hard 수정 완료(2026-10-16), API.md 반영, reviewer 재검토 중(임시 폴더 w_review_lesson2). 새 의존성 nltk==3.9.2 → 잠금 파일 반영 완료(잠금은 build_dist가 venv에서 매번 다시 만들고 git 미추적이 정상). 후속: prefetch가 WordNet을 Tatoeba 준비 시에만·실패해도 조용히 받음 → `[prefetch] WordNet OK/FAIL` 줄 출력하게(레슨 재검토 끝난 뒤 4번 (a)와 함께).
 3. [진행 중] 레슨 화면: 실제 예문 / AI 레슨 선택, 예문 출처 표시 (worker). 끝나면 reviewer.
-4. [진행 중] AI 엔진 정리: Claude/Codex/Gemini CLI 엔진 완전 제거, DeepSeek V4.1 Flash 무료(`opencode serve`, 모델 `opencode/deepseek-v4.1-flash-free`) 기본, 로컬 qwen3:8b 자동 전환, LanguageTool 교정, AI 결과 캐시. 끝나면 reviewer.
+4. [완료 — 재검토 합격 2026-10-16] 후속(v1.0.x): (a) 일본어 채팅 reading에 한자/중국어가 섞이는 경우(예: 买) 검사·재시도, /feedback 형식 오류 502 가끔 → test_backend가 라이브 AI 때문에 3번 중 1번만 통과; (b) [완료] `llm_opencode._write_config`가 사용자 전역 MCP url/command를 복사하던 것 → 자리표시 값으로만 끄도록 수정, `opencode debug config`로 병합 결과 확인; (c) `--ollama-url`을 닫힌 포트로 주면 실제 Ollama 앱을 띄우는 부작용(테스트 전용 인자). 원래 범위: AI 엔진 정리: Claude/Codex/Gemini CLI 엔진 완전 제거, DeepSeek V4.1 Flash 무료(`opencode serve`, 모델 `opencode/deepseek-v4.1-flash-free`) 기본, 로컬 qwen3:8b 자동 전환, LanguageTool 교정, AI 결과 캐시. 끝나면 reviewer.
 5. [진행 중] 대화 음성: 미리 만들기, 문장 단위 재생, GPU 사용, Kokoro 목소리 고르기, 음성 캐시 300MB 제한 (worker-hard). 끝나면 reviewer. 음성 모델 자체는 Kokoro 유지(사용자 결정).
 6. 설치 프로그램 단순화(worker-hard): 엔진 선택지를 "DeepSeek 무료(기본, opencode 설치 + `opencode auth login`)"와 "오프라인 로컬(qwen3:8b)" 두 개로. 업데이터 정리 정책: 백업은 직전 1개만, 내려받은 zip·임시 폴더 즉시 삭제, pip 캐시 남기지 않기, 새 잠금 목록에 없는 모델 파일·옛 Ollama 모델 삭제, 업데이트 전후 앱 폴더 용량 표시. 배포판 기본 config.json은 `llm_provider: opencode`(개발 PC 값이 들어가지 않게). 1번 검토 지적 사항도 함께. 끝나면 reviewer.
 7. DeepSeek(무료) vs 로컬 qwen3:8b 비교표: `C:\Users\rtyu6\AppData\Local\Temp\claude\D--Ai---\9cb41c31-c114-4117-abfc-6c62dfb3d0b7\scratchpad\bench_models.py`로 같은 문장 비교(대화 질문 응답, 번역, 교정, AI 레슨, 속도). 결과를 ROADMAP과 사용자 보고에 반영.
@@ -32,3 +32,6 @@
 - 2026-10-15 23:20 로컬 git 저장소 생성, 첫 커밋 da95917 (작성자 Whahan, noreply 이메일). 아직 푸시 안 함.
 - 2026-10-15 23:20 레슨 화면 실제 예문/AI 선택·출처 표시 완료(64+29 테스트 통과), 시작 화면 문구 수정.
 - 2026-10-15 23:20 큰 로컬 모델(gemma4:26b, qwen3.6) 너무 느려 삭제. qwen3:8b만 유지.
+- 2026-10-16 대화 음성(사전 합성·문장 단위 재생·목소리 선택·캐시 300MB) 검토: 깨진 캐시 파일 재합성 문제만 불합격 → 오케스트레이터가 `_wav_ok` 검사로 수정·확인(빈/엉뚱한/잘린 파일 3건 모두 재합성). GPU TTS는 torch가 CPU 전용이라 불가(로드맵).
+- 2026-10-16 AI 엔진: 1차 검토 불합격(앱이 OpenCode 키를 읽음 등) → 수정 완료, 재검토 중. 배포 수정본 재검토 중. 레슨 지적 수정 진행 중.
+- 2026-10-16 **사용자 결정**: 사용자가 OpenCode 약관을 확인했고 "써도될듯" → 배포판 기본 엔진은 무료 DeepSeek(OpenCode, 각 사용자 본인 계정 로그인) 유지. 오프라인 로컬은 설치 2번 선택지. 9번 공개 진행 가능(다른 조건은 그대로).

@@ -6,7 +6,8 @@ OpenCode Zen's free models answer only OpenCode itself, so the app talks to a lo
 job object and killed by PID at exit). OpenCode uses the login the person made with `opencode auth login`; this
 module never reads or handles that key.
 
-Working dir backend/cache/opencode/work holds an opencode.json with an agent "hoehwa": a short "language engine"
+Working dir %LOCALAPPDATA%/hoehwa-practice/opencode/work (outside the app's folder and any git repository, so
+OpenCode's project scope never contains the app's files) holds an opencode.json with an agent "hoehwa": a short "language engine"
 prompt, one step per request, and every tool that could change or reach outside the PC denied (edit, bash, web,
 tasks, files outside the empty working dir, MCP servers). NOTE: denying ALL tools makes OpenCode Zen refuse the
 free model ("free tier can only be used from within OpenCode"), so the harmless read-only tools (read/list/glob/grep
@@ -34,7 +35,14 @@ import llm_common
 import llm_fallback
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-WORK = os.path.join(BASE, "cache", "opencode", "work")
+
+
+def _work_dir():
+    root = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+    return os.path.join(root, "hoehwa-practice", "opencode", "work")
+
+
+WORK = _work_dir()
 LOG_DIR = os.path.join(BASE, "logs")
 NO_WINDOW = 0x08000000
 PROVIDER_ID = "opencode"
@@ -92,8 +100,11 @@ def _write_config():
         with open(os.path.join(os.path.expanduser("~"), ".config", "opencode", "opencode.json"), encoding="utf-8") as f:
             for name, e in (json.load(f).get("mcp") or {}).items():
                 if isinstance(e, dict):
-                    keep = {k: e[k] for k in ("type", "url", "command") if k in e}
-                    mcp[name] = dict(keep, enabled=False)
+                    # placeholders only: never copy the person's url/command (it may carry a token) into the app's files
+                    if e.get("type") == "remote":
+                        mcp[name] = {"type": "remote", "url": "http://127.0.0.1:9/disabled", "enabled": False}
+                    else:
+                        mcp[name] = {"type": "local", "command": ["disabled"], "enabled": False}
                     perm[name + "_*"] = "deny"
     except Exception:
         pass
@@ -130,6 +141,7 @@ def start(wait=60.0):
             _state.update(fail_t=time.time(), fail_msg="OpenCode가 설치되어 있지 않아요")
             return False
         _write_config()
+        _info("opencode work dir: %s", WORK)
         s = socket.socket()
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
