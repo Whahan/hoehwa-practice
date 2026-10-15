@@ -85,9 +85,9 @@ func _test_store_scheduling() -> void:
 	Store.rate_review(str(_item("A")["id"]), 3)
 	Store.rate_review(str(_item("B")["id"]), 3)
 	ok(int(_item("A")["state"]) == 2 and int(_item("B")["state"]) == 1 and int(_item("B")["step"]) == 1, "A graduated, B on step 2")
-	# +10 days -> C is due (its Easy interval was 9 days); lapse it
-	Store.time_offset += 10 * FSRS.DAY
-	ok(_targets(Store.due_for("en")).has("C"), "after +10 days C is due")
+	# just past C's due (its Easy interval is ~9 days, fuzzed to 7~11) -> C is due; lapse it
+	Store.time_offset += int(_item("C")["due"]) - Store.now() + 60
+	ok(_targets(Store.due_for("en")).has("C"), "just after C's due date, C is due")
 	Store.rate_review(str(_item("C")["id"]), 1)
 	ok(int(_item("C")["state"]) == 3 and int(_item("C")["lapses"]) == 1, "C lapse -> Relearning, lapses=1")
 	# persistence

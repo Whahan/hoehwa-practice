@@ -84,6 +84,11 @@ if ($SkipExport) {
     }
     Move-Item -LiteralPath $tmpExe -Destination $exeOut
     Write-Host ("    exported {0:N1} MB" -f ((Get-Item -LiteralPath $exeOut).Length / 1MB))
+    # keep the dev copy (README: dist\회화연습.exe) the same build as the package; it is locked while the app runs
+    try {
+        New-Item -ItemType Directory -Force (Join-Path $App "dist") | Out-Null
+        Copy-Item -LiteralPath $exeOut -Destination (Join-Path $App "dist\$RootName.exe") -Force -ErrorAction Stop
+    } catch { Write-Host "    (warning: dist\$RootName.exe not updated - is the app running? $($_.Exception.Message))" }
 }
 
 # ---------------------------------------------------------------- 2. backend source
