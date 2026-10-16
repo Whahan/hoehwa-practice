@@ -442,11 +442,15 @@ try {
     # 다시 설치(engine.txt 가 이미 있음)이면 기존 선택을 유지한다. 이번 실행에서 사용자가 직접 고른 경우(-Engine 또는 번호 선택)만 새로 쓴다.
     $savedEngine = Get-SavedEngine $engineFile    # DryRun 에서도 읽기만 한다 (아무것도 쓰지 않는다)
     $cfgMarker = Join-Path $StateDir "engine-config.ok"    # 10단계가 config.json 에 엔진을 적고 나면 만든다
-    $pick = Resolve-Engine $Engine $savedEngine ([bool]$Yes) (Test-Path -LiteralPath $cfgMarker)
+    $cfgPending = Join-Path $StateDir "engine-pending.ok"  # 새로 고른 엔진이 아직 config.json 에 적히지 않았다 (10단계 전에 끊김)
+    # 설치를 끝까지 마친 적이 있으면(version.txt, 표시 파일이 없던 v1.0.0 설치 포함) config.json 의 엔진은 이미 적혀 있다. 단, 새 선택이 대기 중이면 아니다.
+    $configDone = ((Test-Path -LiteralPath $cfgMarker) -or (Test-Path -LiteralPath (Join-Path $Root "version.txt"))) -and -not (Test-Path -LiteralPath $cfgPending)
+    $pick = Resolve-Engine $Engine $savedEngine ([bool]$Yes) $configDone
     $Engine = $pick.Engine
     if (-not $DryRun -and ($pick.Explicit -or $savedEngine -eq "")) {   # 다시 설치이고 직접 고르지 않았다면 engine.txt 는 그대로 둔다
         Write-Utf8 $engineFile $Engine
         Remove-Item -LiteralPath $cfgMarker -Force -ErrorAction SilentlyContinue   # 새 선택이 생겼으니 config.json 에 다시 적을 때까지 '적었음' 표시는 무효
+        Write-Utf8 $cfgPending $Engine
     }
     $keepAppEngine = $pick.Keep     # 앱 안에서 고른 엔진(config.json llm_provider)을 지켜야 하는 경우
     $EngInfo = $EngineInfo[$Engine]
@@ -761,7 +765,10 @@ try {
         $usedProvider = Set-ConfigEngine $cfgPath $EngInfo.Provider $localModel $keepAppEngine
         if ($usedProvider -ne $EngInfo.Provider) { Info ("config.json: llm_provider = " + $usedProvider + " (앱에서 고른 엔진이라 그대로 둡니다)") }
         else { Info ("config.json: llm_provider = " + $usedProvider) }
-        if (-not $DryRun) { Write-Utf8 $cfgMarker (Get-Date -Format "o") }   # 엔진이 config.json 에 적혔다: 다음 재설치부터는 앱에서 바꾼 값을 지킨다
+        if (-not $DryRun) {   # 엔진이 config.json 에 적혔다: 다음 재설치부터는 앱에서 바꾼 값을 지킨다
+            Write-Utf8 $cfgMarker (Get-Date -Format "o")
+            Remove-Item -LiteralPath $cfgPending -Force -ErrorAction SilentlyContinue
+        }
         if ($DryRun) { Info "[DryRun] 학습 기록/설정 기본값 복사는 건너뜁니다."; return }
         $dataDir = Join-Path $env:APPDATA "Godot\app_userdata\회화 연습"
         New-Item -ItemType Directory -Force $dataDir | Out-Null

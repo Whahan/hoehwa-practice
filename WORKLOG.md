@@ -26,7 +26,7 @@
 - reviewer 검토를 통과한 변경마다 커밋하고 `git push` 한다(git 작성자: Whahan / 90018039+Whahan@users.noreply.github.com, 저장소 로컬 설정에 이미 있음).
 - 사용자에게 가는 업데이트(앱 동작이 바뀌는 묶음)는 전체 테스트 통과 + 공개 스크립트의 비밀값 검사 통과 후 `publish_release.ps1 -Version <다음 버전>`으로 릴리스한다. 버전은 기능 추가면 부 버전, 버그 수정이면 수 버전을 올린다.
 - 릴리스나 저장소를 지우고 다시 만들지 않는다. 문제가 있으면 새 버전으로 고친다.
-11. [진행 중 2026-10-16 04:30] v1.0.1 수정 묶음: (A) worker-hard `w_lessonfix` — BLOCK_KO '총/죽' 과잉 차단, 영어 'shoot photos' 과잉 차단, 일본어 AI 레슨 finish_ex에 ja_fix_foreign, `--ollama-url` 닫힌 포트 시 Ollama 실행 부작용. (B) worker-hard `w_updfix` — 1번의 경미한 후속(a~h: HF refs/main 롤백, 실패 잔재, publish 정리 경고, prunehf 사용자 파일, npm null, engine.txt 덮어쓰기, HOEHWA_* 훅, README 한 줄). 각각 reviewer → 커밋·푸시 → 전체 테스트 → v1.0.1 릴리스.
+11. [진행 중 2026-10-16 18:30 — (A) 검토 합격·커밋 8e0bf21 푸시 완료(성능 항목 1회 흔들림, 재실행 통과); (B) 검토 2회(지적 3건 수정 + 기존 설치 표시는 오케스트레이터가 update.ps1에 추가) 합격 → 커밋 f20d35f 푸시. 전체 테스트(백엔드 5·Godot 6) 통과, 1.0.1 빌드, 새 v1.0.0 시험 설치(`D:\Ai\설치 시험 101\`) → 업데이트 1.0.1 성공·/health 전부 true. 지적: v1.0.0→1.0.1 첫 업데이트는 옛 update.ps1이 돌아 표시가 안 생김 → install.ps1이 version.txt도 완료로 보고 engine-pending.ok로 끊긴 새 선택을 구분하도록 수정, reviewer `w_rev_eng3` 합격 → 커밋 후 v1.0.1 릴리스 진행] v1.0.1 수정 묶음: (A) worker-hard `w_lessonfix` — BLOCK_KO '총·죽' 과잉 차단, 영어 'shoot photos' 과잉 차단, 일본어 AI 레슨 finish_ex에 ja_fix_foreign, `--ollama-url` 닫힌 포트 시 Ollama 실행 부작용. (B) worker-hard `w_updfix` — 1번의 경미한 후속(a~h: HF refs/main 롤백, 실패 잔재, publish 정리 경고, prunehf 사용자 파일, npm null, engine.txt 덮어쓰기, HOEHWA_* 훅, README 한 줄). 각각 reviewer → 커밋·푸시 → 전체 테스트 → v1.0.1 릴리스.
 10. 공개 후 개발 PC 정리: `app\backups\`, `packaging\out\`의 예전 zip, scratchpad 테스트 파일, 테스트 로그.
 
 ## 완료 기록
@@ -38,3 +38,5 @@
 - 2026-10-16 대화 음성(사전 합성·문장 단위 재생·목소리 선택·캐시 300MB) 검토: 깨진 캐시 파일 재합성 문제만 불합격 → 오케스트레이터가 `_wav_ok` 검사로 수정·확인(빈/엉뚱한/잘린 파일 3건 모두 재합성). GPU TTS는 torch가 CPU 전용이라 불가(로드맵).
 - 2026-10-16 AI 엔진: 1차 검토 불합격(앱이 OpenCode 키를 읽음 등) → 수정 완료, 재검토 중. 배포 수정본 재검토 중. 레슨 지적 수정 진행 중.
 - 2026-10-16 **사용자 결정**: 사용자가 OpenCode 약관을 확인했고 "써도될듯" → 배포판 기본 엔진은 무료 DeepSeek(OpenCode, 각 사용자 본인 계정 로그인) 유지. 오프라인 로컬은 설치 2번 선택지. 9번 공개 진행 가능(다른 조건은 그대로).
+- 2026-10-16 18:50 v1.0.1 (A) 레슨 과잉 차단(총·죽·shoot)·AI 일본어 레슨 중국어 글자 정리·--ollama-url 시 Ollama 미실행: reviewer 합격(1~8 O) → 커밋 8e0bf21 푸시.
+- 2026-10-16 19:40 v1.0.1 (B) 설치·업데이터 후속 a~h: reviewer 합격(재검토 포함) → 커밋 f20d35f 푸시. 오케스트레이터 보강: 업데이트 성공 시 engine-config.ok 생성(v1.0.0 설치도 재설치 때 앱 엔진 유지). 남은 예외: 재설치가 10단계 전에 끊긴 뒤 설치 대신 업데이트를 돌리면 새로 고른 엔진이 다음 재설치에서 유지 처리됨(드묾).
