@@ -46,12 +46,13 @@ func _build() -> void:
 	var pos: Dictionary = Store.position()
 	var on_phase: bool = pos["phase"] == "on"
 
-	var top := UI.hbox(12)
+	var top := UI.adaptive(12)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		refresh()))
-	top.add_child(UI.spacer())
+	if not Platform.is_phone():
+		top.add_child(UI.spacer())
 	top.add_child(UI.label("전체 진행 %d%%" % Store.lang_pct(lang), "Muted", false))
 	c.add_child(top)
 	c.add_child(UI.progress_bar(float(Store.lang_pct(lang)) / 100.0, acc, 10.0))
@@ -60,6 +61,8 @@ func _build() -> void:
 	var rows: Array = Store.roadmap_rows(lang)
 	var grid := GridContainer.new()
 	grid.columns = 4 if size.x >= 1000.0 else 2
+	if Platform.is_phone():
+		grid.columns = 1
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -107,6 +110,8 @@ func _month_card(m: Dictionary, current: bool) -> Control:
 	var head := PanelContainer.new()
 	head.mouse_filter = Control.MOUSE_FILTER_STOP
 	head.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if Platform.is_phone():
+		PhoneLayout.touch(head, 64.0)
 	head.add_theme_stylebox_override("panel", UI.style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 12, 16, 12))
 	var hrow := UI.hbox(14)
 	hrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -170,9 +175,10 @@ func _month_card(m: Dictionary, current: bool) -> Control:
 	body.add_child(_section_title("핵심 학습 내용"))
 	for kv in m.get("content", []):
 		var d: Dictionary = kv
-		var row := UI.hbox(12)
+		var row := UI.adaptive(12) # phone: the key above its text
 		var k := UI.colored(UI.plain(d.get("k", "")) if str(d.get("k", "")) != "" else "·", acc, "Strong", false)
-		k.custom_minimum_size = Vector2(96, 0)
+		if not Platform.is_phone():
+			k.custom_minimum_size = Vector2(96, 0)
 		k.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		row.add_child(k)
 		row.add_child(UI.label(UI.plain(d.get("v", ""))))

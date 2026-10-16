@@ -7,11 +7,14 @@ static var _ja: SystemFont = null
 static var _ja_bold: SystemFont = null
 static var _cjk_rx: RegEx = null
 
+## Fonts that exist on Android, appended behind the Windows names (same look on the PC).
+const _ANDROID_FONTS := ["Roboto", "Noto Sans CJK KR", "Noto Sans KR", "Noto Sans CJK JP", "Noto Sans JP"]
+
 
 static func bold_font() -> SystemFont:
 	if _bold == null:
 		_bold = SystemFont.new()
-		_bold.font_names = PackedStringArray(["Malgun Gothic", "Yu Gothic UI", "Meiryo", "Segoe UI"])
+		_bold.font_names = PackedStringArray(["Malgun Gothic", "Yu Gothic UI", "Meiryo", "Segoe UI"] + _ANDROID_FONTS)
 		_bold.font_weight = 700
 	return _bold
 
@@ -24,10 +27,10 @@ static func ja_font(bold: bool = false) -> SystemFont:
 	if not bold and _ja != null:
 		return _ja
 	var f := SystemFont.new()
-	f.font_names = PackedStringArray(["Yu Gothic UI", "Meiryo", "Malgun Gothic", "Segoe UI"])
+	f.font_names = PackedStringArray(["Yu Gothic UI", "Meiryo", "Malgun Gothic", "Segoe UI"] + _ANDROID_FONTS)
 	f.font_weight = 700 if bold else 400
 	var fb := SystemFont.new()
-	fb.font_names = PackedStringArray(["Malgun Gothic"])
+	fb.font_names = PackedStringArray(["Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR"])
 	fb.font_weight = 700 if bold else 400
 	var arr: Array[Font] = [fb]
 	f.fallbacks = arr
@@ -98,6 +101,17 @@ static func flow(h_sep: int = 8, v_sep: int = 8) -> HFlowContainer:
 	f.add_theme_constant_override("h_separation", h_sep)
 	f.add_theme_constant_override("v_separation", v_sep)
 	return f
+
+
+## Row on the PC (HBox), column on the phone (VBox). Children of a phone column fill its width.
+static func adaptive(sep: int = 8) -> BoxContainer:
+	return vbox(sep) if Platform.is_phone() else hbox(sep)
+
+
+## Raises a control's minimum height (and width) to the phone touch size. No-op on the PC.
+static func touch(c: Control, h: float = 48.0, w: float = 0.0) -> void:
+	if Platform.is_phone():
+		PhoneLayout.touch(c, h, w)
 
 
 static func spacer() -> Control:
@@ -215,6 +229,8 @@ static func button(text: String, kind: String = "default", accent: Color = Pal.I
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if min_h > 0.0:
 		b.custom_minimum_size.y = min_h
+	if Platform.is_phone():
+		PhoneLayout.touch(b, PhoneLayout.BTN_H)
 	style_button(b, kind, accent)
 	return b
 
@@ -264,6 +280,8 @@ static func option_row(text: String) -> Button:
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_size_override("font_size", 17)
+	if Platform.is_phone():
+		PhoneLayout.touch(b, 52.0)
 	return b
 
 
@@ -299,6 +317,8 @@ static func tile(text: String) -> Button:
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if Platform.is_phone():
+		PhoneLayout.touch(b, PhoneLayout.BTN_H, 48.0)
 	return b
 
 
@@ -310,8 +330,11 @@ static func link_button(text: String, tip: String = "") -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_size_override("font_size", 14)
-	if tip != "":
+	if tip != "" and not Platform.is_phone():
 		b.tooltip_text = tip
+	if Platform.is_phone():
+		b.add_theme_font_size_override("font_size", 15)
+		PhoneLayout.touch(b, PhoneLayout.LINK_H, PhoneLayout.LINK_H)
 	return b
 
 
@@ -335,12 +358,18 @@ static func segmented(items: Array, current: String, on_change: Callable, accent
 	p.theme_type_variation = &"Seg"
 	var h := hbox(2)
 	p.add_child(h)
+	var phone: bool = Platform.is_phone()
+	if phone:
+		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for it in items:
 		var value: String = str(it[0])
 		var b := Button.new()
 		b.text = str(it[1])
 		b.focus_mode = Control.FOCUS_NONE
 		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		if phone:
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			PhoneLayout.touch(b, PhoneLayout.LINK_H)
 		var sel: bool = value == current
 		var fg: Color = Pal.MUTED
 		if sel:
@@ -409,10 +438,15 @@ static func check_row(text: String, checked: bool, on_toggle: Callable, sub: Str
 	cb.focus_mode = Control.FOCUS_NONE
 	cb.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if Platform.is_phone():
+		PhoneLayout.touch(cb, PhoneLayout.BTN_H, PhoneLayout.BTN_H)
 	cb.toggled.connect(func(on: bool) -> void: on_toggle.call(on))
 	row.add_child(cb)
 	var col := vbox(1)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if Platform.is_phone():
+		col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.custom_minimum_size.y = PhoneLayout.BTN_H
 	var l := label(text, "Strong" if sub != "" else "")
 	if checked:
 		l.add_theme_color_override("font_color", Pal.MUTED)
@@ -435,6 +469,9 @@ static func pref_toggle(text: String, pref_key: String) -> CheckBox:
 	cb.button_pressed = Store.pref_bool(pref_key)
 	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	cb.toggled.connect(func(on: bool) -> void: Store.set_pref(pref_key, on))
+	if Platform.is_phone():
+		cb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		PhoneLayout.touch(cb, PhoneLayout.BTN_H)
 	return cb
 
 
@@ -444,6 +481,8 @@ static func option_button(items: Array, selected: int) -> OptionButton:
 	o.fit_to_longest_item = false
 	o.clip_text = true
 	o.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if Platform.is_phone():
+		PhoneLayout.touch(o, PhoneLayout.BTN_H)
 	for it in items:
 		o.add_item(str(it))
 	if selected >= 0 and selected < items.size():

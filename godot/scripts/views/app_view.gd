@@ -20,6 +20,12 @@ func on_hide() -> void:
 	pass
 
 
+## Android back button: leave a sub screen of this view and return true, or return false when the
+## view is already at its top screen (main.gd then goes to 오늘 / asks to quit).
+func go_back() -> bool:
+	return false
+
+
 ## Rebuilds a scrolling page while keeping the scroll position.
 func rebuild_keep_scroll(scroll: ScrollContainer, builder: Callable) -> void:
 	var sv: int = scroll.scroll_vertical

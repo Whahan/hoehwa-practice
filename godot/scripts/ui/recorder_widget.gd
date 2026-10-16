@@ -15,6 +15,8 @@ var big: bool = true
 var accent: Color = Pal.EN
 var use_space: bool = false
 var idle_text: String = "녹음 시작"
+## Phone: a small widget as a full-width 56 px button (talk chat). Set before the widget enters the tree.
+var wide: bool = false
 
 var _btn: Button
 var _time_label: Label
@@ -29,7 +31,7 @@ var _was_recording: bool = false
 func _init(is_big: bool = true, accent_color: Color = Pal.EN, space: bool = false) -> void:
 	big = is_big
 	accent = accent_color
-	use_space = space
+	use_space = space and not Platform.is_phone() # no keyboard on the phone
 	add_theme_constant_override("separation", 14)
 
 
@@ -38,9 +40,15 @@ func _ready() -> void:
 	_btn.focus_mode = Control.FOCUS_NONE
 	_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_btn.custom_minimum_size = Vector2(190 if big else 96, 58 if big else 44)
+	var phone: bool = Platform.is_phone()
+	var full: bool = big or wide
+	if phone:
+		_btn.custom_minimum_size = Vector2(0.0 if full else 96.0, 56.0 if full else PhoneLayout.BTN_H)
+		_btn.size_flags_horizontal = Control.SIZE_FILL if full else Control.SIZE_SHRINK_BEGIN
 	_btn.button_down.connect(_on_down)
 	_btn.button_up.connect(_on_up)
-	add_child(_btn)
+	if not phone:
+		add_child(_btn)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
 	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -51,7 +59,20 @@ func _ready() -> void:
 	_meter.custom_minimum_size = Vector2(130, 8)
 	_meter.size_flags_horizontal = Control.SIZE_FILL
 	col.add_child(_meter)
-	add_child(col)
+	if phone:
+		# vertical: the button over the timer and the level bar, each as wide as the screen allows
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 6)
+		vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_time_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_meter.custom_minimum_size = Vector2(0, 8)
+		_meter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		vb.add_child(_btn)
+		vb.add_child(col)
+		add_child(vb)
+	else:
+		add_child(col)
 	Recorder.finished.connect(_on_finished)
 	_refresh()
 

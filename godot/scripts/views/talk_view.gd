@@ -63,6 +63,10 @@ var _input: LineEdit
 var _send: Button
 var _mic: RecorderWidget
 var _status_label: Label
+var _tg: Container          ## phone: the four option toggles (folded behind "옵션 ▾")
+var _opts_btn: Button
+var _opts_open: bool = false
+var _leave_msec: int = -100000
 
 
 func _ready() -> void:
@@ -100,6 +104,67 @@ func on_hide() -> void:
 		_mic.stop_if_recording()
 
 
+## Phone: with the keyboard up the suggestions and the option toggles make room for the text field,
+## and the newest message stays in view.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and Platform.is_phone() and _aux != null and _tg != null:
+		var typing: bool = PhoneLayout.keyboard_height() > 0.0
+		_aux.visible = not typing
+		_opts_btn.visible = not typing
+		_tg.visible = _opts_open and not typing
+		if status == "talk" or status == "wait":
+			UI.scroll_to_bottom(_msg_scroll)
+
+
+## Android back button: out of the feedback / the chat, one step. A chat that already has my sentences
+## asks for a second press (within 2 s) so a stray swipe does not throw the conversation away.
+func go_back() -> bool:
+	match status:
+		"fb":
+			status = "setup"
+			msgs = []
+			_reset_selection()
+			_render_setup()
+			return true
+		"fbwait":
+			_serial += 1
+			if _fb_call != null:
+				_fb_call.cancel()
+				_fb_call = null
+			status = "talk"
+			_update_visibility()
+			_render_msgs()
+			_update_composer()
+			return true
+		"wait":
+			_cancel_chat()
+			return true
+		"talk":
+			var mine := 0
+			for m in msgs:
+				if m["role"] == "me":
+					mine += 1
+			var now: int = Time.get_ticks_msec()
+			if mine > 0 and now - _leave_msec > 2000:
+				_leave_msec = now
+				Toast.info("지금 대화가 사라져요. 나가려면 한 번 더 눌러 주세요. 피드백은 '끝내기'에서 받아요.")
+				return true
+			_leave_msec = -100000
+			_serial += 1
+			if _stt_call != null:
+				_stt_call.cancel()
+				_stt_call = null
+			stt_busy = false
+			if _mic != null and is_instance_valid(_mic):
+				_mic.stop_if_recording()
+			status = "setup"
+			msgs = []
+			_update_visibility()
+			_render_setup()
+			return true
+	return false
+
+
 func _reset_selection() -> void:
 	var p: Dictionary = Store.position()
 	sel = {"lang": lang, "scen": "month", "stage": Plan.stage_of(int(p["n"])), "n": int(p["n"]), "w": int(p["w"])}
@@ -125,14 +190,15 @@ func _render_setup() -> void:
 	UI.clear(c)
 	var acc: Color = Pal.accent(lang)
 
-	var top := UI.hbox(12)
+	var top := UI.adaptive(12)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		_reset_selection()
 		err = ""
 		_render_setup()))
-	top.add_child(UI.spacer())
+	if not Platform.is_phone():
+		top.add_child(UI.spacer())
 	top.add_child(UI.label("대화 %d회" % Store.stat(lang, "talks"), "Muted", false))
 	c.add_child(top)
 	if err != "":
@@ -174,7 +240,7 @@ func _render_setup() -> void:
 		sel["w"] = 1
 		sel["stage"] = Plan.stage_of(int(sel["n"]))
 		_render_setup())
-	var fields := UI.hbox(12)
+	var fields := UI.adaptive(12)
 	var f1 := UI.field("말하기 수준", so)
 	f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var f2 := UI.field("이번 달 주제 기준", mo)
@@ -211,6 +277,8 @@ func _scenario_card(s: Dictionary) -> Control:
 	p.add_theme_stylebox_override("panel", normal)
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	p.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if Platform.is_phone():
+		PhoneLayout.touch(p, 64.0)
 	var v := UI.vbox(2)
 	var t := UI.label(str(s["t"]), "Strong")
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -263,10 +331,14 @@ func _build_chat_root(parent: Control) -> void:
 	hc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_head_title = UI.label("", "Strong", false)
 	_head_sub = UI.label("", "Small", false)
+	if Platform.is_phone():
+		for hl in [_head_title, _head_sub]:
+			hl.clip_text = true
+			hl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	hc.add_child(_head_title)
 	hc.add_child(_head_sub)
 	hrow.add_child(hc)
-	_end_btn = UI.button("대화 끝내고 피드백", "default")
+	_end_btn = UI.button("끝내기" if Platform.is_phone() else "대화 끝내고 피드백", "default")
 	_end_btn.pressed.connect(_end_chat)
 	hrow.add_child(_end_btn)
 	head_col.content.add_child(hrow)
@@ -301,11 +373,16 @@ func _build_chat_root(parent: Control) -> void:
 	_mic = RecorderWidget.new(false, Pal.EN, false)
 	_mic.idle_text = "말하기"
 	_mic.recorded.connect(_on_recorded)
-	comp.add_child(_mic)
+	if Platform.is_phone():
+		_mic.wide = true # the phone's main input: a full-width button on its own line
+	else:
+		comp.add_child(_mic)
 	_send = UI.button("보내기", "primary", Pal.EN, 48)
 	_send.pressed.connect(_send_message)
 	comp.add_child(_send)
 	b.add_child(comp)
+	if Platform.is_phone():
+		b.add_child(_mic)
 
 	_status_label = UI.label("", "Small", false)
 	b.add_child(_status_label)
@@ -315,6 +392,16 @@ func _build_chat_root(parent: Control) -> void:
 	tg.add_child(UI.pref_toggle("번역 항상", "show_ko"))
 	tg.add_child(UI.pref_toggle("교정 바로 보기", "show_fix"))
 	tg.add_child(UI.pref_toggle("말하면 바로 보내기", "auto_send"))
+	_tg = tg
+	if Platform.is_phone():
+		_opts_btn = UI.link_button("옵션 ▾")
+		_opts_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		tg.visible = false
+		_opts_btn.pressed.connect(func() -> void:
+			_opts_open = not _opts_open
+			tg.visible = _opts_open
+			_opts_btn.text = "옵션 ▴" if _opts_open else "옵션 ▾")
+		b.add_child(_opts_btn)
 	b.add_child(tg)
 
 
@@ -537,6 +624,9 @@ func _render_msgs() -> void:
 	var c: VBoxContainer = _msg_scroll.content
 	UI.clear(c)
 	var max_w: float = clampf(_msg_scroll.size.x * 0.72 - 40.0, 260.0, 620.0)
+	if Platform.is_phone():
+		var base_w: float = _msg_scroll.size.x if _msg_scroll.size.x >= 100.0 else maxf(size.x, PhoneLayout.W)
+		max_w = clampf((base_w - 2.0 * PhoneLayout.PAD) * 0.86 - 28.0, 160.0, 620.0)
 	for i in msgs.size():
 		var m: Dictionary = msgs[i]
 		if m["role"] == "me":
@@ -618,7 +708,7 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 		kl.custom_minimum_size = Vector2(minf(UI.text_width(str(m["ko"]), 15) + 6.0, max_w), 0)
 		kl.size_flags_horizontal = Control.SIZE_FILL
 		col.add_child(kl)
-	var acts := UI.hbox(2)
+	var acts: Container = UI.flow(2, 0) if Platform.is_phone() else UI.hbox(2)
 	acts.add_child(UI.speak_buttons(str(m["reply"]), lang))
 	if not always_ko:
 		var tb := UI.link_button("번역 숨기기" if show_ko else "번역")
