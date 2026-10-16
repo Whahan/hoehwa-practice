@@ -7,6 +7,9 @@ enum Status { IDLE, CHECKING, STARTING, READY, FAILED, NEEDS_PAIRING }
 
 const MAX_WAIT_SECONDS := 90
 const HEALTH_REFRESH_SECONDS := 15.0
+const REMOTE_REFRESH_SECONDS := 30.0   # phone: fewer wake-ups (battery)
+const UNREACHABLE_TEXT := "PC에 닿지 않아요. PC가 켜져 있고 같은 와이파이인지, PC 앱의 '휴대폰 연결'이 켜져 있는지 확인해 주세요."
+const REVOKED_TEXT := "PC에서 이 휴대폰의 연결이 해제됐어요. 다시 연결해 주세요."
 
 var status: Status = Status.IDLE
 var health: Dictionary = {}
@@ -19,13 +22,20 @@ var _starting: bool = false
 var _fail_streak: int = 0
 var _since_refresh: float = 0.0
 var _shutdown_done: bool = false
+var _paused: bool = false
+
+
+func _ready() -> void:
+	remote_mode = Platform.is_phone()
+	Api.auth_failed.connect(_on_auth_failed)
 
 
 func _process(delta: float) -> void:
-	if status != Status.READY:
+	if status != Status.READY or _paused:
 		return
 	_since_refresh += delta
-	if _since_refresh >= HEALTH_REFRESH_SECONDS:
+	var every: float = REMOTE_REFRESH_SECONDS if remote_mode else HEALTH_REFRESH_SECONDS
+	if _since_refresh >= every:
 		_since_refresh = 0.0
 		# A busy engine (long LLM generation) may answer /health late: do not poll while
 		# requests are in flight.
@@ -120,7 +130,7 @@ func refresh_health() -> void:
 		_fail_streak += 1
 		if _fail_streak >= 2:
 			health = {}
-			_set_status(Status.FAILED, "AI 엔진과 연결이 끊겼어요.")
+			_set_status(Status.FAILED, UNREACHABLE_TEXT if remote_mode else "AI 엔진과 연결이 끊겼어요.")
 
 
 ## Uses the port from backend/config.json when it is not the default one.
@@ -144,6 +154,11 @@ func start() -> void:
 	if _starting:
 		return
 	_starting = true
+	if remote_mode:
+		# Phone: never look for / launch a local server (no find_backend_dir, python_path, create_process).
+		await _start_remote()
+		_starting = false
+		return
 	_adopt_config_port()
 	_set_status(Status.CHECKING, "AI 엔진 확인 중…")
 	if await check_health():
@@ -192,6 +207,84 @@ func start() -> void:
 	_starting = false
 
 
+# ---------------------------------------------------------------- phone: paired PC
+
+## Reads the saved pairing (or the test injection `--api= --token=`) and checks the PC.
+func _saved_connection() -> Dictionary:
+	var conn: Dictionary = RemoteLink.load_saved(Api.remote_path)
+	if Api.base_overridden and Api.base_url != "":
+		conn["base_url"] = Api.base_url          # --api= wins over the saved address (tests)
+		if Api.token != "":
+			conn["token"] = Api.token
+	return conn
+
+
+func _start_remote() -> void:
+	var conn: Dictionary = _saved_connection()
+	if str(conn.get("token", "")) == "" or str(conn.get("base_url", "")) == "":
+		# Not paired: no network at all.
+		Api.clear_remote()
+		if Api.base_overridden:
+			pass
+		health = {}
+		_set_status(Status.NEEDS_PAIRING, "")
+		return
+	Api.set_remote(str(conn["base_url"]), str(conn["token"]))
+	_set_status(Status.CHECKING, "PC에 연결 중…")
+	if await check_health():
+		_fail_streak = 0
+		_set_status(Status.READY)
+		Store.refresh_curriculum()
+		return
+	if status == Status.NEEDS_PAIRING:
+		return   # the PC answered 401: the pairing was revoked (see _on_auth_failed)
+	# The PC may have a new IP address: look for it again and accept it only if it proves it knows our token.
+	_set_status(Status.CHECKING, "PC를 다시 찾는 중…")
+	var found: Array = await RemoteLink.discover(get_tree())
+	if status == Status.NEEDS_PAIRING:
+		return
+	var want_name: String = str(conn.get("server_name", ""))
+	for f in found:
+		if want_name == "" or str(f["name"]) != want_name:
+			continue
+		var new_base: String = str(f["base_url"])
+		if new_base == str(conn["base_url"]):
+			continue
+		if not await RemoteLink.proof_ok(new_base, conn):
+			continue
+		Api.set_remote(new_base, str(conn["token"]))
+		if await check_health():
+			conn["base_url"] = new_base
+			RemoteLink.save(conn, Api.remote_path)
+			_fail_streak = 0
+			_set_status(Status.READY)
+			Store.refresh_curriculum()
+			return
+	if status == Status.NEEDS_PAIRING:
+		return
+	Api.set_remote(str(conn["base_url"]), str(conn["token"]))
+	health = {}
+	_set_status(Status.FAILED, UNREACHABLE_TEXT)
+
+
+## The PC no longer knows this phone: forget the token (keep address and PC name for the connect screen).
+func _on_auth_failed(_code: String) -> void:
+	if not remote_mode or status == Status.NEEDS_PAIRING:
+		return
+	RemoteLink.clear_token(Api.remote_path)
+	Api.clear_remote()
+	health = {}
+	_set_status(Status.NEEDS_PAIRING, REVOKED_TEXT)
+
+
+## "연결 끊기": forget the token locally (the caller already asked the PC to unpair, best effort).
+func forget_pairing() -> void:
+	RemoteLink.clear_token(Api.remote_path)
+	Api.clear_remote()
+	health = {}
+	_set_status(Status.NEEDS_PAIRING, "")
+
+
 func shutdown() -> void:
 	if _shutdown_done:
 		return
@@ -208,6 +301,16 @@ func shutdown() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE:
 		shutdown()
+	elif what == NOTIFICATION_APPLICATION_PAUSED:
+		_paused = true   # phone in the background: no polling
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		_paused = false
+		if remote_mode:
+			_since_refresh = 0.0
+			if status == Status.READY:
+				refresh_health()
+			elif status == Status.FAILED:
+				start()
 
 
 func _exit_tree() -> void:

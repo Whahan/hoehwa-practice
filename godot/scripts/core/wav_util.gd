@@ -118,3 +118,104 @@ static func silence(seconds: float, rate: int = 16000, stereo: bool = false) -> 
 	data.resize(int(seconds * rate) * 2 * (2 if stereo else 1))
 	st.data = data
 	return st
+
+
+## Mono 16-bit copy of `stream` (stereo -> average of both channels, 8-bit -> 16-bit; the sample rate is kept).
+## `max_seconds` > 0 cuts longer audio. Returns null for formats other than 8/16-bit PCM.
+static func to_mono16(stream: AudioStreamWAV, max_seconds: float = 0.0) -> AudioStreamWAV:
+	var r: Dictionary = mono16_with_peak(stream, max_seconds)
+	return r.get("stream", null)
+
+
+## {stream: AudioStreamWAV (mono 16-bit), peak: float 0..1}. Safe to run in a worker thread (no scene access).
+static func mono16_with_peak(stream: AudioStreamWAV, max_seconds: float = 0.0) -> Dictionary:
+	var out := {"stream": null, "peak": 0.0}
+	if stream == null or stream.mix_rate <= 0:
+		return out
+	var bits16: bool = stream.format == AudioStreamWAV.FORMAT_16_BITS
+	if not bits16 and stream.format != AudioStreamWAV.FORMAT_8_BITS:
+		return out
+	var ch: int = 2 if stream.stereo else 1
+	var bps: int = 2 if bits16 else 1
+	var src: PackedByteArray = stream.data
+	var frames: int = src.size() / (ch * bps)
+	if max_seconds > 0.0:
+		frames = mini(frames, int(max_seconds * float(stream.mix_rate)))
+	var dst := PackedByteArray()
+	dst.resize(frames * 2)
+	var peak := 0
+	if bits16 and ch == 1:
+		# already the right shape: copy and scan for the peak
+		dst = src.slice(0, frames * 2)
+		for i in frames:
+			var v: int = absi(dst.decode_s16(i * 2))
+			if v > peak:
+				peak = v
+	elif bits16:
+		for i in frames:
+			var m: int = (src.decode_s16(i * 4) + src.decode_s16(i * 4 + 2)) >> 1
+			dst.encode_s16(i * 2, m)
+			var a: int = absi(m)
+			if a > peak:
+				peak = a
+	else:
+		for i in frames:
+			var s: int
+			if ch == 1:
+				s = src.decode_s8(i) << 8
+			else:
+				s = (src.decode_s8(i * 2) + src.decode_s8(i * 2 + 1)) << 7
+			dst.encode_s16(i * 2, s)
+			var a2: int = absi(s)
+			if a2 > peak:
+				peak = a2
+	var st := AudioStreamWAV.new()
+	st.format = AudioStreamWAV.FORMAT_16_BITS
+	st.mix_rate = stream.mix_rate
+	st.stereo = false
+	st.data = dst
+	out["stream"] = st
+	out["peak"] = float(peak) / 32767.0
+	return out
+
+
+## Largest absolute sample of an 8/16-bit stream, 0..1.
+static func peak(stream: AudioStreamWAV) -> float:
+	if stream == null:
+		return 0.0
+	var best := 0
+	if stream.format == AudioStreamWAV.FORMAT_16_BITS:
+		var n: int = stream.data.size() / 2
+		for i in n:
+			var v: int = absi(stream.data.decode_s16(i * 2))
+			if v > best:
+				best = v
+		return float(best) / 32767.0
+	if stream.format == AudioStreamWAV.FORMAT_8_BITS:
+		for i in stream.data.size():
+			var v8: int = absi(stream.data.decode_s8(i))
+			if v8 > best:
+				best = v8
+		return float(best) / 127.0
+	return 0.0
+
+
+## Synthetic sine, for tests. `stereo` puts `right_gain` of the tone into the right channel.
+static func sine(seconds: float, rate: int = 48000, freq: float = 440.0, amp: float = 0.5, stereo: bool = false, right_gain: float = 1.0) -> AudioStreamWAV:
+	var n: int = int(seconds * rate)
+	var st := AudioStreamWAV.new()
+	st.format = AudioStreamWAV.FORMAT_16_BITS
+	st.mix_rate = rate
+	st.stereo = stereo
+	var data := PackedByteArray()
+	var ch: int = 2 if stereo else 1
+	data.resize(n * ch * 2)
+	for i in n:
+		var v: int = int(sin(TAU * freq * float(i) / float(rate)) * amp * 32767.0)
+		if stereo:
+			data.encode_s16(i * 4, v)
+			data.encode_s16(i * 4 + 2, int(float(v) * right_gain))
+		else:
+			data.encode_s16(i * 2, v)
+	st.data = data
+	return st
