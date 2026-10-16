@@ -16,10 +16,13 @@ run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 run/low_processor_mode=true
 config/icon="res://icon.svg"
+config/version="1.1.0"
+config/quit_on_go_back=false
 
 [audio]
 
 driver/enable_input=false
+driver/enable_input.android=true
 
 [autoload]
 
@@ -42,6 +45,11 @@ window/size/viewport_height=800
 window/size/window_width_override=1280
 window/size/window_height_override=800
 window/dpi/allow_hidpi=true
+window/size/viewport_width.android=412
+window/size/viewport_height.android=915
+window/stretch/mode.android="canvas_items"
+window/stretch/aspect.android="expand"
+window/handheld/orientation.android=1
 
 [gui]
 
@@ -52,4 +60,5 @@ theme/default_font_antialiasing=1
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.957, 0.961, 0.969, 1)
