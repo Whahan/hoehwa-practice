@@ -10,6 +10,7 @@
 ## 남은 작업 (위에서부터 순서대로)
 
 **[진행 중 2026-10-16 21:10] 안드로이드 A안(PC 연결형)** — 사용자 요청. 폰 앱은 Godot 화면만, 같은 와이파이의 PC 백엔드에 페어링 코드+토큰으로 연결. designer 설계 중 → `docsndroid_remote_design.md`. 그다음: 설계 확정 → 다운로드 승인(Godot 안드로이드 export 템플릿, platform-tools, 필요 시 JDK 17) → W1 백엔드 / W2 Godot 네트워크·녹음·PC 설정 / W3 폰 레이아웃·export 병렬 → reviewer → 실제 폰 시험 → 커밋·푸시 → (사용자 확인 후) 릴리스에 APK.
+  - 2026-10-16 22:30 안드로이드 설계 완료(`docsndroid_remote_design.md`, §17.0 결정). Phase 0 스텁 커밋 bb5049e(푸시). worktree `D:\Ai\언어pp_wt\w1~w4`(브랜치 android/w1~w4)에서 W1 백엔드 LAN·W2 네트워크/녹음/연결 화면·W3 폰 레이아웃·W4 설정/export/서명 스크립트 동시 진행(커밋은 각 브랜치, push 금지). 진짜 릴리스 키스토어는 사용자 확인 후. 병합 순서: W1·W2·W4 → W3 → 영어 v1.1 T5 연결.
 
 **[진행 중 2026-10-16 21:20] 영어 학습 기능 강화 v1.1** — 사용자 요청("더 좋은 영어공부앱으로", 안드로이드와 동시에). designer 설계 중 → `docs\english_v11_design.md`(새 기능은 새 파일 위주, 기존 파일은 연결 지점만, 폰 세로 레이아웃 원칙). 빌드 도구(Godot 안드로이드 템플릿·platform-tools·필요시 JDK 17)는 사용자 승인 후 worker-hard `w_androidtools` 설치 중. 빌드 도구 결과: Godot 안드로이드 템플릿(SHA512 일치)·platform-tools r37.0.1(adb)·Temurin JDK 17.0.20.1(`%LOCALAPPDATA%\Android\jdk-17`, 에디터 설정 java_sdk_path) 설치 완료. 시험 APK 는 실패: 4.6.3 템플릿이 SDK 36(build-tools 36.1.0) 기준인데 SDK 에 34 만 있음 → `build-tools;36.1.0`·`platforms;android-36` 추가 설치에 사용자 승인 필요(대기). 시험 프로젝트 scratchpad `w_androidtools\proj`. 영어 v1.1 설계 완료(`docs\english_v11_design.md`: 롤플레이 미션·쉐도잉·받아쓰기·약한 소리·일일 목표/보호권/통계·교정 자동 카드, 12.0 에 오케스트레이터 결정). 구현 시작: T0 뼈대(worker `w_t0`)·T2 백엔드(worker-hard `w_t2`, 포트 8811) 동시 → T0 끝나면 T1·T3·T4. 기존 파일 연결(C1~C13)은 안드로이드와 합친 뒤 T5. 두 설계가 나오면 파일 소유권을 나누고, 겹치는 파일은 git worktree 브랜치로 분리해 순서대로 합친다.
 
