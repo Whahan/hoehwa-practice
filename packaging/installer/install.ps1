@@ -154,6 +154,51 @@ function Select-Engine {
     }
 }
 
+# 다시 설치(재실행)할 때 사용자가 앱 안에서 고른 엔진을 덮어쓰지 않기 위한 도우미.
+#  - 기존 선택 = runtime\.state\engine.txt (설치 프로그램이 적어 둔 값). 올바른 값이면 그대로 쓴다.
+#  - 앱 안에서 고른 엔진 = backend\config.json 의 llm_provider (opencode / ollama / openai_api). 앱은 이 값을 따른다.
+#  - 이번 실행에서 사용자가 직접 -Engine 을 쓰거나 번호를 골랐을 때만 두 값을 새로 쓴다.
+function Get-SavedEngine([string]$engineFile) {
+    if (-not (Test-Path -LiteralPath $engineFile)) { return "" }
+    $e = ("" + (Get-Content -LiteralPath $engineFile -Raw -ErrorAction SilentlyContinue)).Trim()
+    if ($EngineInfo.ContainsKey($e)) { return $e }
+    return ""     # 예전 버전이 적어 둔 다른 값은 무시하고 다시 묻는다
+}
+function Set-ConfigEngine([string]$cfgPath, [string]$provider, [string]$localModel, [bool]$keepProvider) {
+    $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $cur = if ($cfg.PSObject.Properties.Name -contains "llm_provider") { "" + $cfg.llm_provider } else { "" }
+    $valid = @("opencode", "ollama", "openai_api") -contains $cur
+    if ($keepProvider -and $valid) { $result = $cur }      # 다시 설치: 앱에서 고른 엔진을 그대로 둔다
+    else {
+        if ($cfg.PSObject.Properties.Name -contains "llm_provider") { $cfg.llm_provider = $provider }
+        else { $cfg | Add-Member -NotePropertyName "llm_provider" -NotePropertyValue $provider }
+        $result = $provider
+    }
+    if ($localModel) {
+        # 로컬 엔진은 방금 받은 모델 태그를 쓴다 (업데이트 때 태그가 바뀌면 이 값을 기준으로 옛 모델을 지운다)
+        if ($cfg.PSObject.Properties.Name -contains "llm_model") { $cfg.llm_model = $localModel }
+        else { $cfg | Add-Member -NotePropertyName "llm_model" -NotePropertyValue $localModel }
+    }
+    Write-Utf8 $cfgPath ($cfg | ConvertTo-Json -Depth 8)
+    return $result
+}
+
+# 어떤 엔진으로 설치할지 정한다. Explicit = 이번 실행에서 사용자가 직접 골랐는가, Keep = 앱에서 고른 엔진(config.json)을 덮어쓰면 안 되는가.
+#   $configDone = 이 설치 프로그램이 이미 한 번 config.json 에 엔진을 끝까지 적었는가 (10단계 끝의 표시 파일 runtime\.state\engine-config.ok).
+#   설치가 10단계 전에 끊겼다면 config.json 은 아직 기본값이므로 Keep 하지 않고 engine.txt 의 선택을 적용한다.
+function Resolve-Engine([string]$requested, [string]$saved, [bool]$autoYes, [bool]$configDone) {
+    $eng = $requested
+    $explicit = ($requested -ne "")      # -Engine 을 직접 적었다
+    if ($eng -eq "" -and $saved -ne "") {
+        $eng = $saved
+        Say ""; Say ("이전에 고른 AI 엔진을 이어서 사용합니다: " + $EngineInfo[$eng].Name + "  (바꾸려면 설치.bat -Engine deepseek 또는 -Engine local)") "Gray"
+    }
+    if ($eng -eq "") {
+        if ($autoYes) { $eng = "deepseek" } else { $eng = Select-Engine; $explicit = $true }   # 번호를 직접 골랐다
+    }
+    return [pscustomobject]@{ Engine = $eng; Explicit = $explicit; Keep = ((-not $explicit) -and ($saved -ne "") -and $configDone) }
+}
+
 function Refresh-Path {
     $m = [Environment]::GetEnvironmentVariable("Path", "Machine"); $u = [Environment]::GetEnvironmentVariable("Path", "User")
     $env:Path = (($m, $u) | Where-Object { $_ }) -join ";"
@@ -210,6 +255,13 @@ function Get-NpmGlobalVersion([string]$pkg) {
     Invoke-Native $npm.Source @("ls", "-g", $pkg, "--depth=0", "--json") -Quiet | Out-Null
     try { $j = ($script:LastOutput -join "`n") | ConvertFrom-Json; return $j.dependencies.$pkg.version } catch { return $null }
 }
+# npm 실행 파일 경로. 없으면 $null (호출하는 쪽이 한국어 안내를 하고 멈춘다 - $null 을 그대로 실행하면 PowerShell 의 'null' 오류가 난다)
+function Get-NpmCmd {
+    $c = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($c) { return $c.Source }
+    return $null
+}
+$NpmMissingMsg = "npm 을 찾지 못해 OpenCode 를 설치할 수 없습니다. Node.js(22 이상, npm 포함)가 설치되어 있지 않거나 지워진 것 같습니다.`n    https://nodejs.org 에서 LTS 를 설치한 뒤 설치.bat 을 다시 실행해 주세요. (인터넷 없이 쓰려면 설치.bat -Engine local)"
 function Find-OpenCode {
     foreach ($n in @("opencode.cmd", "opencode.exe")) {
         $c = Get-Command $n -ErrorAction SilentlyContinue
@@ -246,7 +298,7 @@ function Get-JavaMajor([string]$exe) {
     return 0
 }
 function Find-Java17 {
-    if ($env:HOEHWA_TEST_NO_JAVA -eq "1") { return $null }   # (테스트용) Java 가 없는 PC 흉내
+    if ($env:HOEHWA_TEST_MODE -eq "1" -and $env:HOEHWA_TEST_NO_JAVA -eq "1") { return $null }   # (테스트용, HOEHWA_TEST_MODE=1 일 때만) Java 가 없는 PC 흉내
     $c = New-Object System.Collections.Generic.List[string]
     $tools = Join-Path $Backend "tools"
     if (Test-Path -LiteralPath $tools) {
@@ -387,15 +439,16 @@ try {
     # ---------------------------------------------------------------- AI 엔진 선택
     if (-not $DryRun) { New-Item -ItemType Directory -Force $StateDir | Out-Null }
     $engineFile = Join-Path $StateDir "engine.txt"
-    if ($Engine -eq "") {
-        if (-not $DryRun -and (Test-Path -LiteralPath $engineFile)) {
-            $Engine = (Get-Content -LiteralPath $engineFile -Raw).Trim()
-            if (-not $EngineInfo.ContainsKey($Engine)) { $Engine = "" }   # 예전 버전이 적어 둔 다른 값은 무시하고 다시 묻는다
-            if ($Engine -ne "") { Say ""; Say ("이전에 고른 AI 엔진을 이어서 사용합니다: " + $EngineInfo[$Engine].Name + "  (바꾸려면 설치.bat -Engine deepseek 또는 -Engine local)") "Gray" }
-        }
+    # 다시 설치(engine.txt 가 이미 있음)이면 기존 선택을 유지한다. 이번 실행에서 사용자가 직접 고른 경우(-Engine 또는 번호 선택)만 새로 쓴다.
+    $savedEngine = Get-SavedEngine $engineFile    # DryRun 에서도 읽기만 한다 (아무것도 쓰지 않는다)
+    $cfgMarker = Join-Path $StateDir "engine-config.ok"    # 10단계가 config.json 에 엔진을 적고 나면 만든다
+    $pick = Resolve-Engine $Engine $savedEngine ([bool]$Yes) (Test-Path -LiteralPath $cfgMarker)
+    $Engine = $pick.Engine
+    if (-not $DryRun -and ($pick.Explicit -or $savedEngine -eq "")) {   # 다시 설치이고 직접 고르지 않았다면 engine.txt 는 그대로 둔다
+        Write-Utf8 $engineFile $Engine
+        Remove-Item -LiteralPath $cfgMarker -Force -ErrorAction SilentlyContinue   # 새 선택이 생겼으니 config.json 에 다시 적을 때까지 '적었음' 표시는 무효
     }
-    if ($Engine -eq "") { $Engine = if ($Yes) { "deepseek" } else { Select-Engine } }
-    if (-not $DryRun) { Write-Utf8 $engineFile $Engine }
+    $keepAppEngine = $pick.Keep     # 앱 안에서 고른 엔진(config.json llm_provider)을 지켜야 하는 경우
     $EngInfo = $EngineInfo[$Engine]
     Say ("AI 엔진: " + $EngInfo.Name) "Green"
     Log "engine=$Engine provider=$($EngInfo.Provider)"
@@ -487,10 +540,17 @@ try {
             if (-not (Install-NodeLts)) { Fail "Node.js 설치에 실패했습니다. https://nodejs.org 에서 직접 설치한 뒤 설치.bat 을 다시 실행해 주세요." }
             Info ("Node.js 설치 완료: v" + (Get-NodeMajor))
         }
-        if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { Fail "npm 을 찾지 못했습니다. Node.js 를 다시 설치해 주세요." }
+        if (-not (Get-NpmCmd)) { Fail $NpmMissingMsg }
     }
     Step 6 "OpenCode 설치와 로그인 (무료 DeepSeek V4.1 Flash)" "opencode" -Always -DryOK {
         Refresh-Path
+        $npmCmd = Get-NpmCmd
+        if (-not $npmCmd) {
+            # Node.js 단계가 예전에 끝난 것으로 기록되어 있어도(그 뒤에 Node.js 를 지운 경우) 다음 실행 때 다시 확인하도록 표시를 지운다
+            if (-not $DryRun) { Remove-Item -LiteralPath (Join-Path $StateDir "05-node.ok") -Force -ErrorAction SilentlyContinue }
+            if ($DryRun) { Info "[DryRun] npm 을 찾지 못했습니다. 실제 설치라면 여기서 Node.js 설치 안내를 하고 멈춥니다."; return }
+            Fail $NpmMissingMsg
+        }
         $have = Get-NpmGlobalVersion $OpenCodePkg
         $npmArgs = @("install", "-g", "$OpenCodePkg@$OpenCodeVer", "--allow-scripts=$OpenCodePkg")
         if ($have -eq $OpenCodeVer) { Info "$OpenCodePkg@$have 이(가) 이미 설치되어 있습니다 (고정 버전과 같음)." }
@@ -500,7 +560,7 @@ try {
             $ok = $false
             for ($try = 1; $try -le 3 -and -not $ok; $try++) {
                 if ($try -gt 1) { Warn "다시 시도합니다 ($try/3)..."; Start-Sleep -Seconds 5 }
-                $code = Invoke-Native (Get-Command npm.cmd).Source $npmArgs
+                $code = Invoke-Native $npmCmd $npmArgs
                 if ($code -eq 0) { $ok = $true }
             }
             if (-not $ok) { Fail "$OpenCodePkg 설치에 실패했습니다. install.log 를 확인해 주세요." }
@@ -540,22 +600,26 @@ try {
             $tmp = Join-Path $env:TEMP "OllamaSetup.exe"
             $url = "https://ollama.com/download/OllamaSetup.exe"
             Info "다운로드: $url (1 GB 안팎, 시간이 걸립니다)"
-            $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-            if ($curl) {
-                $code = Invoke-Native $curl.Source @("-L", "--fail", "--retry", "3", "-C", "-", "-o", $tmp, $url)
-                if ($code -ne 0) { Fail "Ollama 설치 파일을 받지 못했습니다." }
-            } else { (New-Object Net.WebClient).DownloadFile($url, $tmp) }
-            $sig = Get-AuthenticodeSignature -LiteralPath $tmp
-            Log ("서명 상태: $($sig.Status) / $($sig.SignerCertificate.Subject)")
-            if ($sig.Status -ne "Valid") { Remove-Item $tmp -Force -ErrorAction SilentlyContinue; Fail "Ollama 설치 파일의 디지털 서명이 올바르지 않습니다 ($($sig.Status)). 보안을 위해 중단합니다." }
-            if ($sig.SignerCertificate.Subject -notmatch "(?i)ollama") { Remove-Item $tmp -Force -ErrorAction SilentlyContinue; Fail "Ollama 설치 파일의 서명자가 예상과 다릅니다: $($sig.SignerCertificate.Subject)" }
-            Info "디지털 서명 확인 OK ($($sig.SignerCertificate.Subject))"
-            $p = Start-Process -FilePath $tmp -ArgumentList @("/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES", "/LOG=`"$env:TEMP\ollama-install.log`"") -Wait -PassThru
-            Log ("OllamaSetup 종료 코드: " + $p.ExitCode)
-            Start-Sleep -Seconds 3
-            $exe = Find-Ollama
-            if (-not $exe) { Fail "Ollama 설치가 끝났지만 ollama.exe 를 찾지 못했습니다. https://ollama.com/download 에서 직접 설치한 뒤 다시 실행해 주세요." }
-            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            try {
+                $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+                if ($curl) {
+                    $code = Invoke-Native $curl.Source @("-L", "--fail", "--retry", "3", "-C", "-", "-o", $tmp, $url)
+                    if ($code -ne 0) { Fail "Ollama 설치 파일을 받지 못했습니다." }
+                } else { (New-Object Net.WebClient).DownloadFile($url, $tmp) }
+                $sig = Get-AuthenticodeSignature -LiteralPath $tmp
+                Log ("서명 상태: $($sig.Status) / $($sig.SignerCertificate.Subject)")
+                if ($sig.Status -ne "Valid") { Fail "Ollama 설치 파일의 디지털 서명이 올바르지 않습니다 ($($sig.Status)). 보안을 위해 중단합니다." }
+                if ($sig.SignerCertificate.Subject -notmatch "(?i)ollama") { Fail "Ollama 설치 파일의 서명자가 예상과 다릅니다: $($sig.SignerCertificate.Subject)" }
+                Info "디지털 서명 확인 OK ($($sig.SignerCertificate.Subject))"
+                $p = Start-Process -FilePath $tmp -ArgumentList @("/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES", "/LOG=`"$env:TEMP\ollama-install.log`"") -Wait -PassThru
+                Log ("OllamaSetup 종료 코드: " + $p.ExitCode)
+                Start-Sleep -Seconds 3
+                $exe = Find-Ollama
+                if (-not $exe) { Fail "Ollama 설치가 끝났지만 ollama.exe 를 찾지 못했습니다. https://ollama.com/download 에서 직접 설치한 뒤 다시 실행해 주세요." }
+            } finally {
+                # 성공이든 실패든(다운로드 실패, 서명 오류, 설치 실패, Ctrl+C) 받은 설치 파일(1 GB 안팎)은 TEMP 에 남기지 않는다
+                if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+            }
             Info "Ollama 설치 완료: $exe"
         }
         if (-not (Ensure-OllamaRunning $exe)) { Fail "Ollama 서버가 켜지지 않습니다. 시작 메뉴에서 Ollama 를 한 번 실행한 뒤 다시 시도해 주세요." }
@@ -645,6 +709,8 @@ try {
         else {
             New-Item -ItemType Directory -Force $ltRoot | Out-Null
             $zip = Join-Path $env:TEMP ("LanguageTool-{0}.zip" -f $lt.version)
+            $tmpDir = Join-Path $ltRoot "_extract"
+            try {   # 아래 어디서 실패하든(다운로드, 해시, 압축 풀기, Ctrl+C) finally 에서 받은 zip 과 _extract 폴더를 지운다
             if (-not ((Test-Path -LiteralPath $zip) -and (Get-Sha256 $zip) -eq $lt.sha256)) {
                 Info ("다운로드: {0} ({1:N0} MB)" -f $lt.url, ($lt.size / 1MB))
                 $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
@@ -665,7 +731,6 @@ try {
                 return
             }
             Info "SHA256 확인 OK"
-            $tmpDir = Join-Path $ltRoot "_extract"
             if (Test-Path -LiteralPath $tmpDir) { Remove-Item -LiteralPath $tmpDir -Recurse -Force }
             [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $tmpDir)
             $dst = Join-Path $ltRoot $lt.dir
@@ -674,8 +739,11 @@ try {
             Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
             if (-not (Test-Path -LiteralPath $jar)) { Warn "LanguageTool 압축을 풀었지만 languagetool-server.jar 가 없습니다."; return }
             Write-Utf8 $manifest ([pscustomobject]@{ version = $lt.version; dir = $lt.dir; url = $lt.url; sha256 = $lt.sha256; size = $lt.size } | ConvertTo-Json)
-            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
             Info ("LanguageTool {0} 설치 완료" -f $lt.version)
+            } finally {
+                if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue }
+                if (Test-Path -LiteralPath $tmpDir) { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+            }
         }
         # Java 17+: 없으면 설치를 물어본다 (서버는 backend\grammar.py 의 규칙으로 같은 곳을 찾는다)
         Ensure-Java
@@ -689,16 +757,11 @@ try {
     Step 10 "설정 파일 (프로그램 기본 설정, AI 엔진)" "prefs" -Always -DryOK {
         # AI 엔진 종류를 backend\config.json 에 기록 (다른 설정은 그대로 둔다)
         $cfgPath = Join-Path $Backend "config.json"
-        $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($cfg.PSObject.Properties.Name -contains "llm_provider") { $cfg.llm_provider = $EngInfo.Provider }
-        else { $cfg | Add-Member -NotePropertyName "llm_provider" -NotePropertyValue $EngInfo.Provider }
-        if ($Engine -eq "local" -and $modelsLock.ollama -and $modelsLock.ollama.model) {
-            # 로컬 엔진은 방금 받은 모델 태그를 쓴다 (업데이트 때 태그가 바뀌면 이 값을 기준으로 옛 모델을 지운다)
-            if ($cfg.PSObject.Properties.Name -contains "llm_model") { $cfg.llm_model = $modelsLock.ollama.model }
-            else { $cfg | Add-Member -NotePropertyName "llm_model" -NotePropertyValue $modelsLock.ollama.model }
-        }
-        Write-Utf8 $cfgPath ($cfg | ConvertTo-Json -Depth 8)
-        Info ("config.json: llm_provider = " + $EngInfo.Provider)
+        $localModel = if ($Engine -eq "local" -and $modelsLock.ollama -and $modelsLock.ollama.model) { "" + $modelsLock.ollama.model } else { "" }
+        $usedProvider = Set-ConfigEngine $cfgPath $EngInfo.Provider $localModel $keepAppEngine
+        if ($usedProvider -ne $EngInfo.Provider) { Info ("config.json: llm_provider = " + $usedProvider + " (앱에서 고른 엔진이라 그대로 둡니다)") }
+        else { Info ("config.json: llm_provider = " + $usedProvider) }
+        if (-not $DryRun) { Write-Utf8 $cfgMarker (Get-Date -Format "o") }   # 엔진이 config.json 에 적혔다: 다음 재설치부터는 앱에서 바꾼 값을 지킨다
         if ($DryRun) { Info "[DryRun] 학습 기록/설정 기본값 복사는 건너뜁니다."; return }
         $dataDir = Join-Path $env:APPDATA "Godot\app_userdata\회화 연습"
         New-Item -ItemType Directory -Force $dataDir | Out-Null

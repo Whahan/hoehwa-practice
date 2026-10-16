@@ -9,7 +9,11 @@
     python update_helper.py mergecfg <user_config.json> <new_default_config.json> <out.json>
     python update_helper.py languagetool <models.lock.json> <backend_dir>
     python update_helper.py dirsize <root> [--skip rel ...]                -> total bytes of a folder tree
-    python update_helper.py prunehf <models.lock.json> <hf_dir> [--apply]  -> list (and with --apply delete) model files the lock does not use
+    python update_helper.py prunehf <models.lock.json> <hf_dir> [--old-lock <previous models.lock.json>] [--apply]
+                                                                           -> list (and with --apply delete) model files the PREVIOUS lock installed and the new lock no
+                                                                              longer uses (+ the installer's download caches). Files the lock never listed are the user's: never touched.
+    python update_helper.py refsave <hf_dir> <out.json>                    -> remember every refs/* file of the model caches (before an update changes them)
+    python update_helper.py refrestore <saved.json> <hf_dir>               -> put those refs back (rollback)
     python update_helper.py setcfg <config.json> <key> <value>             -> sets one top-level string value
 
 The same hashing code is used when the release is built and when an installed copy is updated, so
@@ -27,6 +31,9 @@ import sys
 import time
 import urllib.request
 import zipfile
+
+# Test hooks (HOEHWA_*) only work when HOEHWA_TEST_MODE=1 is set explicitly; a shipped install ignores them.
+TEST_MODE = os.environ.get("HOEHWA_TEST_MODE") == "1"
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -185,7 +192,7 @@ def parse_req(lines):
 def pip(args, check=True):
     cmd = [sys.executable, "-X", "utf8", "-m", "pip"] + args
     print("> pip " + " ".join(args), flush=True)
-    if os.environ.get("HOEHWA_PIP_DRYRUN") == "1":
+    if (TEST_MODE and os.environ.get("HOEHWA_PIP_DRYRUN") == "1"):
         print("  (dry run: not executed)", flush=True)
         return 0
     r = subprocess.call(cmd)
@@ -237,7 +244,7 @@ def pipsync(lock, boot, wheels):
                 os.remove(tmp)
             except OSError:
                 pass
-    if os.environ.get("HOEHWA_PIP_DRYRUN") == "1":
+    if (TEST_MODE and os.environ.get("HOEHWA_PIP_DRYRUN") == "1"):
         print("PIPSYNC_RESULT DRYRUN")
         return 0
     # 3. verify
@@ -344,39 +351,8 @@ def _rm_path(path):
             os.remove(path)
 
 
-def prunehf(lock_path, hf_dir, apply=False):
-    """Deletes what models.lock.json does not reference inside hf_dir (and nothing outside it):
-       - whole models--* repos that are not in the lock
-       - snapshots of other revisions, files of the locked snapshot that the lock does not list,
-         blobs nothing refers to, trees/*.json of other revisions
-       - download caches (xet, .locks) that only the installer needs
-       The plan is always printed first; files are removed only with apply=True."""
-    lock = json.load(open(lock_path, encoding="utf-8-sig"))
-    entries = lock.get("hf") or []
-    if not entries:
-        print("PRUNE_RESULT SKIP (lock lists no models)")
-        return 0
-    hf = os.path.abspath(hf_dir)
-    if not os.path.isdir(hf):
-        print("PRUNE_RESULT SKIP (no model folder)")
-        return 0
-    hf_n = os.path.normcase(os.path.realpath(hf))
-
-    def inside(path):
-        p = os.path.normcase(os.path.realpath(os.path.dirname(path) if os.path.islink(path) else path))
-        return p != hf_n and p.startswith(hf_n + os.sep)
-
-    keep = {}
-    for e in entries:
-        base = os.path.join(hf, e.get("cache_subdir") or "")
-        keep[os.path.normcase(os.path.abspath(os.path.join(base, "models--" + e["repo_id"].replace("/", "--"))))] = e
-
-    plan = []   # (path, bytes, why)
-
-    def add(path, why):
-        plan.append((path, _tree_bytes(path), why))
-
-    # models--* repo folders live in hf_dir itself and in its direct sub folders (cache_subdir, e.g. "whisper")
+def _hf_scan(hf):
+    """(repo folders, download-cache folders) of an hf folder: models--* live in hf itself and in its direct sub folders (cache_subdir, e.g. "whisper")."""
     repos, cache_dirs = [], []
     scan = [hf] + [os.path.join(hf, d) for d in sorted(os.listdir(hf))
                    if os.path.isdir(os.path.join(hf, d)) and not os.path.islink(os.path.join(hf, d))
@@ -388,40 +364,117 @@ def prunehf(lock_path, hf_dir, apply=False):
                 repos.append(full)
             elif name in ("xet", ".locks"):
                 cache_dirs.append(full)
-    for full in repos:
-        e = keep.get(os.path.normcase(os.path.abspath(full)))
-        if e is None:
-            add(full, "repo not in lock")
+    return repos, cache_dirs
+
+
+def _entry_key(hf, e):
+    base = os.path.join(hf, e.get("cache_subdir") or "")
+    return os.path.normcase(os.path.abspath(os.path.join(base, "models--" + e["repo_id"].replace("/", "--"))))
+
+
+def prunehf(lock_path, hf_dir, apply=False, old_lock_path=None):
+    """Deletes model files that the app itself installed and no longer needs - nothing else, and nothing outside hf_dir.
+       "Installed by the app" means: listed in the PREVIOUS models.lock.json (old_lock_path, copied before the update replaced it).
+       Anything no lock file ever listed (a voice pack or file the user added, a model repo the user downloaded) is the user's
+       and is left alone, even inside a repo folder the lock covers.
+       - files of the previous lock that the new lock does not list (or whose revision changed), and the blobs only they used
+       - trees/<previous revision>.json; a repo the new lock dropped is removed completely once none of the user's files remain in it
+       - download caches (xet, .locks) that only the installer needs (these are always the app's own)
+       Without old_lock_path (install.ps1) only the download caches are removed.
+       The plan is always printed first; files are removed only with apply=True."""
+    lock = json.load(open(lock_path, encoding="utf-8-sig"))
+    entries = lock.get("hf") or []
+    if not entries:
+        print("PRUNE_RESULT SKIP (lock lists no models)")
+        return 0
+    hf = os.path.abspath(hf_dir)
+    if not os.path.isdir(hf):
+        print("PRUNE_RESULT SKIP (no model folder)")
+        return 0
+    hf_n = os.path.normcase(os.path.realpath(hf))
+    old_entries = []
+    if old_lock_path:
+        try:
+            old_entries = json.load(open(old_lock_path, encoding="utf-8-sig")).get("hf") or []
+        except (OSError, ValueError) as ex:
+            print("PRUNE note: previous lock unreadable (%s) -> model files are kept, only download caches are removed" % ex)
+    else:
+        print("PRUNE note: no previous lock given -> model files are kept, only download caches are removed")
+
+    def inside(path):
+        p = os.path.normcase(os.path.realpath(os.path.dirname(path) if os.path.islink(path) else path))
+        return p != hf_n and p.startswith(hf_n + os.sep)
+
+    new_by_path = {_entry_key(hf, e): e for e in entries}
+    plan = []   # (path, bytes, why)
+    touched = []
+
+    def add(path, why):
+        plan.append((path, _tree_bytes(path), why))
+
+    repos, cache_dirs = _hf_scan(hf)
+    repo_by_key = {os.path.normcase(os.path.abspath(r)): r for r in repos}
+    for oe in old_entries:
+        key = _entry_key(hf, oe)
+        full = repo_by_key.get(key)
+        if full is None or os.path.islink(full):
             continue
-        if os.path.islink(full):
-            continue
-        want_files = set(f["path"].replace("\\", "/") for f in e["files"])
-        want_blobs = set(f["sha256"] for f in e["files"])
+        ne = new_by_path.get(key)
+        same_rev = ne is not None and ne["revision"] == oe["revision"]
+        new_paths = set(f["path"].replace("\\", "/") for f in ne["files"]) if ne is not None else set()
+        # (revision, relative path) of everything some lock lists = what the app put there
+        listed = set((oe["revision"], f["path"].replace("\\", "/")) for f in oe["files"])
+        if ne is not None:
+            listed |= set((ne["revision"], f["path"].replace("\\", "/")) for f in ne["files"])
         snaps = os.path.join(full, "snapshots")
+        sp = os.path.join(snaps, oe["revision"])
+        mine = []     # (file path, sha256) the previous lock installed and the new lock does not need
+        for f in oe["files"]:
+            rel = f["path"].replace("\\", "/")
+            if same_rev and rel in new_paths:
+                continue
+            fp = os.path.join(sp, *rel.split("/"))
+            if os.path.lexists(fp):
+                mine.append((fp, f["sha256"]))
+        planned = set(os.path.normcase(os.path.abspath(fp)) for fp, _ in mine)
+        # what stays behind in the snapshots: files the new lock still uses, and the user's own files
+        user_files = []
+        referenced = set(f["sha256"] for f in ne["files"]) if ne is not None else set()
         if os.path.isdir(snaps):
-            for rev in sorted(os.listdir(snaps)):
-                rp = os.path.join(snaps, rev)
-                if rev != e["revision"]:
-                    add(rp, "other revision")
-                    continue
-                for dp, dn, fns in os.walk(rp):
-                    for fn in sorted(fns):
-                        fp = os.path.join(dp, fn)
-                        rel = os.path.relpath(fp, rp).replace("\\", "/")
-                        if rel not in want_files:
-                            add(fp, "file not in lock")
-                        elif os.path.islink(fp):
-                            want_blobs.add(os.path.basename(os.path.realpath(fp)))
+            for dp, dn, fns in os.walk(snaps):
+                parts = os.path.relpath(dp, snaps).replace("\\", "/").split("/")
+                rev = parts[0] if parts[0] != "." else ""
+                sub = "/".join(parts[1:])
+                for fn in fns:
+                    fp = os.path.join(dp, fn)
+                    if os.path.normcase(os.path.abspath(fp)) in planned:
+                        continue
+                    if os.path.islink(fp):
+                        referenced.add(os.path.basename(os.path.realpath(fp)))
+                    if (rev, (sub + "/" + fn) if sub else fn) not in listed:
+                        user_files.append(fp)
+        if ne is None and not user_files:
+            add(full, "repo dropped from the lock (installed by the app; none of your files in it)")
+            touched.append(full)
+            continue
+        for fp, _ in mine:
+            add(fp, "file the app installed, not used any more")
         blobs = os.path.join(full, "blobs")
+        cand = set(sha for _, sha in mine)
+        for fp, _ in mine:
+            if os.path.islink(fp):
+                cand.add(os.path.basename(os.path.realpath(fp)))
         if os.path.isdir(blobs):
-            for b in sorted(os.listdir(blobs)):
-                if b not in want_blobs:
-                    add(os.path.join(blobs, b), "unreferenced blob")
-        trees = os.path.join(full, "trees")
-        if os.path.isdir(trees):
-            for t in sorted(os.listdir(trees)):
-                if t != e["revision"] + ".json":
-                    add(os.path.join(trees, t), "tree of other revision")
+            for b in sorted(cand):
+                if b not in referenced and os.path.lexists(os.path.join(blobs, b)):
+                    add(os.path.join(blobs, b), "blob only those files used")
+        if not same_rev:
+            t = os.path.join(full, "trees", oe["revision"] + ".json")
+            if os.path.lexists(t):
+                add(t, "tree of the previous revision")
+        for u in user_files:
+            print("PRUNE keep %s [not installed by the app]" % os.path.relpath(u, hf), flush=True)
+        touched.append(full)
     for c in cache_dirs:
         add(c, "download cache")
 
@@ -442,8 +495,10 @@ def prunehf(lock_path, hf_dir, apply=False):
         except OSError as ex:
             print("PRUNE error %s: %s" % (os.path.relpath(path, hf), ex))
             errors += 1
-    # remove sub folders the deletions emptied
-    for full in repos:
+    # remove sub folders the deletions emptied (never a folder that still holds a file)
+    for full in touched:
+        if not os.path.isdir(full):
+            continue
         for dp, dn, fns in os.walk(full, topdown=False):
             if dp != full and not os.path.islink(dp) and not os.listdir(dp):
                 try:
@@ -452,6 +507,86 @@ def prunehf(lock_path, hf_dir, apply=False):
                     pass
     print("PRUNE_RESULT %s (deleted %d items, %.1f MB)" % ("OK" if not errors else "ERRORS %d" % errors, len(plan) - errors, total / 1e6))
     return 0
+
+
+# ---------------------------------------------------------------------------------------------- refs/main save / restore
+def _ref_files(hf):
+    """{path relative to hf: absolute path} of every file in refs/ of every model repo below hf."""
+    out = {}
+    repos, _ = _hf_scan(hf)
+    for full in repos:
+        for dp, dn, fns in os.walk(os.path.join(full, "refs")):
+            for fn in fns:
+                p = os.path.join(dp, fn)
+                out[os.path.relpath(p, hf).replace("\\", "/")] = p
+    return out
+
+
+def refsave(hf_dir, out_path):
+    """Remembers refs/main (and any other refs/*) of every model cache exactly as it is now."""
+    hf = os.path.abspath(hf_dir)
+    saved = {"refs": {}}
+    if os.path.isdir(hf):
+        for rel, p in _ref_files(hf).items():
+            with open(p, "rb") as f:
+                saved["refs"][rel] = f.read().decode("utf-8", "surrogateescape")
+    tmp = out_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(saved, f, ensure_ascii=True, indent=1)
+    os.replace(tmp, out_path)
+    print("REFSAVE_RESULT OK (%d refs)" % len(saved["refs"]))
+    return 0
+
+
+def refrestore(saved_path, hf_dir):
+    """Puts the refs back as refsave saw them: changed ones get their old content back, ones that did not exist before are removed."""
+    try:
+        saved = json.load(open(saved_path, encoding="utf-8"))
+    except (OSError, ValueError) as ex:
+        print("REFRESTORE_RESULT REFUSED (saved file unreadable: %s) - nothing changed" % ex)
+        return 1
+    if not isinstance(saved, dict) or not isinstance(saved.get("refs"), dict):
+        print("REFRESTORE_RESULT REFUSED (saved file has no valid 'refs' dict) - nothing changed")
+        return 1
+    hf = os.path.abspath(hf_dir)
+    hf_n = os.path.normcase(os.path.realpath(hf))
+    restored = removed = errors = 0
+    now = _ref_files(hf) if os.path.isdir(hf) else {}
+    if not saved["refs"] and now:
+        # refsave never writes an empty list while refs exist; an empty dict here would delete every current ref
+        print("REFRESTORE_RESULT REFUSED (saved refs are empty but %d refs exist now) - nothing changed" % len(now))
+        return 1
+    for rel, text in saved["refs"].items():
+        p = os.path.abspath(os.path.join(hf, *rel.split("/")))
+        if not os.path.normcase(os.path.realpath(p)).startswith(hf_n + os.sep):
+            print("REFRESTORE refused (outside the model folder): %s" % rel)
+            errors += 1
+            continue
+        data = text.encode("utf-8", "surrogateescape")
+        try:
+            if os.path.isfile(p):
+                with open(p, "rb") as f:
+                    if f.read() == data:
+                        continue
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(data)
+            restored += 1
+            print("REFRESTORE %s restored" % rel)
+        except OSError as ex:
+            print("REFRESTORE error %s: %s" % (rel, ex))
+            errors += 1
+    for rel, p in now.items():
+        if rel not in saved["refs"]:
+            try:
+                os.remove(p)
+                removed += 1
+                print("REFRESTORE %s removed (did not exist before)" % rel)
+            except OSError as ex:
+                print("REFRESTORE error %s: %s" % (rel, ex))
+                errors += 1
+    print("REFRESTORE_RESULT %s (restored %d, removed %d)" % ("OK" if not errors else "ERRORS %d" % errors, restored, removed))
+    return 0 if not errors else 1
 
 
 # ---------------------------------------------------------------------------------------------- LanguageTool
@@ -472,21 +607,26 @@ def languagetool(lock_path, backend):
             pass
     os.makedirs(root, exist_ok=True)
     zpath = os.path.join(root, "_download.zip")
-    print("downloading %s (%.0f MB)" % (lt["url"], lt["size"] / 1e6), flush=True)
-    urllib.request.urlretrieve(lt["url"], zpath)
-    if os.path.getsize(zpath) != lt["size"] or sha256_file(zpath) != lt["sha256"]:
-        os.remove(zpath)
-        print("LT_RESULT FAIL (sha256 mismatch)")
-        return 1
     tmp = os.path.join(root, "_extract")
-    shutil.rmtree(tmp, ignore_errors=True)
-    with zipfile.ZipFile(zpath) as z:
-        z.extractall(tmp)
-    dst = os.path.join(root, lt["dir"])
-    shutil.rmtree(dst, ignore_errors=True)
-    shutil.move(os.path.join(tmp, lt["dir"]), dst)
-    shutil.rmtree(tmp, ignore_errors=True)
-    os.remove(zpath)
+    try:
+        print("downloading %s (%.0f MB)" % (lt["url"], lt["size"] / 1e6), flush=True)
+        urllib.request.urlretrieve(lt["url"], zpath)
+        if os.path.getsize(zpath) != lt["size"] or sha256_file(zpath) != lt["sha256"]:
+            print("LT_RESULT FAIL (sha256 mismatch)")
+            return 1
+        shutil.rmtree(tmp, ignore_errors=True)
+        with zipfile.ZipFile(zpath) as z:
+            z.extractall(tmp)
+        dst = os.path.join(root, lt["dir"])
+        shutil.rmtree(dst, ignore_errors=True)
+        shutil.move(os.path.join(tmp, lt["dir"]), dst)
+    finally:
+        # success or failure (download error, bad hash, broken zip, Ctrl+C): no leftover download or extract folder
+        shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            os.remove(zpath)
+        except OSError:
+            pass
     with open(man, "w", encoding="utf-8") as f:
         json.dump({k: lt[k] for k in ("version", "dir", "url", "sha256", "size")}, f, indent=2)
     print("LT_RESULT OK (installed %s)" % lt["version"])
@@ -526,7 +666,12 @@ def main():
         print(dirsize(a[1], skips))
         return 0
     if cmd == "prunehf":
-        return prunehf(a[1], a[2], "--apply" in a)
+        old_lock = a[a.index("--old-lock") + 1] if "--old-lock" in a else None
+        return prunehf(a[1], a[2], "--apply" in a, old_lock)
+    if cmd == "refsave":
+        return refsave(a[1], a[2])
+    if cmd == "refrestore":
+        return refrestore(a[1], a[2])
     if cmd == "setcfg":
         setcfg(a[1], a[2], a[3])
         return 0

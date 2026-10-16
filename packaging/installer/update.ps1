@@ -8,7 +8,7 @@ param(
     [switch]$Yes,                                  # 질문에 자동으로 Y
     [switch]$CheckOnly,                            # 새 버전이 있는지만 확인
     [switch]$Force,                                # 같은 버전이어도 다시 적용
-    [string]$Source = $env:HOEHWA_UPDATE_SOURCE    # (테스트용) GitHub 대신 로컬 폴더: latest.json + 자산 파일
+    [string]$Source = $(if ($env:HOEHWA_TEST_MODE -eq "1") { $env:HOEHWA_UPDATE_SOURCE })   # (테스트용) GitHub 대신 로컬 폴더: latest.json + 자산 파일. 환경변수는 HOEHWA_TEST_MODE=1 일 때만 읽는다 (-Source 는 직접 적어야 하는 인자라 그대로 동작)
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -39,6 +39,9 @@ try {
 $script:LogW = New-Object System.IO.StreamWriter($LogFile, $true, (New-Object System.Text.UTF8Encoding($false)))
 $script:LogW.AutoFlush = $true
 function Log([string]$m) { $script:LogW.WriteLine((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + " " + $m) }
+# 테스트용 환경변수(HOEHWA_UPDATE_SOURCE / HOEHWA_OLLAMA_EXE / HOEHWA_UPDATE_FAIL / HOEHWA_PIP_DRYRUN)는 HOEHWA_TEST_MODE=1 을 명시했을 때만 동작한다.
+# 배포본을 쓰는 PC 에 우연히 남은 환경변수가 업데이트를 바꾸지 못하게 하기 위해서다.
+$TestMode = ($env:HOEHWA_TEST_MODE -eq "1")
 function Say([string]$m, [string]$color = "White") { Write-Host $m -ForegroundColor $color; Log $m }
 function Info([string]$m) { Say ("    " + $m) "Gray" }
 function Warn([string]$m) { Say ("    [주의] " + $m) "Yellow" }
@@ -111,9 +114,9 @@ function Get-TreeSize([string]$helper, [string[]]$Skip = @()) {
 }
 function Format-Size([int64]$b) { if ($b -lt 0) { return "?" }; return ("{0:N2} GB" -f ($b / 1GB)) }
 
-# Ollama (로컬 AI 를 쓰는 설치만 해당). HOEHWA_OLLAMA_EXE 는 테스트용으로 다른 실행 파일을 가리킨다.
+# Ollama (로컬 AI 를 쓰는 설치만 해당). HOEHWA_OLLAMA_EXE 는 테스트용(HOEHWA_TEST_MODE=1 일 때만)으로 다른 실행 파일을 가리킨다.
 function Find-OllamaExe {
-    if ($env:HOEHWA_OLLAMA_EXE) { return $env:HOEHWA_OLLAMA_EXE }
+    if ($TestMode -and $env:HOEHWA_OLLAMA_EXE) { return $env:HOEHWA_OLLAMA_EXE }
     $c = Get-Command ollama.exe -ErrorAction SilentlyContinue
     if ($c) { return $c.Source }
     foreach ($p in @((Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"), (Join-Path $env:ProgramFiles "Ollama\ollama.exe"))) {
@@ -122,7 +125,7 @@ function Find-OllamaExe {
     return $null
 }
 function Ensure-OllamaServing([string]$exe) {
-    if ($env:HOEHWA_OLLAMA_EXE) { return $true }
+    if ($TestMode -and $env:HOEHWA_OLLAMA_EXE) { return $true }
     $up = { try { Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 4 | Out-Null; return $true } catch { return $false } }
     if (& $up) { return $true }
     Start-Process -FilePath $exe -ArgumentList "serve" -WindowStyle Hidden | Out-Null
@@ -198,6 +201,8 @@ $pulledNew = $null        # 이번 실행에서 새로 받은 Ollama 모델 태�
 $oldOllamaTag = $null     # 성공하면 지울 옛 모델 태그
 $sizeBefore = -1
 Log "==================== 업데이트 시작 ===================="
+if ($TestMode) { Say "[테스트 모드] HOEHWA_TEST_MODE=1: 테스트용 환경변수를 사용합니다. 평소에는 켜지 않습니다." "Yellow" }
+elseif ($env:HOEHWA_UPDATE_SOURCE -or $env:HOEHWA_OLLAMA_EXE -or $env:HOEHWA_UPDATE_FAIL -or $env:HOEHWA_PIP_DRYRUN) { Log "HOEHWA_* 테스트용 환경변수가 있지만 HOEHWA_TEST_MODE=1 이 아니라서 무시합니다." }
 try {
     Say "=============================================" "Cyan"
     Say "   회화 연습 업데이트" "Cyan"
@@ -314,6 +319,9 @@ try {
         $backup = Join-Path $BackupDir $curVerText
         if (Test-Path -LiteralPath $backup) { $backup = $backup + "_" + (Get-Date -Format "yyyyMMdd-HHmmss") }
         New-Item -ItemType Directory -Force $backup | Out-Null
+        # 지금 설치된 모델 잠금 목록 = "앱이 설치한 파일" 목록. 새 파일로 바뀌기 전에 보관해 두고, 정리 때 이 목록에 있던 것만 지운다.
+        $oldLockCopy = Join-Path $backup "_old.models.lock.json"
+        if (Test-Path -LiteralPath (Join-Path $Vendor "models.lock.json")) { Copy-Item -LiteralPath (Join-Path $Vendor "models.lock.json") -Destination $oldLockCopy -Force }
         $oldFiles = @{}
         $oldManPath = Join-Path $Root "manifest.json"
         if (Test-Path -LiteralPath $oldManPath) {
@@ -374,9 +382,15 @@ try {
                 (Join-Path $Vendor "requirements.lock.txt"), (Join-Path $Vendor "bootstrap.lock.txt"), (Join-Path $Vendor "wheels"))
             if ($code -ne 0) { throw "파이썬 패키지 업데이트 실패" }
         } else { Info "파이썬 패키지: 변경 없음" }
-        if ($env:HOEHWA_UPDATE_FAIL -eq "after_packages") { throw "(테스트) 강제 실패: after_packages" }
+        if ($TestMode -and $env:HOEHWA_UPDATE_FAIL -eq "after_packages") { throw "(테스트) 강제 실패: after_packages" }
         if ($chg.models) {
             Info "음성 모델 목록이 바뀌었습니다. 바뀐 모델만 받습니다."
+            # install_models.py 가 refs\main 을 새 버전 값으로 바꾼다. 실패해서 되돌릴 때 원래 값으로 복구하려고 먼저 적어 둔다.
+            $script:HfRefsFile = Join-Path $backup "_hf_refs.json"
+            if ((Test-Path -LiteralPath $HfDir) -and ((Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "refsave", $HfDir, $script:HfRefsFile) -Quiet) -ne 0)) {
+                Warn "모델 캐시의 refs\main 값을 기록하지 못했습니다. 실패하면 모델 폴더는 되돌리지 못할 수 있습니다."
+                $script:HfRefsFile = $null
+            }
             $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "install_models.py"), (Join-Path $Vendor "models.lock.json"), $HfDir)
             if ($code -ne 0) { throw "음성 모델 업데이트 실패" }
         } else { Info "음성 모델: 변경 없음" }
@@ -421,13 +435,16 @@ try {
         } elseif ($chg.ollama -and $newLocks.ollama) {
             Info "참고: 개발 PC 의 로컬 AI 모델 내용이 바뀌었습니다(같은 태그). 로컬 AI 를 쓰면 'ollama pull' 로 최신 모델을 받을 수 있습니다."
         }
-        if ($env:HOEHWA_UPDATE_FAIL -eq "after_apply") { throw "(테스트) 강제 실패: after_apply" }
+        if ($TestMode -and $env:HOEHWA_UPDATE_FAIL -eq "after_apply") { throw "(테스트) 강제 실패: after_apply" }
 
         # 마무리: 버전 기록 (여기부터는 되돌리지 않는다)
         Copy-Item -LiteralPath $manPath -Destination (Join-Path $Root "manifest.json") -Force
         Write-Utf8 $verFile ($newVerText + "`r`n")
         New-Item -ItemType Directory -Force $StateDir | Out-Null
         Write-Utf8 (Join-Path $StateDir "installer_version.txt") ("" + $man.installer_version)
+        # 업데이트할 수 있었다 = 설치가 끝까지 됐다 = config.json 의 엔진은 이미 적혀 있다 (그 뒤 앱에서 바꿨을 수 있다).
+        # 표시 파일이 없던 v1.0.0 설치도 다시 설치할 때 앱에서 고른 엔진을 지키도록 install.ps1 의 표시를 만들어 둔다.
+        if (Test-Path -LiteralPath (Join-Path $StateDir "engine.txt")) { Write-Utf8 (Join-Path $StateDir "engine-config.ok") "1" }
         $phase = "done"
 
         # ------------------------------------------------ 정리: 쓰지 않는 것은 남기지 않는다
@@ -447,8 +464,12 @@ try {
             # 새 잠금 목록에 없는 모델 파일 (backend\models\hf 안에서만, 먼저 목록을 로그에 남긴다)
             if ($chg.models -and (Test-Path -LiteralPath $HfDir) -and (([System.IO.Path]::GetFullPath($HfDir)).StartsWith($Root.TrimEnd("\") + "\", [StringComparison]::OrdinalIgnoreCase))) {
                 $lockFile = Join-Path $Vendor "models.lock.json"
-                $null = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "prunehf", $lockFile, $HfDir) -Quiet     # 계획만 (update.log 에 기록)
-                $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "prunehf", $lockFile, $HfDir, "--apply")
+                # 옛 잠금 목록(앱이 설치했던 것)에 있던 파일만 지운다. 사용자가 직접 넣은 음성 팩/파일, 목록에 없는 모델은 그대로 둔다.
+                $pruneArgs = @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "prunehf", $lockFile, $HfDir)
+                if (Test-Path -LiteralPath $oldLockCopy) { $pruneArgs += @("--old-lock", $oldLockCopy) }
+                else { Info "이전 잠금 목록이 없어 모델 파일은 지우지 않습니다 (다운로드 임시 캐시만 정리)." }
+                $null = Invoke-Native $Py $pruneArgs -Quiet     # 계획만 (update.log 에 기록)
+                $code = Invoke-Native $Py ($pruneArgs + @("--apply"))
                 if ($code -ne 0) { Warn "쓰지 않는 모델 파일을 정리하지 못했습니다." }
             } else { Info "음성 모델 정리: 필요 없음 (목록 변경 없음)" }
             # 옛 Ollama 모델 (새 모델을 받은 뒤에만)
@@ -480,6 +501,11 @@ catch {
         $rolledBack = $false
         try {
             $st = $script:State
+            # 모델 캐시의 refs\main 을 원래 값으로 (이전 버전 앱이 이전 모델 스냅샷을 찾도록). 파일을 되돌리기 전에 한다: 그때는 vendor\update_helper.py 가 아직 refrestore 를 아는 새 버전이다.
+            if ($script:HfRefsFile -and (Test-Path -LiteralPath $script:HfRefsFile)) {
+                $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "refrestore", $script:HfRefsFile, $HfDir)
+                if ($code -ne 0) { Warn "모델 캐시의 refs\main 을 완전히 되돌리지 못했습니다. 설치.bat 을 다시 실행하면 복구됩니다." } else { Info "모델 캐시의 refs\main 을 원래 값으로 되돌렸습니다." }
+            }
             foreach ($rel in @($st.replaced) + @($st.removed) + @($st.special)) {
                 $src = Join-Path $backup ($rel -replace "/", "\")
                 if (Test-Path -LiteralPath $src) {

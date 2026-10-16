@@ -39,6 +39,25 @@ function Native([string]$exe, [string[]]$a, [switch]$AllowFail) {
     return ,@($out, $code)
 }
 
+# Cleanup must never fail silently: a leftover file or half-made release/tag that could not be removed is reported
+# with a visible warning (Write-Warning, yellow) and the script keeps going, so the original error is still what ends the run.
+function Remove-Leftover([string]$path) {
+    if (-not $path) { return }
+    try {
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop }
+    } catch {
+        Write-Warning ("cleanup failed: could not remove '$path' (" + $_.Exception.Message + ") - delete it by hand")
+    }
+}
+function Invoke-Cleanup([string]$what, [string]$exe, [string[]]$a) {
+    try {
+        $r = Native $exe $a -AllowFail
+        if ($r[1] -ne 0) { Write-Warning ("cleanup step failed: $what (exit $($r[1])) " + (@($r[0]) -join " | ") + " - harmless if that release/tag was never created, otherwise remove it by hand") }
+    } catch {
+        Write-Warning ("cleanup step failed: $what (" + $_.Exception.Message + ") - check it by hand")
+    }
+}
+
 # ---------------------------------------------------------------- checks
 Write-Host "== checks ($Repo $Tag)$(if ($DryRun) { ' [DRY RUN]' })" -ForegroundColor Cyan
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw "git not found" }
@@ -103,7 +122,7 @@ if (-not $SkipBuild) {
     }
     if ($SkipExport) { $args2 += "-SkipExport" }
     if ($GodotExe) { $args2 += @("-GodotExe", $GodotExe) }
-    try { & powershell.exe @args2 } finally { if ($buildNotes) { Remove-Item -LiteralPath $buildNotes -Force -ErrorAction SilentlyContinue } }
+    try { & powershell.exe @args2 } finally { Remove-Leftover $buildNotes }
     if ($LASTEXITCODE -ne 0) { throw "build_dist.ps1 failed" }
 }
 $prefix = if ($rel.asset_prefix) { $rel.asset_prefix } else { "app" }
@@ -138,12 +157,12 @@ try {
 } catch {
     # nothing may be left behind that blocks a retry: remove the half-made release and its tag (both were checked absent above)
     Write-Host "release failed - cleaning up so the same command can simply be run again" -ForegroundColor Yellow
-    Native gh @("release", "delete", $Tag, "--repo", $Repo, "--yes", "--cleanup-tag") -AllowFail | Out-Null
-    Native git @("-C", $App, "push", "origin", "--delete", "refs/tags/$Tag") -AllowFail | Out-Null
-    Native git @("-C", $App, "tag", "-d", $Tag) -AllowFail | Out-Null
+    Invoke-Cleanup "delete GitHub release $Tag" gh @("release", "delete", $Tag, "--repo", $Repo, "--yes", "--cleanup-tag")
+    Invoke-Cleanup "delete remote tag $Tag" git @("-C", $App, "push", "origin", "--delete", "refs/tags/$Tag")
+    Invoke-Cleanup "delete local tag $Tag" git @("-C", $App, "tag", "-d", $Tag)
     throw
 } finally {
-    Remove-Item -LiteralPath $notesTmp -Force -ErrorAction SilentlyContinue
+    Remove-Leftover $notesTmp
 }
 Native git @("-C", $App, "fetch", "origin", "--quiet", "--tags") -AllowFail | Out-Null    # local copy of the tag gh created
 Write-Host "DONE: https://github.com/$Repo/releases/tag/$Tag" -ForegroundColor Green
