@@ -3,7 +3,7 @@ extends Node
 
 signal status_changed
 
-enum Status { IDLE, CHECKING, STARTING, READY, FAILED }
+enum Status { IDLE, CHECKING, STARTING, READY, FAILED, NEEDS_PAIRING }
 
 const MAX_WAIT_SECONDS := 90
 const HEALTH_REFRESH_SECONDS := 15.0
@@ -13,6 +13,7 @@ var health: Dictionary = {}
 var message: String = ""
 var pid: int = -1
 var launched_by_us: bool = false
+var remote_mode: bool = false   # phone: talk to a paired PC backend instead of launching one (W2)
 
 var _starting: bool = false
 var _fail_streak: int = 0
