@@ -47,7 +47,7 @@ BLOCK_EN = re.compile(
     # violence, death, weapons
     r"kill\w*|die[sd]?|dying|dead(ly)?|death\w*|murder\w*|suicid\w*|assassin\w*|massacre\w*|genocid\w*|slaughter\w*|lynch\w*|"
     r"strangl\w*|hostages?|abduct\w*|hanged|assault\w*|kidnap\w*|tortur\w*|violen\w*|"
-    r"guns?|pistols?|rifles?|gun(man|men|fire|shot|shots|point|powder)|shoot\w*|shot|shots|bomb(s|ed|er|ers|ing|ings|ard\w*|shells?)?|"
+    r"guns?|pistols?|rifles?|gun(man|men|fire|shot|shots|point|powder)|bomb(s|ed|er|ers|ing|ings|ard\w*|shells?)?|"
     r"wars?|warfare|weapons?|knife|knives|knifed|blood\w*|corpses?|"
     # sex, abuse, crime
     r"sex(es|y|ier|iest|ual\w*|ist\w*|ism)?|naked|nude[sd]?|nudity|porn\w*|rap(e|ed|es|ing|ist|ists)|molest\w*|pedophil\w*|paedophil\w*|"
@@ -92,8 +92,18 @@ for _s in sorted(JA_STEMS, key=len, reverse=True):
     _JA_BY_FIRST.setdefault(_s[0], []).append(_s)
 _HIRA = re.compile(r"[ぁ-ゟ]+")
 _ja_cache = {}
-BLOCK_RULES_VERSION = "2"  # bump when the matching logic (not the word lists) changes: it is part of the pool cache signature
-BLOCK_KO = re.compile(r"죽|살인|섹스|씨발|젠장|멍청|바보|마약|자살|총|전쟁|지옥|감옥|담배|테러|폭탄|포르노|강간")
+BLOCK_RULES_VERSION = "3"  # bump when the matching logic (not the word lists) changes: it is part of the pool cache signature
+# Korean: 총 / 죽 alone are NOT blocked (총장 총무 총 3개 / 호박죽 죽 한 그릇 are fine): only the weapon / killing / dying forms are.
+# 죽 counts only at the start of a word (a preceding syllable means 호박죽 / 팥죽 ...) and only with a verb ending (죽이 / 죽을 먹다 pass).
+BLOCK_KO = re.compile(
+    r"살인|섹스|씨발|젠장|멍청|바보|마약|자살|전쟁|지옥|감옥|담배|테러|폭탄|포르노|강간"
+    r"|총기|총격|총살|총탄|총알|총소리|총성|총질|총포|총잡이|총부리|총상(?!금)|권총|기관총|소총|엽총|총으로"
+    r"|(?<![가-힣])총(?:이|을|를|은|는|과|와)(?![가-힣])"
+    r"|총에 ?(?:맞|쏘|찔)|총 ?[을를]? ?(?:쏘|쏜|쐈|쏴|쏠|겨누|난사|맞(?:았|아|은|는|고|지|기))"
+    r"|(?<![가-힣])죽(?:이[다고는지면려라며]|인|임|였|여|일|어|음|으(?!로)|고|는|자|지|기|도록|겠|었|다|나|네|습|게"
+    r"|은(?! ?(?:맛|건강|먹|따뜻|뜨거|부드|소화|영양|아침|한 |한국)))"
+    r"|(?<![가-힣])죽을(?! ?(?:먹|끓|쑤|만들|주문|시키|사|드|데우|좋아|싫어|한 |그릇))"
+    r"|(?:굶어|얼어|맞아|빠져|따라|타|때려|쳐|치어|깔려|밟혀|눌려|말라|목매)죽")
 
 
 def _ja_blocked(text):
@@ -144,9 +154,35 @@ def _ja_blocked(text):
     return hit
 
 
+# English shoot / shot: blocked as violence, unless it is a harmless sense (shoot photos, a flu shot, give it a shot, a good shot ...)
+BLOCK_EN_SHOOT = re.compile(r"\b(?:shoot\w*|shot|shots)\b", re.I)
+_DET = r"(?:(?:a|an|the|some|any|my|your|his|her|our|their|more|many|good|nice|great|beautiful|new|few|lot|lots|of)\s+){0,3}"
+# a person / group as the target: "a shot at him", "a good shot at the police" stay blocked
+_TGT = (r"(?:him|her|them|me|you|us|people|someone|somebody|everyone|anyone|"
+        r"(?:the|a|an)\s+(?:\w+\s+)?(?:man|men|woman|women|boy|girl|police\w*|cops?|guards?|officers?|enemy|enemies|soldiers?|"
+        r"president|children|kids?|crowd|passers?-?by|students?|teachers?|neighbou?rs?))\b")
+_EN_SHOOT_OK = re.compile(
+    r"\b(?:shoot|shoots|shooting|shot)\s+" + _DET + r"(?:photos?|photographs?|pictures?|pics?|films?|videos?|movies?|scenes?|footage|"
+    r"hoops?|baskets?|commercials?|portraits?|selfies?|documentar\w+|episodes?|trailers?|balls?|goals?|penalt\w+|free\s+throws?|pool|dice)\b"
+    r"|\b(?:photo|film|video|fashion|wedding|magazine|movie|photography|commercial)\s+shoots?\b"
+    r"|\b(?:bamboo|bean|pea|new|young|green)\s+shoots?\b"
+    r"|\bshooting\s+stars?\b|\bshoots?\s+(?:the\s+)?breeze\b|\bshoot(?:s|ing)?\s+for\s+(?:the\s+)?(?:moon|stars|gold)\b"
+    r"|\bshot\s+put\b|\bshot\s+clock\b|\bshot\s+glass(?:es)?\b|\bshots?\s+of\s+(?:espresso|coffee|syrup)\b"
+    r"|\b(?:flu|covid|booster|vaccin\w*|tetanus|allergy|measles|polio|insulin|b12|\d+(?:st|nd|rd|th))\s+shots?\b"
+    r"|\b(?:give|gave|giving|gives|take|took|taking|takes|have|had|having)\s+(?:it|this|that)\s+(?:a|one)\s+(?:good\s+)?shot\b"
+    r"|\b(?:take|took|taking|takes)\s+" + _DET + r"(?:\w+\s+)?shots?\s+of\s+(?!" + _TGT + r")"
+    r"|\ba\s+shot\s+at\s+(?!" + _TGT + r")"
+    r"|\b(?:good|nice|great|best|long|big|hot|jump|slap|free|wide|close-up)\s+shots?\b(?!\s+(?:at|into|through|to)\s+" + _TGT + r")", re.I)
+
+
+def _en_shoot_blocked(text):
+    rest = _EN_SHOOT_OK.sub(" ", text)
+    return bool(BLOCK_EN_SHOOT.search(rest))
+
+
 def blocked(text):
     """True if `text` (a sentence, option, distractor word or tile in either language) is on the block list"""
-    return bool(BLOCK_EN.search(text) or _ja_blocked(text))
+    return bool(BLOCK_EN.search(text) or _en_shoot_blocked(text) or _ja_blocked(text))
 
 SEED = {
     "en": {1: "name meet from student work like brother sister family hobby thank sorry nice",
@@ -245,7 +281,7 @@ def warmup():
 def _db_sig():
     st = os.stat(reading.DB_PATH)
     # the block lists are part of the signature: editing them makes old pool caches refresh
-    bl = hashlib.md5("".join((BLOCK_EN.pattern, BLOCK_JA.pattern, " ".join(JA_STEMS), BLOCK_KO.pattern, BLOCK_RULES_VERSION,
+    bl = hashlib.md5("".join((BLOCK_EN.pattern, BLOCK_EN_SHOOT.pattern, _EN_SHOOT_OK.pattern, BLOCK_JA.pattern, " ".join(JA_STEMS), BLOCK_KO.pattern, BLOCK_RULES_VERSION,
                                   VOCAB_RULES_VERSION)).encode("utf-8")).hexdigest()[:8]
     return "%s-%s-%d-%d" % (POOL_VERSION, bl, st.st_size, int(st.st_mtime))
 

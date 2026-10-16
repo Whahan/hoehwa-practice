@@ -269,6 +269,91 @@ def test_block_list(n=200):
     print("  required words all caught: %s; innocent texts all pass: %s" % (not miss, not over))
 
 
+def _block_cases(lr, passes, blocks):
+    """returns the list of wrong answers of lr.blocked / lr.BLOCK_KO: a text in `passes` that is blocked, or in `blocks` that is not"""
+    hit = lambda t_: bool(lr.blocked(t_) or lr.BLOCK_KO.search(t_))
+    return ["should PASS but blocked: %r" % t_ for t_ in passes if hit(t_)] + ["should be BLOCKED but passes: %r" % t_ for t_ in blocks if not hit(t_)]
+
+
+def test_block_ko_en_cases():
+    """Korean 총 / 죽 and English shoot / shot: innocent senses pass, violent senses are still blocked (v1.0.1)"""
+    print("\n== Korean 총/죽 and English shoot/shot block cases")
+    lr = _inproc()
+    ko_pass = ["총장님이 오셨어요.", "총무가 회의를 열었어요.", "총 3개를 샀어요.", "호박죽을 먹었어요.", "죽을 먹어요.", "죽 한 그릇 주세요.", "팥죽이 맛있어요.",
+               "죽은 건강에 좋아요.", "죽으로 아침을 먹어요.", "총리가 연설했어요.", "총합은 10이에요.", "총이익이 늘었어요.", "총상금은 만 원이에요.",
+               "전복죽을 끓였어요.", "어죽을 먹었어요.", "총회에 참석했어요."]
+    ko_block = ["총으로 쏘다", "권총을 샀어요.", "죽이다", "죽었어요.", "굶어죽다", "총이 있어요.", "총에 맞았어요.", "그는 사람을 죽였어요.", "죽고 싶어요.",
+                "총소리가 났어요.", "기관총을 들었어요.", "총을 쏘았어요.", "죽을 것 같아요.", "얼어죽을 뻔했어요.", "소총과 엽총"]
+    en_pass = ["I like to shoot photos.", "We had a photo shoot.", "I got a flu shot.", "Give it a shot.", "Look at the shooting star.",
+               "He loves to shoot hoops.", "They are shooting a movie.", "Bamboo shoots are tasty.", "That was a good shot.", "Let's shoot the breeze.",
+               "I took some shots of the lake.", "She will shoot a video tomorrow.", "He got his booster shot."]
+    en_block = ["Shoot him!", "He was shot.", "They were shooting at people.", "I heard a gunshot.", "He fired three shots at him.",
+                "Don't shoot the president.", "She took a shot at him.", "He fired 3 shots.", "The police shot the man.", "A shooter was in the school.",
+                "They shot the dog.", "He got shot in the leg."]
+    wrong = _block_cases(lr, ko_pass + en_pass, ko_block + en_block)
+    print("  Korean %d pass + %d block, English %d pass + %d block: %d wrong" % (len(ko_pass), len(ko_block), len(en_pass), len(en_block), len(wrong)))
+    fails.extend("block case: " + w_ for w_ in wrong)
+    # negative control: a wrong expectation must be reported
+    ctl = _block_cases(lr, ["총으로 쏘다"], ["총장님이 오셨어요."])
+    if len(ctl) != 2:
+        fails.append("block case checker did not report 2 wrong expectations (got %s)" % ctl)
+
+
+def test_finish_ex_ja():
+    """finish_ex on AI Japanese: Chinese-only characters are swapped for their Japanese form or dropped, an item that would be left
+    empty / broken is thrown away, and real Japanese (髙橋 﨑山 普通) is never touched (v1.0.1)"""
+    print("\n== finish_ex: Chinese-only characters in AI Japanese")
+    sys.argv += ["--port", "8799", "--tag", "unit_fallback", "--stt-cpu"]
+    sys.path.insert(0, HERE)
+    cwd = os.getcwd()
+    os.chdir(HERE)
+    try:
+        import server
+    finally:
+        os.chdir(cwd)
+    CN = "买这们个吗"
+    bad_chars = lambda r_: [c for c in json.dumps(r_, ensure_ascii=False) if c in CN]
+
+    def check(name, e, want):   # want: None (item thrown away) or a function(result) -> True
+        r = server.finish_ex(e, "ja")
+        ok = (r is None) if want is None else (r is not None and want(r) and not bad_chars(r))
+        print("  %-30s -> %s" % (name, "None" if r is None else json.dumps({k: v for k, v in r.items() if k in ("options", "sentence", "audio", "answer", "extra", "text")}, ensure_ascii=False)[:100]))
+        if not ok:
+            fails.append("finish_ex ja %s: %s" % (name, r))
+        return ok
+
+    check("choice 买 -> 買", {"type": "choice", "question": "どれ?", "options": ["本を买います", "本を読みます", "水を飲みます", "寝ます"], "answer": 0, "explain": ""},
+          lambda r: "本を買います" in r["options"] and r["options"][r["answer"]] == "本を買います")
+    check("choice option only 这 -> None", {"type": "choice", "question": "?", "options": ["这", "本", "水", "寝"], "answer": 1, "explain": ""}, None)
+    check("fill option 买 -> 買", {"type": "fill", "sentence": "私は本を___。", "options": ["买います", "読みます", "食べます", "寝ます"], "answer": 1, "ko": "x", "explain": ""},
+          lambda r: "買います" in r["options"] and r["sentence"] == "私は本を___。")
+    check("fill sentence 这 -> None", {"type": "fill", "sentence": "这は___です。", "options": ["本", "水", "犬", "猫"], "answer": 0, "ko": "x", "explain": ""}, None)
+    check("build token 们 -> 達", {"type": "build", "ko": "x", "answer": ["私は", "们", "買います"], "extra": ["本"], "explain": ""},
+          lambda r: r["answer"] == ["私は", "達", "買います"])
+    check("build extra 这 dropped", {"type": "build", "ko": "x", "answer": ["私は", "本を", "买います"], "extra": ["这", "読み"], "explain": ""},
+          lambda r: r["answer"] == ["私は", "本を", "買います"] and r["extra"] == ["読み"])
+    check("build token only 这 -> None", {"type": "build", "ko": "x", "answer": ["私は", "这", "買います"], "extra": [], "explain": ""}, None)
+    check("speak 买 -> 買", {"type": "speak", "text": "本を买います。", "ko": "x"}, lambda r: r["text"] == "本を買います。")
+    check("speak only 这 -> None", {"type": "speak", "text": "这", "ko": "x"}, None)
+    check("listen 们 -> 達", {"type": "listen", "audio": "彼们は学校へ行きます。", "options": ["a", "b", "c", "d"], "answer": 0, "explain": ""},
+          lambda r: r["audio"] == "彼達は学校へ行きます。")
+    # real Japanese must come back unchanged
+    check("name 髙橋 﨑山 普通 (speak)", {"type": "speak", "text": "髙橋さんは普通の人です。", "ko": "x"}, lambda r: r["text"] == "髙橋さんは普通の人です。")
+    check("name 﨑山 (listen)", {"type": "listen", "audio": "﨑山さんは髙橋さんと会います。", "options": ["a", "b", "c", "d"], "answer": 0, "explain": ""},
+          lambda r: r["audio"] == "﨑山さんは髙橋さんと会います。")
+    check("name tokens (build)", {"type": "build", "ko": "x", "answer": ["髙橋さんは", "﨑山さんと", "普通に", "会います"], "extra": [], "explain": ""},
+          lambda r: r["answer"] == ["髙橋さんは", "﨑山さんと", "普通に", "会います"])
+    check("name fill + options", {"type": "fill", "sentence": "髙橋さんは___です。", "options": ["普通", "﨑山", "本", "水"], "answer": 0, "ko": "x", "explain": ""},
+          lambda r: r["sentence"] == "髙橋さんは___です。" and {"普通", "﨑山"} <= set(r["options"]))
+    check("name choice options", {"type": "choice", "question": "?", "options": ["髙橋", "﨑山", "普通", "学校"], "answer": 0, "explain": ""},
+          lambda r: sorted(r["options"]) == sorted(["髙橋", "﨑山", "普通", "学校"]) and r["options"][r["answer"]] == "髙橋")
+    # negative control: the checker must notice a Chinese-only character that is left in
+    n_before = len(fails)
+    if check("(control) wrong expectation", {"type": "speak", "text": "本を买います。", "ko": "x"}, lambda r: r["text"] == "本を买います。"):
+        fails.append("finish_ex checker did not notice a wrong expectation")
+    del fails[n_before:]
+
+
 def test_option_words(n=150):
     """wrong options of fill exercises and extra tiles of build exercises (English) must be independent, reasonably common words"""
     print("\n== English wrong options / extra tiles over %d lessons: real words only" % n)
@@ -512,6 +597,8 @@ def main():
         test_db_validity()
         test_known_bad()
         test_ai_fallback()
+        test_block_ko_en_cases()
+        test_finish_ex_ja()
     print("\n%d problem(s)" % len(fails))
     for f in fails[:40]:
         print("  FAIL", f)

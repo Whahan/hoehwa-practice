@@ -2039,8 +2039,19 @@ def finish_ex(e, lang):
     t = e["type"]
     out = {"type": t}
     s = lambda k: str(e.get(k, "") or "").strip()
+    def jf(x):   # Chinese-only characters in the AI's Japanese: swapped for their Japanese form; no Japanese form -> "" (dropping it would leave a broken sentence)
+        if lang != "ja":
+            return x
+        bad = set(ja_text_foreign(x))
+        if not bad:
+            return x.strip()
+        if any(not SIMP_TO_JA.get(c) for c in bad):
+            return ""
+        return ja_fix_foreign(x).strip()
     if t in ("choice", "fill", "listen"):
-        opts = [re.sub(r"^\s*[A-Da-d1-4][\.\)．）:]\s+", "", o).strip() for o in e["options"]]
+        opts = [jf(re.sub(r"^\s*[A-Da-d1-4][\.\)．）:]\s+", "", o).strip()) for o in e["options"]]
+        if not all(opts):   # an option that was only Chinese-only characters is gone
+            return None
         correct = opts[e["answer"]]
         uniq = []
         for o in opts:
@@ -2055,7 +2066,7 @@ def finish_ex(e, lang):
         out["question"] = s("question")
         out["explain"] = s("explain")
     elif t == "fill":
-        out["sentence"] = re.sub(r"[_＿]{2,}|…{2,}|\.{4,}", "___", s("sentence"))
+        out["sentence"] = jf(re.sub(r"[_＿]{2,}|…{2,}|\.{4,}", "___", s("sentence")))
         if out["sentence"].count("___") != 1:
             return None
         out["ko"] = s("ko")
@@ -2063,22 +2074,25 @@ def finish_ex(e, lang):
         filled = out["sentence"].replace("___", out["options"][out["answer"]], 1)
         out["reading"] = ja_reading(out["sentence"]) if lang == "ja" else ""  # keeps ___
     elif t == "listen":
-        out["audio"] = s("audio")
-        if len(out["audio"]) > 140:
+        out["audio"] = jf(s("audio"))
+        if not out["audio"] or len(out["audio"]) > 140:
             return None
         out["explain"] = s("explain")
         out["reading"] = ja_reading(out["audio"]) if lang == "ja" else ""
     elif t == "build":
-        ans = [x.strip() for x in e["answer"]]
-        extra = [x.strip() for x in (e.get("extra") or []) if isinstance(x, str) and x.strip() and x.strip() not in ans][:2]
+        ans = [jf(x.strip()) for x in e["answer"]]
+        if not all(ans):   # a token that was only Chinese-only characters is gone: no sentence left to build
+            return None
+        extra = [jf(x.strip()) for x in (e.get("extra") or []) if isinstance(x, str) and x.strip()]
+        extra = [x for x in extra if x and x not in ans][:2]
         out["ko"] = s("ko")
         out["answer"] = ans
         out["extra"] = extra
         out["explain"] = s("explain")
         out["reading"] = ja_reading("".join(ans)) if lang == "ja" else ""
     elif t == "speak":
-        out["text"] = s("text")
-        if len(out["text"]) > 140:
+        out["text"] = jf(s("text"))
+        if not out["text"] or len(out["text"]) > 140:
             return None
         out["ko"] = s("ko")
         out["reading"] = ja_reading(out["text"]) if lang == "ja" else ""
@@ -2452,6 +2466,9 @@ def ensure_ollama():
         return
     except Exception:
         pass
+    if ("ollama_url",) in _OVERRIDES:   # --ollama-url points at another (test) server: never start the real Ollama app for it
+        log.info("ollama_url forced by --ollama-url: not starting the Ollama app")
+        return
     exe = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama app.exe")
     if not os.path.exists(exe):
         log.warning("Ollama is not running and %s was not found", exe)
