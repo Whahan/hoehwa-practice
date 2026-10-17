@@ -520,7 +520,7 @@ backend/data/sync/
 
 공통 규칙: 각 작업자는 **표의 "수정 허용"** 만 고친다. 임시 파일은 `scratchpad\w_<ID>\`. 프로세스는 자기가 시작한 PID 만 종료. 포트는 `18791~18799` 중 비어 있는 것. 보고 맨 앞에 합격 조건 표(항목/O·X/근거), 실행 안 한 항목은 "미검증". 새 `class_name` 이 생기면 `GODOT --headless --path D:\Ai\언어\app\godot --import` 로 캐시를 갱신한다. `godot/scripts/ui/*`, `godot/tests/touch_scroll_test.*` 는 다른 작업자가 고치는 중이므로 **읽기만**.
 
-표기: PY = `D:\Ai\언어\app\backend\.venv\Scripts\python.exe`, GODOT = `C:\Users\rtyu6\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe`.
+표기: PY = `D:\Ai\언어\app\backend\.venv\Scripts\python.exe`, GODOT = `%USERPROFILE%\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe`.
 
 | ID | 담당 | 내용 | 수정 허용(소유) | 의존 | 동시 가능 |
 |---|---|---|---|---|---|
