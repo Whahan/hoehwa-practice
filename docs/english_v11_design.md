@@ -495,7 +495,7 @@ T0 ─► T4 (미션 화면) ─────────────────
 
 | 함수 | 반환 | 설명 |
 |---|---|---|
-| `reload()` / `flush()` / `reset()` | void / bool / void | 읽기 / 저장(바뀐 것이 있을 때) / 전부 삭제 |
+| `load_from_disk()` / `flush()` / `reset()` | void / bool / void | 읽기 / 저장(바뀐 것이 있을 때) / 전부 삭제. (이름이 `reload` 인 함수는 만들지 않는다: 클래스 이름으로 `reload` 를 부르면 Godot 내장 `GDScript.reload()` 가 실행돼 static 변수를 초기화한다) |
 | `static var path` | String | 기본 `user://studylog.json` (테스트가 바꿈) |
 | `add_seconds(lang, view, sec)` | void | 공부 시간 |
 | `add_event(lang, kind, n=1)` | void | `kind` ∈ lessons, talks, missions, reviews, shadow, dictation, drill |
@@ -540,7 +540,7 @@ Stop-Process -Id $srv.Id
 
 | ID | 조건 | 확인 | 기대 |
 |---|---|---|---|
-| T0-1 | 8.4의 `StudyLog` 함수 17개가 정확한 이름·인자로 있음 | `Select-String -Path $G\scripts\core\study_log.gd -Pattern '^static func (reload\|flush\|reset\|add_seconds\|add_event\|add_lesson\|add_score\|add_mission\|mission_best\|goal_minutes\|set_goal_minutes\|today_seconds\|settle\|streak\|tokens\|range_summary\|weak_phonemes)\(' \| Measure-Object` | Count = 17 |
+| T0-1 | 8.4의 `StudyLog` 함수 17개가 정확한 이름·인자로 있음 | `Select-String -Path $G\scripts\core\study_log.gd -Pattern '^static func (load_from_disk\|flush\|reset\|add_seconds\|add_event\|add_lesson\|add_score\|add_mission\|mission_best\|goal_minutes\|set_goal_minutes\|today_seconds\|settle\|streak\|tokens\|range_summary\|weak_phonemes)\(' \| Measure-Object` | Count = 17 |
 | T0-2 | 뼈대는 아무것도 하지 않고 오류 없이 값을 돌려줌 | 헤드리스 짧은 스크립트가 아니라 `smoke.tscn` 실행 | 종료 코드 0, 기존 smoke 통과 수가 T0 전과 같음 |
 | T0-3 | `MissionScreen`이 신호 `closed`, 메서드 `open(lang, args)`을 가짐 | `Select-String -Path ...mission_screen.gd -Pattern 'signal closed','func open\('` | 2줄 일치 |
 | T0-4 | 금지: 위 3개 외 파일 변경 없음 | `git -C D:\Ai\언어\app status --short` | 신규 파일(.gd와 .uid) 3쌍만 |

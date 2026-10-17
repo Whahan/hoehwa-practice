@@ -1,0 +1,156 @@
+{
+ "lang": "en",
+ "unsupported": false,
+ "missions": [
+  {
+   "id": "job_interview",
+   "title_ko": "면접",
+   "situation_ko": "영어 면접.",
+   "min_stage": 4,
+   "max_turns": 12,
+   "opening": "Thanks for coming in today.",
+   "goals": [
+    {
+     "id": "intro",
+     "label_ko": "자기소개",
+     "hint_en": "Let me introduce myself."
+    }
+   ],
+   "scenario": {
+    "id": "mission:job_interview",
+    "title": "면접",
+    "persona": "Daniel, a hiring manager",
+    "scene": "Interview."
+   },
+   "script": []
+  },
+  {
+   "id": "cafe_order",
+   "title_ko": "카페에서 음료 주문하기",
+   "situation_ko": "시애틀 카페 카운터. 인사하고, 음료와 사이즈를 말한 뒤, 계산하고 감사 인사를 하세요.",
+   "min_stage": 1,
+   "max_turns": 10,
+   "opening": "Hi there! What can I get started for you today?",
+   "goals": [
+    {
+     "id": "greet",
+     "label_ko": "인사하기",
+     "hint_en": "Hi, good morning!"
+    },
+    {
+     "id": "order_drink",
+     "label_ko": "음료를 주문하기",
+     "hint_en": "I'd like a latte, please."
+    },
+    {
+     "id": "ask_size",
+     "label_ko": "사이즈 말하기",
+     "hint_en": "A medium, please."
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사하기",
+     "hint_en": "Thank you so much!"
+    }
+   ],
+   "scenario": {
+    "id": "mission:cafe_order",
+    "title": "카페에서 음료 주문하기",
+    "persona": "Emma, a friendly barista at a coffee shop in Seattle",
+    "scene": "The learner is a customer at the counter. Your opening line was: \"Hi there! What can I get started for you today?\"."
+   },
+   "script": [
+    {
+     "ai": "Hi there! What can I get started for you today?",
+     "goal": "greet",
+     "model": "Hi, good morning!"
+    },
+    {
+     "ai": "Good morning! What can I get you?",
+     "goal": "order_drink",
+     "model": "I'd like a latte, please."
+    },
+    {
+     "ai": "Sure. What size would you like?",
+     "goal": "ask_size",
+     "model": "A medium, please."
+    },
+    {
+     "ai": "That'll be four fifty. Here you go!",
+     "goal": "thank",
+     "model": "Thank you so much!"
+    }
+   ]
+  },
+  {
+   "id": "hotel_checkin",
+   "title_ko": "호텔 체크인",
+   "situation_ko": "런던 호텔 프런트에서 체크인하세요.",
+   "min_stage": 2,
+   "max_turns": 8,
+   "opening": "Good evening. Welcome to the Rosewood Hotel.",
+   "goals": [
+    {
+     "id": "say_name",
+     "label_ko": "예약 이름 말하기",
+     "hint_en": "I have a reservation under Kim."
+    },
+    {
+     "id": "ask_wifi",
+     "label_ko": "와이파이 묻기",
+     "hint_en": "Is there free Wi-Fi?"
+    },
+    {
+     "id": "ask_breakfast",
+     "label_ko": "조식 시간 묻기",
+     "hint_en": "What time is breakfast?"
+    }
+   ],
+   "scenario": {
+    "id": "mission:hotel_checkin",
+    "title": "호텔 체크인",
+    "persona": "Olivia, a front desk clerk at a hotel in London",
+    "scene": "Check in."
+   },
+   "script": [
+    {
+     "ai": "Good evening. Welcome to the Rosewood Hotel.",
+     "goal": "say_name",
+     "model": "I have a reservation under Kim."
+    }
+   ]
+  },
+  {
+   "id": "broken_nogoals",
+   "title_ko": "목표 없음",
+   "situation_ko": "x",
+   "min_stage": 1,
+   "max_turns": 5,
+   "opening": "Hi",
+   "goals": [],
+   "scenario": {},
+   "script": []
+  },
+  "not a dict",
+  42,
+  {
+   "title_ko": "id 없음",
+   "goals": [
+    {
+     "id": "a",
+     "label_ko": "a"
+    }
+   ]
+  },
+  {
+   "id": "cafe_order",
+   "title_ko": "중복 id",
+   "goals": [
+    {
+     "id": "x",
+     "label_ko": "x"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,29 @@
+{
+ "mission_id": "cafe_order",
+ "goals": [
+  {
+   "id": "greet",
+   "done": true,
+   "new": false
+  },
+  {
+   "id": "order_drink",
+   "done": true,
+   "new": true
+  },
+  {
+   "id": "ask_size",
+   "done": false,
+   "new": false
+  },
+  {
+   "id": "thank",
+   "done": false,
+   "new": false
+  }
+ ],
+ "new": [
+  "order_drink"
+ ],
+ "all_done": false
+}

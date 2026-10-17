@@ -27,6 +27,7 @@ const DEFAULT_PREFS := {
 }
 
 var progress_path: String = PROGRESS_PATH
+var prefs_path: String = PREFS_PATH ## tests point this at a temp file
 var progress: Dictionary = Progress.blank()
 var prefs: Dictionary = DEFAULT_PREFS.duplicate(true)
 var curriculum: Dictionary = {}
@@ -55,8 +56,8 @@ func save_progress() -> void:
 
 func load_prefs() -> void:
 	prefs = DEFAULT_PREFS.duplicate(true)
-	if FileAccess.file_exists(PREFS_PATH):
-		var f := FileAccess.open(PREFS_PATH, FileAccess.READ)
+	if FileAccess.file_exists(prefs_path):
+		var f := FileAccess.open(prefs_path, FileAccess.READ)
 		if f != null:
 			var parsed: Variant = JSON.parse_string(f.get_as_text())
 			if parsed is Dictionary:
@@ -65,7 +66,7 @@ func load_prefs() -> void:
 
 
 func save_prefs() -> void:
-	var f := FileAccess.open(PREFS_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(prefs_path, FileAccess.WRITE)
 	if f != null:
 		f.store_string(JSON.stringify(prefs, "\t"))
 	prefs_changed.emit()

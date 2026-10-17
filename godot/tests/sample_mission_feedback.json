@@ -1,0 +1,31 @@
+{
+ "scores": {
+  "fluency": 4,
+  "accuracy": 3,
+  "vocabulary": 4
+ },
+ "summary": "주문 표현을 자연스럽게 썼어요. 다음에는 사이즈를 먼저 말해 보세요.",
+ "corrections": [
+  {
+   "you": "I want latte",
+   "better": "I'd like a latte, please.",
+   "reading": "",
+   "ko": "라테 한 잔 주세요.",
+   "why": "I want 보다 I'd like 가 공손해요."
+  },
+  {
+   "you": "Is it ok card",
+   "better": "Can I pay by card?",
+   "reading": "",
+   "ko": "카드로 계산해도 되나요?",
+   "why": "문장 전체를 말해요."
+  }
+ ],
+ "phrases": [
+  {
+   "phrase": "For here or to go?",
+   "reading": "",
+   "ko": "드시고 가세요, 가져가세요?"
+  }
+ ]
+}

@@ -1,0 +1,64 @@
+{
+ "p": "θ",
+ "label": "th (θ)",
+ "hint_ko": "혀끝을 윗니 사이에 살짝 내밀고 바람만 내보내요.",
+ "words": [
+  "think",
+  "three",
+  "thank",
+  "mouth",
+  "bath",
+  "month"
+ ],
+ "pairs": [
+  {
+   "a": "think",
+   "b": "sink",
+   "ko": "생각하다 / 가라앉다"
+  },
+  {
+   "a": "three",
+   "b": "free",
+   "ko": "셋 / 자유로운"
+  }
+ ],
+ "phrases": [
+  {
+   "text": "I think three things.",
+   "ko": "나는 세 가지를 생각해요."
+  },
+  {
+   "text": "Thank you very much.",
+   "ko": "정말 고맙습니다."
+  },
+  {
+   "text": "My mouth is dry.",
+   "ko": "입이 말라요."
+  },
+  {
+   "text": "Next month is my birthday.",
+   "ko": "다음 달이 내 생일이에요."
+  }
+ ],
+ "sentences": [
+  {
+   "id": 77,
+   "text": "I think so.",
+   "ko": "그렇게 생각해요.",
+   "url": "https://tatoeba.org/sentences/show/77"
+  },
+  {
+   "id": 78,
+   "text": "Thank you for the gift.",
+   "ko": "선물 고마워요.",
+   "url": "https://tatoeba.org/sentences/show/78"
+  },
+  {
+   "id": 79,
+   "text": "Three people came.",
+   "ko": "세 명이 왔어요.",
+   "url": "https://tatoeba.org/sentences/show/79"
+  }
+ ],
+ "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
+}

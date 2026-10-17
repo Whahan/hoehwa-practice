@@ -1,0 +1,72 @@
+{
+ "lang": "en",
+ "mode": "shadow",
+ "stage": 1,
+ "sentences": [
+  {
+   "id": 101,
+   "text": "I run every morning.",
+   "ko": "나는 매일 아침 달린다.",
+   "reading": "",
+   "words": 4,
+   "url": "https://tatoeba.org/sentences/show/101"
+  },
+  {
+   "id": 102,
+   "text": "She likes green tea.",
+   "ko": "그녀는 녹차를 좋아해요.",
+   "reading": "",
+   "words": 4,
+   "url": "https://tatoeba.org/sentences/show/102"
+  },
+  {
+   "id": 103,
+   "text": "We walked to the park.",
+   "ko": "우리는 공원까지 걸어갔어요.",
+   "reading": "",
+   "words": 5,
+   "url": "https://tatoeba.org/sentences/show/103"
+  },
+  {
+   "id": 104,
+   "text": "Please close the door.",
+   "ko": "문을 닫아 주세요.",
+   "reading": "",
+   "words": 4,
+   "url": "https://tatoeba.org/sentences/show/104"
+  },
+  {
+   "id": 105,
+   "text": "He is reading a book.",
+   "ko": "그는 책을 읽고 있어요.",
+   "reading": "",
+   "words": 5,
+   "url": "https://tatoeba.org/sentences/show/105"
+  },
+  {
+   "id": 106,
+   "text": "The coffee is very hot.",
+   "ko": "커피가 아주 뜨거워요.",
+   "reading": "",
+   "words": 5,
+   "url": "https://tatoeba.org/sentences/show/106"
+  },
+  {
+   "id": 107,
+   "text": "Can you help me today?",
+   "ko": "오늘 저를 도와줄 수 있나요?",
+   "reading": "",
+   "words": 5,
+   "url": "https://tatoeba.org/sentences/show/107"
+  },
+  {
+   "id": 108,
+   "text": "I'd like a large coffee.",
+   "ko": "큰 커피 한 잔 주세요.",
+   "reading": "",
+   "words": 5,
+   "url": "https://tatoeba.org/sentences/show/108"
+  }
+ ],
+ "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
+}

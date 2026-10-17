@@ -1,0 +1,15 @@
+{
+ "ai": true,
+ "goals": [
+  {
+   "id": "ask_size",
+   "done": true,
+   "evidence": "Can I get a large one"
+  },
+  {
+   "id": "thank",
+   "done": true,
+   "evidence": "Many thanks and good bye"
+  }
+ ]
+}

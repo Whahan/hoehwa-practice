@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "phonemes": [
+    {
+      "p": "θ",
+      "label": "th (θ)",
+      "hint_ko": "혀끝을 윗니 사이에 살짝 내밀고 바람만 내보내요. 혀를 입안에 넣으면 s로 들려요.",
+      "words": ["think", "three", "thank", "mouth", "bath", "month", "thing", "birthday"],
+      "pairs": [
+        {"a": "think", "b": "sink", "ko": "생각하다 / 가라앉다"},
+        {"a": "three", "b": "free", "ko": "셋 / 자유로운"},
+        {"a": "thick", "b": "sick", "ko": "두꺼운 / 아픈"}
+      ],
+      "phrases": [
+        {"text": "I think three things.", "ko": "나는 세 가지를 생각해요."},
+        {"text": "Thank you very much.", "ko": "정말 고마워요."},
+        {"text": "My mouth is dry.", "ko": "입이 말라요."},
+        {"text": "Next month is my birthday.", "ko": "다음 달이 내 생일이에요."}
+      ]
+    },
+    {
+      "p": "ɹ",
+      "label": "r (ɹ)",
+      "hint_ko": "r은 혀끝을 입천장에 대지 않고 뒤로 살짝 말아 올려요. 한국어 ㄹ처럼 혀를 대면 l로 들려요.",
+      "words": ["red", "run", "right", "road", "rice", "ready", "rain"],
+      "pairs": [
+        {"a": "right", "b": "light", "ko": "오른쪽 / 빛"},
+        {"a": "road", "b": "load", "ko": "길 / 짐"},
+        {"a": "red", "b": "led", "ko": "빨간 / 이끌었다"}
+      ],
+      "phrases": [
+        {"text": "Turn right at the road.", "ko": "길에서 오른쪽으로 도세요."},
+        {"text": "I eat rice every day.", "ko": "나는 매일 밥을 먹어요."},
+        {"text": "The red car is ready.", "ko": "빨간 차가 준비됐어요."},
+        {"text": "I run in the rain.", "ko": "나는 빗속에서 달려요."}
+      ]
+    },
+    {
+      "p": "æ",
+      "label": "a (æ)",
+      "hint_ko": "æ는 입을 크게 벌리고 '애'와 '아' 사이처럼 소리 내요. 한국어 '에'처럼 입을 작게 벌리면 안 돼요.",
+      "words": ["cat", "bad", "hand", "apple", "happy", "black", "bag"],
+      "pairs": [
+        {"a": "bad", "b": "bed", "ko": "나쁜 / 침대"},
+        {"a": "pan", "b": "pen", "ko": "팬 / 펜"},
+        {"a": "man", "b": "men", "ko": "남자 / 남자들"}
+      ],
+      "phrases": [
+        {"text": "The black cat sat down.", "ko": "검은 고양이가 앉았어요."},
+        {"text": "Grab the black bag.", "ko": "검은 가방을 집으세요."},
+        {"text": "An apple makes me happy.", "ko": "사과는 나를 행복하게 해요."},
+        {"text": "That is a bad plan.", "ko": "그건 나쁜 계획이에요."}
+      ]
+    },
+    {
+      "p": "ð",
+      "label": "th (ð)",
+      "hint_ko": "혀끝을 윗니 사이에 대고 목소리를 내요. θ와 달리 목이 울려요.",
+      "words": ["this", "that", "there", "mother", "father", "weather", "together", "breathe"],
+      "pairs": [
+        {"a": "they", "b": "day", "ko": "그들은 / 날"},
+        {"a": "though", "b": "dough", "ko": "비록 ~이지만 / 반죽"},
+        {"a": "then", "b": "den", "ko": "그때 / 굴"}
+      ],
+      "phrases": [
+        {"text": "This is my favorite.", "ko": "이건 제가 제일 좋아하는 거예요."},
+        {"text": "Please breathe slowly.", "ko": "천천히 숨을 쉬세요."},
+        {"text": "My mother is at home.", "ko": "우리 어머니는 집에 계세요."},
+        {"text": "We work together every day.", "ko": "우리는 매일 함께 일해요."},
+        {"text": "They are over there.", "ko": "그들은 저쪽에 있어요."}
+      ]
+    },
+    {
+      "p": "f",
+      "label": "f (f)",
+      "hint_ko": "윗니를 아랫입술에 살짝 대고 바람을 내보내요. p처럼 두 입술을 붙이면 안 돼요.",
+      "words": ["fish", "five", "friend", "coffee", "photo", "fast", "phone", "family"],
+      "pairs": [
+        {"a": "fan", "b": "pan", "ko": "선풍기 / 프라이팬"},
+        {"a": "fine", "b": "pine", "ko": "좋은 / 소나무"},
+        {"a": "fast", "b": "past", "ko": "빠른 / 지난"}
+      ],
+      "phrases": [
+        {"text": "Five fish, please.", "ko": "생선 다섯 마리 주세요."},
+        {"text": "My friend has a phone.", "ko": "제 친구가 전화기를 갖고 있어요."},
+        {"text": "Coffee is fine for me.", "ko": "저는 커피면 괜찮아요."},
+        {"text": "Send me a family photo.", "ko": "가족 사진 좀 보내 주세요."},
+        {"text": "Walk fast to the station.", "ko": "역까지 빨리 걸어가세요."}
+      ]
+    },
+    {
+      "p": "v",
+      "label": "v (v)",
+      "hint_ko": "아랫입술을 윗니에 살짝 대고 목소리를 내요. b처럼 두 입술을 붙이면 안 돼요.",
+      "words": ["very", "visit", "voice", "river", "seven", "video", "vote", "love"],
+      "pairs": [
+        {"a": "very", "b": "berry", "ko": "매우 / 베리"},
+        {"a": "vest", "b": "best", "ko": "조끼 / 가장 좋은"},
+        {"a": "vote", "b": "boat", "ko": "투표하다 / 배"}
+      ],
+      "phrases": [
+        {"text": "I love this video.", "ko": "이 영상 정말 좋아요."},
+        {"text": "Let's visit the river.", "ko": "강에 가 봐요."},
+        {"text": "Her voice is very nice.", "ko": "그녀의 목소리는 정말 좋아요."},
+        {"text": "Seven videos are ready.", "ko": "영상 일곱 개가 준비됐어요."},
+        {"text": "Please vote for me.", "ko": "저에게 투표해 주세요."}
+      ]
+    },
+    {
+      "p": "l",
+      "label": "l (l)",
+      "hint_ko": "혀끝을 윗니 뒤 잇몸에 붙였다가 떼요. r처럼 혀를 말면 안 돼요.",
+      "words": ["lake", "lemon", "light", "look", "long", "late", "little", "lunch"],
+      "pairs": [
+        {"a": "light", "b": "right", "ko": "빛 / 오른쪽"},
+        {"a": "lock", "b": "rock", "ko": "자물쇠 / 바위"},
+        {"a": "long", "b": "wrong", "ko": "긴 / 틀린"}
+      ],
+      "phrases": [
+        {"text": "Turn left at the lake.", "ko": "호수에서 왼쪽으로 도세요."},
+        {"text": "I like lemon tea.", "ko": "저는 레몬차를 좋아해요."},
+        {"text": "Let's have lunch at noon.", "ko": "정오에 점심 먹어요."},
+        {"text": "Turn the light off, please.", "ko": "불 좀 꺼 주세요."},
+        {"text": "The little boy is late.", "ko": "그 어린 소년은 늦었어요."}
+      ]
+    },
+    {
+      "p": "z",
+      "label": "z (z)",
+      "hint_ko": "s와 같은 혀 위치에서 목이 울리게(성대를 떨어서) 소리를 내요. 목에 손을 대면 떨림이 느껴져야 해요. 떨림이 없으면 s로 들려요.",
+      "words": ["zoo", "zero", "zebra", "busy", "easy", "lazy", "music", "nose"],
+      "pairs": [
+        {"a": "zip", "b": "sip", "ko": "지퍼 / 홀짝 마시다"},
+        {"a": "zoo", "b": "sue", "ko": "동물원 / 고소하다"},
+        {"a": "buzz", "b": "bus", "ko": "윙 하는 소리 / 버스"}
+      ],
+      "phrases": [
+        {"text": "The zoo is busy today.", "ko": "오늘 동물원이 붐벼요."},
+        {"text": "The music is easy.", "ko": "그 음악은 쉬워요."},
+        {"text": "I am lazy on Sundays.", "ko": "일요일엔 게을러요."},
+        {"text": "Zero is my lucky number.", "ko": "0이 제 행운의 숫자예요."},
+        {"text": "Look at the zebra.", "ko": "얼룩말을 보세요."}
+      ]
+    },
+    {
+      "p": "ʃ",
+      "label": "sh (ʃ)",
+      "hint_ko": "입술을 살짝 동그랗게 하고 바람을 넓게 내보내요. s보다 '쉬' 소리에 가까워요.",
+      "words": ["shop", "she", "ship", "wish", "sheep", "shoe", "shower", "dish"],
+      "pairs": [
+        {"a": "ship", "b": "sip", "ko": "배 / 홀짝 마시다"},
+        {"a": "she", "b": "see", "ko": "그녀 / 보다"},
+        {"a": "shoe", "b": "sue", "ko": "신발 / 고소하다"}
+      ],
+      "phrases": [
+        {"text": "She wants to shop.", "ko": "그녀는 쇼핑하고 싶어 해요."},
+        {"text": "Wash the dish, please.", "ko": "접시 좀 씻어 주세요."},
+        {"text": "The ship is big.", "ko": "그 배는 커요."},
+        {"text": "Tie your shoe, please.", "ko": "신발 끈을 묶어 주세요."},
+        {"text": "Wish me good luck.", "ko": "행운을 빌어 주세요."}
+      ]
+    },
+    {
+      "p": "ɪ",
+      "label": "i (ɪ)",
+      "hint_ko": "'이'보다 짧고 느슨하게 내요. 입을 조금만 벌리고 짧게 말해요. 길게 'ii'로 말하면 안 돼요.",
+      "words": ["sit", "big", "drink", "kitchen", "milk", "six", "give", "list"],
+      "pairs": [
+        {"a": "sit", "b": "seat", "ko": "앉다 / 자리"},
+        {"a": "fill", "b": "feel", "ko": "채우다 / 느끼다"},
+        {"a": "lid", "b": "lead", "ko": "뚜껑 / 이끌다"}
+      ],
+      "phrases": [
+        {"text": "Sit down, please.", "ko": "앉으세요."},
+        {"text": "I drink milk every day.", "ko": "나는 매일 우유를 마셔요."},
+        {"text": "Give me six minutes.", "ko": "6분만 주세요."},
+        {"text": "The kitchen is big.", "ko": "부엌이 커요."},
+        {"text": "Put it on the list.", "ko": "그걸 목록에 적어 주세요."}
+      ]
+    },
+    {
+      "p": "iː",
+      "label": "ee (iː)",
+      "hint_ko": "입술을 양옆으로 당기고 길게 '이—' 소리를 내요. ɪ처럼 짧게 말하면 안 돼요.",
+      "words": ["see", "green", "eat", "tea", "week", "meet", "team", "cheese"],
+      "pairs": [
+        {"a": "heat", "b": "hit", "ko": "열 / 치다"},
+        {"a": "beat", "b": "bit", "ko": "이기다 / 조금"},
+        {"a": "green", "b": "grin", "ko": "초록색 / 활짝 웃다"}
+      ],
+      "phrases": [
+        {"text": "See you next week.", "ko": "다음 주에 봐요."},
+        {"text": "I like green tea.", "ko": "저는 녹차를 좋아해요."},
+        {"text": "Let's meet at three.", "ko": "세 시에 만나요."},
+        {"text": "Do you want cheese?", "ko": "치즈 드실래요?"},
+        {"text": "We eat lunch.", "ko": "우리는 점심을 먹어요."}
+      ]
+    },
+    {
+      "p": "ʊ",
+      "label": "oo (ʊ)",
+      "hint_ko": "입술을 살짝 둥글게 하고 짧게 '우'처럼 내요. 'uː'처럼 길게 빼면 안 돼요.",
+      "words": ["book", "good", "cook", "foot", "put", "could", "wood", "should"],
+      "pairs": [
+        {"a": "pull", "b": "pool", "ko": "잡아당기다 / 연못"},
+        {"a": "full", "b": "fool", "ko": "가득 찬 / 바보"},
+        {"a": "look", "b": "luke", "ko": "보다 / 루크(사람 이름)"}
+      ],
+      "phrases": [
+        {"text": "I should cook dinner.", "ko": "저녁을 요리해야 해요."},
+        {"text": "Put the book here.", "ko": "책을 여기에 놓으세요."},
+        {"text": "Is it good?", "ko": "그거 좋아요?"},
+        {"text": "I could not hear.", "ko": "들리지 않았어요."},
+        {"text": "My foot hurts.", "ko": "발이 아파요."}
+      ]
+    },
+    {
+      "p": "uː",
+      "label": "oo (uː)",
+      "hint_ko": "입술을 동그랗게 앞으로 내밀고 길게 '우—' 소리를 내요. ʊ보다 길고 입술이 더 앞으로 나와요.",
+      "words": ["food", "blue", "moon", "school", "new", "room", "true", "soon"],
+      "pairs": [
+        {"a": "pool", "b": "pull", "ko": "수영장 / 잡아당기다"},
+        {"a": "fool", "b": "full", "ko": "바보 / 가득 찬"},
+        {"a": "boot", "b": "but", "ko": "부츠 / 하지만"}
+      ],
+      "phrases": [
+        {"text": "The food is good.", "ko": "음식이 맛있어요."},
+        {"text": "School starts soon.", "ko": "학교가 곧 시작해요."},
+        {"text": "I like the blue room.", "ko": "저는 파란 방이 좋아요."},
+        {"text": "Look at the moon.", "ko": "달을 보세요."},
+        {"text": "You are new here.", "ko": "당신은 여기 처음이에요."}
+      ]
+    },
+    {
+      "p": "ʌ",
+      "label": "u (ʌ)",
+      "hint_ko": "입을 편하게 벌리고 목 안쪽에서 짧게 '어'처럼 내요. æ처럼 입을 크게 벌리면 안 돼요.",
+      "words": ["cup", "luck", "but", "sun", "fun", "come", "young", "enough"],
+      "pairs": [
+        {"a": "cut", "b": "cat", "ko": "자르다 / 고양이"},
+        {"a": "cup", "b": "cop", "ko": "컵 / 경찰"},
+        {"a": "luck", "b": "lock", "ko": "행운 / 자물쇠"}
+      ],
+      "phrases": [
+        {"text": "Good luck with that.", "ko": "그 일에 행운을 빌어요."},
+        {"text": "Come with us.", "ko": "우리랑 같이 가요."},
+        {"text": "It's fun to run.", "ko": "달리기는 재미있어요."},
+        {"text": "Pass me the cup.", "ko": "컵 좀 건네주세요."},
+        {"text": "The sun is hot today.", "ko": "오늘 햇볕이 뜨거워요."}
+      ]
+    },
+    {
+      "p": "ɛ",
+      "label": "e (ɛ)",
+      "hint_ko": "입을 중간쯤 벌리고 '에'처럼 짧게 내요. æ처럼 입을 크게 벌리면 안 돼요.",
+      "words": ["bed", "ten", "pen", "head", "yes", "get", "bread", "sell"],
+      "pairs": [
+        {"a": "get", "b": "gate", "ko": "받다 / 대문"},
+        {"a": "tell", "b": "tail", "ko": "말하다 / 꼬리"},
+        {"a": "pet", "b": "pit", "ko": "반려동물 / 구덩이"}
+      ],
+      "phrases": [
+        {"text": "Yes, I can get it.", "ko": "네, 제가 가져올게요."},
+        {"text": "Ten pens, please.", "ko": "펜 열 개 주세요."},
+        {"text": "Rest your head.", "ko": "머리를 편히 두세요."},
+        {"text": "Bread and butter, please.", "ko": "빵과 버터 주세요."},
+        {"text": "Yes, that is right.", "ko": "네, 맞아요."}
+      ]
+    }
+  ]
+}

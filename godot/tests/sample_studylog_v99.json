@@ -1,0 +1,63 @@
+{
+ "v": 99,
+ "saved": 1760000000,
+ "days": {
+  "2026-10-15": {
+   "en": {
+    "sec": 600,
+    "by": {
+     "lesson": 600
+    },
+    "n": {
+     "lessons": 1
+    },
+    "lesson": [
+     8,
+     10
+    ],
+    "score": [
+     2,
+     160
+    ]
+   }
+  }
+ },
+ "phon": {
+  "en": {
+   "θ": {
+    "h": "0110",
+    "heard": {
+     "s": 2
+    }
+   }
+  },
+  "ja": {}
+ },
+ "freeze": {
+  "en": {
+   "tokens": 2,
+   "frozen": [
+    "2026-10-10"
+   ],
+   "awarded": 1
+  },
+  "ja": {
+   "tokens": 1,
+   "frozen": [],
+   "awarded": 0
+  }
+ },
+ "missions": {},
+ "future_feature": {
+  "nested": {
+   "a": [
+    1,
+    2,
+    3
+   ],
+   "b": "keep me"
+  },
+  "level": 7
+ },
+ "sync_marker": "x1"
+}

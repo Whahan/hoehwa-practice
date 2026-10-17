@@ -1,0 +1,32 @@
+{
+ "lang": "ja",
+ "mode": "shadow",
+ "stage": 1,
+ "sentences": [
+  {
+   "id": 201,
+   "text": "毎朝走ります。",
+   "ko": "나는 매일 아침 달려요.",
+   "reading": "まいあさはしります。",
+   "words": 7,
+   "url": "https://tatoeba.org/sentences/show/201"
+  },
+  {
+   "id": 202,
+   "text": "水をください。",
+   "ko": "물 주세요.",
+   "reading": "みずをください。",
+   "words": 7,
+   "url": "https://tatoeba.org/sentences/show/202"
+  },
+  {
+   "id": 203,
+   "text": "駅はどこですか。",
+   "ko": "역은 어디예요?",
+   "reading": "えきはどこですか。",
+   "words": 8,
+   "url": "https://tatoeba.org/sentences/show/203"
+  }
+ ],
+ "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
+}

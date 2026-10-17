@@ -1,0 +1,1451 @@
+{
+  "version": 1,
+  "missions": [
+    {
+      "id": "cafe_order",
+      "lang": "en",
+      "min_stage": 1,
+      "order": 10,
+      "max_turns": 10,
+      "title_ko": "카페에서 음료 주문하기",
+      "situation_ko": "시애틀의 한 카페 카운터예요. 인사하고, 음료와 사이즈를 고른 뒤, 계산하고 감사 인사를 하세요.",
+      "persona": "Emma, a friendly barista at a coffee shop in Seattle",
+      "scene": "The learner is a customer at the counter. Offer natural chances to talk about the drink, the size, and paying. Keep your lines short and never tell the learner what to say.",
+      "opening": "Hi there! What can I get started for you today?",
+      "goals": [
+        {
+          "id": "greet",
+          "label_ko": "인사를 건넨다",
+          "goal_en": "greet the barista",
+          "hint_en": "Hi, good morning!",
+          "match": {
+            "any": [
+              "\\b(?:hi|hii|hiya|hello|hey|howdy|greetings|good (?:morning|afternoon|evening))\\b",
+              "^(?:morning|afternoon|evening)\\b",
+              "\\bhow(?: are|'?s| is) (?:you|it going|everything|your (?:day|morning))\\b",
+              "\\bwhat'?s up\\b",
+              "\\bnice to see you\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Hi there",
+            "Hello, how are you",
+            "Good morning",
+            "Hey! How's it going?",
+            "Morning!",
+            "Good afternoon, nice to see you",
+            "Hiya, I'm back again"
+          ],
+          "neg": [
+            "I'd like a latte",
+            "Thank you very much",
+            "How much is it",
+            "Can I pay by card",
+            "I had a long morning at work",
+            "A large one please"
+          ]
+        },
+        {
+          "id": "order_drink",
+          "label_ko": "음료를 주문한다",
+          "goal_en": "order a drink",
+          "hint_en": "I'd like a latte, please.",
+          "match": {
+            "any": [
+              "\\b(?:i'?d|i would|we'?d|we would) (?:like|love)(?! to (?:know|ask|pay|see|check|thank|find|say))",
+              "\\bfor me\\b|^(?:just |only )?(?:an?|one|two|three|some|another)\\b",
+              "\\bi'?ll (?:just |also |probably )?(?:have|take|get|go with|go for|try|order)\\b",
+              "\\bi will (?:have|take|get|order)\\b",
+              "\\bi want(?! to (?:know|ask|pay|see|check|thank|find|say))",
+              "\\bi need (?:an?|one|two|three|some|another)\\b",
+              "\\bi'?m (?:having|getting|going to (?:have|get|take|order))\\b",
+              "\\b(?:can|could|may) (?:i|we) (?:please )?(?:get|have|order|try)\\b",
+              "\\blet me (?:get|have|try)\\b",
+              "\\b(?:give|get|make) me\\b",
+              "\\bmake it\\b",
+              "^(?!.{0,40}\\b(?:how much|price|cost|pay|card|cash)\\b).{0,60}\\b(?:please|pls)\\b"
+            ],
+            "all": [
+              "\\b(?:coffees?|lattes?|americanos?|cappuccinos?|teas?|mochas?|espressos?|juices?|smoothies?|macchiatos?|flat whites?|cold brews?|frappe|frappuccinos?|chai|matcha|hot chocolate|lemonade|soda|cola|coke|milkshakes?|cortados?|water|drinks?|beverages?)\\b"
+            ]
+          },
+          "pos": [
+            "I'd like a latte please",
+            "Can I get an iced americano",
+            "Could I have a coffee",
+            "I'll take a large cappuccino",
+            "A flat white, please",
+            "I want a hot chocolate",
+            "Give me two teas",
+            "I think I'll have the matcha latte",
+            "Can I order a cold brew?"
+          ],
+          "neg": [
+            "I like coffee",
+            "Hello",
+            "How much is it",
+            "Coffee is my favorite drink",
+            "I want to know how much the coffee is",
+            "Do you like tea",
+            "Can I pay for it by card"
+          ]
+        },
+        {
+          "id": "ask_size",
+          "label_ko": "사이즈를 말한다",
+          "goal_en": "say what size of drink you want",
+          "hint_en": "A medium, please.",
+          "match": {
+            "any": [
+              "\\b(?:small|smaller|smallest|medium|large|larger|largest|tall|grande|venti|regular|big|bigger|biggest|extra large|xl|normal size|(?:8|12|16|20) ?(?:oz|ounces?))\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "A large one please",
+            "Make it a medium",
+            "Can I get a tall latte",
+            "Grande, please",
+            "I want the biggest size you have",
+            "The small one is fine",
+            "Could I have a 16 ounce?",
+            "Extra large please"
+          ],
+          "neg": [
+            "I'd like a latte",
+            "Hello there",
+            "Thank you so much",
+            "How much is it",
+            "Can I pay by card",
+            "A cappuccino with oat milk, please"
+          ]
+        },
+        {
+          "id": "pay",
+          "label_ko": "계산 방법을 묻거나 말한다",
+          "goal_en": "ask about the price or say how you will pay",
+          "hint_en": "Can I pay by card?",
+          "match": {
+            "any": [
+              "\\b(?:how much|the price|the total|the cost|what do i owe|how much do i owe|costs?)\\b",
+              "\\bpa(?:y|ying|id)\\b(?! attention)",
+              "\\b(?:credit|debit) cards?\\b|\\b(?:my|by|with|your|this) card\\b|\\b(?:accept|take) cards?\\b|\\b(?:cash|contactless|apple pay|google pay|visa|mastercard|receipt)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "How much is it",
+            "Can I pay by card",
+            "I'll pay with cash",
+            "What's the total?",
+            "Do you take credit cards?",
+            "How much do I owe you?",
+            "I'm paying with my phone",
+            "Is it okay to tap my card here?"
+          ],
+          "neg": [
+            "Hello",
+            "A large one please",
+            "Thank you very much",
+            "I'd like a latte",
+            "I'll have an iced tea to go",
+            "Good morning, how are you"
+          ]
+        },
+        {
+          "id": "thank",
+          "label_ko": "감사 인사를 한다",
+          "goal_en": "thank the barista",
+          "hint_en": "Thank you very much!",
+          "match": {
+            "any": [
+              "\\b(?:thanks?|thank (?:you|u)|thankyou|thx|cheers|much appreciated|appreciate|grateful)\\b",
+              "\\byou'?ve been (?:so |very )?(?:helpful|kind)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Thank you very much",
+            "Thanks a lot",
+            "Thank you!",
+            "Cheers, mate",
+            "I really appreciate it",
+            "Thanks so much for your help",
+            "Thx!",
+            "That's very kind, thank you"
+          ],
+          "neg": [
+            "I'd like a latte",
+            "A large one please",
+            "How much is it",
+            "Hello there",
+            "Can I pay by card",
+            "No, that's all"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hi there! What can I get started for you today?", "goal": "greet", "model": "Hi, good morning!"},
+        {"ai": "Good morning! What can I get you?", "goal": "order_drink", "model": "I'd like a latte, please."},
+        {"ai": "Sure. What size would you like?", "goal": "ask_size", "model": "A medium, please."},
+        {"ai": "One medium latte. Anything else for you?", "goal": "pay", "model": "No, that's all. Can I pay by card?"},
+        {"ai": "Of course, just tap your card here. Here is your latte.", "goal": "thank", "model": "Thank you very much!"}
+      ]
+    },
+    {
+      "id": "self_intro",
+      "lang": "en",
+      "min_stage": 1,
+      "order": 20,
+      "max_turns": 10,
+      "title_ko": "처음 만난 사람에게 자기소개하기",
+      "situation_ko": "런던의 영어 모임에서 처음 만난 친구와 이야기해요. 이름, 출신, 취미를 말하고 상대에게도 물어보세요.",
+      "persona": "Alex, a friendly member of a language meetup group in London",
+      "scene": "The learner meets you for the first time at a language meetup. Ask simple follow-up questions about the learner's name, home country, and free time. Keep your lines short and never tell the learner what to say.",
+      "opening": "Hi, I'm Alex. Nice to meet you! What's your name?",
+      "goals": [
+        {
+          "id": "say_name",
+          "label_ko": "이름을 말한다",
+          "goal_en": "say your name",
+          "hint_en": "My name is Jun.",
+          "match": {
+            "any": [
+              "(?<!called )\\bmy (?:(?:english|korean|full|first|last|nick) )?name\\b(?! tag| card| badge)",
+              "\\b(?:calls? me|name'?s)\\b",
+              "\\bi(?:'?m| am) (?!(?:a|an|able|about|afraid|alright|almost|already|also|always|american|at|australian|back|bad|british|busy|angry|awake|available|bored|big|another|both|all)\\b)(?![a-z]{3,12}(?:ing|ed|ly|ous|ful|ive)\\b)[a-b][a-z]{1,14}\\b",
+              "\\bi(?:'?m| am) (?!(?:canadian|chinese|curious|delighted|done|early|excited|fifty|fine|forty|free|french|from|fun|careful|cold|comfortable|different|empty|everyone|fast|first|full|fluent|fat|each)\\b)(?![a-z]{3,12}(?:ing|ed|ly|ous|ful|ive)\\b)[c-f][a-z]{1,14}\\b",
+              "\\bi(?:'?m| am) (?!(?:german|glad|going|good|great|happy|here|home|honored|hungry|ill|in|indian|interested|into|japanese|just|kind|korean|late|little|married|hot|hurt|joking|kidding|lost|lucky|inside|healthy)\\b)(?![a-z]{3,12}(?:ing|ed|ly|ous|ful|ive)\\b)[g-m][a-z]{1,14}\\b",
+              "\\bi(?:'?m| am) (?!(?:nervous|never|new|nice|not|ok|okay|old|on|only|pleased|pregnant|pretty|quite|ready|really|next|nobody|open|outside|positive|proud|right)\\b)(?![a-z]{3,12}(?:ing|ed|ly|ous|ful|ive)\\b)[n-r][a-z]{1,14}\\b",
+              "\\bi(?:'?m| am) (?!(?:sad|shy|sick|single|so|sorry|still|student|sure|the|there|thirty|tired|too|twenty|very|vegetarian|safe|scared|second|serious|sleepy|slow|small|someone|stuck|thirsty|third|tall|upset|strong|short|thin)\\b)(?![a-z]{3,12}(?:ing|ed|ly|ous|ful|ive)\\b)[s-v][a-z]{1,14}\\b",
+              "\\bi(?:'?m| am) (?!(?:well|worried|young|warm|weak|wrong)\\b)(?![a-z]{3,12}(?:ing|ed|ly|ous|ful|ive)\\b)[w-z][a-z]{1,14}\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "My name is Jun",
+            "I'm Minji",
+            "You can call me Sam",
+            "Hi, I am Daniel",
+            "Everyone calls me Jay, but you can call me James",
+            "My English name is Chris",
+            "Hello, my name's Yuna",
+            "Nice to meet you, I'm Hana"
+          ],
+          "neg": [
+            "I'm fine thank you",
+            "Nice to meet you",
+            "I am from Korea",
+            "I'm a little nervous",
+            "I'm really happy to be here",
+            "I'm so excited",
+            "I'm Korean",
+            "I'm studying English",
+            "I'm full."
+          ]
+        },
+        {
+          "id": "nice_meet",
+          "label_ko": "만나서 반갑다고 말한다",
+          "goal_en": "say that you are glad to meet Alex",
+          "hint_en": "Nice to meet you too!",
+          "match": {
+            "any": [
+              "\\b(?:nice|pleased|great|good|glad|happy|lovely|wonderful|delighted|thrilled|honou?red|pleasure|privilege|honou?r|fun|awesome|cool) to (?:finally |also |really |just )?(?:meet|see|get to know)\\b",
+              "\\b(?:nice|pleasure|great|good|lovely|wonderful|fun|happy|glad) (?:meeting|seeing|knowing) you\\b",
+              "\\b(?:pleasure is (?:all )?mine|likewise)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Nice to meet you too",
+            "Pleased to meet you",
+            "Great to meet you",
+            "Pleasure to meet you, Alex.",
+            "It's so nice meeting you",
+            "Lovely to finally meet you",
+            "I'm happy to meet you",
+            "The pleasure is mine"
+          ],
+          "neg": [
+            "My name is Jun",
+            "I'm from Korea",
+            "I like soccer",
+            "I'm glad to be here today",
+            "It's nice weather today",
+            "Good to know",
+            "Nice jacket",
+            "What about you"
+          ]
+        },
+        {
+          "id": "origin",
+          "label_ko": "어느 나라 출신인지 말한다",
+          "goal_en": "say where you are from",
+          "hint_en": "I'm from Korea.",
+          "match": {
+            "any": [
+              "\\bi(?:'?m| am) (?:originally |actually |really |also |just )?from\\b",
+              "\\bi (?:come|came) from\\b",
+              "\\b(?:i was born|i'?m born|i am born|i grew up|born and raised|i was raised) (?:in|at)\\b",
+              "\\b(?:my (?:hometown|home town|home country|home city)|(?:hometown|home town|home country) is|is my (?:hometown|home town|home country|home city))\\b",
+              "\\bmy country is\\b",
+              "\\bi live in (?!an? |the |my |a )",
+              "\\bi(?:'?m| am) (?:an? )?(?:korean|japanese|chinese|american|canadian|british|australian|german|french|indian|thai|vietnamese|spanish|brazilian|mexican|filipino|taiwanese|russian|italian)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I'm from Korea",
+            "I am from Busan",
+            "I come from Seoul",
+            "I was born in Daegu.",
+            "I'm originally from Incheon",
+            "Daegu is my hometown",
+            "I grew up in a small town near Jeju",
+            "I'm Korean",
+            "I live in Seoul"
+          ],
+          "neg": [
+            "My name is Jun",
+            "I like music",
+            "Nice to meet you",
+            "Where are you from",
+            "I'm tired from the trip",
+            "I live in a small apartment",
+            "I want to visit Canada"
+          ]
+        },
+        {
+          "id": "hobby",
+          "label_ko": "취미를 말한다",
+          "goal_en": "talk about something you enjoy doing",
+          "hint_en": "I like playing soccer.",
+          "match": {
+            "any": [
+              "\\bmy (?:favou?rite )?(?:hobby|hobbies|pastime|passion|interest|interests)\\b",
+              "\\bi (?:really |also |just |truly |do |so |quite |always )?(?:like|love|enjoy|adore|prefer)(?: to\\b| (?!(?:some|any|every|no)thing|spring|morning|evening|building|being|living|having|feeling)[a-z]{3,14}ing\\b)",
+              "\\bi (?:really |also |just |truly |do |so |quite |always )?(?:like|love|enjoy|adore|prefer) (?:the )?(?:music|movies?|films?|sports?|soccer|football|baseball|basketball|volleyball|tennis|golf|badminton)\\b",
+              "\\bi (?:really |also |just |truly |do |so |quite |always )?(?:like|love|enjoy|adore|prefer) (?:the )?(?:games?|video games|dramas?|k pop|kpop|anime|manga|art|photography|travel|yoga|dance|fashion|shopping)\\b",
+              "\\bi (?:really |also |just |truly |do |so |quite |always )?(?:like|love|enjoy|adore|prefer) (?:the )?(?:guitar|piano|violin|animals|nature|books?|novels?|comics?|podcasts?|concerts?|coding|programming)\\b",
+              "\\bi (?:really |also |just |truly |do |so |quite |always )?(?:like|love|enjoy|adore|prefer) (?:the )?(?:chess|history|science|netflix|tv|cinema|theater|museums?|cats|dogs|plants|flowers|cars|puzzles|poetry)\\b",
+              "\\bi'?m (?:really |very |so |quite |also )?(?:into|interested in|fond of|crazy about|keen on|passionate about|an? (?:big |huge |great )?fan of|obsessed with|addicted to)\\b",
+              "\\b(?:in|during|with|on) my (?:free|spare|leisure) time\\b|\\bmy (?:free|spare|leisure) time\\b|\\bwhen i (?:have|get) (?:some )?(?:free|spare) time\\b",
+              "\\b(?:my weekends|just for fun|only for fun|as a hobby|for a hobby)\\b|\\bfor fun,? i\\b|\\bi have (?:many |some |a few |a lot of |lots of )?hobbies\\b",
+              "\\bon (?:the )?weekends?,? i\\b",
+              "\\bi (?:often |usually |sometimes |also |always |mostly |regularly )?(?:play|collect|draw|paint|sing|dance|cook|bake|read|watch|swim|hike|climb|run|jog|cycle|travel|garden|fish|exercise|practice|write|knit|code|skate|ski|surf)\\b",
+              "\\bi go (?:hiking|running|swimming|fishing|camping|shopping|cycling|climbing|biking|jogging|skiing|surfing|dancing|to the gym|for a run|for walks|to concerts|to the movies)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I like playing soccer",
+            "My hobby is cooking",
+            "I enjoy reading books",
+            "I really love watching movies.",
+            "In my free time I go hiking",
+            "I'm really into K-pop",
+            "I play the guitar on weekends",
+            "I'm a big fan of baseball",
+            "My hobbies are drawing and swimming"
+          ],
+          "neg": [
+            "My name is Jun",
+            "I'm from Korea",
+            "Nice to meet you",
+            "I like your jacket.",
+            "I'd like to practice speaking English",
+            "I don't like spicy food",
+            "I love this cafe",
+            "I love Seattle.",
+            "I feel like a tourist"
+          ]
+        },
+        {
+          "id": "ask_back",
+          "label_ko": "상대에게 되물어 본다",
+          "goal_en": "ask Alex a question back",
+          "hint_en": "What about you?",
+          "match": {
+            "any": [
+              "\\b(?:what|how) about (?:you|yourself|your)\\b|\\band you\\b|\\bhow (?:are|old are) you\\b",
+              "\\b(?:what|which|where|who|how|when)\\b(?!.{0,30}\\b(?:say|spell|pronounce|mean|translate|called)\\b).{0,15}\\byour\\b",
+              "\\b(?:what|where|when|how|why|who|which)\\b(?! a\\b)(?! (?:nice|great|good|lovely)\\b).{0,20}\\byou(?:'ve)? (?:do|did|like|live|work|study|studied|come|grow|enjoy|think|usually|often|feel|play|spend|have|been|lived|are|from|get|go|prefer|travel|learn|meet|speak)\\b",
+              "\\b(?:what|where|who|which) are you\\b",
+              "\\b(?:do|does|did) you (?:like|enjoy|love|live|work|play|study|come|go|speak|think|prefer|usually|often|also|travel|cook|watch|read|visit)\\b",
+              "\\bdo you have (?:any |a |an )?(?:hobbies|hobby|pets?|brothers?|sisters?|siblings|kids|children|family|favou?rite|plans|job)\\b",
+              "\\bare you (?:from|a|an|also|originally|new|here|married|working|studying|learning|local|in)\\b|\\bwere you (?:born|raised|from)\\b",
+              "\\bhave you (?:been|ever|lived|visited|tried|studied|worked|always)\\b",
+              "\\b(?:is|are|do|does|did|was|were) your\\b",
+              "\\b(?:can|could|may) i ask\\b",
+              "\\btell me (?:about|more about) (?:you|yourself)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "What about you",
+            "Where are you from",
+            "Do you like music",
+            "How about you?",
+            "And you? What do you do?",
+            "Can I ask what you do for work?",
+            "What kind of music do you like?",
+            "Have you lived in London for a long time?",
+            "How long have you been in this group?"
+          ],
+          "neg": [
+            "My name is Jun",
+            "I'm from Korea",
+            "I like soccer",
+            "Thank you for inviting me",
+            "What a pleasure to meet you",
+            "I would like to thank you",
+            "I love cooking",
+            "I'm happy to meet you",
+            "Could you say that again, please?",
+            "How do you say this in English?"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hi, I'm Alex. Nice to meet you! What's your name?", "goal": "say_name", "model": "My name is Jun."},
+        {"ai": "Nice to meet you, Jun. I'm glad you came today.", "goal": "nice_meet", "model": "Nice to meet you too!"},
+        {"ai": "So, where are you from?", "goal": "origin", "model": "I'm from Korea."},
+        {"ai": "That's great. What do you like to do in your free time?", "goal": "hobby", "model": "I like playing soccer."},
+        {"ai": "Sounds fun! I'd love to try that sometime.", "goal": "ask_back", "model": "What about you? What do you like to do?"}
+      ]
+    },
+    {
+      "id": "hotel_checkin",
+      "lang": "en",
+      "min_stage": 2,
+      "order": 30,
+      "max_turns": 10,
+      "title_ko": "호텔에서 체크인하기",
+      "situation_ko": "호텔 프런트에 도착했어요. 예약을 확인받고, 방 종류를 고르고, 아침 식사와 와이파이, 체크아웃 시간을 물어보세요.",
+      "persona": "Jamie, a calm and polite receptionist at a hotel in Chicago",
+      "scene": "The learner has arrived at the front desk to check in. Ask for the name on the reservation, offer room options, and answer questions about breakfast and check-out. Keep your lines short and never tell the learner what to say.",
+      "opening": "Good evening, and welcome to the Lakeside Hotel! Do you have a reservation with us?",
+      "goals": [
+        {
+          "id": "reservation",
+          "label_ko": "예약이 있다고 말하고 이름을 알려 준다",
+          "goal_en": "say that you have a reservation and give your name",
+          "hint_en": "Yes, I have a reservation under Kim.",
+          "match": {
+            "any": [
+              "\\b(?:reservations?|reserved|reserve|booked|booking|bookings)\\b",
+              "\\bunder (?:the |my |a )?(?:name|reservation|booking)\\b",
+              "^(?:yes |yeah |yep |sure )?(?:it'?s |it is |that'?s |the room is |the room'?s )?under\\b",
+              "\\b(?:yes|yeah|yep),? (?:i|we) (?:do|have)\\b",
+              "\\bconfirmation (?:number|code|email)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Yes, I have a reservation",
+            "It's under the name Kim",
+            "I booked a room for two nights",
+            "I made a reservation online last week",
+            "Yes, under Park",
+            "I have a booking for tonight",
+            "My name is Lee and I reserved a double room",
+            "Yes, I do. I have my confirmation number here"
+          ],
+          "neg": [
+            "Good evening",
+            "How much is the breakfast",
+            "Thank you so much",
+            "My name is Kim.",
+            "I'd like a double room with a view",
+            "I have a question",
+            "Where is the elevator"
+          ]
+        },
+        {
+          "id": "room_request",
+          "label_ko": "방 종류를 고른다",
+          "goal_en": "choose a room type",
+          "hint_en": "A double room with a lake view, please.",
+          "match": {
+            "any": [
+              "\\b(?:double|single|twin|queen|king|suite|standard|deluxe|family|superior|executive|junior|smoking|non ?smoking|quiet|cheap|cheapest|cheaper|biggest|bigger|larger|largest|smaller|smallest|cozy|spacious|basic|premium|private)\\b.{0,20}\\b(?:rooms?|beds?|bedrooms?|suites?|ones?|options?)\\b",
+              "\\b(?:rooms?|beds?|suites?|bedrooms?)\\b.{0,8}\\bwith\\b",
+              "\\b(?:non ?smoking|smoking|sea|ocean|lake|city|river|mountain|garden|pool|park|street) view\\b|\\b(?:high|higher|upper|top|lower|low|ground) floor\\b|\\bbalcony\\b|\\b(?:a|the) view\\b",
+              "\\b(?:an? |the |one )(?:double|twin|queen|king|single)\\b|\\bsuites?\\b",
+              "\\b(?:two|2|one|1|three|extra|separate) (?:single |double |twin |king |queen )?beds?\\b",
+              "\\brooms? for (?:one|two|three|four|five|1|2|3|4|me|us)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "A double room please",
+            "I'd like a king bed",
+            "Do you have a twin room",
+            "Do you have any twin rooms left?",
+            "Could I get a quiet room on a higher floor?",
+            "A room with two beds, please",
+            "I'd prefer the cheapest one",
+            "A non-smoking room with a lake view",
+            "Just a single room for me"
+          ],
+          "neg": [
+            "Thank you very much",
+            "What time is breakfast",
+            "Yes, I have a reservation",
+            "My name is Kim",
+            "Is there a bed and breakfast nearby",
+            "How much is the room",
+            "Where is the elevator",
+            "I need my room key"
+          ]
+        },
+        {
+          "id": "breakfast_wifi",
+          "label_ko": "아침 식사나 와이파이를 묻는다",
+          "goal_en": "ask about breakfast or the Wi-Fi",
+          "hint_en": "What time is breakfast served?",
+          "match": {
+            "any": [
+              "\\b(?:breakfast|brunch|buffet|wi ?fi|wifi|internet|wireless|password|network)\\b"
+            ],
+            "all": [
+              "\\b(?:what|when|where|which|is|are|does|do|can|could|would|how|any|tell|know|ask|wonder|include|included|free|available|serve|served|there|have|need|want|get|hours|time|much)\\b"
+            ]
+          },
+          "pos": [
+            "What time is breakfast",
+            "Is the Wi-Fi free",
+            "Do you have a Wi-Fi password",
+            "Does the room include breakfast?",
+            "Could you tell me the internet password?",
+            "I'd like to know the breakfast hours",
+            "Where do you serve breakfast?",
+            "Is there wifi in the rooms?",
+            "Can I get breakfast delivered to my room?"
+          ],
+          "neg": [
+            "I'd like a double room",
+            "Here is my passport",
+            "Thank you",
+            "I already ate lunch",
+            "What time is check out",
+            "Where is the elevator",
+            "The room looks great"
+          ]
+        },
+        {
+          "id": "checkout_pay",
+          "label_ko": "체크아웃 시간을 묻거나 결제 방법을 말한다",
+          "goal_en": "ask about the check-out time or say how you will pay",
+          "hint_en": "What time is check-out, please?",
+          "match": {
+            "any": [
+              "\\bcheck ?out\\b",
+              "\\bchecking out\\b",
+              "\\bpa(?:y|ying|id|yment)\\b(?! attention)",
+              "\\b(?:credit|debit) cards?\\b|\\b(?:my|by|with|a|your) card\\b|\\bcash\\b|\\b(?:accept|take) cards?\\b",
+              "\\b(?:visa|mastercard|master card|amex|american express|apple pay)\\b",
+              "\\bdeposit\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "What time is check out",
+            "I'll pay by credit card",
+            "Can I pay with cash",
+            "What time do we need to check out?",
+            "Is late checkout possible?",
+            "I'm going to pay by card",
+            "Do you take Visa?",
+            "Is checkout at noon?"
+          ],
+          "neg": [
+            "Yes, I have a reservation",
+            "Is the Wi-Fi free",
+            "A double room please",
+            "Thank you very much",
+            "I'd like to know the breakfast hours",
+            "Where is the elevator",
+            "Could you carry my bags"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Good evening, and welcome to the Lakeside Hotel! Do you have a reservation with us?", "goal": "reservation", "model": "Yes, I have a reservation under Kim."},
+        {"ai": "Thank you, Mr. Kim. I see two nights booked. Which kind of room would you like?", "goal": "room_request", "model": "A double room with a lake view, please."},
+        {"ai": "Sure, that room is ready for you. Is there anything you would like to know about the hotel?", "goal": "breakfast_wifi", "model": "Yes, what time is breakfast served?"},
+        {"ai": "Breakfast is served from seven to ten, and our Wi-Fi is free for guests. Your check-out time is eleven in the morning. How would you like to pay for the room?", "goal": "checkout_pay", "model": "I'll pay by credit card, please."}
+      ]
+    },
+    {
+      "id": "ask_directions",
+      "lang": "en",
+      "min_stage": 2,
+      "order": 40,
+      "max_turns": 10,
+      "title_ko": "길을 묻고 방향 알아듣기",
+      "situation_ko": "도심에서 길을 잃었어요. 지나가는 사람에게 기차역 가는 길을 묻고, 얼마나 먼지 확인한 뒤 방향을 다시 말해 보세요.",
+      "persona": "Sam, a local office worker on a lunch break in a busy city center",
+      "scene": "The learner is a visitor who is lost and asks you for directions to the train station, a museum, or a pharmacy. Give directions in short natural steps (turn left, go straight, it is on your right). Ask the learner to repeat if they seem unsure. Never tell the learner what to say.",
+      "opening": "Hi there! You look a little lost. Can I help you find something?",
+      "goals": [
+        {
+          "id": "ask_place",
+          "label_ko": "찾는 장소의 위치를 묻는다",
+          "goal_en": "ask where a place is, such as the train station",
+          "hint_en": "Excuse me, where is the train station?",
+          "match": {
+            "any": [
+              "\\bwhere\\b(?! (?:is |are )?(?:my|your|his|her|our|their) (?:bag|keys?|phone|wallet|luggage|passport|coat|umbrella|glasses|purse|friends?|dog|cat|kids?)\\b).{0,30}\\b(?:is|are)\\b(?! you\\b)(?! they\\b)",
+              "\\bwhere'?s\\b(?! (?:my|your|his|her|our|their) (?:bag|keys?|phone|wallet|luggage|passport|coat|umbrella|glasses|purse|friends?|dog|cat|kids?)\\b)",
+              "\\bwhere\\b.{0,20}\\b(?:station|museum|park|library|bank|bus stop|subway|hotel|pharmacy|hospital|toilet|restroom|airport|post office|market|store|mall)\\b",
+              "\\bwhere (?:can|could|should|do|would) (?:i|we)\\b",
+              "\\bhow (?:do|can|could|would|should) (?:i|we) (?:get|go|walk|reach|find|travel|arrive)\\b",
+              "\\bhow to (?:get|go|reach|find|walk)\\b",
+              "\\bwhich (?:way|direction|bus|train|road|street|exit)\\b",
+              "\\b(?:tell|show|help|direct) me\\b.{0,25}\\b(?:way|where|how|find|directions?)\\b",
+              "\\b(?:looking for|searching for|trying to (?:find|get to|reach|go to)|need to (?:get to|go to|find|reach)|want to (?:go to|get to|find|reach))\\b",
+              "\\bis there an? .{0,25}\\b(?:near|nearby|around|close by|around here)\\b",
+              "\\bis (?:the |this |that )?[a-z]{2,15}(?: [a-z]{2,15})? (?:around here|near here|nearby|close by)\\b",
+              "\\b(?:directions? to|the way to|nearest|closest)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Where is the train station",
+            "Excuse me, where is the museum",
+            "How do I get to the park",
+            "Could you tell me the way to the bank?",
+            "I'm looking for the nearest pharmacy",
+            "Which way is the subway?",
+            "Is there a library near here?",
+            "How can I get to the hotel?",
+            "I need to get to the train station"
+          ],
+          "neg": [
+            "I'm from Canada",
+            "Thank you so much",
+            "I like walking",
+            "Where are you from",
+            "It's a beautiful day",
+            "I'm a tourist",
+            "How far is it"
+          ]
+        },
+        {
+          "id": "ask_distance",
+          "label_ko": "거리나 걸리는 시간을 묻는다",
+          "goal_en": "ask how far it is or how long it takes",
+          "hint_en": "How far is it from here?",
+          "match": {
+            "any": [
+              "\\bhow (?:far|long|close|near)\\b",
+              "\\bis it (?:very |too |really )?(?:far|close|near|nearby|walkable)\\b",
+              "\\bis (?:the |this |that |it |there )?[a-z]{2,15} (?:far|near|close|nearby)\\b",
+              "\\bhow many (?:minutes|blocks|stops|kilometers|km|miles|meters|hours)\\b",
+              "\\bminutes?\\b.{0,10}\\b(?:walk|away|ride|drive|from here)\\b|\\b(?:walk|away|ride|drive)\\b.{0,12}\\bminutes?\\b",
+              "\\bhow much time\\b",
+              "\\b(?:walking|walk) distance\\b",
+              "\\bis it a (?:long|short) (?:walk|way|drive|ride)\\b",
+              "\\b(?:does|will) it take\\b",
+              "\\bcan i walk\\b",
+              "\\b(?:far|close|near) (?:from|to) here\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "How far is it from here",
+            "Is it far from here",
+            "How long does it take to walk",
+            "Is it within walking distance?",
+            "How many minutes is it on foot?",
+            "Can I walk there?",
+            "Is it a long walk from here?",
+            "How close is the station?",
+            "How long will it take?"
+          ],
+          "neg": [
+            "Where is the train station",
+            "I like walking",
+            "Thank you very much",
+            "I'm from Canada",
+            "It's a nice day for a walk",
+            "Excuse me",
+            "Which way should I go"
+          ]
+        },
+        {
+          "id": "confirm_route",
+          "label_ko": "알아들은 방향을 다시 말해 확인한다",
+          "goal_en": "repeat the directions back to check that you understood",
+          "hint_en": "So I turn left at the bank, right?",
+          "match": {
+            "any": [
+              "\\bso (?:i|we|then|first|next)\\b.{0,20}\\b(?:turn|go|walk|take|left|right|straight|continue|head|cross)\\b",
+              "\\b(?:turn|go|walk|head|continue|keep going|keep walking)\\b.{0,15}\\b(?:left|right(?! now| away)|straight)\\b",
+              "\\b(?:is that|am i|did i get (?:it|that|this)|have i got (?:it|that)) (?:right|correct)\\b|\\bis (?:this|it) (?:right|correct)\\b",
+              "\\b(?:let me|just to|to) (?:repeat|check|confirm|make sure|double check|summarize)\\b",
+              "\\bif i understand\\b",
+              "\\b(?:then|and then|after that|next)\\b.{0,20}\\b(?:left|right|straight|turn|cross)\\b",
+              "\\bso (?:it'?s|it is|the (?:station|museum|bank|park)|that'?s)\\b.{0,30}\\b(?:left|right|straight|ahead|corner|blocks?)\\b",
+              "\\b(?:one|two|three|four|five|1|2|3|4|5) blocks?\\b",
+              "\\b(?:should|do) i (?:turn|go|walk|take|cross)\\b",
+              "\\b(?:left|straight)\\b.{0,15}\\b(?:at|after|before|past|until|on) (?:the|that|a)\\b|\\bright (?:after|before|past|until) (?:the|that|a)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "So I turn left at the bank",
+            "I go straight and then right",
+            "Is that right",
+            "Let me make sure I understand. Straight two blocks, then left?",
+            "Go straight, then turn right, correct?",
+            "Just to confirm, I turn right at the corner?",
+            "Did I get that right?",
+            "Should I turn left at the light?",
+            "So the station is on the right after the bank"
+          ],
+          "neg": [
+            "Where is the station",
+            "Thank you so much",
+            "I'm from Canada",
+            "Could you say that again",
+            "How far is it",
+            "I will go to the museum later",
+            "Excuse me, I'm lost"
+          ]
+        },
+        {
+          "id": "thank_bye",
+          "label_ko": "고맙다고 인사하고 헤어진다",
+          "goal_en": "thank the person and say goodbye",
+          "hint_en": "Thanks so much, have a nice day!",
+          "match": {
+            "any": [
+              "\\b(?:thanks?|thank (?:you|u)|thankyou|thx|appreciate|cheers|grateful|bye|goodbye|see you|take care)\\b",
+              "\\bhave a (?:nice|good|great|wonderful|lovely) (?:day|one|time|evening|trip|afternoon|weekend)\\b",
+              "\\b(?:you'?ve been|that'?s) (?:so |very |really )?(?:helpful|kind)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Thank you so much",
+            "Thanks a lot for your help",
+            "Have a nice day",
+            "Thanks! Bye!",
+            "I really appreciate your help",
+            "You've been very helpful",
+            "See you, take care",
+            "Cheers, have a great day"
+          ],
+          "neg": [
+            "Where is the museum",
+            "How far is it",
+            "I'm from Canada",
+            "Excuse me",
+            "Which way is the bank",
+            "So I turn left at the corner"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hi there! You look a little lost. Can I help you find something?", "goal": "ask_place", "model": "Excuse me, where is the train station?"},
+        {"ai": "The train station? Sure. Go straight down this street for two blocks, then turn left at the bank.", "goal": "ask_distance", "model": "How far is it from here?"},
+        {"ai": "It's about a five-minute walk. Is that clear, or should I say it again?", "goal": "confirm_route", "model": "So I turn left at the bank, right?"},
+        {"ai": "Exactly! You can't miss it. Have a good trip.", "goal": "thank_bye", "model": "Thanks so much, have a nice day!"}
+      ]
+    },
+    {
+      "id": "restaurant",
+      "lang": "en",
+      "min_stage": 2,
+      "order": 50,
+      "max_turns": 10,
+      "title_ko": "식당에서 주문하고 계산하기",
+      "situation_ko": "저녁에 레스토랑에 들어왔어요. 자리를 부탁하고, 추천 메뉴를 묻고, 메인 요리를 주문한 뒤 계산서를 달라고 하세요.",
+      "persona": "Chris, a cheerful server at a family restaurant in Austin",
+      "scene": "The learner is a diner. Seat them, offer the menus, and ask what they want to order. If the learner asks for a recommendation, suggest one dish. Bring the check when the learner asks for it. Keep your lines short and never tell the learner what to say.",
+      "opening": "Hi, welcome in! Table for how many people tonight?",
+      "goals": [
+        {
+          "id": "seat_party",
+          "label_ko": "인원수에 맞는 자리를 말한다",
+          "goal_en": "say how many people are in your party",
+          "hint_en": "A table for two, please.",
+          "match": {
+            "any": [
+              "\\btable (?:for|of)\\b",
+              "\\b(?:for|party of|group of) (?:one|two|three|four|five|six|seven|eight|nine|ten|\\d{1,2})\\b",
+              "\\bjust (?:me|us|one|two|the two of us)\\b",
+              "\\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d{1,2}) (?:of us|people|persons|guests|adults|kids|children)\\b",
+              "\\bwe(?:'?re| are) (?:one|two|three|four|five|six|seven|eight|nine|ten|\\d{1,2})\\b",
+              "\\b(?:only me|by myself|alone|on my own|solo)\\b",
+              "\\bme and my\\b|\\bmy (?:friend|wife|husband|family|parents|girlfriend|boyfriend) and i\\b",
+              "^(?:just )?(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d{1,2}) (?:please|thanks|thank you)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "A table for two please",
+            "Table for four, please",
+            "Just me, one person",
+            "There are three of us",
+            "We're five",
+            "For two, please",
+            "Me and my wife",
+            "A table for two near the window, please",
+            "I'm dining alone tonight"
+          ],
+          "neg": [
+            "I'd like the salmon, please",
+            "What do you recommend",
+            "Could we have the check",
+            "Thank you",
+            "The service is great",
+            "Where is the restroom",
+            "I made a reservation"
+          ]
+        },
+        {
+          "id": "ask_recommend",
+          "label_ko": "추천 메뉴를 묻는다",
+          "goal_en": "ask the server what they recommend",
+          "hint_en": "What do you recommend?",
+          "match": {
+            "any": [
+              "\\b(?:recommend|recommendation|recommendations|recommended|suggest|suggestion|suggestions|signature|specials?|bestsellers?|best seller)\\b",
+              "\\bwhat(?:'?s| is| are)\\b.{0,25}\\b(?:good|best|popular|famous|favou?rite|tasty|delicious)\\b",
+              "\\bwhat should i (?:try|order|get|have|eat|choose)\\b",
+              "\\bwhat\\b.{0,25}\\b(?:best|popular|favou?rite|tasty|delicious|famous)\\b|\\bwhat\\b.{0,25}\\b(?:is|are) good\\b",
+              "\\bwhich\\b.{0,25}\\b(?:popular|best|good|recommended|famous)\\b|\\bwhat (?:do|would) you (?:like|prefer|usually)\\b",
+              "\\bwhat do (?:most |other )?(?:people|customers|guests|others) (?:usually |normally |often )?(?:order|get|like|eat)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "What do you recommend",
+            "What's popular here",
+            "Do you have any suggestions",
+            "Could you recommend something?",
+            "What's the best dish on the menu?",
+            "What should I try?",
+            "Is there a house special?",
+            "What's your favorite dish?",
+            "What do most people order?"
+          ],
+          "neg": [
+            "A table for two please",
+            "The steak, medium please",
+            "Thank you very much",
+            "I'll have the steak",
+            "Could we have the check",
+            "Where is the restroom",
+            "I made a reservation"
+          ]
+        },
+        {
+          "id": "order_main",
+          "label_ko": "메인 요리를 주문한다",
+          "goal_en": "order a main dish",
+          "hint_en": "I'll have the grilled salmon, please.",
+          "match": {
+            "any": [
+              "\\b(?:i'?d|i would|we'?d|we would) (?:like|love|go for|prefer|take|order)(?! to (?:know|ask|pay|see|check|thank|find|say))",
+              "\\bi'?ll (?:just |also |probably )?(?:have|take|get|go with|go for|try|order|do)\\b",
+              "\\bi will (?:have|take|get|order)\\b",
+              "\\bi (?:want|need|choose|order)(?! to (?:know|ask|pay|see|check|thank|find|say))",
+              "\\b(?:i'?m|we'?re) (?:having|getting|going to (?:have|get|order|try))\\b",
+              "\\b(?:can|could|may) (?:i|we) (?:please )?(?:get|have|order|try)\\b",
+              "\\bwe'?ll (?:have|take|get|go with|order)\\b|\\blet me (?:get|have|try)\\b|\\bgive me\\b|\\bi think i'?ll\\b",
+              "\\b(?:please|pls)\\b"
+            ],
+            "all": [
+              "\\b(?:salmon|steaks?|chicken|pasta|(?:cheese)?burgers?|soup|salad|pizza|fish|noodles|tacos?|sandwich|rice|curry|pork|beef|lamb|shrimp|lobster|ribs|spaghetti|lasagna|risotto|sushi|ramen|pancakes|omelet|omelette|ribeye|wings|burrito|dumplings|special|dish|main|entree)(?:es|s)?\\b"
+            ]
+          },
+          "pos": [
+            "I'll have the steak",
+            "Can I get the chicken pasta",
+            "I'd like the salmon please",
+            "The steak, medium please",
+            "I think I'll go with the burger",
+            "Could we order two pizzas?",
+            "I'm going to have the grilled fish",
+            "I'll take the soup and the salad",
+            "Let me try the lamb"
+          ],
+          "neg": [
+            "A table for two please",
+            "I'd like a glass of water",
+            "What do you recommend",
+            "Could we have the check",
+            "I'd like to ask what is in the soup",
+            "Is the pasta spicy",
+            "I made a reservation"
+          ]
+        },
+        {
+          "id": "ask_bill",
+          "label_ko": "계산서를 달라고 한다",
+          "goal_en": "ask for the bill",
+          "hint_en": "Could we have the check, please?",
+          "match": {
+            "any": [
+              "\\b(?:the|our|my|a|that) (?:check|bill|tab|total)\\b",
+              "\\b(?:check|bill),? please\\b|^(?:the |my )?(?:check|bill)$",
+              "\\b(?:i'?d|we'?d|i would|we would) like to pay\\b",
+              "\\bready to pay\\b",
+              "\\b(?:can|could|may) (?:we|i) pay\\b",
+              "\\b(?:split|separate)\\b.{0,12}\\b(?:check|checks|bill|bills|it)\\b",
+              "\\bhow much (?:do|did) (?:i|we) owe\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Could we have the check, please",
+            "Can we get the bill",
+            "Check please",
+            "We're ready to pay",
+            "I'd like to pay now",
+            "Could we get separate bills?",
+            "Can I pay now, please?",
+            "The bill, please",
+            "How much do we owe you?"
+          ],
+          "neg": [
+            "A table for two please",
+            "What do you recommend",
+            "I'll have the steak",
+            "Can I check the menu",
+            "Thank you very much",
+            "Please check my order"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hi, welcome in! Table for how many people tonight?", "goal": "seat_party", "model": "A table for two, please."},
+        {"ai": "Perfect, right this way. Here are your menus. Take your time.", "goal": "ask_recommend", "model": "What do you recommend?"},
+        {"ai": "Our grilled salmon is very popular tonight. Are you ready to order your main dish?", "goal": "order_main", "model": "I'll have the grilled salmon, please."},
+        {"ai": "Coming right up. Shall I bring the check when you're finished?", "goal": "ask_bill", "model": "Could we have the check, please?"}
+      ]
+    },
+    {
+      "id": "pharmacy_doctor",
+      "lang": "en",
+      "min_stage": 3,
+      "order": 60,
+      "max_turns": 10,
+      "title_ko": "약국에서 증상 말하고 약 사기",
+      "situation_ko": "감기 기운이 있어서 약국에 왔어요. 증상과 언제부터 아팠는지 말하고, 알레르기를 밝힌 뒤 약 먹는 방법을 확인하세요.",
+      "persona": "Nora, a pharmacist at a neighborhood drugstore in Vancouver",
+      "scene": "The learner is a customer at a pharmacy counter with a cold or a headache. Ask how the learner feels, how long the symptoms have lasted, and whether they have allergies or take other medicine. Then suggest one common over-the-counter product by name only. Never state a dose, an amount, or how many times a day to take it: say to follow the directions on the label and to ask a pharmacist or doctor if unsure. This is only a language practice role. Keep your lines short and never tell the learner what to say.",
+      "opening": "Hi, how can I help you today? You look like you're not feeling well.",
+      "goals": [
+        {
+          "id": "symptom",
+          "label_ko": "증상을 말한다",
+          "goal_en": "describe your symptoms",
+          "hint_en": "I have a headache and a sore throat.",
+          "match": {
+            "any": [
+              "\\b(?:headaches?|fever|cough|coughing|sore throat|throat|stomach ?ache|tummy ?ache|belly ?ache|backache|toothache|earache|runny nose|stuffy nose|blocked nose|stuffed up|congestion|chills|sneezing)\\b",
+              "\\b(?:nausea|nauseous|diarrhea|vomit|vomiting|rash|itchy|migraine|pain|aches?|achy|dizzy|dizziness|sick|unwell|temperature|upset stomach|stomach (?:problems?|issues?|trouble|cramps?))\\b",
+              "\\b(?:have|has|had|caught|got|get|getting|catch|for|with|from) (?:a |the |some |my )?(?:bad |terrible |nasty |heavy |slight )?(?:cold|flu)\\b",
+              "\\b(?:i feel|i'?m feeling|i am feeling|feeling|feel) (?:sick|dizzy|tired|terrible|awful|weak|bad|unwell|nauseous|hot|cold|faint|off|horrible|lousy|rough|ill|funny|strange|light ?headed)\\b",
+              "\\bhurts?\\b|\\bhurting\\b|\\bmy nose is running\\b",
+              "\\bi (?:can'?t|cannot|couldn'?t) (?:sleep|breathe|stop coughing|eat|swallow)\\b",
+              "\\bi'?m (?:ill|sneezing|sweating|shivering)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I have a headache",
+            "I've had a cough since Monday",
+            "I feel dizzy and tired",
+            "My throat hurts a lot",
+            "I think I caught a cold",
+            "I have a runny nose and I keep sneezing",
+            "I've been feeling nauseous",
+            "My stomach hurts",
+            "I can't stop coughing"
+          ],
+          "neg": [
+            "Thank you so much",
+            "Could you tell me the price",
+            "I'd like one box please",
+            "I'm allergic to penicillin",
+            "How often should I take it",
+            "Where is the pharmacy",
+            "I take the bus to work"
+          ]
+        },
+        {
+          "id": "duration",
+          "label_ko": "언제부터 아팠는지 말한다",
+          "goal_en": "say how long you have had the problem",
+          "hint_en": "It started two days ago.",
+          "match": {
+            "any": [
+              "\\b(?:since|started|began|starting|from) (?:on |last |this |the |about |around )?(?:yesterday|today|last night|tonight|this morning|monday|tuesday|wednesday|thursday|friday|saturday|sunday|morning|weekend|last week|this week|last month)\\b",
+              "\\b(?:two|three|four|five|six|seven|ten|\\d+|few|couple|several|half) (?:of |more |or three )?(?:days?|weeks?|months?|nights?)\\b",
+              "\\b(?:for|over) (?:about |almost |nearly )?(?:a|an|one) (?:day|week|month|while|long time|few days)\\b",
+              "^(?:about |around |almost |maybe |nearly )?(?:a|an|one) (?:day|week|month|hour)(?: now| or so| ago)?$",
+              "\\b(?:started|began|since|had|have|has|felt|feel|feeling|got|woke|been|it)\\b.{0,30}\\b(?:yesterday|last night|this morning|last week|last weekend|all week|all day|all night|a while|a long time|few days|couple days)\\b",
+              "\\b(?:yesterday|last night|this morning|last week|last weekend|all week|all day|all night)\\b.{0,30}\\b(?:started|began|since|had|have|has|felt|feel|feeling|got|woke|been)\\b",
+              "^(?:since |from |about |around |it was |it started |it began )?(?:yesterday|last night|this morning|last week|last weekend|a while|a long time)$",
+              "\\bever since\\b|\\bfor the (?:last|past) (?:few )?(?:days|weeks|hours|week|month)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "It started two days ago",
+            "I've had it since yesterday",
+            "It started this morning",
+            "About three days now",
+            "It began last Friday",
+            "For a week or so",
+            "I've been like this for a few days",
+            "It started a couple of days ago",
+            "Since last night"
+          ],
+          "neg": [
+            "I have a headache",
+            "Do you have anything for pain",
+            "Could you tell me the price",
+            "How many times a day should I take it",
+            "I'm allergic to penicillin",
+            "Thank you so much",
+            "Where is the pharmacy"
+          ]
+        },
+        {
+          "id": "allergy",
+          "label_ko": "알레르기나 먹고 있는 약을 말한다",
+          "goal_en": "say whether you have allergies or take other medicine",
+          "hint_en": "I'm not allergic to anything.",
+          "match": {
+            "any": [
+              "\\ballerg(?:y|ic|ies|ens?)\\b",
+              "(?<!can )(?<!should )(?<!could )(?<!do )(?<!may )(?<!will )\\bi (?:(?:do not|don'?t|never|also|currently|usually|only|just) )?(?:take|took|use)\\b.{0,25}\\b(?:medic\\w{3,6}|meds|pills?|drugs?|tablets?|antibiotics?|supplements?|vitamins?|painkillers?|aspirin|insulin|anything)\\b",
+              "\\bi(?: am|'?m) (?:not )?(?:currently |also |already |only )?(?:taking|on|using|having)\\b.{0,25}\\b(?:medic\\w{3,6}|meds|pills?|drugs?|tablets?|antibiotics?|supplements?|vitamins?|painkillers?|aspirin|insulin|anything)\\b",
+              "\\bi(?:'?ve| have| haven'?t) (?:not |never |no )?(?:been )?(?:taking|taken|used)\\b.{0,25}\\b(?:medic\\w{3,6}|meds|pills?|drugs?|tablets?|antibiotics?|supplements?|vitamins?|painkillers?|aspirin|insulin|anything)\\b",
+              "\\bno (?:other |current )?(?:medic\\w{3,6}|drugs|pills|allergies)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I'm not allergic to anything",
+            "I don't take any other medicine",
+            "I'm taking some pills for my blood pressure",
+            "I'm not taking any other medicine.",
+            "No, I have no allergies",
+            "I take vitamins every day",
+            "I'm on blood pressure medication",
+            "I'm allergic to penicillin",
+            "I haven't taken any other drugs"
+          ],
+          "neg": [
+            "I have a headache",
+            "It started two days ago",
+            "How often should I take it",
+            "I don't take the subway.",
+            "I take the bus to work",
+            "Can I take this medicine with food?",
+            "How many pills should I take"
+          ]
+        },
+        {
+          "id": "dosage",
+          "label_ko": "약 복용 방법을 묻는다",
+          "goal_en": "ask how often and when to take the medicine",
+          "hint_en": "How often should I take it?",
+          "match": {
+            "any": [
+              "\\bhow (?:often|many times)\\b",
+              "\\bhow (?!long does it)(?!much time).{0,25}\\b(?:take|taking|use|using|dose|dosage|apply)\\b",
+              "\\bwhen\\b.{0,20}\\b(?:take|taking|use)\\b",
+              "\\b(?:before|after|with|without|during) (?:or after |or with |or without )?(?:meals?|food|eating|eat|breakfast|lunch|dinner|water|milk|bed|sleep)\\b",
+              "\\b(?:once|twice|three times|every (?:\\d+|four|six|eight|twelve) hours?)\\b|\\bempty stomach\\b",
+              "\\b(?:can|should|could|do|may|must|is it (?:ok|okay) to) (?:i )?take (?:it|them|this|these|that|the (?:pills?|tablets?|medicine|medication|capsules?)|one|two|\\d)\\b",
+              "\\b(?:dose|dosage|directions|instructions)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "How often should I take it",
+            "How many times a day",
+            "When should I take the pills",
+            "How should I take this medicine, before or after meals?",
+            "Should I take it with food?",
+            "Should I take it in the morning or at night?",
+            "What's the dosage?",
+            "How much should I take at once?",
+            "Is it okay to take it before bed?"
+          ],
+          "neg": [
+            "I have a headache",
+            "Do you have anything for pain",
+            "Thank you very much",
+            "How long does it take to feel better",
+            "How much is it",
+            "I'm allergic to penicillin",
+            "How many pills are in a box"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hi, how can I help you today? You look like you're not feeling well.", "goal": "symptom", "model": "I have a headache and a sore throat."},
+        {"ai": "Oh no. How long have you had these symptoms?", "goal": "duration", "model": "It started two days ago."},
+        {"ai": "I see. Are you allergic to any medicine, or are you taking other medication?", "goal": "allergy", "model": "I'm not allergic to anything."},
+        {"ai": "I can suggest a common cold medicine for you. Do you have any questions about how to use it?", "goal": "dosage", "model": "How often should I take it?"}
+      ]
+    },
+    {
+      "id": "return_item",
+      "lang": "en",
+      "min_stage": 3,
+      "order": 70,
+      "max_turns": 10,
+      "title_ko": "물건 반품이나 교환 요청하기",
+      "situation_ko": "지난주에 산 셔츠가 맞지 않아요. 이유를 말하고, 영수증과 구매 날짜를 알려 준 뒤, 교환이나 환불을 요청하세요.",
+      "persona": "Rachel, a customer service associate at a clothing store in New York",
+      "scene": "The learner wants to return or exchange a shirt bought last week. Ask for the receipt, ask why the learner is returning it, and offer an exchange in another size or a refund to the original card. Keep your lines short and never tell the learner what to say.",
+      "opening": "Hi there, how can I help you today?",
+      "goals": [
+        {
+          "id": "reason",
+          "label_ko": "반품하거나 교환하는 이유를 말한다",
+          "goal_en": "explain why you want to return or exchange the item",
+          "hint_en": "It's too small for me.",
+          "match": {
+            "any": [
+              "\\btoo (?:small|smaller|big|bigger|large|larger|tight|loose|short|long|baggy|wide|narrow|snug)\\b",
+              "\\b(?:doesn'?t|does not|didn'?t|did not|won'?t|isn'?t|is not|wasn'?t|was not|not) (?:fit|fitting|work|working|right|suit|look|feel|match|the right|the correct|my size|what i)\\b",
+              "\\b(?:wrong|incorrect)\\b",
+              "\\b(?:damaged|broken|defective|faulty|torn|ripped|stained|dirty|cracked|scratched|shrank|shrunk|ruined|wrinkled|missing)\\b",
+              "\\b(?:holes?|stains?|tears?|cracks?|scratch(?:es)?|rips?|defects?)\\b",
+              "\\b(?:button|zipper|strap|handle|sleeve|heel|sole|screw|lid|it|they)\\b.{0,12}\\b(?:fell off|came off|came apart|fell apart|stopped working|broke)\\b",
+              "\\bi (?:don'?t|do not|didn'?t|did not) (?:like|want|need)\\b|\\bchanged my mind\\b|\\bno longer (?:need|want)\\b",
+              "\\bnot what i (?:expected|wanted|ordered|thought)\\b|\\bnot comfortable\\b|\\b(?:problem|issue|trouble) with\\b",
+              "\\b(?:need|want|prefer) (?:an? |the )?(?:bigger|smaller|larger|different) (?:size|one)\\b",
+              "\\b(?:is|are|was|looks?|seems?|feels?) (?:very |totally |completely |quite |a bit |slightly )?different\\b|\\bnot the same\\b|\\bdoesn'?t match\\b",
+              "\\b(?:a (?:bit|little)|so|very|really|pretty|quite|kind of) (?:small|big|large|tight|loose|short|long|baggy|snug|uncomfortable)\\b|\\b(?:tight|loose|baggy|snug)\\b",
+              "\\b(?:it'?s|it is|they'?re|they are|this is|the [a-z]{3,10} is) (?:just )?(?:small|smaller|big|bigger|large|larger|short|long)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "It's too small for me",
+            "The shirt doesn't fit",
+            "It has a hole, so it's damaged",
+            "I got the wrong size",
+            "The zipper is broken",
+            "I don't like the color",
+            "It isn't the right size",
+            "There's a stain on the sleeve",
+            "I need a bigger size"
+          ],
+          "neg": [
+            "Hi, I need some help",
+            "Thank you very much",
+            "Can I see the receipt",
+            "I bought it last Saturday",
+            "I'd like to exchange it",
+            "I'd like to return this shirt",
+            "What is your return policy"
+          ]
+        },
+        {
+          "id": "receipt",
+          "label_ko": "영수증이나 구매 날짜를 말한다",
+          "goal_en": "mention the receipt or the day you bought it",
+          "hint_en": "I have the receipt. I bought it last Saturday.",
+          "match": {
+            "any": [
+              "\\b(?:receipts?|invoice|proof of purchase|order number|order confirmation|confirmation email)\\b",
+              "\\b(?:bought|purchased|got|ordered|paid for) (?:it|this|these|them|that|the)\\b.{0,30}\\b(?:on|last|yesterday|ago|today|this week|this morning|earlier|recently|the other day|back)\\b",
+              "\\b(?:it|that|this)\\b.{0,15}\\b(?:last (?:week|weekend|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|yesterday|(?:a (?:few|couple of) days|(?:one|two|three|four|five|six|seven|\\d+) (?:days?|weeks?)) ago)\\b",
+              "^(?:last (?:week|weekend|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|yesterday|(?:a (?:few|couple of) days|(?:one|two|three|four|five|six|seven|\\d+) (?:days?|weeks?)) ago)$"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I have the receipt here",
+            "I bought it last Saturday",
+            "I purchased it on Monday",
+            "Here's my receipt",
+            "I got it two days ago",
+            "I bought this shirt a week ago",
+            "I lost the receipt, but I paid by card on Friday",
+            "I have the order confirmation on my phone",
+            "I purchased it yesterday"
+          ],
+          "neg": [
+            "It's too small for me",
+            "Thank you very much",
+            "I'd like to exchange it",
+            "Can I get a refund",
+            "What is your return policy",
+            "Hi, I want to return this shirt"
+          ]
+        },
+        {
+          "id": "exchange_refund",
+          "label_ko": "교환이나 환불 중 원하는 것을 말한다",
+          "goal_en": "say whether you want an exchange or a refund",
+          "hint_en": "I'd like to exchange it for a medium, please.",
+          "match": {
+            "any": [
+              "\\b(?:exchang(?:e|ed|es|ing)|refund(?:s|ed|ing)?|money back|cash back|my money|swap(?:ped)?|reimburs\\w{1,5}|replace(?:ment|d)?|store credit)\\b",
+              "\\b(?:change|switch|trade) (?:it|this|that)\\b",
+              "\\b(?:for|with) (?:an? |the )(?:different|bigger|smaller|larger|new|medium|large|small|another)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I'd like to exchange it",
+            "Can I get a refund",
+            "I want my money back",
+            "Could I swap it for a larger one?",
+            "Can I change it for another size?",
+            "I'd like a replacement",
+            "Can I get it refunded to my card?",
+            "I'd like to exchange it for a medium, please"
+          ],
+          "neg": [
+            "It's too small for me",
+            "I bought it last Saturday",
+            "Thank you very much",
+            "I have the receipt",
+            "Hi, I want to return this shirt",
+            "It doesn't fit"
+          ]
+        },
+        {
+          "id": "thank",
+          "label_ko": "처리해 준 것에 감사 인사를 한다",
+          "goal_en": "thank the associate for helping",
+          "hint_en": "Thank you for your help.",
+          "match": {
+            "any": [
+              "\\b(?:thanks?|thank (?:you|u)|thankyou|thx|cheers|much appreciated|appreciate|grateful)\\b",
+              "\\byou'?ve been (?:so |very )?(?:helpful|kind)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "Thank you for your help",
+            "Thanks a lot",
+            "I appreciate it",
+            "Thanks so much, that's perfect",
+            "I'm really grateful",
+            "Cheers!",
+            "Thank you, you've been very helpful",
+            "Thx for the quick service"
+          ],
+          "neg": [
+            "It's too small for me",
+            "I bought it last Saturday",
+            "I'd like to exchange it",
+            "Can I get a refund",
+            "Hi, how are you",
+            "That's all I need"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hi there, how can I help you today?", "goal": "reason", "model": "It's too small for me."},
+        {"ai": "I'm sorry to hear that. Do you have the receipt with you?", "goal": "receipt", "model": "I have the receipt. I bought it last Saturday."},
+        {"ai": "Thanks. Would you like to exchange it for a different size, or get a refund to your card?", "goal": "exchange_refund", "model": "I'd like to exchange it for a medium, please."},
+        {"ai": "Here is your new shirt. Have a wonderful day!", "goal": "thank", "model": "Thank you for your help."}
+      ]
+    },
+    {
+      "id": "job_interview",
+      "lang": "en",
+      "min_stage": 4,
+      "order": 80,
+      "max_turns": 10,
+      "title_ko": "영어 면접에서 자기소개와 질문하기",
+      "situation_ko": "회사의 영어 면접장이에요. 자기소개를 하고, 장점과 지원 이유를 말한 뒤, 마지막에 면접관에게 질문하세요.",
+      "persona": "Olivia, a hiring manager at a software company in Boston",
+      "scene": "The learner is a candidate in a short English job interview for an office position. Ask the learner to introduce themselves, ask about a strength or a past experience, ask why they want this job, and invite questions at the end. Keep your questions professional and short. Never tell the learner what to say.",
+      "opening": "Hello, thank you for coming in today. Please, have a seat. Could you start by telling me a little about yourself?",
+      "goals": [
+        {
+          "id": "intro",
+          "label_ko": "자기소개를 한다",
+          "goal_en": "introduce yourself and your work or studies",
+          "hint_en": "I'm a designer with three years of experience.",
+          "match": {
+            "any": [
+              "(?<!called )\\bmy name'?s?( is)?\\b(?! tag| card| badge)",
+              "\\bi(?:'?m| am) an? (?!(?:little|bit|lot|big|huge|good|great|very|fast|quick|hard|kind|real|slow|strong|natural|fan|person|people)\\b)[a-z]{2,20}",
+              "\\bi(?:'?m| am) (?:currently |now |still |also )?(?:working|studying|employed|based|majoring|graduating|finishing)\\b",
+              "\\bi(?:'?ve| have) (?:worked|studied|majored|graduated|been working|been studying|been an?)\\b",
+              "\\b(?:work(?:ed|ing)?|employed) (?:at|as|for|in|with)\\b|\\bstud(?:y|ied|ying) (?:at|in)\\b",
+              "\\b(?:graduat(?:ed|e|ing)|majored|majoring|degree|bachelor|master|master'?s|phd|university|college)\\b",
+              "\\b(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten) years?\\b|\\bexperience (?:in|as|with)\\b",
+              "\\bintroduce myself\\b|\\bcurrent(?:ly)? (?:role|job|position)\\b",
+              "\\bi(?:'?m| am)\\b.{0,25}\\ban? (?:[a-z]{3,12} )?(?:designer|developer|engineer|teacher|nurse|manager|accountant|analyst|student|programmer|marketer|assistant|consultant|researcher|officer|specialist|coordinator|intern|graduate|salesperson|writer|doctor)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "My name is Min-ho and I work in design",
+            "I'm a designer with three years of experience",
+            "I have worked in sales for four years",
+            "I graduated in computer science last year.",
+            "I recently finished my master's degree in economics",
+            "Currently I'm working as a nurse at a hospital",
+            "I majored in business at Yonsei University",
+            "I used to work in marketing",
+            "Let me introduce myself"
+          ],
+          "neg": [
+            "Thank you for having me",
+            "Yes, I can start on Monday",
+            "Sure, go ahead",
+            "I'm a little nervous.",
+            "I'm very excited about this",
+            "I'm so happy to be here",
+            "Nice to meet you",
+            "I'm good at solving problems"
+          ]
+        },
+        {
+          "id": "strength",
+          "label_ko": "장점이나 구체적인 경험을 말한다",
+          "goal_en": "describe a strength or a past achievement",
+          "hint_en": "I'm good at solving problems, and I led a team of five.",
+          "match": {
+            "any": [
+              "\\b(?:strengths?|strong point|skills?|skilled|talented|expert|proud|accomplish\\w{2,7}|achiev\\w{2,6}|improv\\w{1,4}|led|leading|manag(?:e|ed|ing)|solv(?:e|ed|ing)|increas(?:e|ed)|reduc(?:e|ed))\\b",
+              "\\b(?:built|created|launched|developed|designed|organi[sz]ed|delivered|won|award|promoted|completed|handled|trained|coordinated|negotiated|saved|boosted|succeeded)\\b",
+              "\\b(?:good|great|excellent|strong|skilled|experienced|talented|quick|fast|expert|brilliant|comfortable) (?:at|with|in)\\b",
+              "\\b(?:hard ?working|reliable|responsible|detail oriented|team player|fast learner|quick learner|creative|leader|teamwork|problem solving|adaptable|flexible|punctual|dedicated|diligent|patient)\\b",
+              "\\bi(?: can|'?m able to| am able to| could) (?:work|handle|manage|solve|learn|adapt|lead|communicate|deal|multitask)\\b",
+              "\\blearn\\w{0,3}\\b.{0,25}\\b(?:quickly|fast|easily)\\b|\\b(?:quickly|fast|easily)\\b.{0,10}\\blearn"
+            ],
+            "all": []
+          },
+          "pos": [
+            "My main strength is teamwork",
+            "I'm good at solving problems",
+            "I led a team of five people",
+            "I'm a quick learner and very organized",
+            "I increased our sales by twenty percent",
+            "One thing I'm proud of is a project I delivered early",
+            "I'm very detail oriented",
+            "I can work well under pressure",
+            "I'm great with customers"
+          ],
+          "neg": [
+            "My name is Min-ho",
+            "Thank you for having me",
+            "Yes, I can start on Monday",
+            "Sure, go ahead",
+            "I'm a little nervous",
+            "I'd like to know about the team",
+            "I'm from Busan"
+          ]
+        },
+        {
+          "id": "why_job",
+          "label_ko": "이 회사나 직무에 지원한 이유를 말한다",
+          "goal_en": "explain why you want this job or company",
+          "hint_en": "I want to work here because your team builds useful products.",
+          "match": {
+            "any": [
+              "\\b(?:i want|i'?d like|i would like|i hope|i'?m hoping|i'?d love|i would love|i plan) to (?!ask|know|say|thank|introduce|tell|talk|see|confirm|check).{0,40}\\b(?:work|join|contribute|grow|develop|learn|build|gain|advance|career|team|company|role|position|opportunity|field|industry|skills|part)\\b",
+              "\\b(?:interested|excited|passionate|eager|keen|thrilled|attracted|drawn|enthusiastic|motivated)\\b.{0,30}\\b(?:role|position|job|company|team|opportunity|field|industry|work|business|organization|firm|mission|products?|vacancy|post|projects?|culture)\\b",
+              "\\bbecause\\b.{0,40}\\b(?:team|company|role|position|job|product|products|mission|work|field|industry|skills|career|opportunity|culture|values|growth|learn|passion|passionate|love|enjoy)\\b",
+              "\\b(?:that'?s why|this is why|reason (?:i|why i)) (?:i )?(?:applied|want|am here|chose)\\b|\\bi (?:applied|chose|picked) (?:for|to|because)\\b|\\bi'?m applying\\b",
+              "\\bi (?:chose|choose|picked|applied|apply)\\b.{0,30}\\b(?:company|team|role|position|job|firm|organization)\\b",
+              "\\b(?:looking for|seeking|searching for)\\b.{0,25}\\b(?:chance|opportunity|challenge|place|role|position|job|career)\\b|\\bchance to (?:grow|learn|work|join)\\b",
+              "\\bi(?:'?ve| have) (?:always |long |really |also |been )?(?:wanted|dreamed|dreaming|hoped|wished)\\b.{0,40}\\b(?:work|join|become|career|team|company|role|industry|field)\\b",
+              "\\b(?:great|good|perfect|right|ideal|strong|excellent) (?:fit|match|opportunity|chance)\\b|\\bmatch(?:es)? my\\b|\\bfits? my\\b",
+              "\\bi(?:'?ve| have)? (?:always |really |truly |also |long |greatly )?(?:admire|respect|appreciate|like|love)d?\\b.{0,20}\\b(?:company|team|products?|culture|mission|work|values|brand)\\b",
+              "\\bi (?:believe|think|feel) i\\b.{0,25}\\b(?:fit|contribute|help|bring|add|suit|match)\\b"
+            ],
+            "all": []
+          },
+          "pos": [
+            "I want to work here because the team is great",
+            "I'm excited to join your company",
+            "I'm interested in this role because I like teaching",
+            "I am very interested in this role.",
+            "I admire your company's mission",
+            "I believe I can contribute to your team",
+            "This position matches my skills perfectly",
+            "That's why I applied for this job",
+            "I'd like to grow my career in this field",
+            "I'm looking for a chance to grow."
+          ],
+          "neg": [
+            "I have worked in sales for four years",
+            "Sure, go ahead",
+            "Thank you for having me",
+            "I'm a little nervous",
+            "I'd like to ask a question about the team",
+            "I'm so excited to be here",
+            "I'm from Busan"
+          ]
+        },
+        {
+          "id": "ask_back",
+          "label_ko": "면접관에게 질문한다",
+          "goal_en": "ask the interviewer a question about the job or the team",
+          "hint_en": "What does a typical day look like in this role?",
+          "match": {
+            "any": [
+              "\\b(?:can|could|may|might) i ask\\b|^(?:is|are|do|does)\\b|^(?:can|could|will|would|should) i\\b",
+              "\\b(?:who|where|when|why) (?:is|are|will|would|can|do|does)\\b",
+              "\\bi (?:have|had) (?:a |one |some |two )?questions?\\b|\\bi'?d like to (?:ask|know|learn|hear|understand)\\b",
+              "\\bi(?: was|'?m| am) wondering\\b|\\bwondering (?:if|what|how|about)\\b|\\bi wonder\\b|\\bcurious about\\b|\\bi want to know\\b",
+              "\\b(?:could|can|would) you (?:tell|explain|describe|share|let)\\b|\\b(?:tell|show) me (?:about|more)\\b",
+              "\\bwhat(?:'s| is| are| does| do| will| would| kind| type| sort| about| opportunities)\\b",
+              "\\bhow (?!are you\\b)(?:is|are|does|do|many|large|big|long|often|soon|much|will|would|can|did)\\b",
+              "\\b(?:is|are) there\\b|\\b(?:do|does) (?:you|the (?:company|team|role|position|job)|this (?:role|position|job))\\b",
+              "\\bwill (?:i|we) (?:be|have|work|get|need|receive)\\b|\\bwould (?:i|there) be\\b|\\bcan i (?:work|see|know|get|expect|learn|meet|visit)\\b",
+              "\\bis (?:the|this|it|that) (?:role|position|job|work|team|office|schedule|salary|pay|company)\\b"
+            ],
+            "all": [
+              "\\b(?:role|job|position|compan|team|salary|training|benefit|schedule|hours|process|steps|cultur|work|remote|office|project|responsib|dut(?:y|ies)|task|growth|promot|career|opportun|interview|hiring|typical day|daily|manager|colleague|employee|challeng|dress|hear back|decision|feedback|question|ask)"
+            ]
+          },
+          "pos": [
+            "What does a typical day look like",
+            "Could I ask about the team size",
+            "What is the team like",
+            "What are the working hours?",
+            "Can I ask a question about the schedule?",
+            "How many people are on the team?",
+            "Is there room for growth in this role?",
+            "I was wondering about the training program",
+            "Do you offer remote work?"
+          ],
+          "neg": [
+            "I'm a designer with three years of experience",
+            "Thank you for having me",
+            "I'm good at solving problems",
+            "I'm a little nervous",
+            "Yes, I can start on Monday",
+            "I want to work here because the team is great",
+            "I have worked in sales for four years",
+            "What is this?",
+            "Is this seat taken?"
+          ]
+        }
+      ],
+      "script": [
+        {"ai": "Hello, thank you for coming in today. Please, have a seat. Could you start by telling me a little about yourself?", "goal": "intro", "model": "My name is Min-ho. I'm a designer with three years of experience."},
+        {"ai": "That's interesting. What would you say is your greatest strength?", "goal": "strength", "model": "I'm good at solving problems, and I led a team of five."},
+        {"ai": "Thank you for sharing that. Why are you interested in this position?", "goal": "why_job", "model": "I want to work here because your team builds useful products."},
+        {"ai": "Good. Before we finish, do you have any questions for me?", "goal": "ask_back", "model": "What does a typical day look like in this role?"}
+      ]
+    }
+  ]
+}
