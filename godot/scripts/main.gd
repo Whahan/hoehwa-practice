@@ -101,6 +101,7 @@ func _ready() -> void:
 	_phone = Platform.is_phone()
 	if _phone:
 		PhoneLayout.apply_theme(ThemeDB.get_project_theme())
+		PhoneLayout.install_touch_scroll(get_tree()) # a drag that starts on a card / button scrolls the page
 	_setup_window()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 

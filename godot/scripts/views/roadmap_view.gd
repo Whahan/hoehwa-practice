@@ -156,10 +156,9 @@ func _month_card(m: Dictionary, current: bool) -> Control:
 	right.add_child(chev)
 	hrow.add_child(right)
 	head.add_child(hrow)
-	head.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			_set_open(n, not open)
-			refresh())
+	UI.on_tap(head, func() -> void:
+		_set_open(n, not open)
+		refresh())
 	outer.add_child(head)
 
 	if not open:

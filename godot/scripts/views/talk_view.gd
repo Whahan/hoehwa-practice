@@ -298,10 +298,9 @@ func _scenario_card(s: Dictionary) -> Control:
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(v)
 	var sid: String = str(s["id"])
-	p.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			sel["scen"] = sid
-			_render_setup())
+	UI.on_tap(p, func() -> void:
+		sel["scen"] = sid
+		_render_setup())
 	return p
 
 

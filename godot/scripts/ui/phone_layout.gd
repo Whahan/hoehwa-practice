@@ -114,3 +114,167 @@ static func touch(c: Control, h: float = BTN_H, w: float = 0.0) -> void:
 	c.custom_minimum_size.y = maxf(c.custom_minimum_size.y, h)
 	if w > 0.0:
 		c.custom_minimum_size.x = maxf(c.custom_minimum_size.x, w)
+
+
+# ---------------------------------------------------------------- touch scrolling
+
+## Drag distance (logical px) that turns a touch into a scroll; also the largest wobble that still counts as a tap.
+const SCROLL_DEADZONE := 12
+const TAP_SLOP := 12.0
+
+## Controls that keep their own pointer handling (their drag is a value, a thumb or an inner scroll), so a drag
+## that starts on them does not scroll the page.
+const _OWN_DRAG := ["Slider", "ScrollBar", "ItemList", "Tree", "SpinBox"]
+
+static var _touch_scroll_hooked: bool = false
+
+
+## Phone only, called once by main.gd before any screen is built.
+##
+## Why: Godot 4.6 ScrollContainer scrolls from the (touch-emulated) mouse button / motion events that BUBBLE up to
+## it (scene/gui/scroll_container.cpp gui_input; routing in Viewport::_gui_call_input). A control with
+## mouse_filter STOP (the default of PanelContainer, Button, LineEdit, RichTextLabel, ProgressBar, ...) ends the
+## bubbling, so a finger that starts on a card or a button never reaches the page and only blank space scrolls.
+## Fix: every control inside a ScrollContainer that would STOP the event passes it on (PASS: it still gets the
+## event first, so taps, focus and hover work as before; a covering overlay still blocks, because the event only
+## bubbles to the parents of the control that is hit). Once the finger leaves the dead zone, ScrollContainer
+## sends NOTIFICATION_SCROLL_BEGIN to its children, which cancels the press of the Button under the finger.
+## Every ScrollContainer gets the same dead zone (the default is 0, where any shaky tap would scroll).
+## Nested scroll containers: the inner one scrolls first and only accepts a drag that moves it, so when it is at
+## its end the rest of the same drag continues in the outer page (scroll chaining).
+static func install_touch_scroll(tree: SceneTree) -> void:
+	if _touch_scroll_hooked:
+		return
+	_touch_scroll_hooked = true
+	tree.node_added.connect(_on_node_added)
+	_touch_prepare(tree.root)
+
+
+static func _touch_prepare(n: Node) -> void:
+	_on_node_added(n)
+	for c in n.get_children():
+		_touch_prepare(c)
+
+
+static func _on_node_added(n: Node) -> void:
+	if n is ScrollContainer:
+		var sc := n as ScrollContainer
+		if sc.scroll_deadzone < SCROLL_DEADZONE:
+			sc.scroll_deadzone = SCROLL_DEADZONE
+	elif n is OptionButton:
+		# It opens its popup on PRESS by default, which cannot be undone when the press turns into a scroll.
+		(n as OptionButton).action_mode = BaseButton.ACTION_MODE_BUTTON_RELEASE
+	if n is Control:
+		pass_touch_to_scroll(n as Control)
+
+
+## STOP -> PASS for `c` when it sits inside a ScrollContainer (see install_touch_scroll). Public so a screen can
+## call it for a control it sets to STOP after adding it to the tree. A control can opt out with
+## c.set_meta("own_drag", true).
+static func pass_touch_to_scroll(c: Control) -> void:
+	if c.mouse_filter != Control.MOUSE_FILTER_STOP or c.has_meta("own_drag"):
+		return
+	for cls in _OWN_DRAG:
+		if c.is_class(cls):
+			return
+	var p: Node = c.get_parent()
+	while p != null and not (p is Window):
+		if p is ScrollContainer:
+			c.mouse_filter = Control.MOUSE_FILTER_PASS
+			if c is LineEdit or c is TextEdit:
+				_assist_field_drag(c)
+			return
+		p = p.get_parent()
+
+
+## LineEdit and TextEdit accept every left press themselves (line_edit.cpp: "Don't pass event further when clicked
+## on text field"), so the press never reaches the ScrollContainer and its own touch drag cannot start. Taps, focus,
+## caret and keyboard stay with the field; a mostly vertical drag that starts on it is scrolled here instead:
+## a TextEdit with text left to scroll moves its own text first (inner first), the rest goes to the nearest
+## scrollable parent (chaining); the field does not select text and does not open the keyboard on release, and a
+## flick keeps the page moving a little (a tween; the ScrollContainer fling is not reachable from here).
+static func _assist_field_drag(c: Control) -> void:
+	if c.has_meta("touch_assist"):
+		return
+	c.set_meta("touch_assist", true)
+	var st := {"down": false, "drag": false, "start": Vector2.ZERO, "acc": 0.0, "sc": null, "vel": 0.0}
+	c.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			var mb := ev as InputEventMouseButton
+			if mb.pressed:
+				st["down"] = true
+				st["drag"] = false
+				st["start"] = mb.global_position
+				st["acc"] = 0.0
+				st["sc"] = null
+			else:
+				if st["down"] and st["drag"]:
+					c.accept_event() # a scroll, not a tap: no keyboard, no selection bookkeeping
+					_fling(st["sc"] as ScrollContainer, float(st["vel"]))
+				st["down"] = false
+				st["drag"] = false
+		elif ev is InputEventMouseMotion and st["down"] and ((ev as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			var mm := ev as InputEventMouseMotion
+			var d: Vector2 = mm.global_position - (st["start"] as Vector2)
+			var dy: float = -mm.relative.y
+			if not st["drag"]:
+				if absf(d.y) <= SCROLL_DEADZONE or absf(d.y) <= absf(d.x):
+					return
+				st["drag"] = true
+				dy = -d.y # everything since the press, so no distance is lost to the dead zone
+				var old: Variant = _scrollable_parent(c, dy)
+				if old is ScrollContainer and (old as ScrollContainer).has_meta("fling"):
+					((old as ScrollContainer).get_meta("fling") as Tween).kill()
+			st["vel"] = mm.velocity.y
+			st["sc"] = _scroll_step(c, dy, st)
+			if c is LineEdit:
+				(c as LineEdit).deselect.call_deferred()
+			else:
+				(c as TextEdit).deselect.call_deferred())
+
+
+## Moves `dy` px (> 0 = content up) into the TextEdit itself if it has text left in that direction, else into the
+## nearest scrollable parent. Returns the page that moved (null when the TextEdit took it).
+static func _scroll_step(c: Control, dy: float, st: Dictionary) -> ScrollContainer:
+	if c is TextEdit:
+		var te := c as TextEdit
+		var vb := te.get_v_scroll_bar()
+		var lh: float = maxf(1.0, float(te.get_line_height()))
+		var room: float = vb.max_value - vb.page
+		if vb.visible and room > 0.5 and ((dy > 0.0 and te.get_v_scroll() < room - 0.01) or (dy < 0.0 and te.get_v_scroll() > 0.01)):
+			te.set_v_scroll(clampf(te.get_v_scroll() + dy / lh, 0.0, room))
+			return null
+	var sc: ScrollContainer = _scrollable_parent(c, dy)
+	if sc == null:
+		return null
+	st["acc"] = float(st["acc"]) + dy
+	var whole: int = int(st["acc"])
+	if whole != 0:
+		st["acc"] = float(st["acc"]) - float(whole)
+		sc.scroll_vertical += whole
+	return sc
+
+
+## Nearest ScrollContainer above `c` that can still move in direction `dir` (> 0 = down); chains outwards.
+static func _scrollable_parent(c: Control, dir: float) -> ScrollContainer:
+	var p: Node = c.get_parent()
+	while p != null and not (p is Window):
+		if p is ScrollContainer:
+			var sc := p as ScrollContainer
+			var bar := sc.get_v_scroll_bar()
+			var top: float = maxf(0.0, bar.max_value - bar.page)
+			if sc.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED and ((dir > 0.0 and float(sc.scroll_vertical) < top) or (dir < 0.0 and sc.scroll_vertical > 0)):
+				return sc
+		p = p.get_parent()
+	return null
+
+
+static func _fling(sc: ScrollContainer, vel_y: float) -> void:
+	if sc == null or not is_instance_valid(sc) or absf(vel_y) < 300.0:
+		return
+	var bar := sc.get_v_scroll_bar()
+	var target: float = clampf(float(sc.scroll_vertical) - vel_y * 0.3, 0.0, maxf(0.0, bar.max_value - bar.page))
+	var tw := sc.create_tween()
+	tw.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(sc, "scroll_vertical", int(target), 0.5)
+	sc.set_meta("fling", tw)

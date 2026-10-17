@@ -176,9 +176,7 @@ static func _add_units(box: VBoxContainer, units: Array, lang: String) -> void:
 		if c == null or phonemes_of(units[i] as Dictionary).is_empty():
 			continue
 		var idx: int = i
-		(c["panel"] as PanelContainer).gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-				select.call(idx))
+		UI.on_tap(c["panel"] as PanelContainer, func() -> void: select.call(idx))
 	box.add_child(detail)
 	box.add_child(UI.label("초록은 잘 말한 부분, 노랑은 소리 하나가 어색한 부분, 빨강은 놓친 부분이에요. 글자를 누르면 발음기호별로 어떻게 들렸는지 볼 수 있어요.", "Small"))
 	if first_bad >= 0:

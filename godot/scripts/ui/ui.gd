@@ -114,6 +114,29 @@ static func touch(c: Control, h: float = 48.0, w: float = 0.0) -> void:
 		PhoneLayout.touch(c, h, w)
 
 
+## Calls `cb` when the control is clicked with the left button. PC: on press, as always. Phone: on release, and only
+## when the finger stayed within PhoneLayout.TAP_SLOP, so a drag that starts on the control scrolls the page
+## instead of triggering it.
+static func on_tap(c: Control, cb: Callable) -> void:
+	if not Platform.is_phone():
+		c.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				cb.call())
+		return
+	var st := {"down": false, "pos": Vector2.ZERO}
+	c.gui_input.connect(func(ev: InputEvent) -> void:
+		if not (ev is InputEventMouseButton) or (ev as InputEventMouseButton).button_index != MOUSE_BUTTON_LEFT:
+			return
+		var mb := ev as InputEventMouseButton
+		if mb.pressed:
+			st["down"] = true
+			st["pos"] = mb.global_position
+		elif st["down"]:
+			st["down"] = false
+			if (mb.global_position - (st["pos"] as Vector2)).length() <= PhoneLayout.TAP_SLOP:
+				cb.call())
+
+
 static func spacer() -> Control:
 	var c := Control.new()
 	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -451,9 +474,7 @@ static func check_row(text: String, checked: bool, on_toggle: Callable, sub: Str
 	if checked:
 		l.add_theme_color_override("font_color", Pal.MUTED)
 	l.mouse_filter = Control.MOUSE_FILTER_STOP
-	l.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			cb.button_pressed = not cb.button_pressed)
+	on_tap(l, func() -> void: cb.button_pressed = not cb.button_pressed)
 	col.add_child(l)
 	if sub != "":
 		col.add_child(label(sub, "Small"))

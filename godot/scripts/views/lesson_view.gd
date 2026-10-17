@@ -688,9 +688,7 @@ func _attribution_label(e: Dictionary) -> Label:
 		l.mouse_filter = Control.MOUSE_FILTER_STOP
 		l.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		l.tooltip_text = url
-		l.gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-				OS.shell_open(url))
+		UI.on_tap(l, func() -> void: OS.shell_open(url))
 	return l
 
 
