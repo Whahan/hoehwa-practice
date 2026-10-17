@@ -1,0 +1,17 @@
+[
+  {"id": "MG1", "file": "sync_merge.gd", "desc": "일별 초 합산을 max 로 바꿈 (합이 아닌 max 병합)", "find": "dst[\"sec\"] = int(dst[\"sec\"]) + int(src[\"sec\"])", "replace": "dst[\"sec\"] = maxi(int(dst[\"sec\"]), int(src[\"sec\"]))", "expect_fail": ["U01", "U03"]},
+  {"id": "MG2", "file": "sync_merge.gd", "desc": "일별 기록 갱신 때 own 몫 대신 local 전체를 더함 (이중 계산)", "find": "var nrec: Dictionary = _rec_add(orec, per[l], brec)", "replace": "var nrec: Dictionary = _rec_add(orec, per[l], SyncDoc.blank_rec())", "expect_fail": ["U03", "U15"]},
+  {"id": "MG3", "file": "sync_merge.gd", "desc": "_dlt 에서 max(0, local-base) 의 0 하한 제거 (음수 허용)", "find": "return maxi(0, int(local_v) - int(base_v))", "replace": "return int(local_v) - int(base_v)", "expect_fail": ["U23", "U03"]},
+  {"id": "MG4", "file": "sync_merge.gd", "desc": "삭제 흔적 무시: 추가된 항목은 항상 남김 (합집합)", "find": "if not del_max.has(k) or int(add_max[k]) >= int(del_max[k]):", "replace": "if true:", "expect_fail": ["U07", "U13"]},
+  {"id": "MG5", "file": "sync_merge.gd", "desc": "동률(추가 시각 = 삭제 시각)에서 삭제 우선", "find": "int(add_max[k]) >= int(del_max[k])", "replace": "int(add_max[k]) > int(del_max[k])", "expect_fail": ["U09"]},
+  {"id": "MG6", "file": "sync_merge.gd", "desc": "카드 승자 비교에서 reps 비교 제거 (last_review 만으로 판단)", "find": "if ra != rb:", "replace": "if false:", "expect_fail": ["U10"]},
+  {"id": "MG7", "file": "sync_merge.gd", "desc": "카드 승자 reps 비교 방향 반전", "find": "return ra > rb", "replace": "return ra < rb", "expect_fail": ["U10", "U11"]},
+  {"id": "MG8", "file": "sync_merge.gd", "desc": "미션 stars 병합을 max 대신 마지막 복제본 값으로 (순서 의존; 기존 min 변이는 누산기 0 때문에 항상 0 이 되는 약한 변이라 교체)", "find": "dm[\"stars\"] = maxi(int(dm[\"stars\"]), int(src2[\"stars\"]))", "replace": "dm[\"stars\"] = int(src2[\"stars\"])", "expect_fail": ["U16"]},
+  {"id": "MG9", "file": "sync_merge.gd", "desc": "시각 자르기(TIME_SLACK 상한) 제거: 복제본 시각을 자르지 않음", "find": "cutoff = sh + TIME_SLACK", "replace": "cutoff = -1", "expect_fail": ["U20"]},
+  {"id": "MG10", "file": "sync_merge.gd", "desc": "첫 동기화에서 마지막 복제본만 반영 (늦은 복제본이 통째로 덮어씀)", "find": "var m: Dictionary = _merge(reps, local, today, report)", "replace": "var m: Dictionary = _merge(([reps[reps.size() - 1]] if (first and reps.size() > 1) else reps), local, today, report)", "expect_fail": ["U01", "U02"]},
+  {"id": "MG11", "file": "sync_merge.gd", "desc": "검사기 check() 가 항상 [] 를 반환", "find": "static func check(local: Dictionary, view: Dictionary, ctx: Dictionary) -> Array:", "replace": "static func check(local: Dictionary, view: Dictionary, ctx: Dictionary) -> Array:\n\treturn []", "expect_fail": ["U24"]},
+  {"id": "MG12", "file": "sync_doc.gd", "desc": "to_local 이 보호권(freeze)을 다른 값으로 덮어씀", "find": "var sl: Dictionary = studylog.duplicate(true)", "replace": "var sl: Dictionary = studylog.duplicate(true)\n\tsl[\"freeze\"] = {\"mut\": 1}", "expect_fail": ["U17"]},
+  {"id": "MG13", "file": "sync_merge.gd", "desc": "new_outcomes 가 항상 local_h 전체를 새 관찰로 봄", "find": "static func new_outcomes(base_h: String, local_h: String) -> String:", "replace": "static func new_outcomes(base_h: String, local_h: String) -> String:\n\treturn local_h", "expect_fail": ["U19"]},
+  {"id": "MG14", "file": "sync_merge.gd", "desc": "카드 id 를 로컬 id 대신 승자의 id 로 교체", "find": "var id: String = str(assigned.get(k, \"\"))", "replace": "var id: String = \"\"", "expect_fail": ["U12"]},
+  {"id": "MG15", "file": "sync_merge.gd", "desc": "카드 승자 선택이 peers 순서에 의존 (첫 후보 우선)", "find": "if win.is_empty() or card_wins(cand, win):", "replace": "if win.is_empty():", "expect_fail": ["U05"]}
+]
