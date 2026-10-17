@@ -101,6 +101,7 @@ try {
         "tools",   # LanguageTool (~400 MB): the installer downloads the official zip (models.lock.json "languagetool")
         "/XF", "setup.ps1", "run_backend.bat", "stop_backend.bat", "*.pyc", "*.log",
         "secrets.json", "secrets.json.tmp",   # API keys never leave this PC
+        "lan_devices*.json", "lan_devices*.json.*",   # phone link: paired-phone token hashes never leave this PC
         "test_*.py", "build_curriculum.py", "requirements.txt", ".gitignore")   # dev files (kept in git, not shipped)
     if ($rc -ge 8) { throw "robocopy failed ($rc)" }
     # the package ships a neutral config, never this PC's backend\config.json (robocopy copied it; it is replaced right here)
@@ -183,7 +184,7 @@ try {
         "$($RelCfg.min_installer_version)", "$($RelCfg.installer_version)", (Join-Path $Dest "manifest.json"), "--exclude-from-update") + $notInUpdate)
     if ($code -ne 0) { throw "manifest failed" }
     # last safety net: nothing secret / personal in the package
-    $bad = Get-ChildItem -LiteralPath $Dest -Recurse -File | Where-Object { $_.Name -match '^(secrets\.json.*|auth\.json|\.env)$' -or ($_.Name -eq "progress.json" -and -not $IncludeProgress) }
+    $bad = Get-ChildItem -LiteralPath $Dest -Recurse -File | Where-Object { $_.Name -match '^(secrets\.json.*|auth\.json|\.env|lan_devices.*\.json.*)$' -or ($_.Name -eq "progress.json" -and -not $IncludeProgress) }
     if ($bad) { throw ("secret/personal file in package: " + ($bad.FullName -join ", ")) }
     $code = Run-Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "make_zip.py"), $Stage, $RootName, $ZipPath)
     if ($code -ne 0) { throw "zip failed" }

@@ -43,3 +43,18 @@ godot/.godot/
 /install.log
 /update.log
 .orchestrator_heartbeat
+
+# ---- phone link / Android signing ----
+backend/lan_devices*.json
+backend/lan_devices*.json.*
+*.keystore
+*.jks
+*.p12
+*.pfx
+release.pass
+keystore.properties
+*.apk
+*.aab
+*.idsig
+godot/android/
+packaging/out/android/

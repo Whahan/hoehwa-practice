@@ -102,6 +102,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Any
+import lan   # phone link: extra LAN listener, pairing, device tokens (API.md "휴대폰 연결")
 
 # ----------------------------------------------------------------------------------------------
 # logging
@@ -131,6 +132,7 @@ DEFAULT_CONFIG = {
     # default AI engine: the free DeepSeek V4.1 Flash through OpenCode (local Ollama answers when it is unavailable)
     "llm_provider": "opencode",
     "opencode": {"model": "deepseek-v4.1-flash-free", "variant": "low"},
+    "lan": dict(lan.DEFAULT_LAN),   # phone link (off by default): enabled, port, discovery, discovery_port, name. No tokens here.
 }
 _cfg_lock = threading.Lock()
 
@@ -2525,10 +2527,15 @@ async def lifespan(app_):
     except Exception:
         log.exception("tts cache eviction at start failed")
     threading.Thread(target=_warmup, daemon=True).start()
+    lan.start_if_enabled()   # phone link: second listener (0.0.0.0:<lan.port>) only when the saved config says it is on
     yield
+    lan.shutdown()
 
 
 app = FastAPI(title="Speaking practice backend", lifespan=lifespan)
+# --lan-bind / --devices-file are for test servers; a test server (--port) never starts the link from config.json and never saves it
+lan.attach(app, CFG, save_config, log, BASE, tag=ARG_TAG, devices_file=_arg("--devices-file"), bind=_arg("--lan-bind", "0.0.0.0"),
+           persist=not ARG_PORT, auto_start=not ARG_PORT)
 
 
 @app.exception_handler(ApiError)

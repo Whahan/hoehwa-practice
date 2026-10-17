@@ -192,6 +192,68 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 
 `/health`에 `"tatoeba": bool` 추가.
 
+## 휴대폰 연결 (/hello /pair /lan*)
+같은 와이파이의 안드로이드 폰이 이 PC의 백엔드를 쓰게 한다. 구현은 `backend/lan.py`, 설계는 `docs/android_remote_design.md` §3. **기본은 꺼짐**이다.
+
+### 구조
+- 켜면 `127.0.0.1:<port>`(위 "공통")는 그대로 두고, **추가 리스너** `0.0.0.0:<lan.port>`(기본 8775)가 한 프로세스 안의 보조 스레드에서 같은 앱을 서비스한다. 서버 재시작은 없다. 끄면 그 포트가 바로 닫힌다.
+- **인증은 리스너 기준이다.** 추가 리스너로 들어온 요청은 소스 IP가 127.0.0.1이어도 전부 `Authorization: Bearer hp1_…` 토큰이 필요하다. 루프백 리스너(PC 앱)는 지금처럼 토큰이 없다.
+- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`. 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
+- 토큰은 `hp1_` + base64url(난수 32바이트) = 47자. 서버는 **SHA-256 해시만** `backend/lan_devices.json`(git·배포 제외; 시험 서버는 `lan_devices-<tag>.json`)에 저장하고, 토큰·연결 코드·`Authorization` 헤더는 로그에 남기지 않는다. 기기는 최대 8대. 파일이 깨졌으면 `*.bad`로 옮기고 빈 목록으로 시작한다(예전 토큰은 모두 무효).
+- 본문은 16 MB까지(로그인 전 경로 `/pair`·`/lan/proof`는 4 KB). 넘으면 413 `too_large`. 같은 IP에서 틀린 토큰이 10분에 30번이면 그 IP의 토큰 요청은 429 `rate_limited`.
+- `config.json`: `"lan": {"enabled": false, "port": 8775, "discovery": true, "discovery_port": 8776, "name": ""}`. 켠 상태는 재시작 뒤에도 유지된다(포트가 사용 중이면 꺼진 채 시작). 토큰·코드·기기 목록은 넣지 않는다. 시험 서버(`--port`)는 config.json의 `lan.enabled`로 시작하지 않고 설정을 저장하지 않는다. 시험용 서버 인자: `--lan-bind`(기본 `0.0.0.0`), `--devices-file`.
+- 모든 오류 본문은 `{"error": "한국어 문장", "code": "기계가 읽는 코드"}`이다. `code`는 이 절의 엔드포인트와 LAN 게이트에서만 붙고, 기존 엔드포인트의 오류 본문은 그대로다.
+
+### 엔드포인트
+| 메서드·경로 | 어디서 | 토큰 | 요청 → 응답 |
+|---|---|---|---|
+| `GET /hello` | 둘 다 | 불필요 | → `{"hoehwa": 1, "name": "MYPC", "pairing_open": bool}` |
+| `POST /pair` | LAN | 불필요 | `{"code": "482913", "device_name": "Pixel 8"}` (코드는 숫자 6자리 문자열, 이름 1~40자) → `{"token": "hp1_…", "device_id": "a1b2c3d4", "server_name": "MYPC", "port": 8775}` |
+| `POST /lan/proof` | LAN | 불필요 | `{"device_id", "nonce": "<hex 8~64자>"}` → `{"proof": "<hex>"}` = HMAC-SHA256(키 = 토큰의 SHA-256 32바이트, 메시지 = nonce UTF-8). IP가 바뀐 PC를 다시 찾았을 때 토큰을 보내기 전에 진짜 그 PC인지 확인한다 |
+| `GET /lan/me` | LAN | 필요 | → `{"device_id", "name", "server_name"}` |
+| `POST /lan/unpair` | LAN | 필요 | → `{"ok": true}` (자기 기기만 삭제) |
+| `GET /lan` | 루프백만 | – | → 아래 상태 |
+| `POST /lan` | 루프백만 | – | `{"enabled"?, "discovery"?, "port"?, "discovery_port"?, "name"?}` (포트 1024~65535, 모두 선택) → 상태. 포트를 먼저 bind 해 보고 실패하면 아무것도 바꾸지 않고 409 `lan_port_busy` |
+| `POST /lan/code` | 루프백만 | – | `{}` → `{"code": "482913", "expires_in": 300}` (새 코드, 잠금 해제) · `{"cancel": true}` → `{"ok": true}` |
+| `POST /lan/devices/revoke` | 루프백만 | – | `{"id"}` 또는 `{"all": true}` → `{"ok": true, "revoked": n}` |
+
+`GET /lan` (토큰·해시는 어떤 응답에도 없다):
+```json
+{"enabled": true, "listening": true, "port": 8775, "bind": "0.0.0.0", "discovery": true, "discovery_listening": true, "discovery_port": 8776,
+ "name": "MYPC", "addresses": ["192.168.0.12"],
+ "pairing": {"active": true, "code": "482913", "expires_in": 274, "locked": false, "attempts_left": 5},
+ "devices": [{"id": "a1b2c3d4", "name": "Pixel 8", "created": "ISO", "last_seen": "ISO", "last_ip": "192.168.0.23"}],
+ "error": ""}
+```
+- `addresses`: 이 PC의 사설 IPv4(10.x, 172.16~31.x, 192.168.x)만 최대 3개(링크로컬·루프백 제외). 사설 주소가 없는 PC에서는 빈 배열이다.
+- `pairing.code`는 `active`일 때만 문자열, 아니면 `null`. `error`는 치명적이지 않은 문제의 한국어 설명(예: 자동 찾기 포트 사용 중이면 LAN은 켜지고 `discovery_listening: false`).
+- 켜기(`enabled: true`): 새 코드 생성. 끄기: 두 포트를 닫고 코드를 폐기하며 **등록 기기는 유지**한다.
+
+### 페어링 코드
+숫자 6자리(앞 0 유지), 300초 유효, 1회용. 틀린 코드는 5번까지 `401 code_invalid`(본문에 `attempts_left` 4,3,2,1,0)이고 **5번째 실패에서 코드를 폐기하고 잠근다**. 6번째부터는 맞는 코드를 보내도 `429 pair_locked`. `POST /lan/code`나 껐다 켜기로 푼다. 형식 오류(`400 code_format`, `400 device_name_format`)와 코드 없음·만료·이미 사용(`410 no_active_code`)은 실패 횟수에 세지 않는다. 기기 8대가 차면 `409 device_limit`(코드는 소모하지 않는다).
+
+### 오류 코드
+| HTTP | code | 언제 |
+|---|---|---|
+| 400 | `code_format` · `device_name_format` · `bad_request` | 코드가 숫자 6자리가 아님 · 기기 이름이 비었거나 40자 초과 · JSON/값 형식 오류 |
+| 401 | `token_missing` | LAN 요청에 `Authorization` 없음 |
+| 401 | `token_invalid` | 틀린·해제된 토큰, `Bearer hp1_…` 형식 아님 (폰은 연결 화면으로 돌아간다) |
+| 401 | `code_invalid` | 틀린 연결 코드 (`attempts_left`) |
+| 403 | `lan_forbidden` · `local_only` | 허용 목록 밖 경로 · LAN 리스너로 온 관리 요청 |
+| 404 | `device_not_found` | 해제·증명할 기기 없음 |
+| 409 | `lan_port_busy` · `lan_off` · `device_limit` | 포트 bind 실패 · 꺼진 상태에서 `/lan/code` · 기기 8대 초과 |
+| 410 | `no_active_code` | 코드 없음·만료·사용됨 |
+| 413 | `too_large` | 본문 16 MB(로그인 전 경로는 4 KB) 초과 |
+| 429 | `pair_locked` · `rate_limited` | 코드 5번 실패 뒤 · 같은 IP의 틀린 토큰 30회/10분 |
+| 500 | `store_failed` | 기기 파일을 쓰지 못함(토큰을 내주지 않는다) |
+
+### UDP 자동 찾기
+UDP `0.0.0.0:<lan.discovery_port>`(기본 8776)는 **폰 연결이 켜져 있고 `discovery`가 true일 때만** 열린다(끄면 닫혀서 다른 프로그램이 쓸 수 있다). 요청은 UTF-8 JSON 128바이트 이하 `{"hoehwa": 1, "op": "discover"}`(키가 정확히 이 둘)일 때만 답한다. 답은 보낸 곳으로 유니캐스트 `{"hoehwa": 1, "op": "here", "name": "MYPC", "port": 8775}` — 키는 정확히 이 4개(IP·버전·기기 목록 없음). 모르는 형식·큰 패킷·JSON 아님·사설/루프백/링크로컬이 아닌 송신지는 **무응답**이고, 응답은 초당 10개까지다. 폰은 `255.255.255.255`와 각 사설 IP의 `/24` 브로드캐스트(`a.b.c.255`)로 보내고 2.5초 기다린다.
+
+### 알아 둘 것
+- 폰과 PC 사이는 평문 HTTP다. 공용 와이파이에서는 켜지 말고, 안 쓸 때는 꺼 둔다(앱의 휴대폰 연결 카드에 같은 경고가 있다). Windows 방화벽의 허용 창은 사용자가 누르며, 이 프로그램은 방화벽 설정을 바꾸지 않는다.
+- 시험: `backend/lan_stub_server.py`(모델 없이 뜨는 가짜 서버, 같은 `lan.py`를 쓴다)와 `backend/test_lan.py`.
+
 ## 학습 단계 기준 (stage)
 | stage | 영어 | 일본어 |
 |---|---|---|
