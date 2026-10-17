@@ -328,6 +328,7 @@ func finish_lesson() -> void:
 			if not item.is_empty():
 				wrong.append(item)
 	ok_count = ok
+	StudyLog.add_lesson(lang, ok, results.size())
 	Store.add_xp(lang, ok * 10)
 	Store.inc_stat(lang, "lessons")
 	Store.mark_today(lang)
@@ -913,4 +914,5 @@ func _on_recorded(result: Dictionary) -> void:
 	scoring = false
 	if res["ok"] and res["data"] is Dictionary:
 		speak_result = res["data"]
+		StudyLog.add_score(lang, speak_result, "lesson")
 	_render()

@@ -285,6 +285,7 @@ func reset_progress() -> void:
 	progress = Progress.blank()
 	progress["start"] = keep_start
 	save_progress()
+	StudyLog.reset()
 
 
 # ---------------------------------------------------------------- review list

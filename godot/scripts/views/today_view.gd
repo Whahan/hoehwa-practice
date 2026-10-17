@@ -79,6 +79,7 @@ func _build() -> void:
 	UI.clear(c)
 	var pos: Dictionary = Store.position()
 	c.add_child(_hero(pos))
+	c.add_child(GoalCard.compact(Store.lang()))
 	_grid = GridContainer.new()
 	_grid.columns = 2 if size.x >= 980.0 else 1
 	_grid.add_theme_constant_override("h_separation", 16)
@@ -148,7 +149,7 @@ func _lang_card(l: String, pos: Dictionary) -> Control:
 	head.add_child(ko)
 	if not Platform.is_phone():
 		head.add_child(UI.spacer())
-	var st: int = Store.streak(l)
+	var st: int = StudyLog.streak(l)
 	var chip_text := ("연속 %d일" % st) if st > 0 else "오늘부터 시작"
 	head.add_child(UI.chip("%s · %d XP" % [chip_text, Store.xp(l)], acc, Pal.soft(l)))
 	card.body.add_child(head)

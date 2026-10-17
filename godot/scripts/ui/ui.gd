@@ -499,10 +499,13 @@ static func field(caption: String, control: Control) -> VBoxContainer:
 
 ## Scrolls a ScrollContainer to the bottom after layout settles.
 static func scroll_to_bottom(sc: ScrollContainer) -> void:
-	if not sc.is_inside_tree():
+	if not is_instance_valid(sc) or not sc.is_inside_tree():
 		return
-	await sc.get_tree().process_frame
-	await sc.get_tree().process_frame
+	var tree: SceneTree = sc.get_tree()
+	await tree.process_frame
+	if not is_instance_valid(sc):
+		return
+	await tree.process_frame
 	if is_instance_valid(sc):
 		var bar := sc.get_v_scroll_bar()
 		sc.scroll_vertical = int(bar.max_value)

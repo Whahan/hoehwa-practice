@@ -2,7 +2,7 @@ class_name Progress
 extends RefCounted
 ## Progress data model (same shape as the web app's blank()/normalize()).
 
-const MAX_REVIEW := 300
+const MAX_REVIEW := 1000
 const MAX_KNOWN := 30000 ## per language (reading mode "아는 단어")
 const FSRS_KEYS := ["due", "stability", "difficulty", "state", "step", "last_review", "reps", "lapses"]
 

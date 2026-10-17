@@ -3026,6 +3026,17 @@ def examples(lang: str = "en", q: str = "", limit: int = 5):
     return readmode.examples(need_lang(lang), q, limit)
 
 
+# English v1.1: shadowing / dictation / weak-sound practice (/practice/*) and role-play missions (/missions*).
+# The routers carry no auth code: the phone link (lan.py) gates them per listener like every other route.
+import practice
+import missions
+
+practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, readmode=readmode, lesson_rules=lesson_rules, features=features)
+missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)
+app.include_router(practice.router)
+app.include_router(missions.router)
+
+
 # ----------------------------------------------------------------------------------------------
 def prefetch_wordnet():
     """prefetch stage: WordNet (+ omw-1.4) for the lesson distractor check, whether or not Tatoeba is ready.

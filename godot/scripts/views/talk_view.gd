@@ -517,6 +517,7 @@ func _apply_reply(d: Dictionary) -> void:
 		if TextSim.norm_text(fix, lang) != TextSim.norm_text(str((last as Dictionary)["text"]), lang):
 			(last as Dictionary)["fix"] = fix
 			(last as Dictionary)["fix_ko"] = str(d.get("fix_ko", ""))
+			FixCards.add(lang, last as Dictionary, conv_id)
 	var sugg: Array = []
 	var raw: Variant = d.get("suggest", [])
 	if raw is Array:
@@ -557,6 +558,7 @@ func _request_fix(m: Dictionary, prev_ai: String) -> void:
 		return
 	m["fix"] = fix
 	m["fix_ko"] = str((res["data"] as Dictionary).get("fix_ko", ""))
+	FixCards.add(lang, m, conv_id)
 	if status == "talk" or status == "wait":
 		_render_msgs()
 

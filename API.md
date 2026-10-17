@@ -192,13 +192,72 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 
 `/health`에 `"tatoeba": bool` 추가.
 
+## 연습 · 미션 (영어 v1.1: /practice/* /missions*)
+쉐도잉·받아쓰기 문장, 약한 소리 연습 자료, 롤플레이 미션. 구현은 `backend/practice.py`, `backend/missions.py`(둘 다 라우터만 제공하고 `server.py`가 `init(...)` 후 `app.include_router`로 붙인다), 설계는 `docs/english_v11_design.md`. 라우터 안에는 인증 코드가 없다: 폰이 호출하면 `lan.py`의 토큰 확인과 허용 목록(위 "휴대폰 연결")이 감싼다. 쿼리 값은 문자열로 받아 서버가 범위로 자르므로 이상한 값도 422가 아니라 기본값 또는 한국어 400이다. 이 절의 엔드포인트는 모델을 부르지 않는다(`/missions/judge`만 AI 1회). 일본어는 쉐도잉·목표·통계만 지원한다.
+
+### GET /practice/ping
+→ `{"ok": true, "practice": 1, "missions": 1, "tatoeba": bool}`. 기능 확인용. `missions`는 미션 모듈이 올라와 있으면 1, 아니면 0(옛 서버에는 이 경로 자체가 404). `tatoeba`가 false면 예문이 없어 문장 요청이 503.
+
+### GET /practice/sentences
+`?lang=en|ja&mode=shadow|dictation&stage=1..4&month=1..12&week=1..4&n=1..20&seed=<정수>&exclude=<id,id,...>`
+- `lang`, `mode`는 필수 수준(`mode`가 없거나 다르면 400). **받아쓰기(`dictation`)는 영어만**(일본어는 400). 기본값: `month` 1, `stage` = ceil(month/3), `week` 1, `n` 8. `seed`를 같이 보내면 같은 결과를 되풀이한다. `exclude`는 이미 낸 문장 id(쉼표, 최대 500개·4000자; 숫자가 아닌 토큰은 무시).
+- 이번 달·주 어휘가 들어 있는 Tatoeba 문장을 먼저 고른다(레슨과 같은 순위 방식). 받아쓰기는 3~10단어, 숫자 없음, 첫 단어와 `I` 외에 대문자 단어 없음인 문장만. 일본어는 히라가나 읽기를 만들지 못한 문장을 뺀다.
+```json
+{"lang": "en", "mode": "shadow", "stage": 1,
+ "sentences": [{"id": 101, "text": "I run every morning.", "ko": "나는 매일 아침 달린다.", "reading": "", "words": 4,
+                "url": "https://tatoeba.org/sentences/show/101"}],
+ "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"}
+```
+- `reading`은 일본어에서만 채워진다. `words`는 영어는 단어 수, 일본어는 글자 수. 화면은 `attribution`을 항상 보여 준다.
+- 오류: 400(`lang`/`mode`), 503(예문 DB가 없거나 읽을 수 없음. 메시지는 "예문 데이터가 아직 준비되지 않았어요…").
+
+### GET /practice/phonemes
+→ `{"phonemes": [{"p": "θ", "label": "th (θ)", "hint_ko": "혀끝을 윗니 사이에 살짝…"}]}`. 연습 자료가 있는 영어 소리 목록(`backend/content/phoneme_drills.json`; 파일이 바뀌면 다시 읽는다). 파일이 없거나 깨졌으면 503.
+
+### GET /practice/phoneme
+`?p=<소리>&sentences=0..5` (기본 3) → 소리 하나의 연습 자료.
+```json
+{"p": "θ", "label": "th (θ)", "hint_ko": "…", "words": ["think", "three"],
+ "pairs": [{"a": "think", "b": "sink", "ko": "생각하다 / 가라앉다"}],
+ "phrases": [{"text": "I think three things.", "ko": "나는 세 가지를 생각해요."}],
+ "sentences": [{"id": 1, "text": "…", "ko": "…", "url": "https://tatoeba.org/sentences/show/1"}],
+ "attribution": "예문 출처: Tatoeba …"}
+```
+- `p`가 비면 400, 목록에 없으면 404("아직 연습 자료가 없는 소리예요."). `sentences`는 단어마다 돌아가며 고른 Tatoeba 예문(3~10단어, 깨끗한 한국어 번역 포함)이고, 예문 DB가 없으면 `[]`이지 오류가 아니다.
+
+### GET /missions
+`?lang=en&stage=1..4` → 
+```json
+{"lang": "en", "unsupported": false,
+ "missions": [{"id": "cafe_order", "title_ko": "카페에서 음료 주문하기", "situation_ko": "…", "min_stage": 1, "max_turns": 10,
+               "opening": "Hi there! What can I get started for you today?",
+               "goals": [{"id": "greet", "label_ko": "인사하기", "hint_en": "Hi, good morning!"}],
+               "scenario": {"id": "mission:cafe_order", "title": "…", "persona": "Emma, a friendly barista …", "scene": "…"},
+               "script": [{"ai": "Hi there! What can I get started for you today?", "goal": "order_drink", "model": "I'd like a latte, please."}]}]}
+```
+- `stage`를 주면 `min_stage`가 그 이하인 미션만. `scenario`는 `/chat`에 그대로 보내는 시나리오이고 `id`는 `mission:<id>`. `script`는 AI 없이 진행할 때 쓰는 정해진 대본(상대 대사 `ai`, 유도하는 목표 `goal`, 모범 답 `model`)이다. **정답 규칙(`match`/`pos`/`neg`/`goal_en`)은 어떤 응답에도 나가지 않는다.**
+- `lang=ja`는 `{"lang": "ja", "unsupported": true, "missions": [], "message": "일본어 미션은 다음 버전에서 만들 예정이에요."}`(200).
+
+### POST /missions/check
+`{"lang": "en", "mission_id": "cafe_order", "text": "<학습자 문장>", "done": ["greet"]}` (`done` 선택, 이미 달성한 목표 id) →
+`{"mission_id": "cafe_order", "goals": [{"id": "greet", "done": true, "new": false}], "new": ["order_drink"], "all_done": false}`
+- 규칙만으로 판정(AI 없음, 보통 50 ms 이하). 문장은 정규화(NFKC·소문자·`[a-z0-9' ]` 외 공백)한 뒤 300자까지만 본다. `new`는 이번 문장에서 처음 달성한 목표 id. 이미 `done`인 것은 다시 계산하지 않는다.
+- 오류: 400(문장이 비었음 · 일본어), 404(알 수 없는 미션).
+
+### POST /missions/judge  (선택, AI 1회)
+`{"lang": "en", "mission_id": "cafe_order", "pending": ["ask_size"], "history": [{"role": "ai"|"me", "text": "…"}]}` →
+`{"ai": true, "goals": [{"id": "ask_size", "done": true, "evidence": "a medium please"}]}`
+- 규칙이 놓친 목표(`pending`)를 AI에 묻는다. 대화는 마지막 24줄·줄당 500자까지만 보낸다. `done: true`는 **학습자(`me`)의 문장에서 그대로 따온 증거 인용이 있을 때만** 인정되고, 인용이 없거나 학습자 문장에 없으면 `done: false`, `evidence: ""`.
+- 학습자 문장이 하나도 없으면 AI를 부르지 않고 `{"ai": false, "goals": [모두 done:false]}`.
+- 오류: 400(`pending`이 비었음), 404(알 수 없는 미션), 502(AI가 실패하거나 형식이 틀림 — 앱은 규칙 결과를 그대로 쓴다), 503(AI 없음).
+
 ## 휴대폰 연결 (/hello /pair /lan*)
 같은 와이파이의 안드로이드 폰이 이 PC의 백엔드를 쓰게 한다. 구현은 `backend/lan.py`, 설계는 `docs/android_remote_design.md` §3. **기본은 꺼짐**이다.
 
 ### 구조
 - 켜면 `127.0.0.1:<port>`(위 "공통")는 그대로 두고, **추가 리스너** `0.0.0.0:<lan.port>`(기본 8775)가 한 프로세스 안의 보조 스레드에서 같은 앱을 서비스한다. 서버 재시작은 없다. 끄면 그 포트가 바로 닫힌다.
 - **인증은 리스너 기준이다.** 추가 리스너로 들어온 요청은 소스 IP가 127.0.0.1이어도 전부 `Authorization: Bearer hp1_…` 토큰이 필요하다. 루프백 리스너(PC 앱)는 지금처럼 토큰이 없다.
-- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`. 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
+- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`, 그리고 영어 v1.1의 `GET /practice/ping` `GET /practice/sentences` `GET /practice/phonemes` `GET /practice/phoneme` `GET /missions` `POST /missions/check` `POST /missions/judge`(모두 23개). 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
 - **출발지 주소 필터**: 추가 리스너는 루프백 · 사설(10/8, 172.16/12, 192.168/16) · 링크로컬(169.254/16, fe80::/10) · IPv6 ULA(fc00::/7)에서 온 연결만 받는다. 그 밖(인터넷의 공인 주소)에서 온 연결은 **응답 없이 바로 끊는다**(`/hello`도 안 보인다). CGNAT 100.64/10(Tailscale 등)은 `lan.allow_cgnat`이 true일 때만 받는다. UDP 디스커버리도 같은 규칙이다.
 - **사설 주소가 없으면 켜지지 않는다**: 이 PC에 사설 IPv4 주소가 하나도 없으면(공유기 없이 인터넷에 직접 연결) `POST /lan {"enabled": true}`는 409 `no_private_network`이고 아무것도 열지 않는다. 시작할 때 저장된 `enabled`가 true여도 같은 이유로 꺼진 채 시작한다(`error`에 이유, 저장된 설정은 그대로). 공인 IP는 어떤 응답에도 넣지 않는다.
 - 토큰은 `hp1_` + base64url(난수 32바이트) = 47자. 서버는 **SHA-256 해시만** `backend/lan_devices.json`(git·배포 제외; 시험 서버는 `lan_devices-<tag>.json`)에 저장하고, 토큰·연결 코드·`Authorization` 헤더는 로그에 남기지 않는다. 기기는 최대 8대. 파일이 깨졌으면 `*.bad`로 옮기고 빈 목록으로 시작한다(예전 토큰은 모두 무효).

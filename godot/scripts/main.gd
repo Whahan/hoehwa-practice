@@ -4,7 +4,9 @@ extends Control
 ## Phone behaviour (Platform.is_phone(), docs/android_remote_design.md §5) is added next to the PC code;
 ## with `not Platform.is_phone()` every node and number is the same as before.
 ##
-## Adding a tab (English v1.1: "연습", "기록"): `add_tab(key, label, view, short_label)` after _ready.
+## Adding a tab (English v1.1: "연습", "기록"): `add_tab(key, label, view, short_label, after_key)` after _ready.
+## `add_v11_tabs()` adds those two (and the StudyClock); _ready calls it only when this scene is the running scene
+## of the app, so the layout tests that load main.tscn as a child still see the six original tabs.
 ## The PC top bar moves tabs that do not fit into a "더보기" menu, the phone bottom bar shows 6 cells and
 ## moves the rest into its "더보기" sheet (ui/bottom_tabs.gd). A view that has sub screens overrides
 ## AppView.go_back() so the Android back button can step out of them.
@@ -144,6 +146,8 @@ func _ready() -> void:
 
 	_build_toast()
 	_build_splash()
+	if get_tree().current_scene == self:
+		add_v11_tabs()
 
 	Toast.message.connect(_show_toast)
 	Store.navigate.connect(_on_navigate)
@@ -158,11 +162,20 @@ func _ready() -> void:
 	Backend.start()
 
 
-## Adds a tab behind the existing ones (see the file header). `short_label` is the phone bottom-bar text.
-func add_tab(key: String, label: String, view: AppView, short_label: String = "") -> void:
+## Adds a tab behind the existing ones, or right after the tab `after_key` when that one exists.
+## `short_label` is the phone bottom-bar text.
+func add_tab(key: String, label: String, view: AppView, short_label: String = "", after_key: String = "") -> void:
 	if views.has(key) or view == null:
 		return
-	_tabs.append([key, label])
+	var at: int = -1
+	if after_key != "":
+		for i in _tabs.size():
+			if str((_tabs[i] as Array)[0]) == after_key:
+				at = i + 1
+	if at < 0:
+		_tabs.append([key, label])
+	else:
+		_tabs.insert(at, [key, label])
 	if short_label != "":
 		_tab_short[key] = short_label
 	views[key] = view
@@ -172,9 +185,21 @@ func add_tab(key: String, label: String, view: AppView, short_label: String = ""
 		_bottom_tabs.set_tabs(_tabs, _tab_short)
 		_bottom_tabs.set_current(current)
 	else:
-		_add_top_button(key, label, _top_more.get_index())
+		var idx: int = _top_more.get_index()
+		if at >= 0 and tab_buttons.has(after_key):
+			idx = (tab_buttons[after_key] as Button).get_index() + 1
+		_add_top_button(key, label, idx)
 		_style_tabs()
 		_layout_top_tabs()
+
+
+## English v1.1: 연습 after 대화, 기록 after 복습, and the study clock (StudyLog writer).
+func add_v11_tabs() -> void:
+	if views.has("practice"):
+		return
+	add_child(StudyClock.new())
+	add_tab("practice", "연습", PracticeView.new(), "연습", "talk")
+	add_tab("stats", "기록", StatsView.new(), "기록", "review")
 
 
 ## Keys of the tabs in the order of the tab bar.

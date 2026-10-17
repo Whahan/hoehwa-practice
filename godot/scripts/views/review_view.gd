@@ -425,5 +425,6 @@ func _on_recorded(result: Dictionary) -> void:
 	scoring = false
 	if res["ok"] and res["data"] is Dictionary:
 		score_result = res["data"]
+		StudyLog.add_score(lang, score_result, "review")
 		checked = true
 	_render()

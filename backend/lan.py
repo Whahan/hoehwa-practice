@@ -70,6 +70,9 @@ ALLOW = {
     ("GET", "/health"), ("GET", "/curriculum"), ("POST", "/tts"), ("GET", "/tts/voices"), ("POST", "/stt"), ("POST", "/score"),
     ("POST", "/prosody"), ("POST", "/chat"), ("POST", "/feedback"), ("POST", "/fix"), ("POST", "/lesson"),
     ("POST", "/reading/analyze"), ("POST", "/reading/gloss"), ("GET", "/examples"), ("GET", "/lan/me"), ("POST", "/lan/unpair"),
+    # English v1.1 practice and missions (practice.py, missions.py)
+    ("GET", "/practice/ping"), ("GET", "/practice/sentences"), ("GET", "/practice/phonemes"), ("GET", "/practice/phoneme"),
+    ("GET", "/missions"), ("POST", "/missions/check"), ("POST", "/missions/judge"),
 }
 
 MSG = {

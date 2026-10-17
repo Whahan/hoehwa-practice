@@ -363,8 +363,10 @@ def unit_checks():
     check("U-03 loopback test: 127.0.0.1 / ::1 / ::ffff:127.0.0.1 yes, 192.168.0.1 / empty no",
           lan._is_loopback("127.0.0.1") and lan._is_loopback("::1") and lan._is_loopback("::ffff:127.0.0.1")
           and not lan._is_loopback("192.168.0.1") and not lan._is_loopback(""))
-    check("U-04 allow-list has exactly the 16 documented routes and none of /mic /llm /lan(admin) /docs",
-          len(lan.ALLOW) == 16 and not any(p.startswith(("/mic", "/llm", "/docs", "/debug")) for _, p in lan.ALLOW)
+    new_routes = {("GET", "/practice/ping"), ("GET", "/practice/sentences"), ("GET", "/practice/phonemes"), ("GET", "/practice/phoneme"),
+                  ("GET", "/missions"), ("POST", "/missions/check"), ("POST", "/missions/judge")}
+    check("U-04 allow-list has exactly the 16 original + 7 English v1.1 routes and none of /mic /llm /lan(admin) /docs",
+          len(lan.ALLOW) == 23 and new_routes <= lan.ALLOW and not any(p.startswith("/practice") or p.startswith("/missions") for _, p in lan.ALLOW - new_routes) and not any(p.startswith(("/mic", "/llm", "/docs", "/debug")) for _, p in lan.ALLOW)
           and ("GET", "/lan") not in lan.ALLOW and ("POST", "/lan/code") not in lan.ALLOW)
 
 
@@ -515,6 +517,28 @@ def core(T, ip2, ip2_private):
         if stub and p_ == "/tts" and not r.content.startswith(b"RIFF"):
             bad.append(("tts-not-wav",))
     check("every allow-list route %s through the gate" % ("answers 200 (TTS returns WAV)" if stub else "reaches the app (not 401/403/413/429)"), not bad, bad)
+
+    # ---- B-11b English v1.1 routes: allowed with a token (the stub has no such route: 404 from the app is "through the gate"), 401 without
+    v11 = [("GET", "/practice/ping", None), ("GET", "/practice/sentences?lang=en&n=3", None), ("GET", "/practice/phonemes", None),
+           ("GET", "/practice/phoneme?id=TH", None), ("GET", "/missions", None), ("POST", "/missions/check", {"mission_id": "x", "turns": []}),
+           ("POST", "/missions/judge", {"mission_id": "x", "turns": []})]
+    bad = []
+    for m_, p_, body in v11:
+        with_tok = http(m_, lurl(T, p_), token=tok1, json=body) if body is not None else http(m_, lurl(T, p_), token=tok1)
+        no_tok = http(m_, lurl(T, p_), json=body) if body is not None else http(m_, lurl(T, p_))
+        if with_tok.status_code in (401, 403, 413, 429) or jb(with_tok).get("code") in ("lan_forbidden", "token_missing", "token_invalid"):
+            bad.append(("with token", m_, p_, with_tok.status_code))
+        if no_tok.status_code != 401 or jb(no_tok).get("code") != "token_missing":
+            bad.append(("no token", m_, p_, no_tok.status_code))
+    check("B-11b the 7 English v1.1 routes pass the gate with a token and answer 401 token_missing without one", not bad, bad)
+    bad = []
+    for m_, p_, body in [("POST", "/practice/ping", {}), ("GET", "/missions/check", None), ("GET", "/missions/judge", None), ("POST", "/missions", {}),
+                         ("GET", "/practice/", None), ("GET", "/practice", None), ("GET", "/practice/phoneme/x", None), ("GET", "/missions/", None),
+                         ("DELETE", "/missions", None)]:
+        r = http(m_, lurl(T, p_), token=tok1, json=body) if body is not None else http(m_, lurl(T, p_), token=tok1)
+        if r.status_code != 403 or jb(r).get("code") != "lan_forbidden":
+            bad.append((m_, p_, r.status_code, jb(r).get("code")))
+    check("B-11c near-miss paths and wrong methods next to the new routes are still 403 lan_forbidden", not bad, bad)
 
     # ---- B-12 forbidden
     forb = [("POST", "/mic/start", {}), ("GET", "/mic/devices", None), ("GET", "/mic/level", None), ("POST", "/mic/stop", {}), ("POST", "/mic/cancel", {}),
