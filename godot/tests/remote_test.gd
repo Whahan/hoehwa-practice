@@ -27,6 +27,8 @@ var lan_url: String = ""
 var udp_port: int = UDP_PORT
 var phone: bool = false
 var _saved_remote_path: String = ""
+var _orphan_url: String = ""
+var _orphan_mode: String = "cancel"   ## cancel | inflight | none
 
 
 func ok(cond: bool, name: String) -> void:
@@ -61,8 +63,11 @@ func _ready() -> void:
 	phone = Platform.is_phone()
 	print("== remote test start (%s) ==" % ("phone" if phone else "pc"))
 	_parse_args()
+	if _orphan_url != "":
+		await _quit_with_request()
+		return
 	_saved_remote_path = Api.remote_path
-	_backup_curriculum()
+	_use_test_curriculum_path()
 	Api.remote_path = TEST_REMOTE
 	_cleanup_files()
 	RemoteLink.test_discovery_port = udp_port
@@ -92,13 +97,17 @@ func _parse_args() -> void:
 			lan_url = a.substr(11).rstrip("/")
 		elif a.begins_with("--stub-udp="):
 			udp_port = int(a.substr(11))
+		elif a.begins_with("--orphan-quit="):
+			_orphan_url = a.substr(14).rstrip("/")
+		elif a.begins_with("--orphan-mode="):
+			_orphan_mode = a.substr(14)
 
 
 func _finish() -> void:
 	if fake != null:
 		fake.stop()
 	_cleanup_files()
-	_restore_curriculum()
+	_drop_test_curriculum_path()
 	Api.remote_path = _saved_remote_path
 	print("== remote test: %d passed, %d failed ==" % [passed, failed])
 	if skipped > 0:
@@ -164,6 +173,24 @@ func _write_raw(path: String, text: String) -> void:
 	f.close()
 
 
+# ---------------------------------------------------------------- quit with a request that never gets an answer
+
+## Reproducible quit timing (run it against a server that accepts and never answers, see the report):
+##   godot --headless --path <project> res://tests/remote_test.tscn -- --phone --orphan-quit=http://127.0.0.1:8853 --orphan-mode=cancel
+## Prints QUIT_CALLED <msec> right before quit(); the caller measures how long the process lives after that.
+## modes: cancel = the request is cancelled first (orphan), inflight = still running, none = no request at all.
+func _quit_with_request() -> void:
+	if _orphan_mode != "none":
+		Api.set_remote(_orphan_url, "hp1_" + "T".repeat(43))
+		var c = Api.post_json("/chat", {"lang": "en"}, Api.TIMEOUT_LLM, false)
+		await get_tree().create_timer(0.6).timeout
+		if _orphan_mode == "cancel":
+			c.cancel()
+			print("cancelled; orphans=", Api.orphan_count)
+	print("QUIT_CALLED ", Time.get_ticks_msec())
+	get_tree().quit()
+
+
 # ---------------------------------------------------------------- PHONE
 
 func _phone_tests() -> void:
@@ -174,6 +201,8 @@ func _phone_tests() -> void:
 	await _test_hello_pair_headers()
 	await _test_wrong_codes()
 	await _test_backend_paths()
+	await _test_rediscovery()
+	await _test_saved_token_stays_home()
 	await _test_not_connected()
 	await _test_auth_revoked()
 	await _test_discovery()
@@ -224,6 +253,9 @@ func _test_hello_pair_headers() -> void:
 	print("[hello / pair / headers]")
 	var code: String = await _open_pairing(true)
 	ok(code.length() == 6, "PC shows a 6 digit code after turning the link on")
+	# Api already holds a token (the re-discovery path asks an unverified address while the saved token is set):
+	# the pre-pairing calls must still go out WITHOUT Authorization
+	Api.set_remote("http://127.0.0.1:%d" % CLOSED_PORT, "hp1_" + "C".repeat(43))
 	var hi: Dictionary = await RemoteLink.hello(lan_url)
 	ok(hi["ok"] and str(hi["name"]) != "" and bool(hi["pairing_open"]), "hello: name + pairing_open")
 	var hi_bad: Dictionary = await RemoteLink.hello("http://127.0.0.1:%d" % CLOSED_PORT)
@@ -243,6 +275,14 @@ func _test_hello_pair_headers() -> void:
 	ok(str(cleared.get("token", "x")) == "" and cleared.get("base_url", "") == lan_url and cleared.get("server_name", "") == conn["server_name"], "clear_token keeps address and PC name, drops only the token")
 	# proof
 	ok(await RemoteLink.proof_ok(lan_url, conn), "proof_ok: the PC knows our token")
+	var direct: Dictionary = await Api.get_json_to(lan_url, "/hello", 5.0, false).wait()
+	var direct2: Dictionary = await Api.post_json_to(lan_url, "/lan/proof", {"device_id": "x", "nonce": "00"}, 5.0, false).wait()
+	ok(direct["ok"] and int(direct2["code"]) == 404, "get_json_to / post_json_to work while Api.token is set")
+	if fake != null:
+		ok(not fake.auth_seen("/hello") and not fake.auth_seen("/pair") and not fake.auth_seen("/lan/proof"), "3a: hello / pair / proof / get_json_to / post_json_to never send Authorization even though Api.token is set")
+	else:
+		skip("3a Authorization check needs the in-process fake request log")
+	Api.clear_remote()
 	var wrong := conn.duplicate()
 	wrong["token"] = "hp1_" + "B".repeat(43)
 	ok(not await RemoteLink.proof_ok(lan_url, wrong), "proof_ok is false for another token")
@@ -353,6 +393,90 @@ func _test_backend_paths() -> void:
 			print("    not NEEDS_PAIRING for: ", str(b).left(40))
 	ok(all_pairing, "R-07d: %d broken remote.json variants -> NEEDS_PAIRING, no crash" % broken.size())
 	ok(RemoteLink.load_saved("user://does_not_exist_remote.json").is_empty(), "missing file -> {}")
+	_cleanup_files()
+
+
+func _test_rediscovery() -> void:
+	print("[re-discovery of a moved PC]")
+	if fake == null:
+		skip("3b needs two in-process fake PCs")
+		return
+	var lan2_port := 8854
+	var impostor := FakeLan.new()
+	add_child(impostor)
+	ok(impostor.start(0, lan2_port, 0), "second fake PC (same name, other address) listening")
+	impostor._set_lan(true)
+	var conn: Dictionary = await _pair_new("Moved Phone")
+	var dead := conn.duplicate()
+	dead["base_url"] = "http://127.0.0.1:%d" % CLOSED_PORT   # the PC moved: the saved address is dead
+	fake.udp_reply_port = lan2_port                           # discovery now points at the other PC
+	fake.udp_mode = "on"
+	# 3b-1: the PC that answers has the same name but does not know our token -> refused, token never sent
+	RemoteLink.save(dead, TEST_REMOTE)
+	Api.clear_remote()
+	_reset_backend()
+	await Backend.start()
+	ok(Backend.status == Backend.Status.FAILED and Backend.message.contains("PC에 닿지 않아요"), "3b: same-name PC that cannot prove the token -> FAILED, not connected")
+	ok(impostor.count("/lan/proof") == 1, "3b: the unverified PC was asked for a proof (/lan/proof)")
+	ok(not impostor.auth_seen() and impostor.count("/health") == 0, "3b: the saved token was NEVER sent to the unverified PC (no Authorization, no /health)")
+	ok(RemoteLink.load_saved(TEST_REMOTE).get("base_url", "") == dead["base_url"], "3b: the saved address was not replaced")
+	# 3b-2: the same PC really moved (it knows the device) -> accepted, address updated
+	for d in fake.devices:
+		if d["id"] == str(conn["device_id"]):
+			impostor.devices.append(d.duplicate())
+	impostor.reset_log()
+	Api.clear_remote()
+	_reset_backend()
+	await Backend.start()
+	ok(Backend.status == Backend.Status.READY and Api.base_url == "http://127.0.0.1:%d" % lan2_port, "3b: a PC that proves the token is accepted at its new address")
+	ok(RemoteLink.load_saved(TEST_REMOTE).get("base_url", "") == "http://127.0.0.1:%d" % lan2_port, "3b: the new address is saved")
+	ok(impostor.last_entry("/lan/proof").get("auth", true) == false and impostor.last_entry("/health").get("bearer", false) == true, "3b: proof without a token first, /health with it only afterwards")
+	await _wait_for(func() -> bool: return Api.active_count == 0, 5.0)   # (/curriculum after READY) before the server goes away
+	impostor.stop()
+	impostor.queue_free()
+	fake.udp_reply_port = 0
+	Api.clear_remote()
+	_reset_backend()
+	_cleanup_files()
+	# 3c: an answer with an extra key from a different socket is not a PC
+	fake.udp_mode = "other_garbage"
+	var found: Array = await RemoteLink.discover(get_tree(), 1.2)
+	ok(found.is_empty(), "3c: extra-key discovery answer from a different ip:port is rejected")
+	fake.udp_mode = "on"
+	found = await RemoteLink.discover(get_tree())
+	ok(found.size() == 1, "3c control: a proper answer is still found")
+
+
+func _test_saved_token_stays_home() -> void:
+	print("[--api= must not receive the saved token]")
+	if fake == null:
+		skip("needs the in-process fake request log")
+		return
+	var other := FakeLan.new()
+	add_child(other)
+	other.start(0, 8854, 0)
+	other._set_lan(true)
+	var conn: Dictionary = await _pair_new("Home Phone")
+	RemoteLink.save(conn, TEST_REMOTE)
+	var was_over: String = Api.cli_base_url
+	var was_cli: String = Api.cli_token
+	Api.cli_base_url = "http://127.0.0.1:8854"   # --api= points somewhere else than the pairing
+	Api.cli_token = ""
+	_reset_backend()
+	await Backend.start()
+	ok(Backend.status == Backend.Status.NEEDS_PAIRING, "--api= differs from the saved address and no --token= -> NEEDS_PAIRING")
+	ok(other.log.is_empty(), "the saved token (and any request) never reached the --api= address")
+	Api.cli_token = "hp1_" + "K".repeat(43)
+	_reset_backend()
+	await Backend.start()
+	ok(other.auth_seen("/health"), "an explicit --token= is sent to the --api= address")
+	await _wait_for(func() -> bool: return Api.active_count == 0, 5.0)
+	Api.cli_base_url = was_over
+	Api.cli_token = was_cli
+	other.stop()
+	other.queue_free()
+	Api.clear_remote()
+	_reset_backend()
 	_cleanup_files()
 
 
@@ -887,7 +1011,9 @@ class FakeLan:
 	var private_network: bool = true    ## false: the PC has no private IPv4 address
 	var addresses: Array = ["192.168.0.12"]
 	var reject_admin: String = ""       ## "" | "local_only" | "bad_origin": refuse POST /lan
-	var udp_mode: String = "on"         ## on | off | garbage
+	var udp_mode: String = "on"         ## on | off | garbage | other_garbage (extra-key answer from a second socket)
+	var udp_reply_port: int = 0         ## answer discovery with this TCP port instead of lan_port (a "moved" PC)
+	var _udp2: PacketPeerUDP = null
 	var drop: Dictionary = {}           ## path -> how many requests to close without an answer
 	var delay_sec: Dictionary = {}      ## path -> seconds to hold the answer
 	var _next_id: int = 1
@@ -898,11 +1024,15 @@ class FakeLan:
 		lan_port = lan
 		udp_port = udp
 		_rng.randomize()
-		if _admin.listen(admin, "127.0.0.1") != OK:
+		if admin > 0 and _admin.listen(admin, "127.0.0.1") != OK:
 			return false
-		_udp = PacketPeerUDP.new()
-		if _udp.bind(udp, "127.0.0.1") != OK:
-			return false
+		if udp > 0:
+			_udp = PacketPeerUDP.new()
+			if _udp.bind(udp, "127.0.0.1") != OK:
+				return false
+			_udp2 = PacketPeerUDP.new()
+			if _udp2.bind(0, "127.0.0.1") != OK:
+				return false
 		return true
 
 	func stop() -> void:
@@ -910,6 +1040,8 @@ class FakeLan:
 		_lan.stop()
 		if _udp != null:
 			_udp.close()
+		if _udp2 != null:
+			_udp2.close()
 		for c in _conns:
 			(c["peer"] as StreamPeerTCP).disconnect_from_host()
 		_conns.clear()
@@ -923,6 +1055,13 @@ class FakeLan:
 			if e["path"] == path and (role == "" or e["role"] == role):
 				n += 1
 		return n
+
+	## true if any logged request to `path` (or, with "", to any path) carried an Authorization header
+	func auth_seen(path: String = "") -> bool:
+		for e in log:
+			if (path == "" or e["path"] == path) and bool(e["auth"]):
+				return true
+		return false
 
 	func last_entry(path: String) -> Dictionary:
 		for i in range(log.size() - 1, -1, -1):
@@ -1055,12 +1194,17 @@ class FakeLan:
 				continue
 			if udp_mode == "off" or not lan_enabled or not discovery:
 				continue
+			if udp_mode == "other_garbage":
+				# an answer with an extra key, sent from ANOTHER socket (different source port)
+				_udp2.set_dest_address(ip, port)
+				_udp2.put_packet(('{"hoehwa":1,"op":"here","name":"%s","port":%d,"extra":"x"}' % [server_name, lan_port]).to_utf8_buffer())
+				continue
 			_udp.set_dest_address(ip, port)
 			if udp_mode == "garbage":
 				for bad in ['{"hoehwa":1,"op":"here","name":"X","port":%d,"extra":1}' % lan_port, '{"hoehwa":1,"op":"nope","name":"X","port":%d}' % lan_port, '{"hoehwa":1,"op":"here","name":"X","port":70000}', "not json at all", '{"hoehwa":2,"op":"here","name":"X","port":%d}' % lan_port]:
 					_udp.put_packet(bad.to_utf8_buffer())
 			else:
-				_udp.put_packet(JSON.stringify({"hoehwa": 1, "op": "here", "name": server_name, "port": lan_port}).to_utf8_buffer())
+				_udp.put_packet(JSON.stringify({"hoehwa": 1, "op": "here", "name": server_name, "port": udp_reply_port if udp_reply_port > 0 else lan_port}).to_utf8_buffer())
 
 	# ---- routing (mirrors docs/android_remote_design.md §3.4 / §3.5)
 
@@ -1204,22 +1348,13 @@ class FakeLan:
 		}
 
 
-# A connected phone refreshes Store's curriculum cache from the PC (user://curriculum.json): a test server must not
-# leave its answer in the real app data.
-var _cur_existed: bool = false
-var _cur_text: String = ""
+## A connected phone refreshes Store's curriculum cache from the PC. Tests never touch the app's own files
+## (curriculum.json, prefs.json, progress.json, studylog.json, remote.json): the cache goes to a throw-away file.
+func _use_test_curriculum_path() -> void:
+	Store.curriculum_cache_path = "user://test_curriculum_%s.json" % get_scene_file_path().get_file().get_basename()
 
 
-func _backup_curriculum() -> void:
-	_cur_existed = FileAccess.file_exists(Store.CURRICULUM_CACHE)
-	if _cur_existed:
-		_cur_text = FileAccess.get_file_as_string(Store.CURRICULUM_CACHE)
-
-
-func _restore_curriculum() -> void:
-	if _cur_existed:
-		var f := FileAccess.open(Store.CURRICULUM_CACHE, FileAccess.WRITE)
-		if f != null:
-			f.store_string(_cur_text)
-	elif FileAccess.file_exists(Store.CURRICULUM_CACHE):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(Store.CURRICULUM_CACHE))
+func _drop_test_curriculum_path() -> void:
+	if FileAccess.file_exists(Store.curriculum_cache_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Store.curriculum_cache_path))
+	Store.curriculum_cache_path = Store.CURRICULUM_CACHE

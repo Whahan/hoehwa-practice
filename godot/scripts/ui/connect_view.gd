@@ -78,6 +78,7 @@ class Flow:
 		}
 		if not RemoteLink.save(conn, Api.remote_path):
 			return {"ok": false, "error": "연결 정보를 저장하지 못했어요. 저장 공간을 확인해 주세요.", "err_code": "save_failed"}
+		Api.cli_base_url = ""   # the pairing just made supersedes a --api= from the command line
 		Api.set_remote(base, str(conn["token"]))
 		Backend.start()   # not awaited: the new connection is checked in the background
 		return {"ok": true, "error": "", "err_code": ""}

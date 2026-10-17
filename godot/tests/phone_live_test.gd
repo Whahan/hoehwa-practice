@@ -9,7 +9,7 @@ extends Node
 ## --live-lan may be a private IPv4 of this PC (http://192.168.x.y:8775). Without --live-admin the test prints SKIP
 ## (result "미검증") and exits 0. Tokens and codes are never printed.
 
-const REMOTE_FILE := "user://phone_live_remote.json"
+const REMOTE_FILE := "user://test_phone_live_remote.json"
 
 var passed: int = 0
 var failed: int = 0
@@ -43,13 +43,13 @@ func _ready() -> void:
 		get_tree().quit(0)
 		return
 	_saved_path = Api.remote_path
-	_backup_curriculum()
+	_use_test_curriculum_path()
 	Api.remote_path = REMOTE_FILE
 	await _run()
 	Api.clear_remote()
 	if FileAccess.file_exists(REMOTE_FILE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(REMOTE_FILE))
-	_restore_curriculum()
+	_drop_test_curriculum_path()
 	Api.remote_path = _saved_path
 	print("== phone live result: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
@@ -129,22 +129,13 @@ func _run() -> void:
 	ok(not closed["ok"], "after turning the link off the LAN port no longer answers")
 
 
-# A connected phone refreshes Store's curriculum cache from the PC (user://curriculum.json): a test server must not
-# leave its answer in the real app data.
-var _cur_existed: bool = false
-var _cur_text: String = ""
+## A connected phone refreshes Store's curriculum cache from the PC. Tests never touch the app's own files
+## (curriculum.json, prefs.json, progress.json, studylog.json, remote.json): the cache goes to a throw-away file.
+func _use_test_curriculum_path() -> void:
+	Store.curriculum_cache_path = "user://test_curriculum_%s.json" % get_scene_file_path().get_file().get_basename()
 
 
-func _backup_curriculum() -> void:
-	_cur_existed = FileAccess.file_exists(Store.CURRICULUM_CACHE)
-	if _cur_existed:
-		_cur_text = FileAccess.get_file_as_string(Store.CURRICULUM_CACHE)
-
-
-func _restore_curriculum() -> void:
-	if _cur_existed:
-		var f := FileAccess.open(Store.CURRICULUM_CACHE, FileAccess.WRITE)
-		if f != null:
-			f.store_string(_cur_text)
-	elif FileAccess.file_exists(Store.CURRICULUM_CACHE):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(Store.CURRICULUM_CACHE))
+func _drop_test_curriculum_path() -> void:
+	if FileAccess.file_exists(Store.curriculum_cache_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Store.curriculum_cache_path))
+	Store.curriculum_cache_path = Store.CURRICULUM_CACHE

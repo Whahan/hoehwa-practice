@@ -29,6 +29,7 @@ const NOT_CONNECTED_TEXT := "PC에 연결되지 않았어요."
 const UNREACHABLE_TEXT := "PC에 닿지 않아요. PC가 켜져 있고 같은 와이파이인지, PC 앱의 '휴대폰 연결'이 켜져 있는지 확인해 주세요."
 const RETRY_DELAY_SEC := 0.3
 const RESUME_GRACE_MSEC := 8000
+const EXIT_GRACE_MSEC := 1500
 
 ## POST paths that are safe to send twice (no side effects on the PC). Every GET is safe as well.
 const IDEMPOTENT_POST := ["/tts", "/stt", "/score", "/prosody"]
@@ -45,17 +46,24 @@ var remote_path: String = RemoteLink.PATH
 ## Counts every request that really left through an HTTPRequest (tests).
 var sent_count: int = 0
 
+## Cancelled requests whose HTTPRequest is still running (see ApiCall.cancel()). Tests.
+var orphan_count: int = 0
+## `--token=` from the command line (tests); only used together with `--api=`.
+var cli_token: String = ""
+## `--api=` from the command line (clear_remote() empties base_url, this stays).
+var cli_base_url: String = ""
 var _auth_failed_sent: bool = false
+var _watchdog: Thread = null
 var _resumed_msec: int = -1000000   ## when the app last came back to the foreground
 
 
 func _ready() -> void:
-	var cli_token := ""
 	if Platform.is_phone():
 		base_url = ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--api="):
 			base_url = a.substr(6).rstrip("/")
+			cli_base_url = base_url
 			base_overridden = true
 		elif a.begins_with("--token="):
 			cli_token = a.substr(8)
@@ -116,7 +124,10 @@ class ApiCall:
 				# itself (it has a timeout) and free the node afterwards.
 				var orphan: HTTPRequest = _req
 				_req = null
-				orphan.request_completed.connect(func(_r: int, _c: int, _h: PackedStringArray, _b: PackedByteArray) -> void: orphan.queue_free(), CONNECT_ONE_SHOT)
+				Api.orphan_count += 1
+				orphan.request_completed.connect(func(_r: int, _c: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+					Api.orphan_count = maxi(0, Api.orphan_count - 1)
+					orphan.queue_free(), CONNECT_ONE_SHOT)
 			else:
 				_req.cancel_request()
 		if on_cancel.is_valid():
@@ -263,7 +274,7 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 ## True for "the connection broke" failures. Right after the app came back from the background the OS may have
 ## killed the socket in other ways too, so every failure except a timeout counts for a few seconds.
 func _connection_broke(result: int) -> bool:
-	if result == HTTPRequest.RESULT_CANT_CONNECT or result == HTTPRequest.RESULT_CONNECTION_ERROR or result == HTTPRequest.RESULT_NO_RESPONSE:
+	if result == HTTPRequest.RESULT_CANT_CONNECT or result == HTTPRequest.RESULT_CONNECTION_ERROR:
 		return true
 	if Time.get_ticks_msec() - _resumed_msec < RESUME_GRACE_MSEC:
 		return result != HTTPRequest.RESULT_TIMEOUT and result != HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED
@@ -273,6 +284,22 @@ func _connection_broke(result: int) -> bool:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED:
 		_resumed_msec = Time.get_ticks_msec()
+	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
+		arm_exit_watchdog()
+
+
+## Godot 4.6.3: a threaded HTTPRequest cannot be interrupted while it waits for the answer, and quitting waits for it
+## (measured: the process lingered until the server closed the connection, 58 s). When the app is about to quit with a
+## request still out (running or cancelled-but-not-finished), a watchdog thread ends the process after `grace_msec`
+## if the normal shutdown has not finished by then. Called from Backend.shutdown() and on the window close request.
+func arm_exit_watchdog(grace_msec: int = EXIT_GRACE_MSEC) -> void:
+	if _watchdog != null or (orphan_count <= 0 and active_count <= 0):
+		return
+	var pid: int = OS.get_process_id()
+	_watchdog = Thread.new()
+	_watchdog.start(func() -> void:
+		OS.delay_msec(grace_msec)
+		OS.kill(pid))
 
 
 func _retry_later(req_call: ApiCall, report: bool) -> void:

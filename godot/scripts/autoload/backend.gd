@@ -210,10 +210,12 @@ func start() -> void:
 ## Reads the saved pairing (or the test injection `--api= --token=`) and checks the PC.
 func _saved_connection() -> Dictionary:
 	var conn: Dictionary = RemoteLink.load_saved(Api.remote_path)
-	if Api.base_overridden and Api.base_url != "":
-		conn["base_url"] = Api.base_url          # --api= wins over the saved address (tests)
-		if Api.token != "":
-			conn["token"] = Api.token
+	if Api.cli_base_url != "" and str(conn.get("base_url", "")) != Api.cli_base_url:
+		# --api= points somewhere else than the pairing: the saved token must never be sent to that address.
+		# Only an explicit --token= (tests) goes with it.
+		return {"base_url": Api.cli_base_url, "token": Api.cli_token, "device_id": "", "server_name": ""}
+	if Api.cli_token != "" and not conn.is_empty():
+		conn["token"] = Api.cli_token
 	return conn
 
 
@@ -285,6 +287,7 @@ func shutdown() -> void:
 	if _shutdown_done:
 		return
 	_shutdown_done = true
+	Api.arm_exit_watchdog()   # a request that cannot be interrupted must not hold the quit for minutes
 	if launched_by_us and pid > 0:
 		if OS.get_name() == "Windows":
 			# pythonw.exe from a venv may be a launcher that spawns the real interpreter: kill the tree.
