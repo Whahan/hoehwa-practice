@@ -764,3 +764,10 @@ func complete_json(messages: Array, schema: Dictionary, temperature: float, max_
 - LanguageTool 공개 API(dev.languagetool.org/public-http-api), 개인정보 방침(languagetool.org/privacy)
 - ML Kit GenAI 문서·기사(2025~2026), 소형 LLM 속도 글(간접 근거)
 - EDRDG JMdict 언어 목록 메일링 기록(한국어 뜻 없음)
+
+## 결정 (2026-10-17, 사용자)
+- 진행: 단계별(1단계 네이티브 없음 → B0 실기 스파이크 통과 뒤 2단계). 모델: 영어 base 기본, 일본어 small 선택 다운로드(Wi-Fi 기본).
+- 폰 단독 AI: 기본 "AI 없음"(대본 대화), 선택 기능으로 사용자 본인 API 키. 온디바이스 LLM 제외. C0(본인 키로 OpenCode 무료 모델 직접 호출 시험)는 사용자가 키를 앱에 직접 입력하는 방식으로만.
+- 연결 중 정책: 자동(PC 우선, 끊기면 폰) 기본 + 설정에서 폰만/PC만, TTS 는 연결 중 PC 목소리 우선 + "항상 폰 음성" 옵션. LanguageTool 공개 서버 미사용.
+- NDK·CMake 설치: 2단계 시작 때 sdkmanager 로 설치 허용(사용자 승인).
+- 순서: 동기화 구현 → UI 개편 W0~W3·W6~W11 과 병행 가능한 1단계 작업부터, 겹치는 파일(api.gd, main.gd, today_view.gd, connect_view.gd, talk_view.gd)은 동기화 S3/S7 병합 뒤.
