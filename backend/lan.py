@@ -24,6 +24,7 @@ import os
 import re
 import secrets
 import socket
+import subprocess
 import threading
 import time
 from collections import deque
@@ -35,7 +36,7 @@ from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 
-DEFAULT_LAN = {"enabled": False, "port": 8775, "discovery": True, "discovery_port": 8776, "name": ""}
+DEFAULT_LAN = {"enabled": False, "port": 8775, "discovery": True, "discovery_port": 8776, "name": "", "allow_cgnat": False}
 
 CODE_TTL_SECONDS = 300
 CODE_MAX_FAILS = 5
@@ -49,13 +50,17 @@ FLUSH_SECONDS = 60.0                   # last_seen is written to disk at most th
 DISCOVERY_MAX_PER_SEC = 10
 DISCOVERY_MAX_BYTES = 128
 DEVICES_FILE_MAX = 1024 * 1024
+BAD_TOKEN_MAX_IPS = 2000               # rate-limit table size cap
+PREAUTH_TIMEOUT = 10.0                 # seconds to receive a request before login (/pair, /lan/proof, rejected requests)
+BODY_TIMEOUT = 120.0                   # seconds to receive an authenticated upload
 LOOPBACK_ONLY_NAMES = ("/lan", "/lan/code")
 
-TOKEN_RE = re.compile(r"^(?i:bearer)[ \t]+(hp1_[A-Za-z0-9_-]{43})$")
-CODE_RE = re.compile(r"^[0-9]{6}$")
-NONCE_RE = re.compile(r"^[0-9a-fA-F]{8,64}$")
-HASH_RE = re.compile(r"^[0-9a-f]{64}$")
-ID_RE = re.compile(r"^[0-9a-f]{8}$")
+TOKEN_RE = re.compile(r"\A(?i:bearer)[ \t]+(hp1_[A-Za-z0-9_-]{43})\Z")
+CODE_RE = re.compile(r"\A[0-9]{6}\Z")
+NONCE_RE = re.compile(r"\A[0-9a-fA-F]{8,64}\Z")
+HASH_RE = re.compile(r"\A[0-9a-f]{64}\Z")
+ID_RE = re.compile(r"\A[0-9a-f]{8}\Z")
+HOST_RE = re.compile(r"\A(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?\Z", re.I)
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 # (method, path) that work without a token on the LAN listener
@@ -83,6 +88,9 @@ MSG = {
     "bad_request": "요청 형식이 올바르지 않아요.",
     "device_name_format": "이 휴대폰 이름은 1~40자로 입력해 주세요.",
     "store_failed": "연결 정보를 저장하지 못했어요. PC의 디스크 상태를 확인해 주세요.",
+    "bad_origin": "허용되지 않은 요청이에요. 이 PC의 앱에서만 쓸 수 있어요.",
+    "no_private_network": "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요.",
+    "request_timeout": "요청을 받는 데 시간이 너무 오래 걸려요.",
 }
 
 
@@ -122,6 +130,35 @@ def _is_private_lan(ip):
     return any(a in ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
+_V4_OK = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")]
+_V6_OK = [ipaddress.ip_network(n) for n in ("::1/128", "fe80::/10", "fc00::/7")]
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+
+
+def _source_allowed(host):
+    """loopback, private (10/8, 172.16/12, 192.168/16), link-local, IPv6 ULA; CGNAT 100.64/10 only with lan.allow_cgnat.
+    Anything else (the public internet) gets no answer at all."""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if getattr(ip, "ipv4_mapped", None) is not None:
+        ip = ip.ipv4_mapped
+    if ip.version == 4:
+        if any(ip in n for n in _V4_OK):
+            return True
+        return bool(S.lan.get("allow_cgnat")) and ip in _CGNAT
+    return any(ip in n for n in _V6_OK)
+
+
+def _peer_allowed(transport):
+    try:
+        peer = transport.get_extra_info("peername")
+        return bool(peer) and _source_allowed(peer[0])
+    except Exception:
+        return False
+
+
 def private_addresses(limit=3):
     """This PC's private IPv4 addresses (default-route one first). The route lookup only connect()s a UDP socket: no packet is sent."""
     cands = []
@@ -145,6 +182,32 @@ def private_addresses(limit=3):
         if _is_private_lan(ip) and ip not in out:
             out.append(ip)
     return out[:limit]
+
+
+def _forced_private():
+    """test hook: HOEHWA_TEST_HOOKS=1 + HOEHWA_LAN_ASSUME_PRIVATE=1 / 0 pretends this PC does / does not have a private address"""
+    if os.environ.get("HOEHWA_TEST_HOOKS") == "1":
+        v = os.environ.get("HOEHWA_LAN_ASSUME_PRIVATE")
+        if v in ("0", "1"):
+            return v == "1"
+    return None
+
+
+def _network_ok(addrs=None):
+    """the link may only be turned on behind a router: at least one private IPv4 address on this PC"""
+    forced = _forced_private()
+    if forced is not None:
+        return forced
+    return bool(private_addresses() if addrs is None else addrs)
+
+
+def _hook_seconds(name, default):
+    if os.environ.get("HOEHWA_TEST_HOOKS") == "1" and os.environ.get(name):
+        try:
+            return min(600.0, max(0.5, float(os.environ[name])))
+        except ValueError:
+            pass
+    return default
 
 
 def _clean_name(value, limit=40):
@@ -250,6 +313,18 @@ def _load_devices():
             S.log.warning("lan: device file unreadable and could not be moved")
 
 
+def _owner_only(path):
+    """best effort: only the current Windows user may read the device file (token hashes). Failure is ignored."""
+    user = os.environ.get("USERNAME")
+    if os.name != "nt" or not user:
+        return
+    try:
+        subprocess.run(["icacls", path, "/inheritance:r", "/grant:r", "%s:(F)" % user], capture_output=True, timeout=5,
+                       creationflags=0x08000000)
+    except Exception:
+        pass
+
+
 def _save_devices():
     """write the device file (caller holds S.lock). Raises OSError."""
     path = S.devices_path
@@ -260,6 +335,7 @@ def _save_devices():
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
+    _owner_only(tmp)
     os.replace(tmp, path)
     S.dirty = False
     S.last_flush = time.time()
@@ -351,10 +427,12 @@ def _rate_limited(ip):
 def _note_bad_token(ip):
     now = time.monotonic()
     with S.lock:
-        if len(S.bad_tokens) > 2000:
+        if ip not in S.bad_tokens and len(S.bad_tokens) >= BAD_TOKEN_MAX_IPS:
             for k in [k for k, q in S.bad_tokens.items() if not q or now - q[-1] > RATE_WINDOW]:
                 S.bad_tokens.pop(k, None)
-        S.bad_tokens.setdefault(ip, deque()).append(now)
+            while len(S.bad_tokens) >= BAD_TOKEN_MAX_IPS:
+                S.bad_tokens.pop(next(iter(S.bad_tokens)))     # oldest entry goes
+        S.bad_tokens.setdefault(ip, deque(maxlen=RATE_FAILS * 2)).append(now)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -371,18 +449,32 @@ async def _send_json(send, status, obj, close=False):
 
 def _gate_err(code, **extra):
     status = {"token_missing": 401, "token_invalid": 401, "lan_forbidden": 403, "local_only": 403, "too_large": 413,
-              "rate_limited": 429}[code]
+              "rate_limited": 429, "request_timeout": 408}[code]
     body = {"error": MSG[code], "code": code}
     body.update(extra)
     return status, body
 
 
-async def _drain(receive, already=0):
+class _Slow(Exception):
+    """the client took too long to send its request"""
+
+
+async def _recv(receive, deadline):
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise _Slow()
+    try:
+        return await asyncio.wait_for(receive(), left)
+    except asyncio.TimeoutError:
+        raise _Slow()
+
+
+async def _drain(receive, deadline, already=0):
     """read (and throw away) the rest of the request body, up to DRAIN_CAP. -> True when the whole body was consumed.
     Answering before the client finished uploading makes Windows reset the connection and the client never sees the answer."""
     total = already
     while True:
-        msg = await receive()
+        msg = await _recv(receive, deadline)
         if msg["type"] == "http.disconnect":
             return False
         total += len(msg.get("body", b"") or b"")
@@ -392,20 +484,38 @@ async def _drain(receive, already=0):
             return False
 
 
-async def _read_body(receive, limit):
+async def _read_body(receive, limit, deadline):
     """-> (body bytes | None when over the limit, state) with state "ok" | "over" | "gone" (client disconnected) | "unread" (too big to drain)"""
     chunks, total = [], 0
     while True:
-        msg = await receive()
+        msg = await _recv(receive, deadline)
         if msg["type"] == "http.disconnect":
             return None, "gone"
         part = msg.get("body", b"") or b""
         total += len(part)
         if total > limit:
-            return None, ("over" if (not msg.get("more_body") or await _drain(receive, total)) else "unread")
+            return None, ("over" if (not msg.get("more_body") or await _drain(receive, deadline, total)) else "unread")
         chunks.append(part)
         if not msg.get("more_body"):
             return b"".join(chunks), "ok"
+
+
+def _make_protocol():
+    """uvicorn's h11 protocol that drops a connection from a disallowed source address before reading a single byte"""
+    from uvicorn.protocols.http.h11_impl import H11Protocol
+
+    class LanH11Protocol(H11Protocol):
+        def connection_made(self, transport):
+            if not _peer_allowed(transport):
+                self.transport = transport     # connection_lost() expects it
+                try:
+                    transport.abort()
+                except Exception:
+                    pass
+                return
+            super().connection_made(transport)
+
+    return LanH11Protocol
 
 
 class LanGate:
@@ -417,7 +527,10 @@ class LanGate:
     @staticmethod
     async def _reject(receive, send, code, declared, **extra):
         st, body = _gate_err(code, **extra)
-        done = False if (declared is not None and declared > DRAIN_CAP) else await _drain(receive)
+        try:
+            done = False if (declared is not None and declared > DRAIN_CAP) else await _drain(receive, time.monotonic() + _hook_seconds("HOEHWA_LAN_PREAUTH_TIMEOUT", PREAUTH_TIMEOUT))
+        except _Slow:
+            done = False
         await _send_json(send, st, body, close=not done)
 
     async def __call__(self, scope, receive, send):
@@ -429,10 +542,12 @@ class LanGate:
                 except Exception:
                     pass
             return
+        ip = (scope.get("client") or ("?", 0))[0]
+        if not _source_allowed(ip):
+            return      # public / unknown source: no answer (the protocol class normally closed the connection already)
         scope["hoehwa_lan"] = True
         scope.pop("hoehwa_device", None)
         key = (scope.get("method", ""), scope.get("path", ""))
-        ip = (scope.get("client") or ("?", 0))[0]
         declared = None
         for k, v in scope.get("headers", []):
             if k == b"content-length":
@@ -459,7 +574,12 @@ class LanGate:
         limit = OPEN_BODY_LIMIT if key in OPEN_PATHS else BODY_LIMIT
         if declared is not None and declared > limit:
             return await self._reject(receive, send, "too_large", declared)
-        body_bytes, state = await _read_body(receive, limit)
+        secs = _hook_seconds("HOEHWA_LAN_PREAUTH_TIMEOUT", PREAUTH_TIMEOUT) if key in OPEN_PATHS else _hook_seconds("HOEHWA_LAN_BODY_TIMEOUT", BODY_TIMEOUT)
+        try:
+            body_bytes, state = await _read_body(receive, limit, time.monotonic() + secs)
+        except _Slow:
+            st, body = _gate_err("request_timeout")
+            return await _send_json(send, st, body, close=True)
         if state == "gone":
             return
         if body_bytes is None:
@@ -518,7 +638,7 @@ class _Listener:
         self.port = port
         self.sock = sock
         cfg = uvicorn.Config(LanGate(S.app), lifespan="off", log_config=None, access_log=False, timeout_graceful_shutdown=2,
-                             timeout_keep_alive=5, proxy_headers=False, server_header=False, interface="asgi3")
+                             timeout_keep_alive=5, proxy_headers=False, server_header=False, interface="asgi3", http=_make_protocol())
         self.server = uvicorn.Server(cfg)
         self.done = threading.Event()
         self.crash = None
@@ -605,11 +725,7 @@ class _Discovery:
             return
         if type(msg["hoehwa"]) is not int or msg["hoehwa"] != 1 or msg["op"] != "discover":
             return
-        try:
-            ip = ipaddress.ip_address(addr[0])
-        except ValueError:
-            return
-        if not (ip.is_private or ip.is_loopback or ip.is_link_local):    # LAN only
+        if not _source_allowed(addr[0]):    # LAN only
             return
         now = time.monotonic()
         while self.sent and now - self.sent[0] > 1.0:
@@ -652,6 +768,7 @@ def attach(app, cfg, save_cfg, log, base_dir, tag=None, devices_file=None, bind=
             merged[k] = DEFAULT_LAN[k]
     merged["enabled"] = bool(merged.get("enabled")) and bool(auto_start)
     merged["discovery"] = bool(merged.get("discovery"))
+    merged["allow_cgnat"] = merged.get("allow_cgnat") is True
     merged["name"] = _clean_name(merged.get("name"))
     if devices_file:
         S.devices_path = os.path.abspath(devices_file)
@@ -697,6 +814,11 @@ def start_if_enabled():
         lan = S.lan
         if not lan["enabled"] or S.listener is not None:
             return
+        if not _network_ok():
+            lan["enabled"] = False      # not saved: the setting comes back when the PC is behind a router again
+            S.error = MSG["no_private_network"]
+            S.log.warning("lan: no private network address at start; link stays off")
+            return
         try:
             S.listener = _start_listener(lan["port"])
         except OSError:
@@ -741,6 +863,8 @@ def _configure(upd):
         new.update(upd)
         S.error = ""
         was_on = S.listener is not None
+        if new["enabled"] and not was_on and not _network_ok():
+            return 409, "no_private_network"
         if new["enabled"]:
             if was_on and S.listener.port == new["port"] and not S.listener.alive():
                 S.listener.stop()      # a crashed listener may still hold the port: free it before binding again
@@ -776,9 +900,12 @@ def _status():
     lan = S.lan
     with S.lock:
         devices = [_public_device(d) for d in S.devices]
-    return {"enabled": bool(lan["enabled"]), "listening": bool(S.listener is not None and S.listener.alive()), "port": lan["port"],
+    addrs = private_addresses()
+    safe = _network_ok(addrs)
+    return {"network_safe": safe, "network_reason": "" if safe else MSG["no_private_network"], "allow_cgnat": bool(lan.get("allow_cgnat")),
+            "enabled": bool(lan["enabled"]), "listening": bool(S.listener is not None and S.listener.alive()), "port": lan["port"],
             "bind": S.bind, "discovery": bool(lan["discovery"]), "discovery_listening": S.disc is not None,
-            "discovery_port": lan["discovery_port"], "name": S.name(), "addresses": private_addresses(),
+            "discovery_port": lan["discovery_port"], "name": S.name(), "addresses": addrs,
             "pairing": _pairing_view(), "devices": devices, "error": S.error}
 
 
@@ -803,6 +930,15 @@ def _local_only(request):
     host = request.client.host if request.client else ""
     if not _is_loopback(host):
         return _err(403, "local_only")
+    # a web page in the user's browser must not be able to drive these endpoints (CSRF, DNS rebinding)
+    hv = request.headers.get("host", "")
+    if not HOST_RE.match(hv):
+        return _err(403, "bad_origin")
+    origin = request.headers.get("origin")
+    if origin is not None and origin.lower() != ("http://" + hv).lower():
+        return _err(403, "bad_origin")
+    if request.method == "POST" and request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+        return _err(403, "bad_origin")
     return None
 
 
@@ -920,7 +1056,7 @@ def lan_get(request: Request):
 
 def _parse_update(data):
     upd = {}
-    for k in ("enabled", "discovery"):
+    for k in ("enabled", "discovery", "allow_cgnat"):
         if k in data:
             if type(data[k]) is not bool:
                 return None
@@ -949,6 +1085,8 @@ async def lan_set(request: Request):
         return _err(400, "bad_request")
     status, code = await run_in_threadpool(_configure, upd)
     if status:
+        if code == "no_private_network":
+            return _err(status, code)
         port = upd.get("port", S.lan["port"])
         return _err(status, code, "포트 %d을(를) 다른 프로그램이 쓰고 있어요." % port)
     return await run_in_threadpool(_status)

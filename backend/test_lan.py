@@ -94,7 +94,7 @@ def mask(tok):
 # helpers
 # ----------------------------------------------------------------------------------------------
 def tcp_free(port):
-    for host in ("127.0.0.1", "0.0.0.0"):
+    for host in ("127.0.0.1",):          # tests never bind 0.0.0.0
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             s.bind((host, port))
@@ -108,7 +108,7 @@ def tcp_free(port):
 def udp_free(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.bind(("0.0.0.0", port))
+        s.bind(("127.0.0.1", port))
         return True
     except OSError:
         return False
@@ -258,9 +258,11 @@ class Stub:
             self.lan_port = pick(8840, 8849)
             self.udp_port = pick(18776, 18790, udp=True)
         env = dict(os.environ)
-        env.pop("HOEHWA_TEST_HOOKS", None)
-        env.pop("HOEHWA_LAN_CODE_TTL", None)
-        env.update(self.env)
+        for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_PRIVATE", "HOEHWA_LAN_PREAUTH_TIMEOUT", "HOEHWA_LAN_BODY_TIMEOUT"):
+            env.pop(k, None)
+        base_env = {"HOEHWA_TEST_HOOKS": "1", "HOEHWA_LAN_ASSUME_PRIVATE": "1"}   # this PC may have no private address: pretend it has one
+        base_env.update(self.env)
+        env.update({k: v for k, v in base_env.items() if v is not None})
         cmd = [sys.executable, STUB, "--port", str(self.http_port), "--lan-port", str(self.lan_port), "--lan-discovery-port",
                str(self.udp_port), "--lan-bind", self.lan_bind, "--devices-file", self.devfile, "--tag", self.name]
         if self.enabled:
@@ -382,7 +384,7 @@ def core(T, ip2, ip2_private):
         check("B-03c default: LAN port refuses this PC's non-loopback address (%s)" % ("private" if ip2_private else "public, no private IPv4 on this PC"),
               connect_code(ip2, L) != 0)
     else:
-        skip("B-03c non-loopback refuse", "no non-loopback IPv4 on this PC")
+        pass
     check("B-07a loopback GET /health without token, LAN off -> 200", http("GET", T.base + "/health").status_code == 200)
     hl = jb(http("GET", T.base + "/hello"))
     check("hello (loopback, off): keys hoehwa,name,pairing_open and pairing_open false",
@@ -458,6 +460,9 @@ def core(T, ip2, ip2_private):
 
     # ---- B-08 six wrong codes
     real = (get_lan(T).get("pairing") or {}).get("code") or ""
+    r = http("POST", lurl(T, "/pair"), json={"code": real + "\n", "device_name": "x"})
+    check("S4a a valid code with a trailing newline is a format error (400), not accepted and not counted",
+          r.status_code == 400 and jb(r).get("code") == "code_format" and (get_lan(T).get("pairing") or {}).get("attempts_left") == 5, r.status_code)
     wrong = "000000" if real != "000000" else "000001"
     statuses, lefts, cds = [], [], []
     for _ in range(6):
@@ -494,8 +499,9 @@ def core(T, ip2, ip2_private):
         check("B-11 valid token via %s: /health 200 ok, /stt %s, /lan/me 200 own id" % (label, "200 text" if stub else "reaches the app"),
               h.status_code == 200 and jb(h).get("ok") is True and stt_ok
               and m.status_code == 200 and jb(m).get("device_id") == dev1, (h.status_code, s.status_code, m.status_code))
-    if not ip2_private:
-        note("B-11 private-IP variant NOT verified", "this PC has no private IPv4 (only %s); the non-loopback checks used that address instead" % (ip2 or "none"))
+    if not ip2:
+        note("B-11 / B-03c / B-05b non-loopback (private-IP) variants NOT verified",
+             "the tests never bind 0.0.0.0; this PC has %s private IPv4 address" % ("a" if ip2_private else "no"))
     allowed = [("GET", "/curriculum", None), ("POST", "/tts", {"text": "hi", "lang": "en"}), ("GET", "/tts/voices", None),
                ("POST", "/score", {"lang": "en", "target": "hi", "audio_b64": "AAAA"}), ("POST", "/prosody", {"lang": "en", "text": "hi"}),
                ("POST", "/chat", {"lang": "en"}), ("POST", "/feedback", {"lang": "en"}), ("POST", "/fix", {"lang": "en"}),
@@ -546,6 +552,20 @@ def core(T, ip2, ip2_private):
     check("B-13b nothing changed by those calls (still on, same device count)", after.get("enabled") is True and len(after.get("devices", [])) == ndev, ndev)
     check("management without token on the LAN listener -> 401 (token is checked first)", http("GET", lurl(T, "/lan")).status_code == 401)
 
+    # ---- m2: a valid token is only accepted as "Bearer <token>"
+    variants = [("raw token without a scheme", tok1, 401), ("Token scheme", "Token " + tok1, 401), ("Bearer glued to the token", "Bearer" + tok1, 401),
+                ("trailing junk after the token", "Bearer " + tok1 + " x", 401), ("Basic scheme", "Basic " + tok1, 401),
+                ("Bearer (correct)", "Bearer " + tok1, 200), ("bearer lower case", "bearer " + tok1, 200), ("BEARER upper case", "BEARER " + tok1, 200)]
+    bad = []
+    for label, hv, want in variants:
+        r = http("GET", lurl(T, "/health"), auth=hv)
+        if r.status_code != want or (want == 401 and jb(r).get("code") != "token_invalid"):
+            bad.append((label, r.status_code, jb(r).get("code")))
+    check("m2 valid token: no scheme / Token / glued / trailing junk / Basic -> 401 token_invalid; Bearer in any letter case -> 200", not bad, bad)
+
+    csrf_checks(T)
+    acl_check(T)
+
     # ---- B-15 hygiene
     gl = http("GET", T.base + "/lan").text
     check("B-15a GET /lan body has no token_sha256 / hp1_ / the token", "token_sha256" not in gl and "hp1_" not in gl and tok1 not in gl)
@@ -572,6 +592,8 @@ def core(T, ip2, ip2_private):
     check("B-22c unknown device_id -> 404 device_not_found", r.status_code == 404 and jb(r).get("code") == "device_not_found")
     r = http("POST", lurl(T, "/lan/proof"), json={"device_id": dev1, "nonce": "zz"})
     check("B-22d bad nonce -> 400", r.status_code == 400)
+    r = http("POST", lurl(T, "/lan/proof"), json={"device_id": dev1, "nonce": nonce + "\n"})
+    check("S4b a nonce with a trailing newline -> 400", r.status_code == 400)
 
     # ---- B-20 big bodies
     big = b"x" * (17 * 1024 * 1024)
@@ -733,13 +755,6 @@ def scenario_ttl():
     finally:
         T.stop()
         T.release_ports()
-    T = Stub("ttl2", env={"HOEHWA_LAN_CODE_TTL": "2"}).start()    # the variable is ignored without HOEHWA_TEST_HOOKS=1
-    try:
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        check("HOEHWA_LAN_CODE_TTL is ignored without HOEHWA_TEST_HOOKS=1 (expires_in ~300)", 295 <= (jb(r).get("pairing") or {}).get("expires_in", 0) <= 300)
-    finally:
-        T.stop()
-        T.release_ports()
 
 
 def scenario_restart():
@@ -818,14 +833,322 @@ def scenario_rate():
 
 
 def scenario_core_stub(ip2, ip2_private):
-    # bound to 0.0.0.0 on purpose: the non-loopback address must reach it (tokens are required for everything but /hello,/pair,/lan/proof)
-    T = Stub("core", lan_bind="0.0.0.0").start()
+    T = Stub("core").start()      # 127.0.0.1 only: tests never bind 0.0.0.0
     try:
         core(T, ip2, ip2_private)
     finally:
         T.stop()
         T.release_ports()
     return T
+
+
+# ----------------------------------------------------------------------------------------------
+# security fixes: S1 source filter, S2 CSRF / rebinding, S3 network safety, S4 small things
+# ----------------------------------------------------------------------------------------------
+class FakeTransport:
+    def __init__(self, host):
+        self.host = host
+        self.aborted = False
+
+    def get_extra_info(self, name):
+        return (self.host, 5555) if name == "peername" else None
+
+    def abort(self):
+        self.aborted = True
+
+    def close(self):
+        pass
+
+
+def gate_call(ip, method="GET", path="/hello", headers=None):
+    """run LanGate in-process with a made-up scope['client'] -> (app_called, messages sent to the client)"""
+    import asyncio
+    called, sent = [], []
+
+    async def app(scope, receive, send):
+        called.append(scope)
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}"})
+
+    async def send(m):
+        sent.append(m)
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    scope = {"type": "http", "method": method, "path": path, "client": (ip, 1234), "headers": headers or []}
+    asyncio.run(lan.LanGate(app)(scope, receive, send))
+    return bool(called), sent
+
+
+def unit_security():
+    print("\n== security helpers (in-process)")
+    allowed = ["127.0.0.1", "127.5.5.5", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.9.9", "::1", "fe80::1",
+               "fd12:3456::1", "fc00::1", "::ffff:192.168.0.2"]
+    denied = ["8.8.8.8", "175.212.223.8", "172.32.0.1", "172.15.255.255", "192.169.0.1", "11.0.0.1", "100.64.0.1", "100.127.255.255", "0.0.0.0",
+              "2001:db8::1", "2606:4700::1111", "::ffff:8.8.8.8", "fec0::1", "ff02::1", "junk", ""]
+    saved = lan.S.lan.get("allow_cgnat")
+    try:
+        lan.S.lan["allow_cgnat"] = False
+        bad_a = [x for x in allowed if not lan._source_allowed(x)]
+        bad_d = [x for x in denied if lan._source_allowed(x)]
+        check("S1a source filter: loopback / 10/8 / 172.16/12 / 192.168/16 / 169.254/16 / ::1 / fe80::/10 / fc00::/7 / mapped-private allowed", not bad_a, bad_a)
+        check("S1b source filter: public IPv4/IPv6, CGNAT (default), 172.32, mapped-public, multicast, junk and empty denied", not bad_d, bad_d)
+        lan.S.lan["allow_cgnat"] = True
+        check("S1c lan.allow_cgnat=true admits only 100.64.0.0/10", lan._source_allowed("100.64.0.1") and lan._source_allowed("100.127.255.255")
+              and not lan._source_allowed("100.128.0.1") and not lan._source_allowed("100.63.255.255") and not lan._source_allowed("8.8.8.8"))
+        lan.S.lan["allow_cgnat"] = False
+        res = {ip: gate_call(ip) for ip in ("8.8.8.8", "175.212.223.8", "100.64.0.1", "2606:4700::1111", "192.168.0.7", "127.0.0.1", "169.254.1.1", "fd00::1", "fe80::2")}
+        silent = all(not res[ip][0] and res[ip][1] == [] for ip in ("8.8.8.8", "175.212.223.8", "100.64.0.1", "2606:4700::1111"))
+        served = all(res[ip][0] for ip in ("192.168.0.7", "127.0.0.1", "169.254.1.1", "fd00::1", "fe80::2"))
+        check("S1d LanGate with a fake scope['client']: public / CGNAT sources get NO answer and never reach the app; private / loopback / link-local / ULA do",
+              silent and served, {ip: (v[0], len(v[1])) for ip, v in res.items()})
+        called, sent = gate_call("8.8.8.8", "POST", "/pair")
+        called2, sent2 = gate_call("8.8.8.8", "GET", "/health")
+        check("S1e a public source cannot reach /pair or any other path (no answer, no lock side effect)", not called and not sent and not called2 and not sent2
+              and lan.S.fails == 0 and lan.S.locked is False)
+        called, sent = gate_call("192.168.0.7", "GET", "/health")
+        check("S1f a private source without a token still gets 401 (the filter is in front of the rest, not instead of it)",
+              not called and sent and sent[0]["status"] == 401)
+        lan.S.lan["allow_cgnat"] = True
+        called, sent = gate_call("100.64.0.9")
+        lan.S.lan["allow_cgnat"] = False
+        check("S1g with allow_cgnat a CGNAT source is served", called)
+    finally:
+        lan.S.lan["allow_cgnat"] = saved
+    P = lan._make_protocol()
+    p = P.__new__(P)
+    t = FakeTransport("8.8.8.8")
+    try:
+        p.connection_made(t)
+    except AttributeError:
+        pass          # it went on to the normal setup instead of dropping the connection: the check below fails
+    check("S1h the listener's protocol aborts a connection from a public address before reading anything", t.aborted and p.transport is t)
+    p2 = P.__new__(P)
+    t2 = FakeTransport("192.168.0.9")
+    try:
+        p2.connection_made(t2)
+    except AttributeError:
+        pass          # the real init state is not built here; what matters is that it was not aborted
+    check("S1i ... and does not abort a private address", not t2.aborted)
+    check("S4c regexes use \\Z: a code / nonce / token with a trailing newline does not match",
+          not lan.CODE_RE.match("123456\n") and lan.CODE_RE.match("123456") and not lan.NONCE_RE.match("a1b2c3d4\n")
+          and not lan.TOKEN_RE.match("Bearer hp1_" + "A" * 43 + "\n") and not lan.ID_RE.match("a1b2c3d4\n") and not lan.HASH_RE.match("a" * 64 + "\n"))
+    saved_env = {k: os.environ.get(k) for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_PRIVATE")}
+    try:
+        os.environ.pop("HOEHWA_TEST_HOOKS", None)
+        os.environ["HOEHWA_LAN_CODE_TTL"] = "2"
+        os.environ["HOEHWA_LAN_ASSUME_PRIVATE"] = "0"
+        a = (lan._code_ttl(), lan._forced_private())
+        os.environ["HOEHWA_TEST_HOOKS"] = "1"
+        b = (lan._code_ttl(), lan._forced_private())
+        check("HOEHWA_LAN_CODE_TTL / HOEHWA_LAN_ASSUME_PRIVATE are ignored without HOEHWA_TEST_HOOKS=1 and read with it",
+              a == (300.0, None) and b == (2.0, False), (a, b))
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    lan.S.bad_tokens.clear()
+    for i in range(5000):
+        lan._note_bad_token("10.%d.%d.1" % (i // 256, i % 256))
+    for _ in range(200):
+        lan._note_bad_token("10.99.99.99")
+    check("S4d the bad-token table is capped (<= %d addresses, <= %d entries per address) after 5000 sources" % (lan.BAD_TOKEN_MAX_IPS, lan.RATE_FAILS * 2),
+          len(lan.S.bad_tokens) <= lan.BAD_TOKEN_MAX_IPS and max(len(q) for q in lan.S.bad_tokens.values()) <= lan.RATE_FAILS * 2, len(lan.S.bad_tokens))
+    lan.S.bad_tokens.clear()
+
+
+def csrf_checks(T):
+    """S2: management endpoints refuse a web page's request (Origin / Host / Content-Type); the PC app's own style still works"""
+    port = T.http_port
+    url = T.base + "/lan"
+    new_code(T)            # an active code, so "cancel" and the lock state are observable
+    cur = get_lan(T)
+    same = json.dumps({"discovery": cur.get("discovery")})       # a body that changes nothing if it were accepted
+    flip = json.dumps({"discovery": not cur.get("discovery")})
+    evil_all = requests.post(url, data=flip, headers={"Content-Type": "text/plain", "Origin": "http://evil.example", "Host": "evil.example:%d" % port}, timeout=15)
+    check("S2a POST /lan with Content-Type text/plain + Origin evil + Host evil + body {discovery:flipped} -> 403 bad_origin",
+          evil_all.status_code == 403 and jb(evil_all).get("code") == "bad_origin", (evil_all.status_code, jb(evil_all).get("code")))
+    check("S2b ... and the setting did not change", get_lan(T).get("discovery") == cur.get("discovery"))
+    J = {"Content-Type": "application/json"}
+    bad_cases = [
+        ("only Origin evil", J, {"Origin": "http://evil.example"}),
+        ("Origin null", J, {"Origin": "null"}),
+        ("only Host evil", J, {"Host": "evil.example:%d" % port}),
+        ("Host 127.0.0.1.evil.example", J, {"Host": "127.0.0.1.evil.example:%d" % port}),
+        ("Host evil without port", J, {"Host": "evil.example"}),
+        ("only Content-Type text/plain", {"Content-Type": "text/plain"}, {}),
+        ("only Content-Type form-urlencoded", {"Content-Type": "application/x-www-form-urlencoded"}, {}),
+        ("no Content-Type", {}, {}),
+        ("loopback Origin on another port", J, {"Origin": "http://127.0.0.1:1"}),
+        ("localhost Origin but 127.0.0.1 Host", J, {"Origin": "http://localhost:%d" % port}),
+        ("https Origin", J, {"Origin": "https://127.0.0.1:%d" % port}),
+    ]
+    bad = []
+    for label, h1, h2 in bad_cases:
+        hh = dict(h1)
+        hh.update(h2)
+        r = requests.post(url, data=same.encode(), headers=hh, timeout=15)
+        if r.status_code != 403 or jb(r).get("code") != "bad_origin":
+            bad.append((label, r.status_code, jb(r).get("code")))
+    check("S2c each of Origin evil / null / other port / https, Host evil / suffix trick, Content-Type text/plain / form / none alone -> 403 bad_origin", not bad, bad)
+    ok_cases = [
+        ("PC app style (JSON, Host 127.0.0.1:port, no Origin)", J, {}),
+        ("same-origin Origin", J, {"Origin": "http://127.0.0.1:%d" % port}),
+        ("localhost Host + localhost Origin", J, {"Host": "localhost:%d" % port, "Origin": "http://localhost:%d" % port}),
+        ("[::1] Host", J, {"Host": "[::1]:%d" % port}),
+        ("JSON with charset", {"Content-Type": "application/json; charset=utf-8"}, {}),
+        ("upper-case JSON type", {"Content-Type": "Application/JSON"}, {}),
+    ]
+    bad = []
+    for label, h1, h2 in ok_cases:
+        hh = dict(h1)
+        hh.update(h2)
+        r = requests.post(url, data=same.encode(), headers=hh, timeout=15)
+        if r.status_code != 200:
+            bad.append((label, r.status_code, jb(r).get("code")))
+    check("S2d the legitimate shapes still work: no Origin (what Godot's HTTPRequest sends), same-origin, localhost, [::1], JSON with charset", not bad, bad)
+    reads = [requests.get(url, headers={"Host": "evil.example:%d" % port}, timeout=15), requests.get(url, headers={"Origin": "http://evil.example"}, timeout=15)]
+    check("S2e GET /lan (it shows the pairing code) with Host evil or Origin evil -> 403 (DNS rebinding cannot read it)",
+          all(r.status_code == 403 and jb(r).get("code") == "bad_origin" and "code" not in (jb(r).get("pairing") or {}) for r in reads))
+    ndev = len(get_lan(T).get("devices", []))
+    others = [("/lan/code", {}), ("/lan/code", {"cancel": True}), ("/lan/devices/revoke", {"all": True})]
+    bad = []
+    for path, body in others:
+        for hh in ({"Content-Type": "application/json", "Origin": "http://evil.example"}, {"Content-Type": "text/plain"},
+                   {"Content-Type": "application/json", "Host": "evil.example:%d" % port}):
+            r = requests.post(T.base + path, data=json.dumps(body).encode(), headers=hh, timeout=15)
+            if r.status_code != 403 or jb(r).get("code") != "bad_origin":
+                bad.append((path, sorted(hh), r.status_code))
+    check("S2f /lan/code, /lan/code cancel and /lan/devices/revoke {all} are refused the same way; nothing was revoked or cancelled",
+          not bad and len(get_lan(T).get("devices", [])) == ndev and (get_lan(T).get("pairing") or {}).get("active") is True, bad)
+    check("S2g the public endpoint /hello is not affected by Host / Origin (it reveals nothing private)",
+          requests.get(T.base + "/hello", headers={"Host": "evil.example", "Origin": "http://evil.example"}, timeout=15).status_code == 200)
+    # lan.allow_cgnat is a plain config flag through POST /lan
+    r = set_lan(T, allow_cgnat=True)
+    on = jb(r).get("allow_cgnat")
+    r2 = set_lan(T, allow_cgnat="yes")
+    r3 = set_lan(T, allow_cgnat=False)
+    check("S1j POST /lan {allow_cgnat:true} shows in GET /lan; a string value is 400; false switches it off again",
+          r.status_code == 200 and on is True and r2.status_code == 400 and jb(r3).get("allow_cgnat") is False)
+
+
+def acl_check(T):
+    """S4: the device file is readable by the current Windows user only (best effort; icacls)"""
+    if os.name != "nt" or not T.devfile or not os.path.exists(T.devfile):
+        note("S4e device-file ACL not checked", "not Windows or the file path is unknown")
+        return
+    user = os.environ.get("USERNAME", "")
+    r = subprocess.run(["icacls", T.devfile], capture_output=True, text=True, errors="replace")
+    aces = re.findall(r"(\S+):\(", r.stdout.replace(T.devfile, ""))
+    check("S4e the device file's ACL has exactly one entry and it is the current user (no Everyone / Users / inherited admins)",
+          user and len(aces) == 1 and aces[0].lower().endswith(user.lower()), "aces=%s" % aces)
+    check("S4f the file is still readable and still valid JSON by its owner", json.load(open(T.devfile, "r", encoding="utf-8")).get("version") == 1)
+
+
+def scenario_netsafe():
+    print("\n== S3 turning the link on needs a private network address")
+    expect_msg = "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요."
+    T = Stub("net0", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0"}).start()
+    try:
+        st = get_lan(T)
+        check("S3a no private address: GET /lan says network_safe false with a Korean reason, addresses []",
+              st.get("network_safe") is False and "공유기" in st.get("network_reason", "") and st.get("addresses") == [], st.get("network_reason", "")[:30])
+        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        check("S3b POST /lan {enabled:true} -> 409 no_private_network with the agreed Korean message",
+              r.status_code == 409 and jb(r).get("code") == "no_private_network" and jb(r).get("error") == expect_msg, (r.status_code, jb(r).get("code")))
+        st = get_lan(T)
+        check("S3c nothing was started: enabled false, listening false, LAN port and UDP port closed, no code",
+              st.get("enabled") is False and st.get("listening") is False and connect_code("127.0.0.1", T.lan_port) != 0 and udp_free(T.udp_port)
+              and (st.get("pairing") or {}).get("code") is None)
+        r = set_lan(T, discovery=False)
+        check("S3d other settings can still be changed while the link is off (200)", r.status_code == 200 and jb(r).get("discovery") is False)
+        r = http("POST", T.base + "/lan/code", json={})
+        check("S3e /lan/code while off -> 409 lan_off", r.status_code == 409 and jb(r).get("code") == "lan_off")
+        text = http("GET", T.base + "/lan").text + r.text + http("GET", T.base + "/hello").text
+        ips = re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", text)
+        check("S3f no public IP address appears in any response (only the loopback bind)", all(lan._source_allowed(i) for i in ips), ips)
+    finally:
+        T.stop()
+        T.release_ports()
+    T = Stub("net1", env={"HOEHWA_LAN_ASSUME_PRIVATE": "1"}).start()
+    try:
+        st0 = get_lan(T)
+        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        check("S3g behind a router (hook: private address present): network_safe true and the link turns on",
+              st0.get("network_safe") is True and r.status_code == 200 and jb(r).get("listening") is True)
+        r = set_lan(T, discovery=False)
+        check("S3h changing a setting while it is already on is not blocked", r.status_code == 200)
+    finally:
+        T.stop()
+        T.release_ports()
+    have = bool(lan.private_addresses())
+    T = Stub("net2", env={"HOEHWA_LAN_ASSUME_PRIVATE": None}).start()      # no override: the real answer for this PC
+    try:
+        st0 = get_lan(T)
+        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        check("S3i without the hook the real network decides (%s on this PC)" % ("private address present -> allowed" if have else "no private address -> refused 409"),
+              st0.get("network_safe") is have and r.status_code == (200 if have else 409) and (have or jb(r).get("code") == "no_private_network"),
+              (have, st0.get("network_safe"), r.status_code))
+    finally:
+        T.stop()
+        T.release_ports()
+    T = Stub("net3", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0"}, enabled=True).start()
+    try:
+        st = get_lan(T)
+        check("S3j saved enabled=true but no private address at boot: stays off, says why, port closed",
+              st.get("enabled") is False and st.get("listening") is False and "공유기" in st.get("error", "") and connect_code("127.0.0.1", T.lan_port) != 0)
+    finally:
+        T.stop()
+        T.release_ports()
+
+
+def _raw(port, payload, wait):
+    """send raw bytes, then read until the server closes or `wait` seconds pass -> (bytes, seconds)"""
+    t0 = time.time()
+    s = socket.create_connection(("127.0.0.1", port), timeout=5)
+    s.settimeout(0.5)
+    data = b""
+    try:
+        s.sendall(payload)
+        while time.time() - t0 < wait:
+            try:
+                chunk = s.recv(4096)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if not chunk:
+                break
+            data += chunk
+    finally:
+        s.close()
+    return data, time.time() - t0
+
+
+def scenario_slow():
+    print("\n== S4 slow senders (timeouts shortened with the test hooks: 2 s before login, 3 s for an upload)")
+    T = Stub("slow", env={"HOEHWA_LAN_PREAUTH_TIMEOUT": "2", "HOEHWA_LAN_BODY_TIMEOUT": "3"}).start()
+    try:
+        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        tok, _ = pair_token(T)
+        head = b"POST /pair HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 60\r\n\r\n"
+        data, dt = _raw(T.lan_port, head + b'{"code"', 9)
+        check("S4g /pair body that never completes -> 408 request_timeout after ~2 s (not held open)", b" 408 " in data and b"request_timeout" in data and 1.5 <= dt <= 6, "%.1fs" % dt)
+        head = ("POST /stt HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Type: application/json\r\nContent-Length: 100000\r\n\r\n" % tok).encode()
+        data, dt = _raw(T.lan_port, head + b"x" * 10, 12)
+        check("S4h an authenticated upload that stalls -> 408 after its (longer) limit ~3 s", b" 408 " in data and 2.5 <= dt <= 8, "%.1fs" % dt)
+        head = b"POST /stt HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n"
+        data, dt = _raw(T.lan_port, head, 12)
+        check("S4i a refused request (no token) whose body never arrives is answered 401 and closed after ~2 s", b" 401 " in data and dt <= 7, "%.1fs" % dt)
+        check("S4j the server is fine afterwards (valid token /health 200 on the link, loopback 200)",
+              http("GET", lurl(T, "/health"), token=tok).status_code == 200 and http("GET", T.base + "/health").status_code == 200)
+    finally:
+        T.stop()
+        T.release_ports()
+
 
 
 def scenario_logs(stubs_logs, codes_seen=()):
@@ -854,8 +1177,9 @@ def scenario_logs(stubs_logs, codes_seen=()):
 def main():
     try:
         unit_checks()
-        ip2, ip2_private = own_ip()
-        print("\nnon-loopback address used for the 'LAN' checks: %s (%s)" % (ip2 or "none", "private" if ip2_private else "NOT private"))
+        unit_security()
+        ip2, ip2_private = None, bool(lan.private_addresses())     # no 0.0.0.0 bind in tests, so no non-loopback address can be reached
+        print("\nprivate IPv4 addresses on this PC: %s (non-loopback reachability is not tested: tests bind 127.0.0.1 only)" % ("yes" if ip2_private else "none"))
         if EXTERNAL:
             lp, up = _arg("--lan-port"), _arg("--udp-port")
             if not lp or not up:
@@ -869,6 +1193,8 @@ def main():
         else:
             T = scenario_core_stub(ip2, ip2_private)
             scenario_ttl()
+            scenario_netsafe()
+            scenario_slow()
             scenario_restart()
             scenario_rate()
             scenario_logs(sorted(os.path.join(WORK, f) for f in os.listdir(WORK) if f.startswith("stub_")))
