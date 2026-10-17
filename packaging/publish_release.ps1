@@ -115,11 +115,15 @@ if ($keyHits[1] -eq 0 -and $keyHits[0]) {
 }
 # Android signing: a quoted password literal for the keystore (in a script or in export_presets.cfg) must never be tracked.
 # Only quoted literals match, so scripts that take the password from a variable are fine. Again: where, never the text.
-$ksRegex = 'GODOT_ANDROID_KEYSTORE_[A-Za-z0-9_]*PASSWORD[[:space:]]*[=:][[:space:]]*["'']+[^"''$]+["'']|keystore/(release|debug)_password="[^"]+"'
-$ksHits = Native git @("-C", $App, "grep", "-I", "-n", "-E", $ksRegex) -AllowFail
+$ksRegex = 'GODOT_ANDROID_KEYSTORE_[A-Za-z0-9_]*PASSWORD[[:space:]]*[=:][[:space:]]*["'']+[^"''$]+["'']' + "`n" + 'keystore/(release|debug)_password="[^"]+"'
+# the patterns contain double quotes, which Windows PowerShell 5.1 strips from native command arguments -> pass them as a pattern file
+$ksPatFile = Join-Path $env:TEMP ("hoehwa_ks_patterns_{0}.txt" -f $PID)
+[System.IO.File]::WriteAllText($ksPatFile, ($ksRegex + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+try { $ksHits = Native git @("-C", $App, "grep", "-I", "-n", "-E", "-f", $ksPatFile) -AllowFail } finally { Remove-Item -LiteralPath $ksPatFile -Force -ErrorAction SilentlyContinue }
 if ($ksHits[1] -eq 0 -and $ksHits[0]) {
     throw ("something that looks like a keystore password is tracked in:`n" + (($ksHits[0] | ForEach-Object { ($_ -split ":", 3)[0..1] -join ":" }) -join "`n"))
 }
+if ($ksHits[1] -gt 1) { throw "keystore password scan failed (git grep exit $($ksHits[1]))" }
 foreach ($c in @("backend\config.json", "packaging\defaults\config.default.json")) {
     $cp = Join-Path $App $c
     if (-not (Test-Path -LiteralPath $cp)) { if ($c -like "*default*") { throw "$c is missing" } else { continue } }
