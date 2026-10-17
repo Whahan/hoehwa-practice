@@ -82,6 +82,8 @@ ALLOW = {
     # English v1.1 practice and missions (practice.py, missions.py)
     ("GET", "/practice/ping"), ("GET", "/practice/sentences"), ("GET", "/practice/phonemes"), ("GET", "/practice/phoneme"),
     ("GET", "/missions"), ("POST", "/missions/check"), ("POST", "/missions/judge"),
+    # 1.2 learning-record sync hub (sync_hub.py)
+    ("GET", "/sync/pull"), ("POST", "/sync/push"),
 }
 
 MSG = {

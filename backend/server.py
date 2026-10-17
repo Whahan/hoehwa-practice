@@ -105,6 +105,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import lan   # phone link: extra LAN listener, pairing, device tokens (API.md "휴대폰 연결")
+import sync_hub   # learning-record sync hub: /sync/pull, /sync/push (docs/sync_design.md)
 
 # ----------------------------------------------------------------------------------------------
 # logging
@@ -2661,6 +2662,8 @@ app = FastAPI(title="Speaking practice backend", lifespan=lifespan)
 # --devices-file is for test servers; a test server (--port) never starts the link from config.json and never saves it
 lan.attach(app, CFG, save_config, log, BASE, tag=ARG_TAG, devices_file=_arg("--devices-file"),
            persist=not ARG_PORT, auto_start=not ARG_PORT)
+# the hub folder is backend/data/sync; a test server (--port) has no hub unless --sync-dir names a folder
+sync_hub.attach(app, BASE, log, sync_dir=_arg("--sync-dir"), test_server=bool(ARG_PORT))
 
 
 @app.exception_handler(ApiError)

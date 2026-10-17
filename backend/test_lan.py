@@ -343,7 +343,7 @@ def unit_checks():
     new_routes = {("GET", "/practice/ping"), ("GET", "/practice/sentences"), ("GET", "/practice/phonemes"), ("GET", "/practice/phoneme"),
                   ("GET", "/missions"), ("POST", "/missions/check"), ("POST", "/missions/judge")}
     check("U-04 allow-list has exactly the 16 original + 7 English v1.1 routes and none of /mic /llm /lan(admin) /docs",
-          len(lan.ALLOW) == 23 and new_routes <= lan.ALLOW and not any(p.startswith("/practice") or p.startswith("/missions") for _, p in lan.ALLOW - new_routes) and not any(p.startswith(("/mic", "/llm", "/docs", "/debug")) for _, p in lan.ALLOW)
+          len(lan.ALLOW) == 25 and new_routes <= lan.ALLOW and not any(p.startswith("/practice") or p.startswith("/missions") for _, p in lan.ALLOW - new_routes) and not any(p.startswith(("/mic", "/llm", "/docs", "/debug")) for _, p in lan.ALLOW)
           and ("GET", "/lan") not in lan.ALLOW and ("POST", "/lan/code") not in lan.ALLOW)
 def core(T, ip2):
     """B-03 .. B-23 on target T (LAN off at the start). ip2 = a non-loopback IPv4 of this PC | None: the link is bound to the

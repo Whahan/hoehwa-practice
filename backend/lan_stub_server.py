@@ -13,6 +13,7 @@
   --lan-enabled          start with the phone link already on (like a saved "enabled": true)
   --devices-file         where tokens (SHA-256 only) are kept; default backend\\lan_devices-<tag>.json (git-ignored)
   --tag                  names the default devices file
+  --sync-dir             folder of the learning-record sync hub (sync_hub.py); without it every /sync/* answers 503 sync_off
 
 Answers: /health /stt /tts(0.3 s WAV) /score /prosody /chat /mic/start /llm(POST) and the rest of the phone allow-list, plus
 lan.router (/hello /pair /lan ...). Prints "STUB_READY ..." on stdout once the app is up. Everything is fake: do not judge quality with it.
@@ -41,6 +42,7 @@ if "--no-hooks" not in sys.argv:
     os.environ.setdefault("HOEHWA_LAN_ASSUME_TAILSCALE", "127.0.0.1")
 
 import lan
+import sync_hub
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -54,6 +56,7 @@ ap.add_argument("--tag", default="")
 ap.add_argument("--devices-file", default="")
 ap.add_argument("--lan-port", type=int, default=8863)
 ap.add_argument("--lan-enabled", action="store_true")
+ap.add_argument("--sync-dir", default="")
 ap.add_argument("--no-hooks", action="store_true", help="do not set the test hooks (the real Tailscale adapters decide)")
 ap.add_argument("--allow-real-ports", action="store_true", help="allow the app's real ports (never do this next to the app)")
 ARGS = ap.parse_args()
@@ -82,6 +85,7 @@ async def lifespan(app_):
 app = FastAPI(title="Phone link stub backend", lifespan=lifespan)
 lan.attach(app, CFG, lambda cfg: None, log, BASE, tag=ARGS.tag or None, devices_file=ARGS.devices_file or None,
            persist=False, auto_start=True)
+sync_hub.attach(app, BASE, log, sync_dir=ARGS.sync_dir or None, test_server=True)
 
 
 @app.exception_handler(RequestValidationError)

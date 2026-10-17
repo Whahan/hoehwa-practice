@@ -1,0 +1,59 @@
+[
+  {
+    "id": "M-H1",
+    "desc": "스키마 검증 생략 (validate_doc 이 항상 문제 없음으로 답함)",
+    "file": "backend/sync_hub.py",
+    "find": "def validate_doc(",
+    "replace": "def validate_doc(*_a, **_k):\n    return []\n\n\ndef _validate_doc_unused(",
+    "expect_fail": ["T-H6"]
+  },
+  {
+    "id": "M-H2",
+    "desc": "seq 검사 제거 (낮은 seq 를 막지 않음; _do_push 의 stale_seq 분기)",
+    "file": "backend/sync_hub.py",
+    "find": "if seq < stored_seq:",
+    "replace": "if False:",
+    "expect_fail": ["T-H3"]
+  },
+  {
+    "id": "M-H3",
+    "desc": "루프백 Host/Origin 검사 제거",
+    "file": "backend/sync_hub.py",
+    "find": "lan.HOST_RE.match(",
+    "replace": "(lambda *_a, **_k: True)(",
+    "expect_fail": ["T-H12"]
+  },
+  {
+    "id": "M-H4",
+    "desc": "본문 크기 제한 제거 (3 MiB 상한을 사실상 없앰)",
+    "file": "backend/sync_hub.py",
+    "find": "3 * 1024 * 1024",
+    "replace": "3 * 1024 * 1024 * 1024 * 1024",
+    "expect_fail": ["T-H8"]
+  },
+  {
+    "id": "M-H5",
+    "desc": "임시 파일 없이 직접 쓰기 (_atomic_write 가 <대상>.tmp 를 거치지 않고 대상에 바로 씀)",
+    "file": "backend/sync_hub.py",
+    "find": "tmp = path + \".tmp\"",
+    "replace": "tmp = path",
+    "expect_fail": ["T-H19"]
+  },
+  {
+    "id": "M-H6",
+    "desc": "device_id 형식 검사 제거 (대문자·짧은 값·경로 조각 허용)",
+    "file": "backend/sync_hub.py",
+    "find": "[0-9a-f]{16}",
+    "replace": "[0-9a-zA-Z._/-]{1,64}",
+    "expect_fail": ["T-H7"],
+    "all": true
+  },
+  {
+    "id": "M-H7",
+    "desc": "--sync-dir 없는 시험 서버도 실제 기본 폴더 사용 (attach 의 test_server 분기 제거)",
+    "file": "backend/sync_hub.py",
+    "find": "elif not test_server:",
+    "replace": "elif True:",
+    "expect_fail": ["T-H17"]
+  }
+]

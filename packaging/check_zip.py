@@ -19,6 +19,7 @@ zpath, default_cfg = args[0], args[1]
 BAD_NAME = [
     (r"(^|/)test_[^/]*\.py$", "test file"),
     (r"(^|/)build_curriculum\.py$", "dev build script"),
+    (r"(^|/)(sync_hub_mutations\.json|run_sync_hub_mutations\.ps1)$", "dev tool (sync hub mutation test)"),
     (r"(^|/)\.gitignore$", ".gitignore"),
     (r"(^|/)\.gitattributes$", ".gitattributes"),
     (r"^backend/requirements\.txt$", "dev requirements.txt"),

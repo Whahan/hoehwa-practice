@@ -102,7 +102,8 @@ try {
         "/XF", "setup.ps1", "run_backend.bat", "stop_backend.bat", "*.pyc", "*.log",
         "secrets.json", "secrets.json.tmp",   # API keys never leave this PC
         "lan_devices*.json", "lan_devices*.json.*",   # phone link: paired-phone token hashes never leave this PC
-        "test_*.py", "build_curriculum.py", "requirements.txt", ".gitignore")   # dev files (kept in git, not shipped)
+        "test_*.py", "build_curriculum.py", "requirements.txt", ".gitignore",
+        "sync_hub_mutations.json", "run_sync_hub_mutations.ps1")   # dev files (kept in git, not shipped)
     if ($rc -ge 8) { throw "robocopy failed ($rc)" }
     # the package ships a neutral config, never this PC's backend\config.json (robocopy copied it; it is replaced right here)
     if (-not (Test-Path -LiteralPath $DefaultCfg)) { throw "defaults\config.default.json not found" }
