@@ -13,10 +13,13 @@ const POLL_SEC := 2.0
 const DESC_TEXT := "켜면 같은 와이파이에 있는 내 휴대폰의 회화 연습 앱이 이 PC의 AI 엔진을 쓸 수 있어요. 끄면 외부 연결 포트가 바로 닫혀요. 연결 코드를 입력한 휴대폰만 쓸 수 있어요."
 const WARN_TEXT := "카페·학교·호텔 같은 공용 와이파이에서는 켜지 마세요. 휴대폰과 PC 사이의 통신은 암호화되지 않아서 같은 와이파이의 다른 사람이 볼 수 있어요. 집이나 내가 관리하는 와이파이에서만 쓰세요. 안 쓸 때는 꺼 두세요."
 const FIREWALL_TEXT := "처음 켜면 Windows가 '이 앱이 네트워크에서 통신하도록 허용하시겠습니까?' 창을 띄워요. '개인 네트워크'를 체크하고 '액세스 허용'을 눌러 주세요. 창이 안 보이면 작업 표시줄을 확인해 보세요. 이 프로그램은 방화벽 설정을 직접 바꾸지 않아요. 그래도 폰에서 안 잡히면: 설정 > 네트워크 및 인터넷 > 와이파이 > 이 네트워크의 '네트워크 프로필'이 '개인'인지 확인하세요. 회사·학교 와이파이는 기기끼리 통신을 막는 경우가 많아요. PC가 잠들면 연결이 끊겨요."
+const NO_NETWORK_TEXT := "이 PC에 집이나 사무실 같은 사설 네트워크 주소가 없어서 휴대폰 연결을 켤 수 없어요. 공유기(와이파이)에 연결한 뒤 다시 시도해 주세요."
 const LOCKED_TEXT := "코드를 5번 틀려서 잠겼어요. '새 코드 만들기'를 눌러 주세요."
 
 var state: Dictionary = {}          ## 마지막 GET /lan 응답
 var error_text: String = ""
+## 이 PC 의 네트워크가 안전하지 않다는 경고(사설 IPv4 주소가 없음). 있으면 스위치를 켤 수 없다.
+var network_warning: String = ""
 
 var toggle: CheckButton
 var state_label: Label
@@ -36,6 +39,7 @@ var discovery_check: CheckBox
 var port_edit: LineEdit
 var name_edit: LineEdit
 
+var _pending: Array = []   ## in-flight ApiCalls: cancelled when the card is removed
 var _expires_at_msec: int = 0
 var _poll_timer: Timer
 var _busy: bool = false
@@ -169,11 +173,34 @@ func _on_poll() -> void:
 
 # ---------------------------------------------------------------- calls
 
+func _exit_tree() -> void:
+	# the screen is going away while a request is out: finish it now so nothing resumes in a freed node
+	for c in _pending.duplicate():
+		(c as Api.ApiCall).cancel()
+
+
+func _await_call(c: Api.ApiCall) -> Dictionary:
+	_pending.append(c)
+	var res: Dictionary = await c.wait()
+	_pending.erase(c)
+	return res
+
+
+## Reads GET /lan once and keeps `last_enabled` current (main.gd may call this without showing the card).
+static func poll_state() -> bool:
+	var res: Dictionary = await Api.get_json("/lan", 5.0, false).wait()
+	if res["ok"] and res["data"] is Dictionary:
+		last_enabled = bool((res["data"] as Dictionary).get("enabled", false))
+	return last_enabled
+
+
 ## GET /lan. Awaitable.
 func refresh() -> void:
 	if _busy:
 		return
-	var res: Dictionary = await Api.get_json("/lan", 5.0, false).wait()
+	var res: Dictionary = await _await_call(Api.get_json("/lan", 5.0, false))
+	if res.get("cancelled", false):
+		return
 	_handle_result(res)
 
 
@@ -183,8 +210,24 @@ func _handle_result(res: Dictionary) -> void:
 	if res["ok"] and res["data"] is Dictionary:
 		state = res["data"]
 		error_text = ""
+		network_warning = ""
+		if state.get("network_safe", true) == false:
+			network_warning = _network_reason(state)
 		last_enabled = bool(state.get("enabled", false))
 	else:
+		var ec: String = str(res.get("err_code", ""))
+		if ec == "no_private_network":
+			# the PC has no private (home / office) address: refuse, no way around it
+			network_warning = str(res.get("error", ""))
+			if network_warning == "":
+				network_warning = NO_NETWORK_TEXT
+			error_text = ""
+			_apply_state()
+			return
+		if ec == "local_only" or ec == "bad_origin":
+			error_text = "휴대폰 연결 설정을 바꾸지 못했어요. 앱을 다시 시작한 뒤 다시 시도해 주세요."
+			_apply_state()
+			return
 		if int(res.get("code", 0)) == 404:
 			error_text = "이 PC의 엔진이 옛 버전이라 휴대폰 연결을 쓸 수 없어요. 앱을 업데이트해 주세요."
 		else:
@@ -196,6 +239,26 @@ func _handle_result(res: Dictionary) -> void:
 	_apply_state()
 
 
+static func _network_reason(st: Dictionary) -> String:
+	for k in ["network_reason", "network_error", "network_message", "network_note", "reason"]:
+		if str(st.get(k, "")).strip_edges() != "":
+			return str(st[k])
+	return NO_NETWORK_TEXT
+
+
+## 10.x / 172.16-31.x / 192.168.x 만 화면에 낸다(공인 주소는 어떤 경우에도 보여 주지 않는다).
+static func is_private_ipv4(ip: String) -> bool:
+	var o: PackedStringArray = ip.split(".")
+	if o.size() != 4:
+		return false
+	for x in o:
+		if not x.is_valid_int() or int(x) < 0 or int(x) > 255:
+			return false
+	var a: int = int(o[0])
+	var b: int = int(o[1])
+	return a == 10 or (a == 172 and b >= 16 and b <= 31) or (a == 192 and b == 168)
+
+
 func _port_busy_text(_res: Dictionary) -> String:
 	var port: int = int(state.get("port", 8775))
 	return "포트 %d를 다른 프로그램이 쓰고 있어요. 다른 프로그램을 끄거나 아래 '고급'에서 포트를 바꿔 주세요." % port
@@ -203,7 +266,7 @@ func _port_busy_text(_res: Dictionary) -> String:
 
 func _post(path: String, body: Dictionary) -> Dictionary:
 	_busy = true
-	var res: Dictionary = await Api.post_json(path, body, 10.0, false).wait()
+	var res: Dictionary = await _await_call(Api.post_json(path, body, 10.0, false))
 	_busy = false
 	return res
 
@@ -317,10 +380,12 @@ func _apply_state() -> void:
 		return
 	var enabled: bool = bool(state.get("enabled", false))
 	toggle.set_pressed_no_signal(enabled)
-	toggle.disabled = state.is_empty() and error_text != ""
+	toggle.disabled = (state.is_empty() and error_text != "") or (network_warning != "" and not enabled)
 	state_label.text = "켜짐" if enabled else "꺼짐"
 	details.visible = enabled
 	var texts: Array[String] = []
+	if network_warning != "":
+		texts.append("⚠ " + network_warning)
 	if error_text != "":
 		texts.append(error_text)
 	if enabled:
@@ -332,7 +397,10 @@ func _apply_state() -> void:
 		if str(state.get("error", "")) != "" and not texts.has(str(state["error"])):
 			texts.append(str(state["error"]))
 		_show_warning(true)
-		var addrs: Array = state.get("addresses", []) if state.get("addresses", null) is Array else []
+		var addrs: Array = []
+		for a in (state.get("addresses", []) if state.get("addresses", null) is Array else []):
+			if is_private_ipv4(str(a)):
+				addrs.append(str(a))
 		var port: int = int(state.get("port", 8775))
 		if addrs.is_empty():
 			address_label.text = "주소를 찾지 못했어요 (포트 %d)" % port

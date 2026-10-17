@@ -48,6 +48,9 @@ var _mic_player: AudioStreamPlayer = null
 var _record_fx: AudioEffectRecord = null
 var _capture_fx: AudioEffectCapture = null
 var _perm_result: int = -1        ## -1 waiting, 0 denied, 1 granted
+var _perm_waiting: bool = false   ## the system permission dialog is open
+var _peak_seen: float = 0.0       ## largest sample the capture bus has delivered this recording
+var _mic_retried: bool = false
 var _devices: PackedStringArray = PackedStringArray()
 
 
@@ -172,6 +175,10 @@ func _process(delta: float) -> void:
 			return   # still waiting for the permission dialog
 		elapsed += delta
 		level = _read_level()
+		if elapsed >= 1.0 and not _mic_retried and _peak_seen <= 0.0 and Platform.is_android():
+			# the very first recording after the permission was granted can deliver only zeros: open the microphone once more
+			_mic_retried = true
+			_mic_reopen_player()
 		if elapsed >= MAX_SECONDS:
 			end()
 		return
@@ -196,8 +203,9 @@ func _poll_level() -> void:
 
 ## The phone leaves the foreground: never keep the microphone (or the speaker) running in the background.
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_PAUSED:
-		if recording:
+	if what == NOTIFICATION_APPLICATION_PAUSED and mode() != "pc":
+		# the system permission dialog also pauses the app: that must not throw the first recording away
+		if recording and not _perm_waiting:
 			cancel()
 		Tts.stop()
 
@@ -302,18 +310,26 @@ func _ensure_permission() -> bool:
 	Toast.info("마이크 권한이 필요해요. 다음 창에서 '허용'을 눌러 주세요.")
 	var rq: Callable = _hook("request")
 	if rq.is_valid():
-		return bool(await rq.call())
+		_perm_waiting = true
+		var got: bool = bool(await rq.call())
+		_perm_waiting = false
+		return got
 	if not Platform.is_android():
 		return false
 	_perm_result = -1
+	_perm_waiting = true
 	var cb := Callable(self, "_on_permission_result")
-	get_tree().on_request_permissions_result.connect(cb)
-	OS.request_permission("RECORD_AUDIO")
+	if not get_tree().on_request_permissions_result.is_connected(cb):
+		get_tree().on_request_permissions_result.connect(cb)
+	if OS.request_permission("RECORD_AUDIO"):
+		_perm_result = 1   # already granted: no dialog, no signal
 	var waited := 0.0
 	while _perm_result < 0 and waited < PERMISSION_WAIT_SEC:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
-	get_tree().on_request_permissions_result.disconnect(cb)
+	_perm_waiting = false
+	if get_tree().on_request_permissions_result.is_connected(cb):
+		get_tree().on_request_permissions_result.disconnect(cb)
 	return _perm_result == 1
 
 
@@ -360,13 +376,25 @@ func _mic_open() -> bool:
 	if _record_fx == null:
 		return false
 	_mic_close()
+	_peak_seen = 0.0
+	_mic_retried = false
+	_mic_reopen_player()
+	_record_fx.set_recording_active(true)
+	return true
+
+
+## (Re)creates the microphone player on the Record bus. Android only.
+func _mic_reopen_player() -> void:
+	if not Platform.is_android():
+		return
+	if _mic_player != null:
+		_mic_player.stop()
+		_mic_player.queue_free()
 	_mic_player = AudioStreamPlayer.new()   # a fresh player after the permission was granted
 	_mic_player.stream = AudioStreamMicrophone.new()
 	_mic_player.bus = RECORD_BUS
 	add_child(_mic_player)
 	_mic_player.play()
-	_record_fx.set_recording_active(true)
-	return true
 
 
 ## Stops capturing and returns what was recorded (null when nothing).
@@ -409,5 +437,6 @@ func _read_level() -> float:
 	for v in buf:
 		var m: float = (v.x + v.y) * 0.5
 		sum += m * m
+		_peak_seen = maxf(_peak_seen, maxf(absf(v.x), absf(v.y)))
 	var rms: float = sqrt(sum / float(buf.size()))
 	return clampf(rms * 4.0, 0.0, 1.0)

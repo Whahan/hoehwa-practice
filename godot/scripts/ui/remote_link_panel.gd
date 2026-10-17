@@ -15,6 +15,7 @@ var mic_hint: Label
 var change_button: Button
 var disconnect_button: Button
 var _busy: bool = false
+var _unpair_call: Api.ApiCall = null
 
 
 func _init() -> void:
@@ -53,16 +54,25 @@ func _ready() -> void:
 	refresh()
 
 
+func _exit_tree() -> void:
+	# removed while the PC is being told: finish the request now (the token is still forgotten locally)
+	if _unpair_call != null:
+		_unpair_call.cancel()
+
+
 ## "연결 끊기": 가능하면 PC 에 알리고(POST /lan/unpair), 이 폰의 토큰을 지운다.
 func disconnect_pc() -> void:
 	if _busy:
 		return
 	_busy = true
 	if Api.token != "" and Api.base_url != "":
-		await Api.post_json("/lan/unpair", {}, 5.0, false).wait()
+		_unpair_call = Api.post_json("/lan/unpair", {}, 5.0, false)
+		await _unpair_call.wait()
+		_unpair_call = null
 	_busy = false
 	Backend.forget_pairing()
-	refresh()
+	if is_inside_tree():
+		refresh()
 
 
 static func mic_granted() -> bool:
@@ -94,7 +104,7 @@ func refresh() -> void:
 			text = "PC에 연결하는 중…"
 	dot.add_theme_stylebox_override("panel", UI.style(color, Color(0, 0, 0, 0), 0, 99, 0, 0))
 	status_label.text = text
-	var conn: Dictionary = Backend.last_conn
+	var conn: Dictionary = RemoteLink.load_saved(Api.remote_path)
 	var name: String = str(conn.get("server_name", ""))
 	var addr: String = str(conn.get("base_url", Api.base_url)).trim_prefix("http://")
 	if st == Backend.Status.READY and Api.base_url != "":

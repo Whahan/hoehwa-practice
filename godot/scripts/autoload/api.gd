@@ -28,6 +28,7 @@ const TIMEOUT_LLM := 180.0
 const NOT_CONNECTED_TEXT := "PC에 연결되지 않았어요."
 const UNREACHABLE_TEXT := "PC에 닿지 않아요. PC가 켜져 있고 같은 와이파이인지, PC 앱의 '휴대폰 연결'이 켜져 있는지 확인해 주세요."
 const RETRY_DELAY_SEC := 0.3
+const RESUME_GRACE_MSEC := 8000
 
 ## POST paths that are safe to send twice (no side effects on the PC). Every GET is safe as well.
 const IDEMPOTENT_POST := ["/tts", "/stt", "/score", "/prosody"]
@@ -45,6 +46,7 @@ var remote_path: String = RemoteLink.PATH
 var sent_count: int = 0
 
 var _auth_failed_sent: bool = false
+var _resumed_msec: int = -1000000   ## when the app last came back to the foreground
 
 
 func _ready() -> void:
@@ -95,6 +97,7 @@ class ApiCall:
 	var base: String = ""
 	var use_auth: bool = true
 	var retries: int = 0
+	var in_flight: bool = false
 	var _req: HTTPRequest = null
 
 	## Awaitable: returns immediately if already finished.
@@ -107,7 +110,15 @@ class ApiCall:
 		if done:
 			return
 		if _req != null and is_instance_valid(_req):
-			_req.cancel_request()
+			if in_flight:
+				# Godot 4.6.3: HTTPRequest.cancel_request() (and removing the node, which calls it) blocks the
+				# main thread forever while a threaded request waits for the answer. Let the request end by
+				# itself (it has a timeout) and free the node afterwards.
+				var orphan: HTTPRequest = _req
+				_req = null
+				orphan.request_completed.connect(func(_r: int, _c: int, _h: PackedStringArray, _b: PackedByteArray) -> void: orphan.queue_free(), CONNECT_ONE_SHOT)
+			else:
+				_req.cancel_request()
 		if on_cancel.is_valid():
 			on_cancel.call()
 		_complete({"ok": false, "code": 0, "data": null, "bytes": PackedByteArray(), "error": "", "cancelled": true, "err_code": "", "err_body": null})
@@ -176,7 +187,11 @@ func _send(req_call: ApiCall, report: bool) -> int:
 	if req_call.use_auth and token != "":
 		headers.append("Authorization: Bearer " + token)
 	sent_count += 1
-	return req.request(req_call.base + req_call.path, headers, req_call.method, req_call.payload)
+	req_call.in_flight = true
+	var err: int = req.request(req_call.base + req_call.path, headers, req_call.method, req_call.payload)
+	if err != OK:
+		req_call.in_flight = false
+	return err
 
 
 func _finish_later(req_call: ApiCall, res: Dictionary, report: bool) -> void:
@@ -206,9 +221,9 @@ static func is_idempotent(method: int, path: String) -> bool:
 func _on_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, req_call: ApiCall, report: bool) -> void:
 	if req_call.done:
 		return
+	req_call.in_flight = false
 	# The connection broke (Wi-Fi hiccup, app just came back): one more try, only for requests without side effects.
-	if is_remote() and req_call.retries < 1 and (result == HTTPRequest.RESULT_CANT_CONNECT or result == HTTPRequest.RESULT_CONNECTION_ERROR) \
-			and is_idempotent(req_call.method, req_call.path):
+	if result != HTTPRequest.RESULT_SUCCESS and is_remote() and req_call.retries < 1 and _connection_broke(result) and is_idempotent(req_call.method, req_call.path):
 		req_call.retries += 1
 		_retry_later(req_call, report)
 		return
@@ -245,6 +260,21 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 	req_call._complete(res)
 
 
+## True for "the connection broke" failures. Right after the app came back from the background the OS may have
+## killed the socket in other ways too, so every failure except a timeout counts for a few seconds.
+func _connection_broke(result: int) -> bool:
+	if result == HTTPRequest.RESULT_CANT_CONNECT or result == HTTPRequest.RESULT_CONNECTION_ERROR or result == HTTPRequest.RESULT_NO_RESPONSE:
+		return true
+	if Time.get_ticks_msec() - _resumed_msec < RESUME_GRACE_MSEC:
+		return result != HTTPRequest.RESULT_TIMEOUT and result != HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED
+	return false
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED:
+		_resumed_msec = Time.get_ticks_msec()
+
+
 func _retry_later(req_call: ApiCall, report: bool) -> void:
 	if req_call._req != null and is_instance_valid(req_call._req):
 		req_call._req.queue_free()
@@ -274,4 +304,6 @@ static func _transport_error(result: int) -> String:
 		HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED, HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN, HTTPRequest.RESULT_DOWNLOAD_FILE_WRITE_ERROR:
 			return "받은 데이터를 처리하지 못했어요."
 		_:
+			if phone and result == HTTPRequest.RESULT_NO_RESPONSE:
+				return UNREACHABLE_TEXT
 			return "통신 중 문제가 생겼어요. (코드 %d)" % result

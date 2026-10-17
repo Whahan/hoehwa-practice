@@ -19,6 +19,17 @@ static var test_discovery_port: int = 0
 static var test_extra_targets: Array = []
 
 
+# ---------------------------------------------------------------- json
+
+## JSON.parse_string() prints an engine error for every non-JSON input; a broken remote.json or a stray
+## UDP packet is an expected input here, so parse quietly.
+static func parse_json(text: String) -> Variant:
+	var j := JSON.new()
+	if j.parse(text) != OK:
+		return null
+	return j.data
+
+
 # ---------------------------------------------------------------- address
 
 ## {ok, host, port, base_url, error}. IPv4(+선택 :포트)만. "http://", 끝 "/" 허용
@@ -75,7 +86,8 @@ static func discover(tree: SceneTree, timeout_sec: float = 2.5) -> Array:
 	var port: int = test_discovery_port if test_discovery_port > 0 else DISCOVERY_PORT
 	var udp := PacketPeerUDP.new()
 	udp.set_broadcast_enabled(true)
-	if udp.bind(0) != OK:
+	# explicit IPv4 socket: broadcasts from a dual-stack socket are unreliable on some Android versions
+	if udp.bind(0, "0.0.0.0") != OK:
 		return found
 	var targets: Array[String] = ["255.255.255.255"]
 	for ip in IP.get_local_addresses():
@@ -138,7 +150,7 @@ static func _broadcast_of(ip: String) -> String:
 static func _parse_here(pkt: PackedByteArray) -> Dictionary:
 	if pkt.size() == 0 or pkt.size() > 512:
 		return {}
-	var d: Variant = JSON.parse_string(pkt.get_string_from_utf8())
+	var d: Variant = parse_json(pkt.get_string_from_utf8())
 	if not (d is Dictionary):
 		return {}
 	var dd: Dictionary = d
@@ -296,15 +308,17 @@ static func save(conn: Dictionary, path: String = PATH) -> bool:
 static func load_saved(path: String = PATH) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	var parsed: Variant = parse_json(FileAccess.get_file_as_string(path))
 	if not (parsed is Dictionary):
 		return {}
 	var d: Dictionary = parsed
-	if str(d.get("base_url", "")) == "":
+	if not (d.get("base_url") is String) or not parse_address(str(d["base_url"]))["ok"]:
+		return {}
+	if d.has("token") and not (d["token"] is String):
 		return {}
 	return {
 		"v": 1,
-		"base_url": str(d["base_url"]),
+		"base_url": str(parse_address(str(d["base_url"]))["base_url"]),
 		"token": str(d.get("token", "")),
 		"device_id": str(d.get("device_id", "")),
 		"server_name": str(d.get("server_name", "")),

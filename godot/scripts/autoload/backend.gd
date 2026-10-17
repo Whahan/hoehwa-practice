@@ -7,7 +7,6 @@ enum Status { IDLE, CHECKING, STARTING, READY, FAILED, NEEDS_PAIRING }
 
 const MAX_WAIT_SECONDS := 90
 const HEALTH_REFRESH_SECONDS := 15.0
-const REMOTE_REFRESH_SECONDS := 30.0   # phone: fewer wake-ups (battery)
 const UNREACHABLE_TEXT := "PC에 닿지 않아요. PC가 켜져 있고 같은 와이파이인지, PC 앱의 '휴대폰 연결'이 켜져 있는지 확인해 주세요."
 const REVOKED_TEXT := "PC에서 이 휴대폰의 연결이 해제됐어요. 다시 연결해 주세요."
 
@@ -34,8 +33,7 @@ func _process(delta: float) -> void:
 	if status != Status.READY or _paused:
 		return
 	_since_refresh += delta
-	var every: float = REMOTE_REFRESH_SECONDS if remote_mode else HEALTH_REFRESH_SECONDS
-	if _since_refresh >= every:
+	if _since_refresh >= HEALTH_REFRESH_SECONDS:
 		_since_refresh = 0.0
 		# A busy engine (long LLM generation) may answer /health late: do not poll while
 		# requests are in flight.
@@ -224,8 +222,6 @@ func _start_remote() -> void:
 	if str(conn.get("token", "")) == "" or str(conn.get("base_url", "")) == "":
 		# Not paired: no network at all.
 		Api.clear_remote()
-		if Api.base_overridden:
-			pass
 		health = {}
 		_set_status(Status.NEEDS_PAIRING, "")
 		return
