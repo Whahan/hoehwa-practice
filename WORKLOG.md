@@ -9,6 +9,8 @@
 
 ## 남은 작업 (위에서부터 순서대로)
 
+**⏸ 사용자 요청으로 중단 (2026-10-17 18:30)** — Tailscale 전용 전환 작업을 멈춤. 자동 이어하기 세션은 이 작업을 이어서 하지 말 것(사용자가 다시 지시할 때까지). 반쯤 된 변경은 패치로 보관: `D:\Ai\언어pp_wt	ailscale_only_wip.patch`(같은 파일이 scratchpad `w_tsonly\` 에도), main 작업 폴더는 마지막 커밋(a38d3fb) 상태로 되돌림. 이어서 할 때: `git apply D:\Ai\언어pp_wt	ailscale_only_wip.patch` 후 남은 부분(server.py 연결·stub·Godot 화면·문서·시험) 진행.
+
 **[진행 중 2026-10-16 21:10] 안드로이드 A안(PC 연결형)** — 사용자 요청. 폰 앱은 Godot 화면만, 같은 와이파이의 PC 백엔드에 페어링 코드+토큰으로 연결. designer 설계 중 → `docsndroid_remote_design.md`. 그다음: 설계 확정 → 다운로드 승인(Godot 안드로이드 export 템플릿, platform-tools, 필요 시 JDK 17) → W1 백엔드 / W2 Godot 네트워크·녹음·PC 설정 / W3 폰 레이아웃·export 병렬 → reviewer → 실제 폰 시험 → 커밋·푸시 → (사용자 확인 후) 릴리스에 APK.
   - 2026-10-16 22:30 안드로이드 설계 완료(`docsndroid_remote_design.md`, §17.0 결정). Phase 0 스텁 커밋 bb5049e(푸시). worktree `D:\Ai\언어pp_wt\w1~w4`(브랜치 android/w1~w4)에서 W1 백엔드 LAN·W2 네트워크/녹음/연결 화면·W3 폰 레이아웃·W4 설정/export/서명 스크립트 동시 진행(커밋은 각 브랜치, push 금지). 진짜 릴리스 키스토어는 사용자 확인 후. 병합 순서: W1·W2·W4 → W3 → 영어 v1.1 T5 연결.
   - 2026-10-17 10:30 **사고 정리**: 자동 이어하기 실행(local_92ec8a8a, 02:26 시작)이 이 세션의 heartbeat 가 오래돼(워커들이 12시간 도는 동안 세션은 쉬는 중) 작업을 중복 시작 — worktree `app_wt\eng_t1~t4`(브랜치 eng/t1~t4)에 영어 T0~T4 WIP 커밋, android/w2·w4 에 WIP 커밋(7adad4f, bfe56e3), main 의 미추적 파일이 사라진 사고도 이 때문으로 추정. 오케스트레이터가 그 세션을 중지함. 재발 방지: 자동 이어하기 규칙에 `.orchestrator_lease`(active_until) 확인 + 다른 세션의 worktree·브랜치 수정 금지 + 파일을 바꾸는 git 명령 금지 추가, lease 는 4시간씩 갱신. eng/* 브랜치·worktree 는 중복본이라 쓰지 않음(통합 끝나면 정리). 그 세션이 남긴 mock 서버 2개(PID 8856·2924, 포트 8813)는 우리가 띄운 게 아니라 그대로 둠.
