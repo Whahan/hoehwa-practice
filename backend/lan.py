@@ -53,6 +53,9 @@ DEVICES_FILE_MAX = 1024 * 1024
 BAD_TOKEN_MAX_IPS = 2000               # rate-limit table size cap
 PREAUTH_TIMEOUT = 10.0                 # seconds to receive a request before login (/pair, /lan/proof, rejected requests)
 BODY_TIMEOUT = 120.0                   # seconds to receive an authenticated upload
+HEADER_TIMEOUT = 10.0                  # seconds for the request line + headers to arrive completely (slowloris)
+MAX_HEADER_BYTES = 16 * 1024           # request line + headers
+HEADER_END = bytes([13, 10, 13, 10])   # CR LF CR LF
 LOOPBACK_ONLY_NAMES = ("/lan", "/lan/code")
 
 TOKEN_RE = re.compile(r"\A(?i:bearer)[ \t]+(hp1_[A-Za-z0-9_-]{43})\Z")
@@ -316,16 +319,51 @@ def _load_devices():
             S.log.warning("lan: device file unreadable and could not be moved")
 
 
+_SID = None
+
+
+def _sys32(name):
+    return os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", name)
+
+
+def _my_sid():
+    """SID of the account this process runs as (whoami), or "" when unknown"""
+    global _SID
+    if _SID is None:
+        _SID = ""
+        try:
+            r = subprocess.run([_sys32("whoami.exe"), "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, timeout=5, creationflags=0x08000000)
+            m = re.search(r"S-1-[0-9-]+", r.stdout or "")
+            if r.returncode == 0 and m:
+                _SID = m.group(0)
+        except Exception:
+            pass
+    return _SID
+
+
 def _owner_only(path):
-    """best effort: only the current Windows user may read the device file (token hashes). Failure is ignored."""
-    user = os.environ.get("USERNAME")
-    if os.name != "nt" or not user:
+    """best effort: only the account this process runs as may read the device file (token hashes). The grant uses the process SID,
+    not the USERNAME variable, and is undone (ACL reset) if the file is not readable afterwards. Any doubt -> leave the default ACL."""
+    if os.name != "nt":
+        return
+    sid = _my_sid()
+    if not sid:
         return
     try:
-        subprocess.run(["icacls", path, "/inheritance:r", "/grant:r", "%s:(F)" % user], capture_output=True, timeout=5,
-                       creationflags=0x08000000)
+        r = subprocess.run([_sys32("icacls.exe"), path, "/inheritance:r", "/grant:r", "*%s:(F)" % sid], capture_output=True, timeout=5, creationflags=0x08000000)
+        ok = r.returncode == 0
+        if ok:
+            with open(path, "rb") as f:        # still ours?
+                f.read(1)
+            with open(path, "ab"):
+                pass
     except Exception:
-        pass
+        ok = False
+    if not ok:
+        try:
+            subprocess.run([_sys32("icacls.exe"), path, "/reset"], capture_output=True, timeout=5, creationflags=0x08000000)
+        except Exception:
+            pass
 
 
 def _save_devices():
@@ -508,6 +546,9 @@ def _make_protocol():
     from uvicorn.protocols.http.h11_impl import H11Protocol
 
     class LanH11Protocol(H11Protocol):
+        _hdr_timer = None
+        _hdr_buf = b""
+
         def connection_made(self, transport):
             if not _peer_allowed(transport):
                 self.transport = transport     # connection_lost() expects it
@@ -517,6 +558,43 @@ def _make_protocol():
                     pass
                 return
             super().connection_made(transport)
+
+        def _header_timeout(self):
+            self._hdr_timer = None
+            c = self.cycle
+            if c is None or c.response_complete:       # still no complete request: drop the connection
+                try:
+                    self.transport.abort()
+                except Exception:
+                    pass
+
+        def data_received(self, data):
+            c0 = self.cycle
+            if c0 is None or c0.response_complete:        # request line + headers of a new request are still arriving
+                self._hdr_buf += data
+                end = self._hdr_buf.find(HEADER_END)
+                if (end if end >= 0 else len(self._hdr_buf)) > MAX_HEADER_BYTES:
+                    try:
+                        self.transport.abort()
+                    except Exception:
+                        pass
+                    return
+                if end >= 0:
+                    self._hdr_buf = b""
+            super().data_received(data)
+            c = self.cycle
+            if c is not None and not c.response_complete:      # headers are complete: the body limits take over
+                if self._hdr_timer is not None:
+                    self._hdr_timer.cancel()
+                    self._hdr_timer = None
+            elif self._hdr_timer is None and data:             # first bytes of a request that is not complete yet
+                self._hdr_timer = self.loop.call_later(_hook_seconds("HOEHWA_LAN_HEADER_TIMEOUT", HEADER_TIMEOUT), self._header_timeout)
+
+        def connection_lost(self, exc):
+            if self._hdr_timer is not None:
+                self._hdr_timer.cancel()
+                self._hdr_timer = None
+            super().connection_lost(exc)
 
     return LanH11Protocol
 
@@ -641,7 +719,8 @@ class _Listener:
         self.port = port
         self.sock = sock
         cfg = uvicorn.Config(LanGate(S.app), lifespan="off", log_config=None, access_log=False, timeout_graceful_shutdown=2,
-                             timeout_keep_alive=5, proxy_headers=False, server_header=False, interface="asgi3", http=_make_protocol())
+                             timeout_keep_alive=5, proxy_headers=False, server_header=False, interface="asgi3", http=_make_protocol(),
+                             h11_max_incomplete_event_size=MAX_HEADER_BYTES)
         self.server = uvicorn.Server(cfg)
         self.done = threading.Event()
         self.crash = None
