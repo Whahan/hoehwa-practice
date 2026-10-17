@@ -312,18 +312,56 @@ def call_json(cfg, messages, schema, temperature=0.7, timeout=180):
         raise llm_common.LlmError("AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.", 502, None, text[:300])
 
 
-# one OpenCode session per conversation, so only the newest learner message is sent
+# one OpenCode session per conversation, so only the newest learner message is sent.
+# A session is only valid while it holds EXACTLY the conversation the app shows: `seen` = how many history messages
+# (incl. the reply it gave) the session knows, -1 = no longer trustworthy (a failed / unreadable / discarded answer is in
+# it) -> the next turn starts a new session from the app's history. Every use of a session (create, send, delete) is under
+# its own lock, so a request never races a delete or a second create for the same conversation.
 _sessions = {}
 MAX_SESSIONS = 4
 IDLE_SECONDS = 20 * 60
 
 
 class _Sess:
-    def __init__(self, sid):
-        self.sid = sid
-        self.seen = 0
+    def __init__(self):
+        self.sid = None
+        self.seen = -1
         self.last_used = time.time()
         self.lock = threading.Lock()
+        self.dead = False       # removed from _sessions: a thread that waited for the lock must look it up again
+
+
+def _session_key(conv_id, system):
+    return (conv_id or "") + "|" + hashlib.sha1(system.encode("utf-8")).hexdigest()[:12]
+
+
+def _retire(sess):
+    """Delete the OpenCode session of a removed _Sess - after any request that is using it has finished."""
+    sess.dead = True
+
+    def run():
+        with sess.lock:
+            if sess.sid:
+                _delete_session(sess.sid)
+                sess.sid = None
+    if sess.lock.acquire(blocking=False):
+        try:
+            if sess.sid:
+                _delete_session(sess.sid)
+                sess.sid = None
+        finally:
+            sess.lock.release()
+    else:
+        threading.Thread(target=run, daemon=True, name="opencode-retire").start()
+
+
+def invalidate(conv_id, system):
+    """The app did not use the answer chat_json returned (it was rejected): the session now holds a reply the user never
+    saw, so the next turn must start a new session."""
+    with _lock:
+        sess = _sessions.get(_session_key(conv_id, system))
+    if sess is not None:
+        sess.seen = -1
 
 
 def chat_json(cfg, conv_id, system, history, last_note, schema, timeout=120,
@@ -333,35 +371,57 @@ def chat_json(cfg, conv_id, system, history, last_note, schema, timeout=120,
         raise llm_common.LlmError("무료 모델의 사용 한도에 도달했어요.", 502, llm_fallback.classify(llm_common.SIMULATE_LIMIT), llm_common.SIMULATE_LIMIT)
     _need_server()
     t0 = time.time()
-    key = (conv_id or "") + "|" + hashlib.sha1(system.encode("utf-8")).hexdigest()[:12]
-    stale = []
-    with _lock:
-        for k, s in list(_sessions.items()):
-            if k != key and time.time() - s.last_used > IDLE_SECONDS:
-                stale.append(_sessions.pop(k))
-        sess = _sessions.get(key)
-        fresh = sess is None or sess.seen != max(0, len(history) - 1) or not conv_id
-        if fresh:
-            if sess is not None:
-                stale.append(sess)
-            while len(_sessions) >= MAX_SESSIONS:
-                oldest = min(_sessions, key=lambda k: _sessions[k].last_used)
-                stale.append(_sessions.pop(oldest))
-            sess = None
-    for s in stale:
-        _delete_session(s.sid)
-    if sess is None:
-        sess = _Sess(_new_session("hoehwa chat"))
+    if not conv_id:   # no conversation id: nothing to continue -> a throw-away session
+        sid = _new_session("hoehwa chat")
+        try:
+            text, stats = _send(cfg, sid, _turn_prompt(history, last_note, start_note, True), system + _schema_instr(schema), timeout)
+        finally:
+            _delete_session(sid)
+        stats["fresh"] = True
+        return _parse(text), time.time() - t0, stats
+    key = _session_key(conv_id, system)
+    for _ in range(5):
+        stale = []
         with _lock:
-            _sessions[key] = sess
-    with sess.lock:
-        sess.last_used = time.time()
-        text, stats = _send(cfg, sess.sid, _turn_prompt(history, last_note, start_note, fresh),
-                            system + _schema_instr(schema), timeout)
-        sess.seen = len(history) + 1
-    stats["fresh"] = fresh
+            now = time.time()
+            for k, s in list(_sessions.items()):
+                if k != key and now - s.last_used > IDLE_SECONDS:
+                    stale.append(_sessions.pop(k))
+            sess = _sessions.get(key)
+            if sess is None:
+                while len(_sessions) >= MAX_SESSIONS:
+                    oldest = min(_sessions, key=lambda k: _sessions[k].last_used)
+                    stale.append(_sessions.pop(oldest))
+                sess = _sessions[key] = _Sess()
+        for s in stale:
+            _retire(s)
+        with sess.lock:
+            if sess.dead:   # evicted while this request waited: look the conversation up again
+                continue
+            sess.last_used = time.time()
+            fresh = sess.sid is None or sess.seen != max(0, len(history) - 1)
+            try:
+                if fresh:
+                    if sess.sid:
+                        _delete_session(sess.sid)
+                        sess.sid = None
+                    sess.seen = -1
+                    sess.sid = _new_session("hoehwa chat")
+                text, stats = _send(cfg, sess.sid, _turn_prompt(history, last_note, start_note, fresh),
+                                    system + _schema_instr(schema), timeout)
+                data = _parse(text)   # raises if unreadable
+            except BaseException:
+                sess.seen = -1       # the session may hold this message / a junk answer: start over next time
+                raise
+            sess.seen = len(history) + 1   # only a readable answer moves the session forward
+        stats["fresh"] = fresh
+        return data, time.time() - t0, stats
+    raise llm_common.LlmError("OpenCode 대화를 준비하지 못했어요. 다시 시도해 주세요.", 502)
+
+
+def _parse(text):
     try:
-        return llm_common.extract_json(text), time.time() - t0, stats
+        return llm_common.extract_json(text)
     except Exception:
         raise llm_common.LlmError("AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.", 502, None, text[:300])
 

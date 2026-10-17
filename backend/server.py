@@ -17,6 +17,8 @@ import difflib
 import math
 import random
 import subprocess
+import shutil
+import tempfile
 import llm_common   # LlmError + JSON helpers shared by the remote engines
 import llm_opencode   # "opencode" engine: `opencode serve` + free DeepSeek V4.1 Flash (the default engine)
 import llm_api        # "openai_api" engine: OpenAI-compatible HTTP APIs (OpenCode Zen, DeepSeek, Gemini, OpenRouter)
@@ -242,27 +244,35 @@ def need_lang(lang):
 # ----------------------------------------------------------------------------------------------
 # audio decode
 # ----------------------------------------------------------------------------------------------
+MAX_AUDIO_B64 = 16 * 1024 * 1024    # base64 characters accepted per request (~12 MB of audio: the 16 MB request body limit)
+MAX_AUDIO_SECONDS = 60              # longer recordings are cut off after this many seconds
+
+
 def decode_audio_b64(b64: str) -> np.ndarray:
     import base64
     if not b64:
         raise ApiError("녹음된 소리가 없어요. 다시 녹음해 주세요.", 400)
+    if len(b64) > MAX_AUDIO_B64:
+        raise ApiError("녹음 파일이 너무 커요. 60초 이내로 짧게 녹음해 주세요.", 400)
     try:
         raw = base64.b64decode(b64, validate=False)
     except Exception:
         raise ApiError("오디오 데이터를 읽을 수 없어요.", 400)
     try:
-        data, sr = sf.read(BytesIO(raw), dtype="float32", always_2d=True)
+        with sf.SoundFile(BytesIO(raw)) as f:
+            sr = f.samplerate
+            data = f.read(frames=int(sr * MAX_AUDIO_SECONDS) + 1, dtype="float32", always_2d=True)
         mono = data.mean(axis=1)
     except Exception:
         try:
             from faster_whisper.audio import decode_audio
-            return decode_audio(BytesIO(raw), sampling_rate=16000).astype(np.float32)
+            return decode_audio(BytesIO(raw), sampling_rate=16000).astype(np.float32)[:16000 * MAX_AUDIO_SECONDS]
         except Exception:
             raise ApiError("오디오 형식을 읽을 수 없어요. WAV 파일을 보내 주세요.", 400)
     if sr != 16000 and len(mono):
         g = gcd(int(sr), 16000)
         mono = resample_poly(mono, 16000 // g, int(sr) // g).astype(np.float32)
-    return np.ascontiguousarray(mono, dtype=np.float32)
+    return np.ascontiguousarray(mono[:16000 * MAX_AUDIO_SECONDS], dtype=np.float32)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -357,26 +367,98 @@ _espeak_patched = False
 TTS_MIN_FREE_VRAM_MB = 1536   # Kokoro goes to the GPU only when at least this much VRAM is free at load time
 
 
+_espeak_lock = threading.Lock()   # the ONE lock for the patch (get_tts, features and reading all call it from different threads)
+
+
+def _ascii_path(p):
+    try:
+        p.encode("ascii")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def _short_ascii_path(p):
+    """Windows 8.3 short form of p (GetShortPathNameW), or None if it is not ASCII (8.3 names are often switched off)."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(1024)
+        n = ctypes.windll.kernel32.GetShortPathNameW(p, buf, 1024)
+        if 0 < n < 1024 and _ascii_path(buf.value) and os.path.isdir(buf.value):
+            return buf.value
+    except Exception:
+        pass
+    return None
+
+
+def _data_signature(d):
+    """(file count, total bytes) of an espeak data folder: a copy is reused only if it matches the original."""
+    n = total = 0
+    for root, _dirs, files in os.walk(d):
+        for f in files:
+            n += 1
+            total += os.path.getsize(os.path.join(root, f))
+    return n, total
+
+
+def _ascii_espeak_data(d):
+    """An ASCII-only path that holds the espeak-ng data of `d`: the 8.3 short path if the volume has one, else a one-time
+    copy under an ASCII temp folder (env HOEHWA_ESPEAK_DIR, the system temp, ProgramData, Public - first ASCII one that
+    works). The process working directory is never touched."""
+    short = _short_ascii_path(d)
+    if short:
+        return short
+    sig = _data_signature(d)
+    name = "hoehwa-espeak-ng-data-%d-%d" % sig
+    roots = [os.environ.get("HOEHWA_ESPEAK_DIR"), tempfile.gettempdir(), os.path.join(os.environ.get("PROGRAMDATA", ""), "hoehwa"),
+             os.path.join(os.environ.get("PUBLIC", ""), "Documents")]
+    last = None
+    for root in roots:
+        if not root or not _ascii_path(root):
+            continue
+        dest = os.path.join(root, name)
+        try:
+            if os.path.isdir(dest):
+                if _data_signature(dest) == sig:
+                    return dest
+                shutil.rmtree(dest, ignore_errors=True)   # incomplete / damaged copy
+            os.makedirs(root, exist_ok=True)
+            tmp = "%s.tmp%d" % (dest, os.getpid())
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.copytree(d, tmp)
+            try:
+                os.replace(tmp, dest)
+            except OSError:   # another process put its copy there first
+                shutil.rmtree(tmp, ignore_errors=True)
+            if os.path.isdir(dest) and _data_signature(dest) == sig:
+                log.info("espeak data copied to the ASCII folder %s", dest)
+                return dest
+        except Exception as e:
+            last = e
+            continue
+    raise RuntimeError("espeak-ng data path has non-ASCII characters and no ASCII folder could hold a copy: %s" % last)
+
+
 def _patch_espeak_for_nonascii_path():
-    """espeak-ng on Windows cannot open a data dir whose absolute path has non-ASCII characters
-    (this project lives under a Korean folder name). Work around it by chdir-ing into the folder that
-    contains espeak-ng-data and handing espeak the relative path '.'."""
+    """espeak-ng on Windows cannot open a data dir whose absolute path has non-ASCII characters (this project lives
+    under a Korean folder name). espeak is handed an ASCII path to the same data instead (short path or a one-time copy);
+    the process working directory is NOT changed. Safe to call from any thread, any number of times."""
     global _espeak_patched
     if _espeak_patched:
         return
-    import espeakng_loader
-    d = espeakng_loader.get_data_path()
-    try:
-        d.encode("ascii")
-        ascii_ok = True
-    except UnicodeEncodeError:
-        ascii_ok = False
-    if not ascii_ok:
-        os.chdir(os.path.dirname(d))
-        import phonemizer.backend.espeak.wrapper as W
-        _orig = W.EspeakAPI
-        W.EspeakAPI = lambda lib, dp: _orig(lib, ".")
-    _espeak_patched = True
+    with _espeak_lock:
+        if _espeak_patched:
+            return
+        import espeakng_loader
+        d = espeakng_loader.get_data_path()
+        if not _ascii_path(d):
+            ascii_dir = _ascii_espeak_data(d)
+            import phonemizer.backend.espeak.wrapper as W
+            _orig = W.EspeakAPI
+            W.EspeakAPI = lambda lib, dp: _orig(lib, ascii_dir)
+        _espeak_patched = True
 
 
 def pick_tts_device():
@@ -1006,7 +1088,10 @@ def nw_align(a, b, sim):
         bt[0][j] = 2
     for i in range(1, n + 1):
         for j in range(1, m + 1):
-            d = sc[i - 1][j - 1] + sim(a[i - 1], b[j - 1]) - 0.45
+            sv = sim(a[i - 1], b[j - 1])
+            # a pairing of two unrelated items (sim < 0.3) is worse than leaving both unpaired (2 x GAP = -1.0): the target
+            # item counts as missed and the heard one as extra, instead of "'X' was heard as 'Y'" for unrelated words
+            d = sc[i - 1][j - 1] + (sv - 0.45 if sv >= 0.3 else -1.1)
             u = sc[i - 1][j] + GAP
             l = sc[i][j - 1] + GAP
             best = max(d, u, l)
@@ -1577,33 +1662,52 @@ def on_remote_error(e):
     return ok
 
 
-def _with_cache(kind, prov, model, messages, schema, opts, fn):
+CACHE_VERSION = 2   # part of every cache key: bump it to retire answers stored by older (unvalidated) code
+
+
+def _with_cache(kind, prov, model, messages, schema, opts, fn, validate=None):
+    """Cache wrapper. `validate(data) -> bool` is the caller's semantic check (Korean present, no Chinese mixed in, every
+    item answered, ...): an answer is stored ONLY when it passes, and a stored answer that fails it is ignored on read
+    (so one bad first answer can never stick to the key)."""
     if not kind:
         return fn()
-    key = llm_cache.make_key(kind, prov, model, schema, messages, opts)
+    key = llm_cache.make_key(kind, prov, model, schema, messages, dict(opts, cv=CACHE_VERSION))
     hit = llm_cache.get(key)
     if hit is not None:
-        log.info("llm cache HIT %s (%s/%s) %s", kind, prov, model, key[:12])
-        return hit
+        if validate is None or _safe_valid(validate, hit):
+            log.info("llm cache HIT %s (%s/%s) %s", kind, prov, model, key[:12])
+            return hit
+        log.info("llm cache entry %s failed validation: ignored", key[:12])
     t0 = time.time()
     data = fn()
-    llm_cache.put(key, kind, prov, model, data)
-    log.info("llm cache MISS %s (%s/%s) %s stored after %.1fs", kind, prov, model, key[:12], time.time() - t0)
+    if validate is None or _safe_valid(validate, data):
+        llm_cache.put(key, kind, prov, model, data)
+        log.info("llm cache MISS %s (%s/%s) %s stored after %.1fs", kind, prov, model, key[:12], time.time() - t0)
+    else:
+        log.info("llm cache MISS %s (%s/%s) %s NOT stored (failed validation)", kind, prov, model, key[:12])
     return data
+
+
+def _safe_valid(validate, data):
+    try:
+        return bool(validate(data))
+    except Exception:
+        return False
 
 
 STRICT_JSON_NOTE = ("(Your previous answer could not be read as JSON. Answer again with ONLY one JSON object that matches the schema: "
                     "it starts with { and ends with }, no code fences, no text before or after it, no comments, double quotes around every key and string.)")
 
 
-def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None):
+def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None, validate=None):
     """The single LLM entry point: the selected remote engine or local Ollama, with the usage-limit fallback.
     cache_key_kind: e.g. "fix", "translate", "verify", "gloss" -> the result is cached persistently (backend/cache/
     llm_cache.sqlite) by (kind, provider, model, schema, messages, options). Only for deterministic tasks; default off.
+    validate: optional callback(data) -> bool; with cache_key_kind, the answer is cached only when it returns True.
     An answer that holds no usable JSON object (after llm_common.extract_json's repairs) is asked for ONE more time with a
     stricter instruction; if that fails too, ApiError 502 (Korean message)."""
     try:
-        return _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind)
+        return _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate)
     except ApiError as e:
         if not e.format_error:
             raise
@@ -1613,20 +1717,20 @@ def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False
         msgs[-1]["content"] = msgs[-1]["content"] + "\n\n" + STRICT_JSON_NOTE
     else:
         msgs.append({"role": "user", "content": STRICT_JSON_NOTE})
-    return _ollama_json_once(msgs, schema, min(temperature, 0.3), num_predict, think, cache_key_kind)
+    return _ollama_json_once(msgs, schema, min(temperature, 0.3), num_predict, think, cache_key_kind, validate)
 
 
-def _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind):
+def _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate=None):
     opts = {"temperature": temperature, "num_predict": num_predict, "think": think}
     if remote_route_active():
         try:
             return _with_cache(cache_key_kind, llm_provider(), _remote_model(), messages, schema, opts,
-                               lambda: _remote_json(messages, schema, temperature, num_predict))
+                               lambda: _remote_json(messages, schema, temperature, num_predict), validate)
         except llm_common.LlmError as e:
             if not on_remote_error(e):
                 raise ApiError(e.msg, e.status, format_error=llm_common.is_format_error(e))
     return _with_cache(cache_key_kind, "ollama", CFG["llm_model"], messages, schema, opts,
-                       lambda: _ollama_chat_json(messages, schema, temperature, num_predict, think))
+                       lambda: _ollama_chat_json(messages, schema, temperature, num_predict, think), validate)
 
 
 def _ollama_chat_json(messages, schema, temperature, num_predict, think):
@@ -1795,7 +1899,8 @@ def translate_ko(text, lang):
     for attempt in range(2):
         try:
             d = ollama_json([{"role": "user", "content": prompt}], KO_SCHEMA, temperature=0.2 if attempt == 0 else 0.4, num_predict=400,
-                            cache_key_kind="translate")
+                            cache_key_kind="translate",
+                            validate=lambda d: isinstance(d, dict) and ko_ok(str(d.get("ko", "") or "").strip(), lang))
         except ApiError:
             return ""
         ko = str(d.get("ko", "") or "").strip()
@@ -1856,10 +1961,20 @@ def _llm_correct(lang, stage, text, prev_ai, lt_fix=""):
         "Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), "
         "articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
     )
+    def fix_valid(d):   # the same acceptance test as the loop below: only an answer it would accept is cached
+        if not isinstance(d, dict):
+            return False
+        f = str(d.get("fix", "") or "").strip()
+        if not f or norm_text(f, lang) == norm_text(text, lang):
+            return True    # "nothing to fix" is a complete answer
+        if (lang == "en" and HANGUL.search(f)) or (lang == "ja" and not re.search(r"[぀-ヿ一-鿿]", f)):
+            return False
+        return ko_ok(str(d.get("fix_ko", "") or "").strip(), lang)
+
     fix = ""
     for attempt in range(2):
         d = ollama_json([{"role": "user", "content": prompt}], FIX_SCHEMA, temperature=0.2 if attempt == 0 else 0.5, num_predict=2500, think=True,
-                        cache_key_kind="fix")
+                        cache_key_kind="fix", validate=fix_valid)
         fix = str(d.get("fix", "") or "").strip()
         fix_ko = str(d.get("fix_ko", "") or "").strip()
         if not fix or norm_text(fix, lang) == norm_text(text, lang):
@@ -1928,6 +2043,7 @@ def run_chat(req):
     oc_session = llm_provider() == "opencode" and remote_route_active()
     for attempt in range(2):
         data = _chat_opencode(req, lang, sys_prompt) if (oc_session and attempt == 0) else None
+        from_oc = data is not None
         if data is None:  # other engines, the retry, or the OpenCode limit fallback
             data = ollama_json(msgs, CHAT_SCHEMA, temperature=0.6 if attempt == 0 else 0.45, num_predict=600)
         reply = str(data.get("reply", "")).strip()
@@ -1944,6 +2060,8 @@ def run_chat(req):
         if not bad:
             break
         log.info("chat attempt %d rejected: %r", attempt + 1, str(data)[:200])
+        if from_oc:   # the OpenCode session holds a reply the user will never see: the next turn starts a new session
+            llm_opencode.invalidate(req.conv_id or "", sys_prompt)
     else:
         if not reply or (lang == "en" and HANGUL.search(reply)):
             raise ApiError("AI가 대답을 만들지 못했어요. 다시 시도해 주세요.", 502)
@@ -2332,9 +2450,16 @@ def verify_answers(lang, exs):
               "(e) the Korean meaning / Korean option marked correct matches the sentence meaning.\n\n"
               + json.dumps(items, ensure_ascii=False) +
               '\n\nReply with JSON: {"answers": [{"id": <item id>, "answer": <index or -1>, "a": "O", "b": "O", "c": "O", "d": "O", "e": "O"}, ...]} covering every item.')
+    def verify_valid(d):   # every item answered (an incomplete checker answer is never cached)
+        if not isinstance(d, dict):
+            return False
+        ids = {a["id"] for a in (d.get("answers") or []) if isinstance(a, dict) and isinstance(a.get("id"), int)
+               and isinstance(a.get("answer"), int)}
+        return all(i in ids for i in range(len(exs)))
+
     try:
         data = ollama_json([{"role": "user", "content": prompt}], VERIFY_SCHEMA, temperature=0.0, num_predict=4000, think=True,
-                           cache_key_kind="verify")
+                           cache_key_kind="verify", validate=verify_valid)
     except Exception as e:
         log.warning("answer check failed: %s", getattr(e, "msg", e))
         raise LessonUnchecked("answer_check_failed")

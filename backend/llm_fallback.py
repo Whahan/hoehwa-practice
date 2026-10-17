@@ -57,10 +57,11 @@ def parse_reset(raw, now=None):
             total += float(n) * _UNITS.get(u.lower(), 0)
         if total > 0:
             return now + total
-    m = re.search(r"(?:reset[s]?|try again|available again)(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?", t, re.I)
+    # a clock time needs ":MM" or am/pm - a bare number ("try again 1 time", "resets after 2026-10-17") is not a time
+    m = re.search(r"(?:reset[s]?|try again|available again)(?:\s+at)?\s+(?<![\d:.-])(\d{1,2})(?:(?::(\d{2})(?![\d:.-]))\s*([ap]\.?m\.?(?![a-z]))?|\s*([ap]\.?m\.?(?![a-z])))", t, re.I)
     if m:
         hour, minute = int(m.group(1)), int(m.group(2) or 0)
-        ap = (m.group(3) or "").lower().replace(".", "")
+        ap = (m.group(3) or m.group(4) or "").lower().replace(".", "")
         if ap == "pm" and hour < 12:
             hour += 12
         if ap == "am" and hour == 12:
