@@ -9,6 +9,8 @@
 
 ## 남은 작업 (위에서부터 순서대로)
 
+**[진행 중 2026-10-17 19:30] 1.1.1 버그 수정 (외부 코드 리뷰 지적, 오케스트레이터가 코드로 확인)** — 작업자 5명 동시: w_fix_core(server.py LLM 캐시를 검증 뒤 저장·os.chdir 제거·OpenCode 세션 동기화·parse_reset·오디오 크기 상한·nw_align), w_fix_aux(features 캐시 락·LanguageTool --allow-origin 제거·일본어 청크 head/중복·lan pair 성공 시 실패 기록 초기화), w_fix_godot(progress/prefs 원자적 저장·add_mission done_goals 최고값·연결 변경 취소 버튼·api/backend/recorder/mission/reading/lesson/review/phoneme/shadow 수명주기), w_fix_pkg(update Ask-YN EOF 무한 반복·uninstall 이 앱 exe 안 끔·하드코딩 사용자 경로·check_zip 금지 파일·LT zip 고정 이름), w_fix_names(say_name 의 -ly/-ed 실명·국적·나이). 오케스트레이터 직접: `D:\Ai\언어\회화플랜.html` DOCTYPE/meta 추가와 월말 날짜 넘침 수정(저장소 밖 파일), 병합 끝난 worktree 5개 제거(브랜치 유지). 남은 worktree `app_wt\eng_t1~t4` 는 중복 세션 산출물·미커밋 파일 있음 → 사용자 확인 후 정리. 1.1.1 이후 후보(버그 아님): server.py 모듈 분리, /chat 답변 생성과 교정 병렬화, gloss.json → SQLite, tatoeba_build 가 기본 어휘 중·장문(Stage 3~4)을 지움.
+
 **✔ Tailscale 전용 전환 완료 (2026-10-17)** — 리스너는 이 PC 의 Tailscale IPv4(≤3)에만 바인딩, 출발지는 루프백+100.64/10+fd7a:115c:a1e0::/48 만, Tailscale 없으면 409 no_tailscale, UDP 자동 찾기 제거, 주소가 사라지면 감시 스레드가 포트를 닫음, PC 카드·폰 연결 화면·문서 Tailscale 기준. test_lan 194/194, 보안 검토 합격(우회 40여 개·변이 8종 모두 차단). 1.1.1 후보: 감시/부팅 때 메모리에서만 끈 enabled=false 가 다른 설정 저장 때 함께 저장될 수 있음(다시 켜면 됨), test_lan 이 리스너 시작 실패 시 합계 줄 없이 중단. 다음: 진짜 키 APK 재빌드 → 사용자 Tailscale 설치·키 백업·실기 시험 → APK 공개 + PC 1.1.1(사용자 확인).
 
 **[진행 중 2026-10-16 21:10] 안드로이드 A안(PC 연결형)** — 사용자 요청. 폰 앱은 Godot 화면만, 같은 와이파이의 PC 백엔드에 페어링 코드+토큰으로 연결. designer 설계 중 → `docsndroid_remote_design.md`. 그다음: 설계 확정 → 다운로드 승인(Godot 안드로이드 export 템플릿, platform-tools, 필요 시 JDK 17) → W1 백엔드 / W2 Godot 네트워크·녹음·PC 설정 / W3 폰 레이아웃·export 병렬 → reviewer → 실제 폰 시험 → 커밋·푸시 → (사용자 확인 후) 릴리스에 APK.
