@@ -98,6 +98,17 @@ func _notification(what: int) -> void:
 		_apply_layout()
 
 
+## Android back button: close the word panel, then leave the reader for the library.
+func go_back() -> bool:
+	if mode != "reader":
+		return false
+	if selected >= 0:
+		close_panel()
+	else:
+		back_to_library()
+	return true
+
+
 # ---------------------------------------------------------------- helpers
 
 func lemma_key(lemma: String) -> String:
@@ -136,8 +147,8 @@ static func error_text(res: Dictionary) -> String:
 
 
 func _font_key() -> String:
-	var k: String = str(Store.prefs.get("reading_font", "m"))
-	return k if FONT_SIZES.has(k) else "m"
+	var k: String = str(Store.prefs.get("reading_font", "l" if Platform.is_phone() else "m"))
+	return k if FONT_SIZES.has(k) else ("l" if Platform.is_phone() else "m")
 
 
 func _refresh_sets() -> void:
@@ -263,13 +274,14 @@ func _render_library() -> void:
 	var acc: Color = _accent()
 	var docs: Array = list_docs(lang)
 
-	var top := UI.hbox(12)
+	var top := UI.adaptive(12)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		_confirm_delete = ""
 		_render()))
-	top.add_child(UI.spacer())
+	if not Platform.is_phone():
+		top.add_child(UI.spacer())
 	top.add_child(UI.label("저장한 글 %d개" % docs.size(), "Muted", false))
 	c.add_child(top)
 
@@ -278,6 +290,7 @@ func _render_library() -> void:
 	card.body.add_child(UI.label("읽고 싶은 %s 글을 붙여 넣으세요" % NAME_KO[lang], "H2"))
 	card.body.add_child(UI.label("기사·소설·가사 무엇이든 좋아요. 분석하면 처음 보는 어려운 단어가 색으로 표시되고, 단어를 누르면 뜻·발음·예문을 보고 복습 목록에 넣을 수 있어요.", "Muted"))
 	var title_le := LineEdit.new()
+	UI.touch(title_le)
 	title_le.placeholder_text = "제목 (선택)"
 	title_le.text = _draft_title
 	title_le.text_changed.connect(func(t: String) -> void: _draft_title = t)
@@ -285,7 +298,7 @@ func _render_library() -> void:
 	_te = TextEdit.new()
 	_te.custom_minimum_size = Vector2(0, 260)
 	_te.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_te.placeholder_text = "여기에 %s 글을 붙여 넣으세요 (Ctrl+V)" % NAME_KO[lang]
+	_te.placeholder_text = ("여기에 %s 글을 붙여 넣으세요" if Platform.is_phone() else "여기에 %s 글을 붙여 넣으세요 (Ctrl+V)") % NAME_KO[lang]
 	_te.text = _draft_text
 	_te.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if lang == "ja":
@@ -299,7 +312,12 @@ func _render_library() -> void:
 			_te.accept_event()
 			analyze_draft())
 	card.body.add_child(_te)
-	var row := UI.hbox(10)
+	var phone: bool = Platform.is_phone()
+	var row: Container = UI.flow(10, 4) if phone else UI.hbox(10)
+	if phone: # there is no Ctrl+V on the phone: a button pastes the clipboard
+		var paste := UI.button("붙여넣기", "soft", acc)
+		paste.pressed.connect(_paste_clipboard)
+		row.add_child(paste)
 	var sample := UI.link_button("예시 글 넣기", "연습용 짧은 %s 글을 넣어요" % NAME_KO[lang])
 	sample.pressed.connect(func() -> void:
 		var s: Dictionary = SAMPLES[lang]
@@ -310,13 +328,18 @@ func _render_library() -> void:
 	_count_label = UI.label("", "Small", false)
 	_count_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_count_label)
-	row.add_child(UI.spacer())
+	if not phone:
+		row.add_child(UI.spacer())
 	_analyze_btn = UI.button("분석하기", "primary", acc, 50)
-	_analyze_btn.custom_minimum_size.x = 180
-	_analyze_btn.tooltip_text = "Ctrl+Enter"
+	if not phone:
+		_analyze_btn.custom_minimum_size.x = 180
+		_analyze_btn.tooltip_text = "Ctrl+Enter"
 	_analyze_btn.pressed.connect(analyze_draft)
-	row.add_child(_analyze_btn)
+	if not phone:
+		row.add_child(_analyze_btn)
 	card.body.add_child(row)
+	if phone:
+		card.body.add_child(_analyze_btn) # full width
 	c.add_child(card)
 	_update_draft_state()
 
@@ -332,6 +355,19 @@ func _render_library() -> void:
 	UI.fix_cjk(c)
 
 
+## Phone: puts the clipboard text into the draft at the caret.
+func _paste_clipboard() -> void:
+	var t: String = DisplayServer.clipboard_get()
+	if t.strip_edges() == "":
+		Toast.info("복사한 글이 없어요. 다른 앱에서 글을 복사한 뒤 눌러 주세요.")
+		return
+	if _te == null or not is_instance_valid(_te):
+		return
+	_te.insert_text_at_caret(t)
+	_draft_text = _te.text
+	_update_draft_state()
+
+
 func _update_draft_state() -> void:
 	if _count_label == null or not is_instance_valid(_count_label):
 		return
@@ -343,7 +379,9 @@ func _update_draft_state() -> void:
 
 func _doc_row(d: Dictionary) -> Control:
 	var id: String = str(d["id"])
-	var row := UI.hbox(10)
+	var phone: bool = Platform.is_phone()
+	var row: BoxContainer = UI.vbox(8) if phone else UI.hbox(10)
+	var acts: BoxContainer = row # phone: the buttons sit on a line of their own under the text
 	var col := UI.vbox(2)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(UI.label(str(d.get("title", "")), "Strong"))
@@ -357,8 +395,11 @@ func _doc_row(d: Dictionary) -> Control:
 	var date: String = Time.get_date_string_from_unix_time(opened + bias) if opened > 0 else ""
 	col.add_child(UI.colored("%s자 · 마지막으로 연 날 %s" % [_comma(text.length()), date], Pal.MUTED, "Small"))
 	row.add_child(col)
+	if phone:
+		acts = UI.hbox(8)
+		row.add_child(acts)
 	if _confirm_delete == id:
-		row.add_child(UI.colored("정말 지울까요?", Pal.BAD, "Small", false))
+		acts.add_child(UI.colored("정말 지울까요?", Pal.BAD, "Small", false))
 		var yes := UI.button("지우기", "primary", Pal.BAD)
 		yes.pressed.connect(func() -> void:
 			delete_doc(id)
@@ -368,20 +409,23 @@ func _doc_row(d: Dictionary) -> Control:
 		no.pressed.connect(func() -> void:
 			_confirm_delete = ""
 			_render_library())
-		row.add_child(yes)
-		row.add_child(no)
+		acts.add_child(yes)
+		acts.add_child(no)
 	else:
 		var open := UI.button("열기", "soft", _accent())
+		if phone:
+			open.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		open.pressed.connect(func() -> void: open_doc(d))
 		var del := UI.link_button("삭제")
 		del.pressed.connect(func() -> void:
 			_confirm_delete = id
 			_render_library())
-		row.add_child(open)
-		row.add_child(del)
-	for n in row.get_children():
-		if n is Button or n is Label:
-			(n as Control).size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		acts.add_child(open)
+		acts.add_child(del)
+	if not phone:
+		for n in row.get_children():
+			if n is Button or n is Label:
+				(n as Control).size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return row
 
 
@@ -527,6 +571,11 @@ func _build_reader() -> void:
 	add_child(_reader)
 	_head = UI.vbox(8)
 	var hm := UI.margin(_head, 20, 14, 20, 12)
+	if Platform.is_phone():
+		hm.add_theme_constant_override("margin_left", PhoneLayout.PAD)
+		hm.add_theme_constant_override("margin_top", 10)
+		hm.add_theme_constant_override("margin_right", PhoneLayout.PAD)
+		hm.add_theme_constant_override("margin_bottom", 8)
 	_reader.add_child(hm)
 	var line := ColorRect.new()
 	line.color = Pal.LINE
@@ -541,6 +590,8 @@ func _build_reader() -> void:
 
 	_text_scroll = ScrollContainer.new()
 	_text_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	if Platform.is_phone():
+		_text_scroll.scroll_deadzone = 12 # a drag that starts on a word still scrolls
 	_text_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var col := ColumnBox.new()
@@ -572,6 +623,8 @@ func _build_reader() -> void:
 	_panel = PanelContainer.new()
 	_panel_scroll = ScrollContainer.new()
 	_panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	if Platform.is_phone():
+		_panel_scroll.scroll_deadzone = 12
 	_panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_panel.add_child(_panel_scroll)
 	_panel_body = UI.vbox(12)
@@ -626,13 +679,18 @@ func _render_header() -> void:
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row1.add_child(title)
-	row1.add_child(UI.label("글자 크기", "Small", false))
-	(row1.get_child(row1.get_child_count() - 1) as Control).size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row1.add_child(UI.segmented([["s", "작게"], ["m", "보통"], ["l", "크게"]], _font_key(), func(v: String) -> void:
+	var size_row: BoxContainer = row1 # phone: the font size switch gets its own line
+	if Platform.is_phone():
+		size_row = UI.hbox(10)
+	size_row.add_child(UI.label("글자 크기", "Small", false))
+	(size_row.get_child(size_row.get_child_count() - 1) as Control).size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	size_row.add_child(UI.segmented([["s", "작게"], ["m", "보통"], ["l", "크게"]], _font_key(), func(v: String) -> void:
 		Store.set_pref("reading_font", v)
 		_render_header()
 		_render_text()))
 	_head.add_child(row1)
+	if Platform.is_phone():
+		_head.add_child(size_row)
 
 	if tokens.is_empty():
 		UI.fix_cjk(_head)
@@ -646,13 +704,13 @@ func _render_header() -> void:
 	row2.add_child(easy_note)
 	_head.add_child(row2)
 
-	var row3 := UI.hbox(6)
+	var phone: bool = Platform.is_phone()
+	var row3: Container = UI.flow(6, 2) if phone else UI.hbox(6)
 	if _confirm_bulk != "":
 		var n: int = bulk_keys(_confirm_bulk).size()
 		var q: String = "쉬운 단어 %d개를 아는 단어로 표시할까요?" % n if _confirm_bulk == "easy" else "이 글에 남은 새 단어·쉬운 단어 %d개를 모두 아는 단어로 표시할까요?" % n
-		var ql := UI.colored(q, Pal.INK, "Small", false)
+		var ql := UI.colored(q, Pal.INK, "Small", phone)
 		ql.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row3.add_child(ql)
 		var yes := UI.button("표시하기", "primary", acc)
 		var which: String = _confirm_bulk
 		yes.pressed.connect(func() -> void: mark_bulk_known(which))
@@ -660,8 +718,19 @@ func _render_header() -> void:
 		no.pressed.connect(func() -> void:
 			_confirm_bulk = ""
 			_render_header())
-		row3.add_child(yes)
-		row3.add_child(no)
+		if phone:
+			row3 = UI.vbox(6)
+			row3.add_child(ql)
+			var br := UI.hbox(8)
+			yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			br.add_child(yes)
+			br.add_child(no)
+			row3.add_child(br)
+		else:
+			row3.add_child(ql)
+			row3.add_child(yes)
+			row3.add_child(no)
 	else:
 		var b1 := UI.link_button("쉬운 단어 모두 아는 단어로")
 		b1.disabled = bulk_keys("easy").is_empty()
@@ -675,7 +744,8 @@ func _render_header() -> void:
 			_render_header())
 		row3.add_child(b1)
 		row3.add_child(b2)
-	row3.add_child(UI.spacer())
+	if not phone:
+		row3.add_child(UI.spacer())
 	_gloss_label = UI.colored("", Pal.MUTED, "Small", false)
 	_gloss_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row3.add_child(_gloss_label)
@@ -829,11 +899,11 @@ func _render_text() -> void:
 	if lang == "ja":
 		_rtl.add_theme_font_override("normal_font", UI.ja_font(false))
 		_rtl.add_theme_font_override("bold_font", UI.ja_font(true))
-		_rtl.add_theme_constant_override("line_separation", int(fs * 0.6))
+		_rtl.add_theme_constant_override("line_separation", int(fs * 0.6) + (6 if Platform.is_phone() else 0))
 	else:
 		_rtl.remove_theme_font_override("normal_font")
 		_rtl.remove_theme_font_override("bold_font")
-		_rtl.add_theme_constant_override("line_separation", int(fs * 0.45))
+		_rtl.add_theme_constant_override("line_separation", int(fs * 0.45) + (6 if Platform.is_phone() else 0))
 	var sv: int = _text_scroll.scroll_vertical
 	_rtl.text = build_bbcode()
 	_text_scroll.scroll_vertical = sv
@@ -939,6 +1009,7 @@ func _render_panel_word() -> void:
 	top.add_child(lem)
 	var close := UI.link_button("✕", "닫기")
 	close.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	UI.touch(close, 48.0, 48.0)
 	close.pressed.connect(close_panel)
 	top.add_child(close)
 	_panel_body.add_child(top)

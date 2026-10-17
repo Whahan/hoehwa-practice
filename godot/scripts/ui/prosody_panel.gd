@@ -164,7 +164,13 @@ func _draw_header(w: float, f: Font, fb: Font, acc: Color) -> void:
 	elif not has_mine and not native.is_empty():
 		var hint := "녹음하면 내 억양이 겹쳐 보여요"
 		var hw: float = f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
-		draw_string(f, Vector2(w - PAD_R - hw, y), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Pal.MUTED)
+		# narrow panel (phone): use a shorter hint, or none, instead of running into the legend
+		var legend_end: float = x + 28.0 + f.get_string_size("나", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 10.0
+		if w - PAD_R - hw < legend_end:
+			hint = "내 억양이 겹쳐 보여요"
+			hw = f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		if w - PAD_R - hw >= legend_end:
+			draw_string(f, Vector2(w - PAD_R - hw, y), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Pal.MUTED)
 
 
 func _y_range() -> Vector2:

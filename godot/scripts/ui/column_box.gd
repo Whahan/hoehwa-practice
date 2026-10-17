@@ -33,6 +33,8 @@ func _notification(what: int) -> void:
 
 func _apply_margins(width: float) -> void:
 	var side: int = maxi(min_pad, int((width - max_width) * 0.5))
+	if Platform.is_phone():
+		side = PhoneLayout.PAD # narrow screen: max_width is ignored, the column is as wide as the page
 	add_theme_constant_override("margin_left", side)
 	add_theme_constant_override("margin_right", side)
 	add_theme_constant_override("margin_top", pad_top)

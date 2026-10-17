@@ -398,13 +398,14 @@ func _render() -> void:
 
 func _render_home(c: VBoxContainer) -> void:
 	var acc: Color = Pal.accent(lang)
-	var top := UI.hbox(12)
+	var top := UI.adaptive(12)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		err = ""
 		_render()))
-	top.add_child(UI.spacer())
+	if not Platform.is_phone():
+		top.add_child(UI.spacer())
 	top.add_child(UI.label("%d XP · 레슨 %d회" % [Store.xp(lang), Store.stat(lang, "lessons")], "Muted", false))
 	c.add_child(top)
 	if err != "":
@@ -434,7 +435,7 @@ func _render_home(c: VBoxContainer) -> void:
 		_render())
 	var wo := UI.option_button(w_items, clampi(sel_w - 1, 0, maxi(0, w_items.size() - 1)))
 	wo.item_selected.connect(func(i: int) -> void: sel_w = i + 1)
-	var fields := UI.hbox(12)
+	var fields := UI.adaptive(12)
 	var f1 := UI.field("범위", mo)
 	f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var f2 := UI.field("주차", wo)
@@ -443,7 +444,10 @@ func _render_home(c: VBoxContainer) -> void:
 	fields.add_child(f2)
 	card.body.add_child(fields)
 
-	var src_seg := UI.segmented([["tatoeba", "실제 예문 레슨 (빠름)"], ["ai", "AI 레슨 (느림)"]], lesson_source(), set_lesson_source, func(_v: String) -> Color: return acc)
+	var src_items: Array = [["tatoeba", "실제 예문 레슨 (빠름)"], ["ai", "AI 레슨 (느림)"]]
+	if Platform.is_phone():
+		src_items = [["tatoeba", "실제 예문 (빠름)"], ["ai", "AI (느림)"]]
+	var src_seg := UI.segmented(src_items, lesson_source(), set_lesson_source, func(_v: String) -> Color: return acc)
 	card.body.add_child(UI.field("레슨 종류", src_seg))
 
 	var go := UI.button("레슨 시작", "primary", acc, 52)

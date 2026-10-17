@@ -272,6 +272,7 @@ func _render_run(c: VBoxContainer) -> void:
 		card.body.add_child(UI.label("또는 직접 입력", "Small", false))
 		var row := UI.hbox(8)
 		var le := LineEdit.new()
+		UI.touch(le)
 		le.placeholder_text = "%s로 입력" % NAME_KO[lang]
 		le.text = typed_text
 		if lang == "ja":
@@ -339,7 +340,14 @@ func _rating_card(it: Dictionary) -> Control:
 	var now: int = Store.now()
 	var pv: Dictionary = FSRS.preview(it, now)
 	var colors := {1: Pal.BAD, 2: Pal.WARN, 3: Pal.OK, 4: acc}
-	var row := UI.hbox(8)
+	var row: Container = UI.hbox(8)
+	if Platform.is_phone(): # four buttons do not fit side by side: two by two
+		var g := GridContainer.new()
+		g.columns = 2
+		g.add_theme_constant_override("h_separation", 8)
+		g.add_theme_constant_override("v_separation", 8)
+		g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row = g
 	for r in [1, 2, 3, 4]:
 		var wait: int = int((pv[r] as Dictionary)["due"]) - now
 		var b := UI.button("%s\n%s" % [RATING_NAME[r], FSRS.format_interval(wait)], "primary" if r == pre else "outline", colors[r], 64)

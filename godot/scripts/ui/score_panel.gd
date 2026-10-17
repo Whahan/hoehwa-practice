@@ -135,9 +135,12 @@ static func _add_units(box: VBoxContainer, units: Array, lang: String) -> void:
 			tip = (tip + " · " if tip != "" else "") + "눌러서 발음기호 보기"
 			if first_bad < 0 and ph_bad:
 				first_bad = i
-		var ch := UI.chip(t, fg, bg, tip)
+		var ch := UI.chip(t, fg, bg, "" if Platform.is_phone() else tip)
 		var lab := ch.get_child(0) as Label
 		lab.add_theme_font_size_override("font_size", 17)
+		if Platform.is_phone(): # touch target
+			PhoneLayout.touch(ch, PhoneLayout.LINK_H)
+			lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		if not ph.is_empty():
 			ch.mouse_filter = Control.MOUSE_FILTER_STOP
 			ch.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -146,7 +149,10 @@ static func _add_units(box: VBoxContainer, units: Array, lang: String) -> void:
 	box.add_child(fl)
 
 	if not any_ph:
-		box.add_child(UI.label("초록은 잘 말한 부분, 빨강은 놓친 부분이에요. 빨간 칸에 마우스를 올리면 어떻게 들렸는지 보여요.", "Small"))
+		if Platform.is_phone():
+			box.add_child(UI.label("초록은 잘 말한 부분, 빨강은 놓친 부분이에요.", "Small"))
+		else:
+			box.add_child(UI.label("초록은 잘 말한 부분, 빨강은 놓친 부분이에요. 빨간 칸에 마우스를 올리면 어떻게 들렸는지 보여요.", "Small"))
 		return
 
 	var select := func(i: int) -> void:

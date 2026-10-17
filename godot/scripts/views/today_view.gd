@@ -2,6 +2,9 @@ class_name TodayView
 extends AppView
 ## 오늘: progress overview, two language cards, settings.
 
+## The phone's connection card asked for the connect screen (main.gd opens it).
+signal connect_requested
+
 const WD := ["일", "월", "화", "수", "목", "금", "토"]
 const NATIVE := {"en": "English", "ja": "日本語"}
 const NAME_KO := {"en": "영어", "ja": "일본어"}
@@ -15,9 +18,10 @@ var _llm_hint: Label
 var _speed_label: Label
 var _start_edit: LineEdit
 var _start_msg: Label
-var _confirm_row: HBoxContainer
+var _confirm_row: BoxContainer
 var _test_player: AudioStreamPlayer
 var _built: bool = false
+var _settings_btn: Button
 
 
 func _ready() -> void:
@@ -37,6 +41,32 @@ func refresh() -> void:
 	if _scroll == null:
 		return
 	rebuild_keep_scroll(_scroll, _build)
+
+
+## Phone: the status strip opens the settings card at the top of the page.
+func open_settings() -> void:
+	_settings_open = true
+	refresh()
+	if is_inside_tree():
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if _scroll != null and is_instance_valid(_scroll):
+			_scroll.scroll_vertical = int(_settings_toggle_y())
+
+
+func _settings_toggle_y() -> float:
+	if _settings_btn == null or not is_instance_valid(_settings_btn):
+		return 0.0
+	return maxf(0.0, _settings_btn.global_position.y - _scroll.content.global_position.y - 8.0)
+
+
+## Android back button: close the settings first.
+func go_back() -> bool:
+	if _settings_open:
+		_settings_open = false
+		refresh()
+		return true
+	return false
 
 
 func _notification(what: int) -> void:
@@ -71,7 +101,7 @@ func _hero(pos: Dictionary) -> Control:
 	var start: String = Store.start_iso()
 	if phase == "before":
 		v.add_child(UI.label("시작까지", "Eyebrow", false))
-		var line := UI.hbox(14)
+		var line := UI.adaptive(14)
 		var big := UI.label("D-%d" % int(pos["days"]), "Big", false)
 		line.add_child(big)
 		var s := UI.label("%s 시작 · 아래는 첫 주 미리보기예요. 레슨과 원어민 대화는 지금 바로 써 볼 수 있어요." % start.replace("-", "."), "Muted")
@@ -105,7 +135,9 @@ func _lang_card(l: String, pos: Dictionary) -> Control:
 	var wk: Dictionary = Store.week_data(l, n, w)
 	var card := UI.card("Card", 14)
 
-	var head := UI.hbox(8)
+	var head: Container = UI.hbox(8)
+	if Platform.is_phone():
+		head = UI.flow(8, 4) # the XP chip drops under the name when the card is narrow
 	var nm := Label.new()
 	nm.text = NATIVE[l]
 	nm.theme_type_variation = &"H2"
@@ -114,7 +146,8 @@ func _lang_card(l: String, pos: Dictionary) -> Control:
 	var ko := UI.label(NAME_KO[l], "Small", false)
 	ko.size_flags_vertical = Control.SIZE_SHRINK_END
 	head.add_child(ko)
-	head.add_child(UI.spacer())
+	if not Platform.is_phone():
+		head.add_child(UI.spacer())
 	var st: int = Store.streak(l)
 	var chip_text := ("연속 %d일" % st) if st > 0 else "오늘부터 시작"
 	head.add_child(UI.chip("%s · %d XP" % [chip_text, Store.xp(l)], acc, Pal.soft(l)))
@@ -180,21 +213,30 @@ const VOICE_SAMPLE := {
 
 ## One row of the voice settings: dropdown of the voices installed for `l` + a preview button.
 func _voice_row(l: String) -> Control:
-	var row := UI.hbox(12)
+	var phone: bool = Platform.is_phone()
+	var row: BoxContainer = UI.vbox(6) if phone else UI.hbox(12)
+	var line: BoxContainer = row # phone: the dropdown and the preview button share a second line
 	var cap := UI.label("영어" if l == "en" else "일본어", "Muted", false)
-	cap.custom_minimum_size = Vector2(60, 0)
+	if not phone:
+		cap.custom_minimum_size = Vector2(60, 0)
 	row.add_child(cap)
+	if phone:
+		line = UI.hbox(8)
+		row.add_child(line)
 	var ob := UI.option_button([], -1)
-	ob.custom_minimum_size = Vector2(260, 0)
+	if phone:
+		ob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		ob.custom_minimum_size = Vector2(260, 0)
 	_fill_voice_option(ob, l)
 	ob.item_selected.connect(func(idx: int) -> void:
 		Store.set_pref("tts_voice_" + l, str(ob.get_item_metadata(idx))))
-	row.add_child(ob)
+	line.add_child(ob)
 	var pv := UI.button("미리 듣기", "default")
 	pv.pressed.connect(func() -> void:
 		if ob.selected >= 0:
 			Tts.speak(str(VOICE_SAMPLE[l]), l, false, str(ob.get_item_metadata(ob.selected))))
-	row.add_child(pv)
+	line.add_child(pv)
 	if Tts.voices.is_empty():
 		Tts.voices_loaded.connect(func() -> void:
 			if is_instance_valid(ob):
@@ -249,6 +291,7 @@ func _settings_panel() -> Control:
 	var wrap := UI.vbox(10)
 	var toggle := UI.button(("설정  ▴" if _settings_open else "설정  ▾"), "default")
 	toggle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_settings_btn = toggle
 	toggle.pressed.connect(func() -> void:
 		_settings_open = not _settings_open
 		refresh())
@@ -259,6 +302,12 @@ func _settings_panel() -> Control:
 	var card := UI.card("Card", 16)
 	wrap.add_child(card)
 
+	# phone: the connection to the PC comes first
+	if Platform.is_phone():
+		var rl := RemoteLinkPanel.new()
+		rl.change_requested.connect(func() -> void: connect_requested.emit())
+		_mount_link_panel(card, rl)
+
 	# start date
 	var sd := UI.vbox(6)
 	sd.add_child(UI.label("시작일", "Strong"))
@@ -267,14 +316,21 @@ func _settings_panel() -> Control:
 	_start_edit.text = Store.start_iso()
 	_start_edit.placeholder_text = "YYYY-MM-DD"
 	_start_edit.custom_minimum_size = Vector2(170, 0)
+	if Platform.is_phone():
+		_start_edit.custom_minimum_size = Vector2(0, 0)
+		_start_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		PhoneLayout.touch(_start_edit)
 	row.add_child(_start_edit)
 	var apply := UI.button("적용", "soft", Pal.INK)
 	apply.pressed.connect(_apply_start)
 	_start_edit.text_submitted.connect(func(_t: String) -> void: _apply_start())
 	row.add_child(apply)
-	_start_msg = UI.label("", "Small", false)
-	row.add_child(_start_msg)
+	_start_msg = UI.label("", "Small", Platform.is_phone())
+	if not Platform.is_phone():
+		row.add_child(_start_msg)
 	sd.add_child(row)
+	if Platform.is_phone():
+		sd.add_child(_start_msg)
 	sd.add_child(UI.label("시작일을 바꾸면 오늘이 몇 개월차 몇 주차인지 다시 계산돼요. 체크한 기록은 그대로 남아요.", "Small"))
 	card.body.add_child(sd)
 	card.body.add_child(UI.hline())
@@ -282,7 +338,12 @@ func _settings_panel() -> Control:
 	# TTS speed
 	var sp := UI.vbox(6)
 	sp.add_child(UI.label("읽어주는 속도", "Strong"))
-	var srow := UI.hbox(12)
+	var phone: bool = Platform.is_phone()
+	var srow: BoxContainer = UI.adaptive(12) # phone: slider line, then the two listen buttons
+	var sline: BoxContainer = srow
+	if phone:
+		sline = UI.hbox(12)
+		srow.add_child(sline)
 	var slider := HSlider.new()
 	slider.min_value = 0.6
 	slider.max_value = 1.3
@@ -291,10 +352,13 @@ func _settings_panel() -> Control:
 	slider.custom_minimum_size = Vector2(240, 24)
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.focus_mode = Control.FOCUS_NONE
-	srow.add_child(slider)
+	if phone:
+		slider.custom_minimum_size = Vector2(120, 40)
+		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sline.add_child(slider)
 	_speed_label = UI.label("%.2f배" % slider.value, "Muted", false)
 	_speed_label.custom_minimum_size = Vector2(60, 0)
-	srow.add_child(_speed_label)
+	sline.add_child(_speed_label)
 	slider.value_changed.connect(func(v: float) -> void:
 		_speed_label.text = "%.2f배" % v)
 	slider.drag_ended.connect(func(changed: bool) -> void:
@@ -308,36 +372,45 @@ func _settings_panel() -> Control:
 	t2.pressed.connect(func() -> void:
 		Store.set_pref("tts_speed", snappedf(slider.value, 0.05))
 		Tts.speak("こんにちは。はじめまして。週末はどうでしたか。", "ja"))
-	srow.add_child(t1)
-	srow.add_child(t2)
+	if phone:
+		var tline := UI.hbox(8)
+		t1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tline.add_child(t1)
+		tline.add_child(t2)
+		srow.add_child(tline)
+	else:
+		srow.add_child(t1)
+		srow.add_child(t2)
 	sp.add_child(srow)
 	sp.add_child(UI.label("목소리", "Strong"))
 	sp.add_child(_voice_row("en"))
 	sp.add_child(_voice_row("ja"))
-	sp.add_child(UI.label("이 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요.", "Small"))
+	sp.add_child(UI.label("연결한 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요." if phone else "이 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요.", "Small"))
 	card.body.add_child(sp)
 	card.body.add_child(UI.hline())
 
 	# microphone
 	var mic := UI.vbox(6)
 	mic.add_child(UI.label("마이크", "Strong"))
-	var devs := Recorder.input_devices()
-	var names: Array = []
-	var sel := 0
-	var cur: String = str(Store.prefs.get("mic_device", "Default"))
-	for i in devs.size():
-		names.append(devs[i])
-		if devs[i] == cur:
-			sel = i
-	var ob := UI.option_button(names, sel)
-	ob.custom_minimum_size = Vector2(320, 0)
-	ob.item_selected.connect(func(idx: int) -> void:
-		var dn: String = ob.get_item_text(idx)
-		Store.set_pref("mic_device", dn)
-		Recorder.apply_device(dn))
-	var mrow := UI.hbox(12)
-	mrow.add_child(ob)
-	mic.add_child(mrow)
+	if not Platform.is_phone(): # the phone has one microphone: only the test below
+		var devs := Recorder.input_devices()
+		var names: Array = []
+		var sel := 0
+		var cur: String = str(Store.prefs.get("mic_device", "Default"))
+		for i in devs.size():
+			names.append(devs[i])
+			if devs[i] == cur:
+				sel = i
+		var ob := UI.option_button(names, sel)
+		ob.custom_minimum_size = Vector2(320, 0)
+		ob.item_selected.connect(func(idx: int) -> void:
+			var dn: String = ob.get_item_text(idx)
+			Store.set_pref("mic_device", dn)
+			Recorder.apply_device(dn))
+		var mrow := UI.hbox(12)
+		mrow.add_child(ob)
+		mic.add_child(mrow)
 	var test_row := UI.hbox(12)
 	var rw := RecorderWidget.new(false, Pal.accent(Store.lang()), false)
 	rw.idle_text = "테스트"
@@ -350,14 +423,18 @@ func _settings_panel() -> Control:
 
 	# backend status
 	var be := UI.vbox(6)
-	be.add_child(UI.label("AI 엔진 상태", "Strong"))
-	var brow := UI.hbox(8)
+	be.add_child(UI.label("PC 연결 상태" if Platform.is_phone() else "AI 엔진 상태", "Strong"))
+	var brow: BoxContainer = UI.adaptive(8) # phone: the status text on its own line, the button under it
+	var bline: BoxContainer = brow
+	if Platform.is_phone():
+		bline = UI.hbox(8)
+		brow.add_child(bline)
 	_status_dot = UI.tinted_panel(Pal.MUTED, Color(0, 0, 0, 0), 0, 99, 0, 0)
 	_status_dot.custom_minimum_size = Vector2(10, 10)
 	_status_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	brow.add_child(_status_dot)
+	bline.add_child(_status_dot)
 	_status_label = UI.label("", "")
-	brow.add_child(_status_label)
+	bline.add_child(_status_label)
 	var rb := UI.button("다시 확인", "default")
 	rb.pressed.connect(func() -> void:
 		if Backend.status == Backend.Status.READY:
@@ -370,15 +447,17 @@ func _settings_panel() -> Control:
 	be.add_child(_llm_hint)
 	card.body.add_child(be)
 	card.body.add_child(UI.hline())
-	card.body.add_child(_engine_section())
-	card.body.add_child(UI.hline())
+	if not Platform.is_phone(): # the AI engine is a PC setting (the phone link may not change it)
+		card.body.add_child(_engine_section())
+		card.body.add_child(UI.hline())
+		_mount_link_panel(card, PhoneLinkPanel.new())
 
 	# reset
 	var rs := UI.vbox(6)
-	var rrow := UI.hbox(8)
+	var rrow: BoxContainer = UI.adaptive(8)
 	var reset := UI.button("모든 기록 지우기", "outline", Pal.BAD)
 	rrow.add_child(reset)
-	_confirm_row = UI.hbox(8)
+	_confirm_row = UI.adaptive(8)
 	_confirm_row.visible = false
 	_confirm_row.add_child(UI.label("정말 지울까요? 되돌릴 수 없어요.", "Small", false))
 	var yes := UI.button("지우기", "primary", Pal.BAD)
@@ -397,8 +476,24 @@ func _settings_panel() -> Control:
 		reset.visible = false)
 	rrow.add_child(_confirm_row)
 	rs.add_child(rrow)
+	if Platform.is_phone():
+		rs.add_child(UI.label("이 휴대폰에 쌓인 기록만 지워져요. PC의 기록은 그대로예요.", "Small"))
 	card.body.add_child(rs)
 	return wrap
+
+
+## Puts a connection panel (ui/remote_link_panel.gd, phone_link_panel.gd) and a divider into the settings
+## card. Both stay hidden while the panel has no content yet.
+func _mount_link_panel(card: CardBox, panel: Control) -> void:
+	var sep := UI.hline()
+	card.body.add_child(panel)
+	card.body.add_child(sep)
+	var sync := func() -> void:
+		var has: bool = panel.get_child_count() > 0
+		panel.visible = has
+		sep.visible = has
+	sync.call()
+	panel.child_entered_tree.connect(func(_n: Node) -> void: sync.call())
 
 
 func _apply_start() -> void:
