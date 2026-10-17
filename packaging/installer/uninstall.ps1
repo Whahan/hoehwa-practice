@@ -1,5 +1,5 @@
 # 회화 연습 제거 스크립트. 보통은 제거.bat 을 더블클릭해서 실행합니다.
-# 지우는 것: 이 폴더 안의 runtime, backend\models, backend\logs, backend\cache, backend\tools(LanguageTool), backend\secrets.json(API 키), install.log
+# 지우는 것: 이 폴더 안의 runtime, backend\models, backend\logs, backend\cache, backend\tools(LanguageTool), backend\secrets.json(API 키), backend\lan_devices.json(연결된 휴대폰 목록), install.log
 # 지우지 않는 것: Ollama 와 AI 모델, OpenCode/Node.js, 학습 기록/설정(%APPDATA%\Godot\app_userdata\회화 연습), 프로그램 파일 자체
 param([switch]$Yes)
 $ErrorActionPreference = "Stop"
@@ -8,7 +8,7 @@ $Root = $PSScriptRoot
 
 Write-Host "================ 회화 연습 제거 ================" -ForegroundColor Cyan
 Write-Host "다음 폴더/파일을 지웁니다 (설치 폴더: $Root)"
-$targets = @("runtime", "backend\models", "backend\logs", "backend\cache", "backend\tools", "backend\secrets.json", "backend\__pycache__", "install.log", "backup", "update.log", "version.txt")
+$targets = @("runtime", "backend\models", "backend\logs", "backend\cache", "backend\tools", "backend\secrets.json", "backend\lan_devices.json", "backend\__pycache__", "install.log", "backup", "update.log", "version.txt")
 foreach ($t in $targets) {
     $p = Join-Path $Root $t
     if (Test-Path -LiteralPath $p) { Write-Host "  - $t" }

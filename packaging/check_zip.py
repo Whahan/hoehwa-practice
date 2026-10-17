@@ -25,6 +25,7 @@ BAD_NAME = [
     (r"(^|/)setup\.ps1$", "dev setup.ps1"),
     (r"(^|/)secrets\.json", "secrets.json"),
     (r"(^|/)(auth\.json|\.env)$", "credentials file"),
+    (r"(^|/)lan_devices[^/]*\.json", "paired-phone tokens (lan_devices*.json)"),
     (r"\.sqlite(-journal|-wal)?$", "database"),
     (r"(^|/)__pycache__/", "__pycache__"),
     (r"\.(pyc|log)$", "pyc/log"),
