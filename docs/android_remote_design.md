@@ -723,7 +723,7 @@ packaging/out/android/
 | X-07 | `apksigner verify --print-certs <apk>` | 종료코드 0, 인증서 SHA-256이 scratch 키의 지문과 같음 (실제 `android_cert.sha256`과는 다름 — 릴리스 키가 아니므로) |
 | X-08 | `aapt2 dump badging <apk>` / `aapt2 dump permissions <apk>` | `package: name='io.github.whahan.hoehwa'`, `versionCode='10100'`, `versionName='1.1.0'`, `sdkVersion:'24'`(다르면 보고), `native-code: 'arm64-v8a'`만, 권한 = INTERNET·ACCESS_NETWORK_STATE·RECORD_AUDIO뿐 |
 | X-09 | 비밀값: `Select-String 'keystore/(release\|debug)_password="[^"]' godot\export_presets.cfg` 및 `git ls-files | Select-String '\.(keystore|jks|p12|pfx)$'` | 둘 다 0건. 키 폴더가 저장소 밖(`D:\Ai\언어\app` 하위 아님) |
-| X-10 | 공개 스크립트: `publish_release.ps1 -ScanOnly -Version 1.1.0` | `SCAN OK` (새 패턴이 스크립트 자신에 안 걸림). **부정 시험**: 저장소 복제본(scratchpad)에 가짜 `x.keystore`와 `GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD = "abc"` 한 줄을 `git add` 한 뒤 복제본의 스크립트로 `-ScanOnly` → 종료코드≠0, 출력에 값은 없고 파일 이름만 |
+| X-10 | 공개 스크립트: `publish_release.ps1 -ScanOnly -Version 1.1.0` | `SCAN OK` (새 패턴이 스크립트 자신에 안 걸림). **부정 시험**: 저장소 복제본(scratchpad)에 가짜 `x.keystore`와 릴리스 비밀번호 환경변수(GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD)에 따옴표 친 가짜 값을 대입하는 한 줄을 `git add` 한 뒤 복제본의 스크립트로 `-ScanOnly` → 종료코드≠0, 출력에 값은 없고 파일 이름만 |
 | X-11 | `publish_release.ps1 -DryRun -WithApk -SkipBuild -Version 1.1.0` (scratch 산출물 사용) | `release_1.1.0\`에 APK와 `SHA256SUMS.txt`가 있고 그 안에 `hoehwa-practice-android-1.1.0.apk` 줄 존재, 체크섬 재검증 통과. 지문 불일치(scratch 키 ≠ `android_cert.sha256`)면 중단되는 것도 확인 (-AcceptNewKey 없이) |
 | X-12 | 업데이터 영향: PowerShell로 `update.ps1`의 정규식 `(?i)[-_]update[-_]v?1\.1\.0\.zip$`를 `hoehwa-practice-android-1.1.0.apk`에 적용 | `False` |
 | X-13 | `-WithApk` 없이 `-DryRun`(기존 동작) | 이전과 같은 자산 목록 (APK 없음) |
