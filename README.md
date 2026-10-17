@@ -4,6 +4,7 @@
 
 - **다운로드:** https://github.com/Whahan/hoehwa-practice/releases/latest
 - **저장소:** https://github.com/Whahan/hoehwa-practice
+- **설치 가이드 (PC·안드로이드·Tailscale 연결):** [INSTALL.md](INSTALL.md)
 
 ![원어민 대화](screenshots/원어민대화.png)
 ![발음 채점](screenshots/발음채점.png)
