@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Tests of the phone link (lan.py): pairing, tokens, allow-list, ports, UDP discovery. No model is needed.
+"""Tests of the phone link (lan.py, Tailscale only): pairing, tokens, allow-list, ports, source filter, bind address. No model is needed.
 
-  .venv\\Scripts\\python.exe test_lan.py [--work-dir DIR] [--keep]
-      Starts its OWN stub servers (lan_stub_server.py) on free ports in 8830-8839 (HTTP), 8840-8849 (LAN) and 18776-18790 (UDP),
-      runs every scenario, kills only the processes it started. It never touches the app's real ports.
-  .venv\\Scripts\\python.exe test_lan.py --base http://127.0.0.1:8830 --lan-port 8840 --udp-port 18776 [--devices-file F] [--pid N]
-      Runs the core scenarios against a server YOU started (stub or server.py --port ... --tag ...); --base is required in this
-      mode and the app's own server is refused. Scenarios that need to start/kill processes are reported as SKIP.
+  .venv\\Scripts\\python.exe test_lan.py [--work-dir DIR] [--keep] [--only unit]
+      Starts its OWN stub servers (lan_stub_server.py) on free ports in 8862-8869 (HTTP and link share this range), runs every
+      scenario, kills only the processes it started. It never touches the app's real ports (8770, 8775, 8776).
+      The link listens on the PC's Tailscale address, so the stubs run with the test hooks HOEHWA_TEST_HOOKS=1 and
+      HOEHWA_LAN_ASSUME_TAILSCALE=127.0.0.1 (the "Tailscale address" is the loopback one). No test binds 0.0.0.0.
+      --only unit runs the in-process checks only (no stub is started).
+  .venv\\Scripts\\python.exe test_lan.py --base http://127.0.0.1:8862 --lan-port 8863 [--devices-file F] [--pid N]
+      Runs the core scenarios against a server YOU started (stub or server.py --port ... --tag ... with the hooks above); --base is
+      required in this mode and the app's own server is refused. Scenarios that need to start/kill processes are reported as SKIP.
 
 Last line:  LAN_TEST_RESULT PASS n/n   (exit 0)   |   LAN_TEST_RESULT FAIL k/n | PARTIAL ...  (exit 1)
 Tokens are only ever printed as their first 4 characters; codes are never printed.
@@ -24,7 +27,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections import deque
 
 import requests
 
@@ -107,28 +109,20 @@ def tcp_free(port):
     return True
 
 
-def udp_free(port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.bind(("127.0.0.1", port))
-        return True
-    except OSError:
-        return False
-    finally:
-        s.close()
-
-
 _USED = set()
 
 
-def pick(lo, hi, udp=False):
-    for p in range(lo, hi + 1):
+PORT_LO, PORT_HI = 8862, 8869      # every port a test uses (HTTP and link); never 8770 / 8775 / 8776
+
+
+def pick():
+    for p in range(PORT_LO, PORT_HI + 1):
         if p in _USED:
             continue
-        if (udp_free(p) if udp else tcp_free(p)):
+        if tcp_free(p):
             _USED.add(p)
             return p
-    sys.exit("no free port in %d-%d" % (lo, hi))
+    sys.exit("no free port in %d-%d" % (PORT_LO, PORT_HI))
 
 
 def release(p):
@@ -136,28 +130,41 @@ def release(p):
 
 
 def own_ip():
-    """a non-loopback IPv4 of this PC: a private one if there is any (-> (ip, True)), else the default-route one (-> (ip, False))"""
-    pr = lan.private_addresses()
-    if pr:
-        return pr[0], True
+    """a non-loopback IPv4 of this PC (the default-route one; connect() on a UDP socket sends no packet) | None"""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("10.255.255.255", 1))
         ip = s.getsockname()[0]
-        return (ip, False) if not ip.startswith("127.") else (None, False)
+        return ip if not ip.startswith("127.") else None
     except OSError:
-        return None, False
+        return None
     finally:
         s.close()
 
 
-def listening_pids(port):
+def listening_rows(port):
+    """[(local address text, pid)] of the TCP LISTENING rows of `port` (netstat -ano), e.g. ("127.0.0.1", 1234) | ("0.0.0.0", ..)"""
     out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, errors="replace").stdout
-    pids = []
+    rows = []
     for line in out.splitlines():
         p = line.split()
         if len(p) >= 5 and p[0] == "TCP" and p[3] == "LISTENING" and p[1].rsplit(":", 1)[-1] == str(port):
-            pids.append(int(p[4]))
+            rows.append((p[1].rsplit(":", 1)[0], int(p[4])))
+    return rows
+
+
+def listening_pids(port):
+    return [pid for _, pid in listening_rows(port)]
+
+
+def udp_pids():
+    """PIDs that own at least one UDP endpoint (netstat -ano -p UDP)"""
+    out = subprocess.run(["netstat", "-ano", "-p", "UDP"], capture_output=True, text=True, errors="replace").stdout
+    pids = set()
+    for line in out.splitlines():
+        p = line.split()
+        if len(p) >= 4 and p[0] == "UDP" and p[-1].isdigit():
+            pids.add(int(p[-1]))
     return pids
 
 
@@ -195,57 +202,23 @@ def jb(r):
         return {}
 
 
-def udp_ask(port, payload, wait=1.5, repeat=3, host="127.0.0.1"):
-    """-> parsed JSON reply | None (no reply). Windows reports an ICMP 'port closed' as a reset: that is also 'no reply'."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(wait)
-    try:
-        for _ in range(repeat):
-            try:
-                s.sendto(payload, (host, port))
-            except OSError:
-                pass
-            time.sleep(0.05)
-        end = time.time() + wait
-        while time.time() < end:
-            s.settimeout(max(0.05, end - time.time()))
-            try:
-                data, _ = s.recvfrom(4096)
-                try:
-                    return json.loads(data.decode("utf-8"))
-                except Exception:
-                    return {"_raw": data}
-            except socket.timeout:
-                return None
-            except ConnectionResetError:
-                continue
-            except OSError:
-                return None
-        return None
-    finally:
-        s.close()
-
-
-DISCOVER = json.dumps({"hoehwa": 1, "op": "discover"}).encode()
-
-
 # ----------------------------------------------------------------------------------------------
 # stub process
 # ----------------------------------------------------------------------------------------------
 class Stub:
     live = []
 
-    def __init__(self, name, lan_bind="127.0.0.1", env=None, enabled=False, devfile=None):
+    def __init__(self, name, env=None, enabled=False, devfile=None, no_hooks=False):
         self.name = name
-        self.lan_bind = lan_bind
         self.env = env or {}
+        self.no_hooks = no_hooks
         self.enabled = enabled
         self.devfile = devfile or os.path.join(WORK, "dev_%s.json" % name)
         self.out_path = os.path.join(WORK, "stub_%s.out" % name)
         self.err_path = os.path.join(WORK, "stub_%s.err" % name)
         self.proc = None
         self.pid = None
-        self.http_port = self.lan_port = self.udp_port = None
+        self.http_port = self.lan_port = None
 
     @property
     def base(self):
@@ -256,20 +229,22 @@ class Stub:
 
     def start(self, keep_ports=False):
         if not keep_ports or self.http_port is None:
-            self.http_port = pick(8830, 8839)
-            self.lan_port = pick(8840, 8849)
-            self.udp_port = pick(18776, 18790, udp=True)
+            self.http_port = pick()
+            self.lan_port = pick()
         env = dict(os.environ)
-        for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_PRIVATE", "HOEHWA_LAN_PREAUTH_TIMEOUT", "HOEHWA_LAN_BODY_TIMEOUT",
-              "HOEHWA_LAN_FAKE_TAILSCALE"):
+        for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_TAILSCALE", "HOEHWA_LAN_PREAUTH_TIMEOUT", "HOEHWA_LAN_BODY_TIMEOUT",
+              "HOEHWA_LAN_HEADER_TIMEOUT", "HOEHWA_LAN_WATCH_SECONDS"):
             env.pop(k, None)
-        base_env = {"HOEHWA_TEST_HOOKS": "1", "HOEHWA_LAN_ASSUME_PRIVATE": "1"}   # this PC may have no private address: pretend it has one
+        # this PC may have no Tailscale: the stub pretends the loopback address is the Tailscale one (the stub sets these itself too)
+        base_env = {} if self.no_hooks else {"HOEHWA_TEST_HOOKS": "1", "HOEHWA_LAN_ASSUME_TAILSCALE": "127.0.0.1"}
         base_env.update(self.env)
         env.update({k: v for k, v in base_env.items() if v is not None})
-        cmd = [sys.executable, STUB, "--port", str(self.http_port), "--lan-port", str(self.lan_port), "--lan-discovery-port",
-               str(self.udp_port), "--lan-bind", self.lan_bind, "--devices-file", self.devfile, "--tag", self.name]
+        cmd = [sys.executable, STUB, "--port", str(self.http_port), "--lan-port", str(self.lan_port), "--devices-file", self.devfile,
+               "--tag", self.name]
         if self.enabled:
             cmd.append("--lan-enabled")
+        if self.no_hooks:
+            cmd.append("--no-hooks")
         self.out = open(self.out_path, "a", encoding="utf-8")
         self.err = open(self.err_path, "a", encoding="utf-8")
         self.proc = subprocess.Popen(cmd, stdout=self.out, stderr=self.err, env=env, cwd=HERE)
@@ -306,12 +281,12 @@ class Stub:
             Stub.live.remove(self)
 
     def release_ports(self):
-        for p in (self.http_port, self.lan_port, self.udp_port):
+        for p in (self.http_port, self.lan_port):
             release(p)
 
 
 # ----------------------------------------------------------------------------------------------
-# API shorthands against a "target" T (.base .lan_port .udp_port .devfile .pid)
+# API shorthands against a "target" T (.base .lan_port .devfile .pid)
 # ----------------------------------------------------------------------------------------------
 def get_lan(T):
     r = http("GET", T.base + "/lan")
@@ -345,8 +320,8 @@ def lurl(T, path="", host="127.0.0.1"):
 class Ext:
     """target description for --base mode"""
 
-    def __init__(self, base, lan_port, udp_port):
-        self.base, self.lan_port, self.udp_port = base, lan_port, udp_port
+    def __init__(self, base, lan_port):
+        self.base, self.lan_port = base, lan_port
         self.devfile = _arg("--devices-file")
         self.pid = int(_arg("--pid")) if _arg("--pid") else None
         self.http_port = int(base.rsplit(":", 1)[-1])
@@ -357,12 +332,11 @@ class Ext:
 # ----------------------------------------------------------------------------------------------
 def unit_checks():
     print("\n== helpers (in-process, nothing started)")
-    cases = {"192.168.0.12": True, "10.1.2.3": True, "172.16.5.5": True, "172.31.255.1": True, "172.32.0.1": False, "169.254.1.1": False,
-             "127.0.0.1": False, "8.8.8.8": False, "175.212.223.8": False, "100.64.0.1": False, "abc": False}
-    bad = {k: lan._is_private_lan(k) for k, v in cases.items() if lan._is_private_lan(k) != v}
-    check("U-01 private-address filter (10/8, 172.16/12, 192.168/16 only)", not bad, bad or "")
-    pr = lan.private_addresses()
-    check("U-02 private_addresses() returns only private IPv4, at most 3", len(pr) <= 3 and all(lan._is_private_lan(a) for a in pr), pr)
+    gone = ("private_addresses", "_is_private_lan", "_Discovery", "_network_via", "_network_ok", "_forced_private", "_unsafe_message", "_local_is_tailscale")
+    check("U-01 the LAN-era helpers are gone (private addresses, UDP discovery, allow_* network switches): the link is Tailscale only",
+          not [n for n in gone if hasattr(lan, n)], [n for n in gone if hasattr(lan, n)])
+    check("U-02 DEFAULT_LAN is exactly enabled=false, port=8775, name='' (no discovery / allow_* keys)",
+          lan.DEFAULT_LAN == {"enabled": False, "port": 8775, "name": ""}, lan.DEFAULT_LAN)
     check("U-03 loopback test: 127.0.0.1 / ::1 / ::ffff:127.0.0.1 yes, 192.168.0.1 / empty no",
           lan._is_loopback("127.0.0.1") and lan._is_loopback("::1") and lan._is_loopback("::ffff:127.0.0.1")
           and not lan._is_loopback("192.168.0.1") and not lan._is_loopback(""))
@@ -371,36 +345,29 @@ def unit_checks():
     check("U-04 allow-list has exactly the 16 original + 7 English v1.1 routes and none of /mic /llm /lan(admin) /docs",
           len(lan.ALLOW) == 23 and new_routes <= lan.ALLOW and not any(p.startswith("/practice") or p.startswith("/missions") for _, p in lan.ALLOW - new_routes) and not any(p.startswith(("/mic", "/llm", "/docs", "/debug")) for _, p in lan.ALLOW)
           and ("GET", "/lan") not in lan.ALLOW and ("POST", "/lan/code") not in lan.ALLOW)
-
-
-def core(T, ip2, ip2_private):
-    """B-03 .. B-23 on target T (LAN off at the start). ip2 = a non-loopback IPv4 of this PC"""
-    L, U = T.lan_port, T.udp_port
+def core(T, ip2):
+    """B-03 .. B-23 on target T (LAN off at the start). ip2 = a non-loopback IPv4 of this PC | None: the link is bound to the
+    Tailscale address only (here: loopback through the test hook), so this other address of the PC must refuse"""
+    L = T.lan_port
     stub = bool(jb(http("GET", T.base + "/health")).get("stub"))     # only the stub gives canned 200s; a real server may lack models
-    if get_lan(T).get("bind") == "127.0.0.1":
-        ip2 = None      # the link of this server listens on loopback only: the non-loopback address cannot reach it
-        note("non-loopback address checks not run", "this server was started with --lan-bind 127.0.0.1")
     print("\n== core scenarios (%s)" % (("stub " + T.name) if hasattr(T, "name") else ("external server, stub=%s" % stub)))
     # ---- B-03 default: off
     st = get_lan(T)
     check("B-03a default: GET /lan -> enabled false, listening false", st.get("enabled") is False and st.get("listening") is False, st.get("error", ""))
     check("B-03b default: LAN port refuses 127.0.0.1", connect_code("127.0.0.1", L) != 0)
     if ip2:
-        check("B-03c default: LAN port refuses this PC's non-loopback address (%s)" % ("private" if ip2_private else "public, no private IPv4 on this PC"),
-              connect_code(ip2, L) != 0)
-    else:
-        pass
+        check("B-03c default: LAN port refuses this PC's non-loopback address (%s)" % ip2, connect_code(ip2, L) != 0)
     check("B-07a loopback GET /health without token, LAN off -> 200", http("GET", T.base + "/health").status_code == 200)
     hl = jb(http("GET", T.base + "/hello"))
     check("hello (loopback, off): keys hoehwa,name,pairing_open and pairing_open false",
           set(hl) == {"hoehwa", "name", "pairing_open"} and hl.get("hoehwa") == 1 and hl.get("pairing_open") is False, hl)
-    check("udp discovery port closed while off: no reply", udp_ask(U, DISCOVER, wait=1.0, repeat=2) is None)
+    check("B-03d while off the server owns no UDP socket", T.pid is None or T.pid not in udp_pids(), T.pid)
     r = http("POST", T.base + "/lan/code", json={})
     check("lan_off: POST /lan/code while off -> 409 lan_off", r.status_code == 409 and jb(r).get("code") == "lan_off", r.status_code)
 
     # ---- bad inputs to POST /lan
     for body, label in (({"port": 80}, "port 80"), ({"enabled": "yes"}, "enabled as string"), ({"port": True}, "port true"),
-                        ({"discovery_port": 70000}, "udp port 70000"), ({"name": 5}, "name number")):
+                        ({"port": 70000}, "port 70000"), ({"name": 5}, "name number")):
         r = http("POST", T.base + "/lan", json=body)
         check("POST /lan rejects %s -> 400" % label, r.status_code == 400, r.status_code)
     r = http("POST", T.base + "/lan", data=b"{broken", headers={"Content-Type": "application/json"})
@@ -409,7 +376,7 @@ def core(T, ip2, ip2_private):
 
     # ---- B-04 turn on
     t0 = time.time()
-    r = set_lan(T, enabled=True, port=L, discovery_port=U)
+    r = set_lan(T, enabled=True, port=L)
     st = jb(r)
     code0 = (st.get("pairing") or {}).get("code") or ""
     check("B-04a POST /lan enabled -> 200, listening true, 6-digit code", r.status_code == 200 and st.get("listening") is True and re.match(r"^\d{6}$", code0),
@@ -420,7 +387,15 @@ def core(T, ip2, ip2_private):
         check("B-04c netstat: LISTENING on the LAN port by the stub's own PID", T.pid in pids, "pids=%s" % pids)
     else:
         check("B-04c netstat: LISTENING on the LAN port", bool(pids), "pids=%s" % pids)
-    check("B-04d discovery listening true", st.get("discovery_listening") is True)
+    rows = listening_rows(L)
+    bound = st.get("bind")
+    check("B-04d bind lists exactly this PC's Tailscale address(es) (GET /lan tailscale_addresses), never 0.0.0.0",
+          isinstance(bound, list) and bool(bound) and bound == st.get("tailscale_addresses") and "0.0.0.0" not in bound, bound)
+    check("B-04e netstat: LISTENING only on those addresses (%s), no 0.0.0.0 / :: row" % ",".join(map(str, bound or [])),
+          bool(rows) and sorted(a for a, _ in rows) == sorted(bound or []) and not any(a in ("0.0.0.0", "::", "[::]") for a, _ in rows), rows)
+    if ip2:
+        check("B-04f the PC's other address %s refuses the link port (it is not bound there)" % ip2, connect_code(ip2, L) != 0)
+    check("B-04g while on the server still owns no UDP socket (no discovery)", T.pid is None or T.pid not in udp_pids(), T.pid)
     check("B-07b loopback GET /health without token, LAN on -> 200", http("GET", T.base + "/health").status_code == 200)
     check("hello over the LAN listener needs no token and reveals only name + pairing_open",
           set(jb(http("GET", lurl(T, "/hello")))) == {"hoehwa", "name", "pairing_open"} and jb(http("GET", lurl(T, "/hello"))).get("pairing_open") is True)
@@ -428,9 +403,6 @@ def core(T, ip2, ip2_private):
     # ---- B-05 / B-06 token checks
     r = http("GET", lurl(T, "/health"))
     check("B-05 LAN /health without token -> 401 token_missing", r.status_code == 401 and jb(r).get("code") == "token_missing", r.status_code)
-    if ip2:
-        r = http("GET", lurl(T, "/health", ip2))
-        check("B-05b same through the non-loopback address -> 401", r.status_code == 401 and jb(r).get("code") == "token_missing", r.status_code)
     fake = "hp1_" + "A" * 43
     r1 = http("GET", lurl(T, "/health"), token=fake)
     r2 = http("GET", lurl(T, "/health"), auth=fake)
@@ -495,8 +467,7 @@ def core(T, ip2, ip2_private):
     check("B-10a the same code a second time -> 410 no_active_code", r.status_code == 410 and jb(r).get("code") == "no_active_code", r.status_code)
 
     # ---- B-11 allowed requests, both addresses
-    hosts = [("127.0.0.1", "loopback")] + ([(ip2, "non-loopback %s" % ("private" if ip2_private else "public"))] if ip2 else [])
-    for host, label in hosts:
+    for host, label in [("127.0.0.1", "the Tailscale (here: loopback) address")]:
         h = http("GET", lurl(T, "/health", host), token=tok1)
         s = http("POST", lurl(T, "/stt", host), token=tok1, json={"lang": "en", "audio_b64": "AAAA"})
         m = http("GET", lurl(T, "/lan/me", host), token=tok1)
@@ -504,9 +475,6 @@ def core(T, ip2, ip2_private):
         check("B-11 valid token via %s: /health 200 ok, /stt %s, /lan/me 200 own id" % (label, "200 text" if stub else "reaches the app"),
               h.status_code == 200 and jb(h).get("ok") is True and stt_ok
               and m.status_code == 200 and jb(m).get("device_id") == dev1, (h.status_code, s.status_code, m.status_code))
-    if not ip2:
-        note("B-11 / B-03c / B-05b non-loopback (private-IP) variants NOT verified",
-             "the tests never bind 0.0.0.0; this PC has %s private IPv4 address" % ("a" if ip2_private else "no"))
     allowed = [("GET", "/curriculum", None), ("POST", "/tts", {"text": "hi", "lang": "en"}), ("GET", "/tts/voices", None),
                ("POST", "/score", {"lang": "en", "target": "hi", "audio_b64": "AAAA"}), ("POST", "/prosody", {"lang": "en", "text": "hi"}),
                ("POST", "/chat", {"lang": "en"}), ("POST", "/feedback", {"lang": "en"}), ("POST", "/fix", {"lang": "en"}),
@@ -643,41 +611,15 @@ def core(T, ip2, ip2_private):
     r = http("POST", lurl(T, "/pair"), data=b"q" * 5000, headers={"Content-Type": "application/json"})
     check("B-20f a 5 KB body to /pair (before login) -> 413", r.status_code == 413, r.status_code)
 
-    # ---- B-18 discovery on
-    rep = udp_ask(U, DISCOVER, wait=1.0)
-    check("B-18 UDP discover -> reply within 1 s with exactly keys hoehwa,op,name,port; port == LAN port",
-          isinstance(rep, dict) and set(rep) == {"hoehwa", "op", "name", "port"} and rep.get("hoehwa") == 1 and rep.get("op") == "here" and rep.get("port") == L
-          and rep.get("name") == jb(http("GET", T.base + "/hello")).get("name"), rep)
-    # burst limit
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(0.3)
-    for _ in range(40):
-        s.sendto(DISCOVER, ("127.0.0.1", U))
-    n = 0
-    end = time.time() + 1.0
-    while time.time() < end:
-        try:
-            s.recvfrom(1024)
-            n += 1
-        except (socket.timeout, OSError):
-            if time.time() > end:
-                break
-    s.close()
-    check("discovery answers at most 10 packets per second (40 sent in a burst, %d answered)" % n, 1 <= n <= 10)
-    time.sleep(1.1)
-
-    # ---- B-19 no answer
-    junk = [b"\xff\xfe\x00garbage", b'{"op":"discover"}', b'{"hoehwa":1,"op":"discover","x":1}', b'{"hoehwa":true,"op":"discover"}', b'{"hoehwa":1,"op":"hello"}',
-            b"[1,2,3]", b"", b"x" * 2048, json.dumps({"hoehwa": 1, "op": "discover", "pad": "p" * 200}).encode()]
-    bad = [i for i, p in enumerate(junk) if udp_ask(U, p, wait=0.6, repeat=3) is not None]
-    check("B-19a LAN on + discovery on: broken bytes / wrong keys / bool / extra key / 2 KB packet / oversize -> no reply", not bad, bad)
-    set_lan(T, discovery=False)
+    # ---- B-18 / B-19 no discovery; keys of older versions are ignored
+    r = set_lan(T, discovery=True, discovery_port=18776, allow_cgnat=True, allow_tailscale=True)
     st = get_lan(T)
-    check("B-19b discovery off + LAN on: discovery_listening false", st.get("discovery_listening") is False and st.get("listening") is True)
-    check("B-19c discovery off + LAN on: valid discover x3 -> no reply for 1.5 s", udp_ask(U, DISCOVER, wait=1.5) is None)
-    check("B-19d discovery off: another program can bind the UDP port", udp_free(U))
-    set_lan(T, discovery=True)
-    check("discovery on again -> replies again", isinstance(udp_ask(U, DISCOVER, wait=1.0), dict))
+    old_keys = ("discovery", "discovery_listening", "discovery_port", "allow_cgnat", "allow_tailscale", "addresses")
+    check("B-18 POST /lan with the old keys discovery / discovery_port / allow_cgnat / allow_tailscale -> 200, ignored: GET /lan has none of them",
+          r.status_code == 200 and not any(k in st for k in old_keys) and not any(k in jb(r) for k in old_keys), sorted(k for k in old_keys if k in st))
+    check("B-19 ... and the server still owns no UDP socket", T.pid is None or T.pid not in udp_pids(), T.pid)
+    r = set_lan(T, discovery_port="x", allow_tailscale="yes")
+    check("a nonsense value for an old key is just ignored too (200)", r.status_code == 200)
 
     # ---- B-21 device limit
     toks = [(tok1, dev1)]
@@ -717,10 +659,9 @@ def core(T, ip2, ip2_private):
     closed, dt = wait_closed("127.0.0.1", L, 3.0)
     check("B-17a POST /lan enabled=false -> LAN port closes within 3 s", r.status_code == 200 and closed and dt <= 3.0, "%.2fs" % (time.time() - t0))
     st = get_lan(T)
-    check("B-17b off: listening false, discovery_listening false, code hidden, devices kept", st.get("listening") is False and st.get("discovery_listening") is False
+    check("B-17b off: listening false, bind [], code hidden, devices kept", st.get("listening") is False and st.get("bind") == []
           and (st.get("pairing") or {}).get("code") is None and len(st.get("devices", [])) >= 1)
-    check("B-17c UDP port is free for another program after turning off", udp_free(U))
-    check("B-17d discover while off -> no reply", udp_ask(U, DISCOVER, wait=1.0, repeat=2) is None)
+    check("B-17c after turning off the server owns no UDP socket either", T.pid is None or T.pid not in udp_pids(), T.pid)
     if ip2:
         check("B-17e non-loopback address refuses too", connect_code(ip2, L) != 0)
     check("B-07c loopback /health without token while LAN is off again -> 200", http("GET", T.base + "/health").status_code == 200)
@@ -731,9 +672,9 @@ def core(T, ip2, ip2_private):
 
     # ---- B-23 port busy
     set_lan(T, enabled=False)
-    busy_port = pick(8840, 8849)
+    busy_port = pick()
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    blocker.bind((get_lan(T).get("bind") or "0.0.0.0", busy_port))    # same address family as the link, so the OS really sees a conflict
+    blocker.bind(("127.0.0.1", busy_port))    # the address the link binds to (hook), so the OS really sees a conflict
     blocker.listen(1)
     try:
         r = set_lan(T, enabled=True, port=busy_port)
@@ -750,7 +691,7 @@ def core(T, ip2, ip2_private):
     finally:
         blocker.close()
         release(busy_port)
-    newp = pick(8840, 8849)
+    newp = pick()
     r = set_lan(T, port=newp)
     st = jb(r)
     time.sleep(0.3)
@@ -766,7 +707,7 @@ def scenario_ttl():
     print("\n== B-10b code expiry (HOEHWA_TEST_HOOKS=1 HOEHWA_LAN_CODE_TTL=2)")
     T = Stub("ttl", env={"HOEHWA_TEST_HOOKS": "1", "HOEHWA_LAN_CODE_TTL": "2"}).start()
     try:
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        r = set_lan(T, enabled=True, port=T.lan_port)
         pv = jb(r).get("pairing") or {}
         code = pv.get("code") or ""
         check("a 2-second code: expires_in <= 2", pv.get("active") is True and 1 <= pv.get("expires_in", 99) <= 2, pv.get("expires_in"))
@@ -789,7 +730,7 @@ def scenario_restart():
     T = Stub("persist").start()
     tok = ""
     try:
-        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        set_lan(T, enabled=True, port=T.lan_port)
         tok, dev = pair_token(T)
         check("paired before the restart", bool(tok))
     finally:
@@ -842,7 +783,7 @@ def scenario_rate():
     print("\n== rate limit for bad tokens")
     T = Stub("rate").start()
     try:
-        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        set_lan(T, enabled=True, port=T.lan_port)
         tok, _ = pair_token(T)
         codes = []
         for i in range(32):
@@ -859,16 +800,14 @@ def scenario_rate():
         T.release_ports()
 
 
-def scenario_core_stub(ip2, ip2_private):
-    T = Stub("core").start()      # 127.0.0.1 only: tests never bind 0.0.0.0
+def scenario_core_stub(ip2):
+    T = Stub("core").start()      # the link listens on the hook's Tailscale address 127.0.0.1: tests never bind 0.0.0.0
     try:
-        core(T, ip2, ip2_private)
+        core(T, ip2)
     finally:
         T.stop()
         T.release_ports()
     return T
-
-
 # ----------------------------------------------------------------------------------------------
 # security fixes: S1 source filter, S2 CSRF / rebinding, S3 network safety, S4 small things
 # ----------------------------------------------------------------------------------------------
@@ -913,67 +852,56 @@ def gate_call(ip, method="GET", path="/hello", headers=None, server=None):
 
 def unit_security():
     print("\n== security helpers (in-process)")
-    allowed = ["127.0.0.1", "127.5.5.5", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.9.9", "::1", "fe80::1",
-               "fd12:3456::1", "fc00::1", "::ffff:192.168.0.2"]
-    denied = ["8.8.8.8", "175.212.223.8", "172.32.0.1", "172.15.255.255", "192.169.0.1", "11.0.0.1", "100.64.0.1", "100.127.255.255", "0.0.0.0",
-              "2001:db8::1", "2606:4700::1111", "::ffff:8.8.8.8", "fec0::1", "ff02::1", "junk", ""]
-    saved = lan.S.lan.get("allow_cgnat")
-    try:
-        lan.S.lan["allow_cgnat"] = False
-        bad_a = [x for x in allowed if not lan._source_allowed(x)]
-        bad_d = [x for x in denied if lan._source_allowed(x)]
-        check("S1a source filter: loopback / 10/8 / 172.16/12 / 192.168/16 / 169.254/16 / ::1 / fe80::/10 / fc00::/7 / mapped-private allowed", not bad_a, bad_a)
-        check("S1b source filter: public IPv4/IPv6, CGNAT (default), 172.32, mapped-public, multicast, junk and empty denied", not bad_d, bad_d)
-        lan.S.lan["allow_cgnat"] = True
-        check("S1c lan.allow_cgnat=true admits only 100.64.0.0/10", lan._source_allowed("100.64.0.1") and lan._source_allowed("100.127.255.255")
-              and not lan._source_allowed("100.128.0.1") and not lan._source_allowed("100.63.255.255") and not lan._source_allowed("8.8.8.8"))
-        lan.S.lan["allow_cgnat"] = False
-        res = {ip: gate_call(ip) for ip in ("8.8.8.8", "175.212.223.8", "100.64.0.1", "2606:4700::1111", "192.168.0.7", "127.0.0.1", "169.254.1.1", "fd00::1", "fe80::2")}
-        silent = all(not res[ip][0] and res[ip][1] == [] for ip in ("8.8.8.8", "175.212.223.8", "100.64.0.1", "2606:4700::1111"))
-        served = all(res[ip][0] for ip in ("192.168.0.7", "127.0.0.1", "169.254.1.1", "fd00::1", "fe80::2"))
-        check("S1d LanGate with a fake scope['client']: public / CGNAT sources get NO answer and never reach the app; private / loopback / link-local / ULA do",
-              silent and served, {ip: (v[0], len(v[1])) for ip, v in res.items()})
-        called, sent = gate_call("8.8.8.8", "POST", "/pair")
-        called2, sent2 = gate_call("8.8.8.8", "GET", "/health")
-        check("S1e a public source cannot reach /pair or any other path (no answer, no lock side effect)", not called and not sent and not called2 and not sent2
-              and lan.S.fails == 0 and lan.S.locked is False)
-        called, sent = gate_call("192.168.0.7", "GET", "/health")
-        check("S1f a private source without a token still gets 401 (the filter is in front of the rest, not instead of it)",
-              not called and sent and sent[0]["status"] == 401)
-        lan.S.lan["allow_cgnat"] = True
-        called, sent = gate_call("100.64.0.9")
-        lan.S.lan["allow_cgnat"] = False
-        check("S1g with allow_cgnat a CGNAT source is served", called)
-    finally:
-        lan.S.lan["allow_cgnat"] = saved
+    allowed = ["127.0.0.1", "127.5.5.5", "::1", "::ffff:127.0.0.1", "100.64.0.1", "100.101.102.103", "100.127.255.255", "fd7a:115c:a1e0::1",
+               "fd7a:115c:a1e0:ffff::9", "::ffff:100.64.0.9"]
+    denied = ["10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.9.9", "fe80::1", "fd12:3456::1", "fc00::1", "fd7a:115c:a1e1::1",
+              "::ffff:192.168.0.2", "100.63.255.255", "100.128.0.1", "8.8.8.8", "175.212.223.8", "172.32.0.1", "0.0.0.0", "2001:db8::1",
+              "2606:4700::1111", "::ffff:8.8.8.8", "fec0::1", "ff02::1", "junk", ""]
+    bad_a = [x for x in allowed if not lan._source_allowed(x)]
+    bad_d = [x for x in denied if lan._source_allowed(x)]
+    check("S1a source filter: loopback and Tailscale only - 127/8, ::1, 100.64.0.0/10 (both edges), fd7a:115c:a1e0::/48, mapped forms - are allowed", not bad_a, bad_a)
+    check("S1b source filter: private 10/8 172.16/12 192.168/16, link-local, other ULA (fd12::, fc00::), 100.63.x / 100.128.x, public, multicast, junk and empty are denied",
+          not bad_d, bad_d)
+    silent_ips = ("192.168.0.7", "10.0.0.5", "172.20.1.1", "169.254.1.1", "fd00::1", "fe80::2", "8.8.8.8", "175.212.223.8", "2606:4700::1111")
+    served_ips = ("127.0.0.1", "100.64.0.9", "100.101.102.103", "fd7a:115c:a1e0::5")
+    res = {ip: gate_call(ip) for ip in silent_ips + served_ips}
+    silent = all(not res[ip][0] and res[ip][1] == [] for ip in silent_ips)
+    served = all(res[ip][0] for ip in served_ips)
+    check("S1d LanGate with a fake scope['client']: private / link-local / other-ULA / public sources get NO answer and never reach the app; loopback and Tailscale do",
+          silent and served, {ip: (v[0], len(v[1])) for ip, v in res.items()})
+    called, sent = gate_call("192.168.0.7", "POST", "/pair")
+    called2, sent2 = gate_call("8.8.8.8", "GET", "/health")
+    check("S1e a private-LAN or public source cannot reach /pair or any other path (no answer, no lock side effect)",
+          not called and not sent and not called2 and not sent2 and lan.S.fails == 0 and lan.S.locked is False)
+    called, sent = gate_call("100.101.102.103", "GET", "/health")
+    check("S1f a Tailscale source without a token still gets 401 (the filter is in front of the rest, not instead of it)",
+          not called and sent and sent[0]["status"] == 401)
     P = lan._make_protocol()
-    p = P.__new__(P)
-    t = FakeTransport("8.8.8.8")
-    try:
-        p.connection_made(t)
-    except AttributeError:
-        pass          # it went on to the normal setup instead of dropping the connection: the check below fails
-    check("S1h the listener's protocol aborts a connection from a public address before reading anything", t.aborted and p.transport is t)
-    p2 = P.__new__(P)
-    t2 = FakeTransport("192.168.0.9")
-    try:
-        p2.connection_made(t2)
-    except AttributeError:
-        pass          # the real init state is not built here; what matters is that it was not aborted
-    check("S1i ... and does not abort a private address", not t2.aborted)
+    aborted = {}
+    for ip in ("192.168.0.9", "10.0.0.2", "169.254.4.4", "8.8.8.8", "127.0.0.1", "100.101.102.103"):
+        pr = P.__new__(P)
+        t = FakeTransport(ip)
+        try:
+            pr.connection_made(t)
+        except AttributeError:
+            pass          # it went on to the normal setup instead of dropping the connection (the real init state is not built here)
+        aborted[ip] = t.aborted
+    check("S1h the listener's protocol aborts a connection from a private-LAN / link-local / public address before reading anything",
+          aborted["192.168.0.9"] and aborted["10.0.0.2"] and aborted["169.254.4.4"] and aborted["8.8.8.8"], aborted)
+    check("S1i ... and does not abort a loopback or Tailscale address", not aborted["127.0.0.1"] and not aborted["100.101.102.103"], aborted)
     check("S4c regexes use \\Z: a code / nonce / token with a trailing newline does not match",
           not lan.CODE_RE.match("123456\n") and lan.CODE_RE.match("123456") and not lan.NONCE_RE.match("a1b2c3d4\n")
           and not lan.TOKEN_RE.match("Bearer hp1_" + "A" * 43 + "\n") and not lan.ID_RE.match("a1b2c3d4\n") and not lan.HASH_RE.match("a" * 64 + "\n"))
-    saved_env = {k: os.environ.get(k) for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_PRIVATE")}
+    saved_env = {k: os.environ.get(k) for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_TAILSCALE")}
     try:
         os.environ.pop("HOEHWA_TEST_HOOKS", None)
         os.environ["HOEHWA_LAN_CODE_TTL"] = "2"
-        os.environ["HOEHWA_LAN_ASSUME_PRIVATE"] = "0"
-        a = (lan._code_ttl(), lan._forced_private())
+        os.environ["HOEHWA_LAN_ASSUME_TAILSCALE"] = "127.0.0.1"
+        a = (lan._code_ttl(), lan._fake_tailscale())
         os.environ["HOEHWA_TEST_HOOKS"] = "1"
-        b = (lan._code_ttl(), lan._forced_private())
-        check("HOEHWA_LAN_CODE_TTL / HOEHWA_LAN_ASSUME_PRIVATE are ignored without HOEHWA_TEST_HOOKS=1 and read with it",
-              a == (300.0, None) and b == (2.0, False), (a, b))
+        b = (lan._code_ttl(), lan._fake_tailscale())
+        check("HOEHWA_LAN_CODE_TTL / HOEHWA_LAN_ASSUME_TAILSCALE are ignored without HOEHWA_TEST_HOOKS=1 and read with it",
+              a == (300.0, None) and b == (2.0, ["127.0.0.1"]), (a, b))
     finally:
         for k, v in saved_env.items():
             if v is None:
@@ -988,61 +916,19 @@ def unit_security():
     check("S4d the bad-token table is capped (<= %d addresses, <= %d entries per address) after 5000 sources" % (lan.BAD_TOKEN_MAX_IPS, lan.RATE_FAILS * 2),
           len(lan.S.bad_tokens) <= lan.BAD_TOKEN_MAX_IPS and max(len(q) for q in lan.S.bad_tokens.values()) <= lan.RATE_FAILS * 2, len(lan.S.bad_tokens))
     lan.S.bad_tokens.clear()
-
-
-class FakeSock:
-    def __init__(self):
-        self.sent = []
-
-    def sendto(self, data, addr):
-        self.sent.append((data, addr))
-
-
-def disc_reply(ip, payload=None):
-    """feed one UDP packet from a made-up source address to the discovery handler -> replies it would send"""
-    d = lan._Discovery.__new__(lan._Discovery)
-    d.sock = FakeSock()
-    d.sent = deque()
-    d._handle(payload if payload is not None else DISCOVER, (ip, 4444))
-    return d.sock.sent
-
-
-def unit_discovery():
-    print("\n== UDP discovery source filter (in-process)")
-    saved = lan.S.lan.get("allow_cgnat")
-    try:
-        lan.S.lan["allow_cgnat"] = False
-        denied = {ip: disc_reply(ip) for ip in ("8.8.8.8", "175.212.223.8", "100.64.0.1", "2606:4700::1111", "::ffff:8.8.8.8", "junk")}
-        allowed = {ip: disc_reply(ip) for ip in ("127.0.0.1", "192.168.0.7", "10.2.3.4", "172.16.9.9", "169.254.3.3", "fd00::1", "fe80::5")}
-        check("S1k discovery: a valid discover packet from a public / CGNAT / junk source gets NO reply", all(v == [] for v in denied.values()),
-              {k: len(v) for k, v in denied.items()})
-        ok = all(len(v) == 1 for v in allowed.values())
-        body = json.loads(allowed["192.168.0.7"][0][0].decode()) if ok else {}
-        check("S1l discovery: the same packet from loopback / private / link-local / ULA sources is answered (keys hoehwa,op,name,port; sent back to the asker)",
-              ok and set(body) == {"hoehwa", "op", "name", "port"} and allowed["192.168.0.7"][0][1] == ("192.168.0.7", 4444), {k: len(v) for k, v in allowed.items()})
-        lan.S.lan["allow_cgnat"] = True
-        check("S1m discovery: with lan.allow_cgnat a CGNAT source is answered, a public one still is not",
-              len(disc_reply("100.64.0.1")) == 1 and disc_reply("8.8.8.8") == [])
-        lan.S.lan["allow_cgnat"] = False
-        check("S1n discovery: a bad packet from an allowed source is still ignored (wrong keys, bool, 2 KB)",
-              disc_reply("192.168.0.7", b'{"hoehwa":true,"op":"discover"}') == [] and disc_reply("192.168.0.7", b"x" * 2048) == []
-              and disc_reply("192.168.0.7", b'{"hoehwa":1,"op":"discover","x":1}') == [])
-    finally:
-        lan.S.lan["allow_cgnat"] = saved
-
-
 def csrf_checks(T):
     """S2: management endpoints refuse a web page's request (Origin / Host / Content-Type); the PC app's own style still works"""
     port = T.http_port
     url = T.base + "/lan"
     new_code(T)            # an active code, so "cancel" and the lock state are observable
+    set_lan(T, name="CsrfOrig")
     cur = get_lan(T)
-    same = json.dumps({"discovery": cur.get("discovery")})       # a body that changes nothing if it were accepted
-    flip = json.dumps({"discovery": not cur.get("discovery")})
+    same = json.dumps({"name": "CsrfOrig"})       # a body that changes nothing if it were accepted
+    flip = json.dumps({"name": "CsrfFlipped"})
     evil_all = requests.post(url, data=flip, headers={"Content-Type": "text/plain", "Origin": "http://evil.example", "Host": "evil.example:%d" % port}, timeout=15)
-    check("S2a POST /lan with Content-Type text/plain + Origin evil + Host evil + body {discovery:flipped} -> 403 bad_origin",
+    check("S2a POST /lan with Content-Type text/plain + Origin evil + Host evil + body {name:flipped} -> 403 bad_origin",
           evil_all.status_code == 403 and jb(evil_all).get("code") == "bad_origin", (evil_all.status_code, jb(evil_all).get("code")))
-    check("S2b ... and the setting did not change", get_lan(T).get("discovery") == cur.get("discovery"))
+    check("S2b ... and the setting did not change", get_lan(T).get("name") == "CsrfOrig" == cur.get("name"))
     J = {"Content-Type": "application/json"}
     bad_cases = [
         ("only Origin evil", J, {"Origin": "http://evil.example"}),
@@ -1097,13 +983,6 @@ def csrf_checks(T):
           not bad and len(get_lan(T).get("devices", [])) == ndev and (get_lan(T).get("pairing") or {}).get("active") is True, bad)
     check("S2g the public endpoint /hello is not affected by Host / Origin (it reveals nothing private)",
           requests.get(T.base + "/hello", headers={"Host": "evil.example", "Origin": "http://evil.example"}, timeout=15).status_code == 200)
-    # lan.allow_cgnat is a plain config flag through POST /lan
-    r = set_lan(T, allow_cgnat=True)
-    on = jb(r).get("allow_cgnat")
-    r2 = set_lan(T, allow_cgnat="yes")
-    r3 = set_lan(T, allow_cgnat=False)
-    check("S1j POST /lan {allow_cgnat:true} shows in GET /lan; a string value is 400; false switches it off again",
-          r.status_code == 200 and on is True and r2.status_code == 400 and jb(r3).get("allow_cgnat") is False)
 
 
 def acl_check(T):
@@ -1119,64 +998,97 @@ def acl_check(T):
     check("S4f the file is still readable and still valid JSON by its owner", json.load(open(T.devfile, "r", encoding="utf-8")).get("version") == 1)
 
 
+NO_TAILSCALE_TEXT = "이 PC에서 Tailscale이 꺼져 있거나 설치되지 않았어요. tailscale.com 에서 설치하고 휴대폰과 같은 구글 계정으로 로그인한 뒤 다시 켜 주세요."
+
+
 def scenario_netsafe():
-    print("\n== S3 turning the link on needs a private network address")
-    old_msg = "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요."
-    expect_msg = old_msg + " Tailscale 을 쓴다면 '고급'에서 'Tailscale 로 연결 허용'을 켜세요."     # allow_tailscale is off here: the old sentence + the hint
-    T = Stub("net0", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0"}).start()
+    print("\n== S3 the link needs a Tailscale address (hook HOEHWA_LAN_ASSUME_TAILSCALE: '' = none, 127.0.0.1 = the loopback stands in)")
+    T = Stub("net0", env={"HOEHWA_LAN_ASSUME_TAILSCALE": ""}).start()
     try:
         st = get_lan(T)
-        check("S3a no private address: GET /lan says network_safe false with a Korean reason, addresses []",
-              st.get("network_safe") is False and "공유기" in st.get("network_reason", "") and st.get("addresses") == [], st.get("network_reason", "")[:30])
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        check("S3b POST /lan {enabled:true} -> 409 no_private_network with the agreed Korean message",
-              r.status_code == 409 and jb(r).get("code") == "no_private_network" and jb(r).get("error") == expect_msg, (r.status_code, jb(r).get("code")))
+        check("S3a no Tailscale address: GET /lan says network_safe false, network_reason = the agreed Korean text, tailscale_addresses [], no addresses / allow_* / discovery keys",
+              st.get("network_safe") is False and st.get("network_reason") == NO_TAILSCALE_TEXT and st.get("tailscale_addresses") == []
+              and not any(k in st for k in ("addresses", "allow_tailscale", "allow_cgnat", "discovery", "discovery_port")), st.get("network_reason", "")[:30])
+        r = set_lan(T, enabled=True, port=T.lan_port)
+        check("S3b POST /lan {enabled:true} -> 409 no_tailscale with the agreed Korean message (install, same Google account, turn on again)",
+              r.status_code == 409 and jb(r).get("code") == "no_tailscale" and jb(r).get("error") == NO_TAILSCALE_TEXT, (r.status_code, jb(r).get("code")))
         st = get_lan(T)
-        check("S3c nothing was started: enabled false, listening false, LAN port and UDP port closed, no code",
-              st.get("enabled") is False and st.get("listening") is False and connect_code("127.0.0.1", T.lan_port) != 0 and udp_free(T.udp_port)
-              and (st.get("pairing") or {}).get("code") is None)
-        r = set_lan(T, discovery=False)
-        check("S3d other settings can still be changed while the link is off (200)", r.status_code == 200 and jb(r).get("discovery") is False)
+        check("S3c nothing was started: enabled false, listening false, bind [], LAN port closed, the server owns no UDP socket, no code",
+              st.get("enabled") is False and st.get("listening") is False and st.get("bind") == [] and connect_code("127.0.0.1", T.lan_port) != 0
+              and T.pid not in udp_pids() and (st.get("pairing") or {}).get("code") is None and not listening_rows(T.lan_port))
+        r = set_lan(T, name="Other PC")
+        check("S3d other settings can still be changed while the link is off (200)", r.status_code == 200 and jb(r).get("name") == "Other PC")
         r = http("POST", T.base + "/lan/code", json={})
         check("S3e /lan/code while off -> 409 lan_off", r.status_code == 409 and jb(r).get("code") == "lan_off")
         text = http("GET", T.base + "/lan").text + r.text + http("GET", T.base + "/hello").text
         ips = re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", text)
-        check("S3f no public IP address appears in any response (only the loopback bind)", all(lan._source_allowed(i) for i in ips), ips)
+        check("S3f no address that is not loopback / Tailscale appears in any response", all(lan._source_allowed(i) for i in ips), ips)
     finally:
         T.stop()
         T.release_ports()
-    T = Stub("net1", env={"HOEHWA_LAN_ASSUME_PRIVATE": "1"}).start()
+    T = Stub("net1").start()
     try:
         st0 = get_lan(T)
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        check("S3g behind a router (hook: private address present): network_safe true and the link turns on",
-              st0.get("network_safe") is True and r.status_code == 200 and jb(r).get("listening") is True)
-        r = set_lan(T, discovery=False)
-        check("S3h changing a setting while it is already on is not blocked", r.status_code == 200)
+        r = set_lan(T, enabled=True, port=T.lan_port)
+        j = jb(r)
+        check("S3g with a Tailscale address (hook 127.0.0.1): network_safe true, tailscale_addresses ['127.0.0.1'], the link turns on and binds exactly there",
+              st0.get("network_safe") is True and st0.get("tailscale_addresses") == ["127.0.0.1"] and r.status_code == 200 and j.get("listening") is True
+              and j.get("bind") == ["127.0.0.1"], (st0.get("network_safe"), j.get("bind")))
+        rows = listening_rows(T.lan_port)
+        check("S3h netstat shows the link LISTENING on 127.0.0.1:port only - not 0.0.0.0, not ::", [a for a, _ in rows] == ["127.0.0.1"] and all(pid == T.pid for _, pid in rows), rows)
+        ip2 = own_ip()
+        if ip2:
+            check("S3h2 this PC's own other address %s refuses the link port" % ip2, connect_code(ip2, T.lan_port) != 0)
+        r = set_lan(T, name="Changed")
+        check("S3i changing a setting while it is already on is not blocked (200) and the listener keeps its address", r.status_code == 200 and jb(r).get("bind") == ["127.0.0.1"])
     finally:
         T.stop()
         T.release_ports()
-    have = bool(lan.private_addresses())
-    T = Stub("net2", env={"HOEHWA_LAN_ASSUME_PRIVATE": None}).start()      # no override: the real answer for this PC
+    have = bool(lan.tailscale_addresses(fresh=True))       # this test process has no hooks set: the real adapters
+    T = Stub("net2", no_hooks=True).start()          # no hooks at all: the real answer for this PC
     try:
         st0 = get_lan(T)
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        check("S3i without the hook the real network decides (%s on this PC)" % ("private address present -> allowed" if have else "no private address -> refused 409"),
-              st0.get("network_safe") is have and r.status_code == (200 if have else 409) and (have or jb(r).get("code") == "no_private_network"),
-              (have, st0.get("network_safe"), r.status_code))
+        r = set_lan(T, enabled=True, port=T.lan_port)
+        j = jb(r)
+        check("S3j WITHOUT the test hooks the real adapters decide (%s on this PC)" % ("a Tailscale address exists -> allowed, bound there only" if have else "no Tailscale address -> 409 no_tailscale"),
+              st0.get("network_safe") is have and r.status_code == (200 if have else 409) and (have or (j.get("code") == "no_tailscale" and j.get("error") == NO_TAILSCALE_TEXT))
+              and (have or (not listening_rows(T.lan_port) and connect_code("127.0.0.1", T.lan_port) != 0)),
+              (have, st0.get("network_safe"), r.status_code, j.get("code")))
+        if have:
+            check("S3j2 (Tailscale present) the link is bound to the Tailscale address(es) only", not any(a in ("0.0.0.0", "::", "127.0.0.1") for a, _ in listening_rows(T.lan_port)), listening_rows(T.lan_port))
+            set_lan(T, enabled=False)
     finally:
         T.stop()
         T.release_ports()
-    T = Stub("net3", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0"}, enabled=True).start()
+    T = Stub("net3", env={"HOEHWA_LAN_ASSUME_TAILSCALE": ""}, enabled=True).start()
     try:
         st = get_lan(T)
-        check("S3j saved enabled=true but no private address at boot: stays off, says why, port closed",
-              st.get("enabled") is False and st.get("listening") is False and "공유기" in st.get("error", "") and connect_code("127.0.0.1", T.lan_port) != 0)
+        check("S3k saved enabled=true but no Tailscale address at boot: stays off, says why (the Korean text), port closed",
+              st.get("enabled") is False and st.get("listening") is False and st.get("error") == NO_TAILSCALE_TEXT and connect_code("127.0.0.1", T.lan_port) != 0)
     finally:
         T.stop()
         T.release_ports()
-
-
+    T = Stub("net4", env={"HOEHWA_LAN_ASSUME_TAILSCALE": "127.0.0.1,127.0.0.2"}).start()
+    try:
+        r = set_lan(T, enabled=True, port=T.lan_port)
+        j = jb(r)
+        rows = listening_rows(T.lan_port)
+        check("S3l two Tailscale addresses: the link binds both (and only those): bind lists them, netstat has exactly those two rows, both accept, 0.0.0.0 does not appear",
+              r.status_code == 200 and sorted(j.get("bind", [])) == ["127.0.0.1", "127.0.0.2"] and sorted(a for a, _ in rows) == ["127.0.0.1", "127.0.0.2"]
+              and connect_code("127.0.0.1", T.lan_port) == 0 and connect_code("127.0.0.2", T.lan_port) == 0, (j.get("bind"), rows))
+        check("S3l2 /hello answers through the second address as well", http("GET", lurl(T, "/hello", "127.0.0.2")).status_code == 200)
+    finally:
+        T.stop()
+        T.release_ports()
+    T = Stub("net5", env={"HOEHWA_LAN_ASSUME_TAILSCALE": "100.101.102.103"}).start()
+    try:
+        r = set_lan(T, enabled=True, port=T.lan_port)
+        check("S3m a 'Tailscale address' that is not on this PC (bind fails: address not available) -> 409 no_tailscale, nothing listens, link stays off",
+              r.status_code == 409 and jb(r).get("code") == "no_tailscale" and connect_code("127.0.0.1", T.lan_port) != 0 and get_lan(T).get("enabled") is False,
+              (r.status_code, jb(r).get("code")))
+    finally:
+        T.stop()
+        T.release_ports()
 def _raw(port, payload, wait):
     """send raw bytes, then read until the server closes or `wait` seconds pass -> (bytes, seconds)"""
     t0 = time.time()
@@ -1204,7 +1116,7 @@ def scenario_slow():
     print("\n== S4 slow senders (timeouts shortened with the test hooks: 2 s before login, 3 s for an upload)")
     T = Stub("slow", env={"HOEHWA_LAN_PREAUTH_TIMEOUT": "2", "HOEHWA_LAN_BODY_TIMEOUT": "3"}).start()
     try:
-        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        set_lan(T, enabled=True, port=T.lan_port)
         tok, _ = pair_token(T)
         head = b"POST /pair HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 60\r\n\r\n"
         data, dt = _raw(T.lan_port, head + b'{"code"', 9)
@@ -1230,7 +1142,7 @@ def scenario_acl():
         return
     T = Stub("acl", env={"USERNAME": "Administrator"}).start()      # a wrong USERNAME must not lock the real user out
     try:
-        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        set_lan(T, enabled=True, port=T.lan_port)
         tok, dev = pair_token(T)
         try:
             data = json.load(open(T.devfile, "r", encoding="utf-8"))
@@ -1259,7 +1171,7 @@ def scenario_hdr():
     print("\n== S4 header-phase slowloris (default limit 10 s, headers capped at 16 KB)")
     T = Stub("hdr").start()
     try:
-        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        set_lan(T, enabled=True, port=T.lan_port)
         tok, _ = pair_token(T)
         data, dt = _raw(T.lan_port, b"GET /hello HTTP/1.1\r\nHost: x\r\nX-A: ", 15)
         check("S4m a connection that sends half a header and stalls is closed by the server after ~10 s (not held open)", data == b"" and 8.0 <= dt <= 12.5, "%.1fs" % dt)
@@ -1343,268 +1255,250 @@ class _Env:
                 os.environ[k] = v
 
 
-FAKE_TS = "100.101.102.103"
-
-
-class _TsTransport(FakeTransport):
-    """FakeTransport that also knows the local (socket) address of the connection"""
-
-    def __init__(self, host, sock):
-        super().__init__(host)
-        self.sock = sock
-
-    def get_extra_info(self, name):
-        return (self.sock, 8775) if name == "sockname" else super().get_extra_info(name)
 
 
 def unit_tailscale():
     print("\n== Tailscale helpers (in-process)")
-    pick = lan._pick_tailscale
-    check("TS1a _pick_tailscale: adapter named Tailscale with 100.101.1.2 is taken", pick([("Tailscale", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"])
+    pk = lan._pick_tailscale
+    check("TS1a _pick_tailscale: adapter named Tailscale with 100.101.1.2 is taken", pk([("Tailscale", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"])
     check("TS1b ... also when only the description says Tailscale (renamed adapter '이더넷 3'), and in any letter case",
-          pick([("이더넷 3", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"]
-          and pick([("TAILSCALE", "wintun", True, ["100.64.0.1"])]) == ["100.64.0.1"])
+          pk([("이더넷 3", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"]
+          and pk([("TAILSCALE", "wintun", True, ["100.64.0.1"])]) == ["100.64.0.1"])
     check("TS1c carrier CGNAT: adapter 'Ethernet' / 'Realtek' with 100.70.0.5 is NOT taken (next to a Tailscale adapter only the Tailscale address is the result)",
-          pick([("Ethernet", "Realtek PCIe GbE", True, ["100.70.0.5"])]) == []
-          and pick([("Ethernet", "Realtek PCIe GbE", True, ["100.70.0.5"]), ("Tailscale", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"])
-    check("TS1d a Tailscale adapter that is down gives nothing", pick([("Tailscale", "Tailscale Tunnel", False, ["100.101.1.2"])]) == [])
+          pk([("Ethernet", "Realtek PCIe GbE", True, ["100.70.0.5"])]) == []
+          and pk([("Ethernet", "Realtek PCIe GbE", True, ["100.70.0.5"]), ("Tailscale", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"])
+    check("TS1d a Tailscale adapter that is down gives nothing", pk([("Tailscale", "Tailscale Tunnel", False, ["100.101.1.2"])]) == [])
     check("TS1e on a Tailscale adapter 192.168.x, 8.8.8.8, 100.128.0.1 / 100.63.255.255 (outside 100.64/10), IPv6 (also fd7a:115c:a1e0::) and junk are left out",
-          pick([("Tailscale", "Tailscale Tunnel", True, ["192.168.1.5", "8.8.8.8", "100.128.0.1", "100.63.255.255", "fd7a:115c:a1e0::1", "2606:4700::1111", "junk", ""])]) == []
-          and pick([("Tailscale", "Tailscale Tunnel", True, ["192.168.1.5", "8.8.8.8", "fd7a:115c:a1e0::1", "100.127.255.255"])]) == ["100.127.255.255"])
+          pk([("Tailscale", "Tailscale Tunnel", True, ["192.168.1.5", "8.8.8.8", "100.128.0.1", "100.63.255.255", "fd7a:115c:a1e0::1", "2606:4700::1111", "junk", ""])]) == []
+          and pk([("Tailscale", "Tailscale Tunnel", True, ["192.168.1.5", "8.8.8.8", "fd7a:115c:a1e0::1", "100.127.255.255"])]) == ["100.127.255.255"])
     check("TS1f at most 3 addresses, no duplicates; None names do not crash",
-          pick([("Tailscale", "", True, ["100.64.0.1", "100.64.0.2", "100.64.0.2", "100.64.0.3", "100.64.0.4", "100.64.0.5"])]) == ["100.64.0.1", "100.64.0.2", "100.64.0.3"]
-          and pick([(None, None, True, ["100.64.0.1"])]) == [])
+          pk([("Tailscale", "", True, ["100.64.0.1", "100.64.0.2", "100.64.0.2", "100.64.0.3", "100.64.0.4", "100.64.0.5"])]) == ["100.64.0.1", "100.64.0.2", "100.64.0.3"]
+          and pk([(None, None, True, ["100.64.0.1"])]) == [])
     # ---- test hook
-    with _Env(HOEHWA_TEST_HOOKS=None, HOEHWA_LAN_FAKE_TAILSCALE="100.101.1.2"):
+    with _Env(HOEHWA_TEST_HOOKS=None, HOEHWA_LAN_ASSUME_TAILSCALE="100.101.1.2"):
         lan._ts_cache = (float("-inf"), [])
-        check("TS2a HOEHWA_LAN_FAKE_TAILSCALE is ignored without HOEHWA_TEST_HOOKS=1", lan._fake_tailscale() is None and "100.101.1.2" not in lan.tailscale_addresses())
+        check("TS2a HOEHWA_LAN_ASSUME_TAILSCALE is ignored without HOEHWA_TEST_HOOKS=1", lan._fake_tailscale() is None and "100.101.1.2" not in lan.tailscale_addresses())
     lan._ts_cache = (float("-inf"), [])
-    with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE="100.101.1.2, 8.8.8.8,100.64.0.1,192.168.0.9,fd7a:115c:a1e0::1,junk,100.128.0.1,100.101.1.2"):
-        check("TS2b with the hook only 100.64/10 IPv4 is taken (8.8.8.8, 192.168.x, IPv6, junk, 100.128.x out; duplicates once)",
-              lan.tailscale_addresses() == ["100.101.1.2", "100.64.0.1"], lan.tailscale_addresses())
-    with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE="100.64.0.1,100.64.0.2,100.64.0.3,100.64.0.4"):
+    with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="100.101.1.2, 8.8.8.8,100.64.0.1,192.168.0.9,fd7a:115c:a1e0::1,junk,100.128.0.1,127.0.0.1,100.101.1.2"):
+        check("TS2b with the hook only 100.64/10 IPv4 and loopback 127.x are taken (8.8.8.8, 192.168.x, IPv6, junk, 100.128.x out; duplicates once)",
+              lan.tailscale_addresses() == ["100.101.1.2", "100.64.0.1", "127.0.0.1"], lan.tailscale_addresses())
+    with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="100.64.0.1,100.64.0.2,100.64.0.3,100.64.0.4"):
         check("TS2c the hook list is capped at 3", len(lan.tailscale_addresses()) == 3)
     real_adapters = lan._windows_adapters
     calls = []
     try:
         lan._windows_adapters = lambda: (calls.append(1) or [("Tailscale", "Tailscale Tunnel", True, ["100.101.9.9"]), ("Ethernet", "Realtek", True, ["100.70.0.5"])])
-        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE=""):
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE=""):
             check("TS2d an EMPTY hook value means 'no Tailscale' (the real adapters are not consulted)", lan._fake_tailscale() == [] and lan.tailscale_addresses() == [] and not calls, calls)
-        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE=None):
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE=None):
             lan._ts_cache = (float("-inf"), [])
             a1, a2 = lan.tailscale_addresses(), lan.tailscale_addresses()
             check("TS2e without the hook value the adapter list decides (only the Tailscale adapter's 100.x), and the result is cached (second call does not read adapters)",
                   a1 == ["100.101.9.9"] and a2 == a1 and len(calls) == 1, (a1, len(calls)))
             lan._ts_cache = (time.monotonic() - 6.0, ["100.1.1.1"])
             check("TS2f the cache expires after 5 s", lan.tailscale_addresses() == ["100.101.9.9"] and len(calls) == 2)
+            lan._ts_cache = (time.monotonic(), ["100.1.1.1"])
+            check("TS2f2 fresh=True ignores a young cache (turning the link on and the watcher look again)", lan.tailscale_addresses(fresh=True) == ["100.101.9.9"] and len(calls) == 3)
         lan._windows_adapters = lambda: (_ for _ in ()).throw(OSError("boom"))
-        with _Env(HOEHWA_TEST_HOOKS=None, HOEHWA_LAN_FAKE_TAILSCALE=None):
+        with _Env(HOEHWA_TEST_HOOKS=None, HOEHWA_LAN_ASSUME_TAILSCALE=None):
             lan._ts_cache = (float("-inf"), [])
             check("TS2g an adapter-listing failure gives [] and no exception", lan.tailscale_addresses() == [])
     finally:
         lan._windows_adapters = real_adapters
         lan._ts_cache = (float("-inf"), [])
-    # ---- source filter with the local address
-    saved = {k: lan.S.lan.get(k) for k in ("allow_cgnat", "allow_tailscale")}
-    try:
-        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE=FAKE_TS):
-            lan.S.lan["allow_cgnat"] = False
-            lan.S.lan["allow_tailscale"] = True
-            sa = lan._source_allowed
-            check("TS3a allow_tailscale + local = our Tailscale address: 100.64/10 hosts are allowed (edges too), 100.128.x / 100.63.x are not",
-                  sa("100.64.0.9", FAKE_TS) and sa("100.127.255.255", FAKE_TS) and sa("100.101.1.2", FAKE_TS)
-                  and not sa("100.128.0.1", FAKE_TS) and not sa("100.63.255.255", FAKE_TS))
-            check("TS3b ... but local = a public address (203.0.113.5), a carrier-CGNAT address (100.70.0.5), None, '' or junk is refused",
-                  not sa("100.64.0.9", "203.0.113.5") and not sa("100.64.0.9", "100.70.0.5") and not sa("100.64.0.9", None) and not sa("100.64.0.9", "")
-                  and not sa("100.64.0.9") and not sa("100.64.0.9", "junk"))
-            check("TS3c ... a private or loopback local address does not make a CGNAT host acceptable either", not sa("100.64.0.9", "192.168.0.7") and not sa("100.64.0.9", "127.0.0.1"))
-            check("TS3d a public host is refused whatever the local address is", not sa("8.8.8.8", FAKE_TS) and not sa("175.212.223.8", FAKE_TS)
-                  and not sa("2606:4700::1111", FAKE_TS) and not sa("::ffff:8.8.8.8", FAKE_TS))
-            check("TS3e IPv4-mapped forms: host '::ffff:100.64.0.9' with local '::ffff:%s' is allowed, with a mapped public local it is not" % FAKE_TS,
-                  sa("::ffff:100.64.0.9", "::ffff:" + FAKE_TS) and sa("100.64.0.9", "::ffff:" + FAKE_TS) and sa("::ffff:100.64.0.9", FAKE_TS)
-                  and not sa("::ffff:100.64.0.9", "::ffff:203.0.113.5"))
-            check("TS3f the Tailscale IPv6 range (ULA fd7a:115c:a1e0::/48) and ordinary private hosts stay allowed as before",
-                  sa("fd7a:115c:a1e0::1") and sa("192.168.0.7") and sa("127.0.0.1") and sa("10.1.2.3", "203.0.113.5"))
-            lan.S.lan["allow_tailscale"] = False
-            check("TS3g allow_tailscale off: the same CGNAT host with the Tailscale local address is refused", not sa("100.64.0.9", FAKE_TS) and not sa("100.101.1.2", FAKE_TS))
-            lan.S.lan["allow_cgnat"] = True
-            check("TS3h the old lan.allow_cgnat still admits CGNAT hosts without any local address (unchanged), and still no public host",
-                  sa("100.64.0.9") and sa("100.64.0.9", "203.0.113.5") and not sa("8.8.8.8", FAKE_TS))
-            lan.S.lan["allow_cgnat"] = False
-            lan.S.lan["allow_tailscale"] = True
-            # LanGate: scope["server"] is the local address
-            ok = gate_call("100.64.0.9", server=(FAKE_TS, 8775))
-            bad_pub = gate_call("100.64.0.9", server=("203.0.113.5", 8775))
-            bad_cg = gate_call("100.64.0.9", server=("100.70.0.5", 8775))
-            bad_none = gate_call("100.64.0.9")
-            pub_ts = gate_call("8.8.8.8", server=(FAKE_TS, 8775))
-            check("TS4a LanGate: CGNAT client + scope['server'] = our Tailscale address is served; the same client with a public / carrier-CGNAT / missing server address gets NO answer",
-                  ok[0] and not bad_pub[0] and not bad_pub[1] and not bad_cg[0] and not bad_cg[1] and not bad_none[0] and not bad_none[1],
-                  (ok[0], bad_pub, bad_cg, bad_none))
-            check("TS4b LanGate: a public client gets no answer even when the server address is ours", not pub_ts[0] and not pub_ts[1])
-            lan.S.lan["allow_tailscale"] = False
-            off = gate_call("100.64.0.9", server=(FAKE_TS, 8775))
-            check("TS4c LanGate: with allow_tailscale off the Tailscale client is not served", not off[0] and not off[1])
-            lan.S.lan["allow_tailscale"] = True
-            check("TS4d _peer_allowed uses the transport's sockname: CGNAT peer via our Tailscale address yes, via a public socket address no, without a sockname no",
-                  lan._peer_allowed(_TsTransport("100.64.0.9", FAKE_TS)) and not lan._peer_allowed(_TsTransport("100.64.0.9", "203.0.113.5"))
-                  and not lan._peer_allowed(FakeTransport("100.64.0.9")) and lan._peer_allowed(_TsTransport("192.168.0.7", "203.0.113.5")))
-            # discovery has no local address: Tailscale alone does not open it
-            check("TS4e UDP discovery: a CGNAT source gets no reply with allow_tailscale alone (only allow_cgnat admits it); a private one is still answered",
-                  disc_reply("100.64.0.1") == [] and disc_reply("192.168.0.7") != [])
-    finally:
-        for k, v in saved.items():
-            lan.S.lan[k] = v
     # ---- config parsing
-    check("TS5a _parse_update takes allow_tailscale only as a real bool", lan._parse_update({"allow_tailscale": True}) == {"allow_tailscale": True}
-          and lan._parse_update({"allow_tailscale": False}) == {"allow_tailscale": False}
-          and all(lan._parse_update({"allow_tailscale": v}) is None for v in ("yes", 1, 0, None, "true", [])))
-    check("TS5b DEFAULT_LAN has allow_tailscale false and allow_cgnat is still there", lan.DEFAULT_LAN.get("allow_tailscale") is False and lan.DEFAULT_LAN.get("allow_cgnat") is False)
-
-
+    check("TS5a _parse_update takes enabled / port / name only; the old keys (discovery, discovery_port, allow_cgnat, allow_tailscale) are ignored, bad values for the real keys are refused",
+          lan._parse_update({"enabled": True, "port": 8863, "name": "A"}) == {"enabled": True, "port": 8863, "name": "A"}
+          and lan._parse_update({"discovery": True, "discovery_port": "x", "allow_cgnat": 1, "allow_tailscale": "yes"}) == {}
+          and all(lan._parse_update(b) is None for b in ({"enabled": "yes"}, {"enabled": 1}, {"port": 80}, {"port": True}, {"port": 70000}, {"name": 5}, {"name": "x" * 81})))
 def _tcp_ok(port):
     return connect_code("127.0.0.1", port) == 0
 
 
-def scenario_tailscale():
-    print("\n== Tailscale: turning the link on without a private address (hooks: no private address, fake Tailscale %s)" % FAKE_TS)
-    old_msg = lan.MSG["no_private_network"]
-    T = Stub("ts1", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0", "HOEHWA_LAN_FAKE_TAILSCALE": FAKE_TS}).start()
-    try:
-        st = get_lan(T)
-        check("TS6a fresh server: allow_tailscale false, network_safe false, network_via '', tailscale_addresses lists the fake address (always computed)",
-              st.get("allow_tailscale") is False and st.get("network_safe") is False and st.get("network_via") == "" and st.get("tailscale_addresses") == [FAKE_TS], st)
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        j = jb(r)
-        check("TS6b allow_tailscale off: enabling -> 409 no_private_network, text = the old sentence + a Tailscale hint, nothing listening",
-              r.status_code == 409 and j.get("code") == "no_private_network" and j.get("error", "").startswith(old_msg) and "Tailscale" in j.get("error", "")[len(old_msg):]
-              and not _tcp_ok(T.lan_port) and get_lan(T).get("enabled") is False, (r.status_code, j))
-        r = set_lan(T, allow_tailscale="yes")
-        r2 = set_lan(T, allow_tailscale=1)
-        check("TS6c allow_tailscale as a string / number -> 400 bad_request, and the setting is unchanged", r.status_code == 400 and r2.status_code == 400
-              and jb(r).get("code") == "bad_request" and get_lan(T).get("allow_tailscale") is False)
-        r = set_lan(T, enabled=True, allow_tailscale=True, port=T.lan_port, discovery_port=T.udp_port)
-        st = jb(r)
-        listening = _tcp_ok(T.lan_port)
-        check("TS6d {enabled:true, allow_tailscale:true} in one request -> 200: listening, network_safe true, network_via 'tailscale', tailscale_addresses [fake], allow_tailscale true",
-              r.status_code == 200 and st.get("enabled") is True and st.get("listening") is True and st.get("allow_tailscale") is True and st.get("network_safe") is True
-              and st.get("network_via") == "tailscale" and st.get("tailscale_addresses") == [FAKE_TS] and st.get("network_reason") == "" and listening, (r.status_code, st.get("network_via")))
-        st = get_lan(T)
-        text = http("GET", T.base + "/lan").text
-        ips = set(re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", text))
-        pub = [i for i in ips if not (lan._is_private_lan(i) or i in ("127.0.0.1", FAKE_TS))]
-        check("TS6e GET /lan: addresses has only private IPv4 (no 100.x, no public), tailscale_addresses only 100.64/10, and no public IP appears anywhere in the text",
-              all(lan._is_private_lan(a) for a in st.get("addresses", [])) and FAKE_TS not in st.get("addresses", [])
-              and all(lan._unmap(a) in lan._CGNAT for a in st.get("tailscale_addresses", [])) and not pub, (st.get("addresses"), pub))
-        check("TS6f the link answers (/hello on the LAN port) and a device can pair through it",
-              http("GET", lurl(T, "/hello")).status_code == 200 and bool(pair_token(T)[0]))
-        r = set_lan(T, allow_tailscale=False)
-        st = jb(r)
-        closed, _ = wait_closed("127.0.0.1", T.lan_port, 3.0)
-        check("TS7a switching allow_tailscale off while the link is on (no private address) -> 200, link off: enabled false, listening false, port closed, error says why, no pairing code",
-              r.status_code == 200 and st.get("enabled") is False and st.get("listening") is False and closed and bool(st.get("error"))
-              and (st.get("pairing") or {}).get("code") is None and st.get("allow_tailscale") is False and st.get("network_via") == "", (r.status_code, st.get("error")))
-        check("TS7b ... the error is the Tailscale hint text and GET /lan afterwards agrees (still off, UDP port free)",
-              "Tailscale" in st.get("error", "") and get_lan(T).get("enabled") is False and udp_free(T.udp_port))
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        check("TS7c ... and it cannot be turned on again until allow_tailscale is back on (409)", r.status_code == 409 and jb(r).get("code") == "no_private_network")
-    finally:
-        T.stop()
-        T.release_ports()
-    T = Stub("ts2", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0", "HOEHWA_LAN_FAKE_TAILSCALE": ""}).start()
-    try:
-        st = get_lan(T)
-        check("TS8a no Tailscale address (empty hook): tailscale_addresses [], network_via ''", st.get("tailscale_addresses") == [] and st.get("network_via") == "" and st.get("network_safe") is False)
-        r = set_lan(T, enabled=True, allow_tailscale=True, port=T.lan_port, discovery_port=T.udp_port)
-        j = jb(r)
-        check("TS8b allow_tailscale on but no Tailscale address: enabling -> 409 no_private_network with the no_tailscale text, nothing opened, and the failed request changed nothing",
-              r.status_code == 409 and j.get("code") == "no_private_network" and j.get("error") == lan.MSG["no_tailscale"] and "Tailscale" in j.get("error", "")
-              and not _tcp_ok(T.lan_port) and get_lan(T).get("allow_tailscale") is False, (r.status_code, j))
-        r0 = set_lan(T, allow_tailscale=True)
-        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
-        j = jb(r)
-        st = get_lan(T)
-        check("TS8c allow_tailscale saved first, then enabling -> 409 with the no_tailscale text; network_reason in GET /lan is that text too",
-              r0.status_code == 200 and jb(r0).get("allow_tailscale") is True and r.status_code == 409 and j.get("error") == lan.MSG["no_tailscale"]
-              and st.get("network_reason") == lan.MSG["no_tailscale"] and st.get("enabled") is False and st.get("listening") is False, (r0.status_code, r.status_code))
-    finally:
-        T.stop()
-        T.release_ports()
-    # a CGNAT neighbour cannot be simulated over a real socket here (tests bind 127.0.0.1 only): the in-process checks above (TS3, TS4) cover it.
+class _Spy:
+    """records every socket lan.py creates (type) and every bind (type, address) in this process; a bind on all interfaces is refused"""
+
+    def __init__(self):
+        self.created, self.binds = [], []
+
+    def __enter__(self):
+        import errno
+        real = socket.socket
+        self.real = real
+        created, binds = self.created, self.binds
+
+        class SpySocket(real):
+            def __init__(self, family=-1, type=-1, proto=-1, fileno=None):
+                super().__init__(family, type, proto, fileno)
+                created.append(self.type)
+
+            def bind(self, addr):
+                binds.append((self.type, addr))
+                if isinstance(addr, tuple) and addr and addr[0] in ("", "0.0.0.0", "::"):
+                    raise OSError(errno.EACCES, "test spy: a bind on all interfaces is never done")
+                return super().bind(addr)
+
+        socket.socket = SpySocket
+        return self
+
+    def __exit__(self, *a):
+        socket.socket = self.real
+
+    def udp(self):
+        return [t for t in self.created if t == socket.SOCK_DGRAM]
+
+    def on_port(self, port):
+        return [a for t, a in self.binds if isinstance(a, tuple) and len(a) >= 2 and a[1] == port]
+
+    def wildcard(self):
+        return [a for t, a in self.binds if isinstance(a, tuple) and a and a[0] in ("", "0.0.0.0", "::")]
 
 
-def _attach_ts(v):
-    """lan.attach() on a fresh State with allow_tailscale = v in the config -> what it keeps"""
+def _state(cfg_lan, label, auto_start=True):
+    """a fresh lan.S (own State) attached to a throw-away FastAPI app -> the config dict"""
     from fastapi import FastAPI
+    lan.S = lan._State()
+    cfg = {"lan": cfg_lan}
+    lan.attach(FastAPI(), cfg, lambda c: None, logging.getLogger("inproc"), WORK, devices_file=os.path.join(WORK, "dev_inproc_%s.json" % label),
+               persist=False, auto_start=auto_start)
+    return cfg
+
+
+def scenario_inproc_link():
+    """lan.py driven in this process (own State, hook: Tailscale address = loopback, test ports 8862-8869): which sockets it opens and where it binds,
+    several addresses, a missing / vanished address, the watcher, stale config keys. Nothing here binds 0.0.0.0 (the spy would refuse it)."""
+    print("\n== link in-process: sockets, bind addresses, watcher, saved config")
     old_state = lan.S
+    port = pick()
+    H1 = dict(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="127.0.0.1", HOEHWA_LAN_WATCH_SECONDS=None)
+    base_env = _Env(**H1)         # the hook stays set for the whole scenario: a running watcher thread must keep seeing the "Tailscale address"
+    base_env.__enter__()
     try:
-        lan.S = lan._State()
-        cfg = {"lan": {"allow_tailscale": v}}
-        lan.attach(FastAPI(), cfg, lambda c: None, logging.getLogger("tsattach"), os.path.join(WORK), devices_file=os.path.join(WORK, "dev_tsattach.json"),
-                   bind="127.0.0.1", persist=False, auto_start=False)
-        return cfg["lan"]["allow_tailscale"]
+        # ---- A: one address, spy on sockets
+        _state({"enabled": False, "port": port, "name": ""}, "a")
+        with _Env(**H1), _Spy() as spy:
+            res = lan._configure({"enabled": True})
+            up = res == (None, None) and lan.S.listener is not None and lan.S.listener.alive()
+        check("IP1 turning the link on with one Tailscale address (hook 127.0.0.1): ok, listener alive, bound to exactly that address",
+              up and lan.S.bound == ["127.0.0.1"] and lan.S.listener.addrs == ["127.0.0.1"], (res, lan.S.bound))
+        check("IP2 turning it on opens NO UDP socket (no discovery)", not spy.udp(), spy.udp())
+        check("IP3 the listener's bind on the link port is exactly 127.0.0.1:port (the Tailscale address) and no bind on all interfaces was attempted",
+              spy.on_port(port) == [("127.0.0.1", port)] and not spy.wildcard(), (spy.on_port(port), spy.wildcard()))
+        check("IP3b the port accepts on that address", _tcp_ok(port))
+        ls = lan.S.listener
+        with _Env(**H1):
+            gone_now = lan._watch_once(ls)
+        check("IP4 watcher check while the address is still there: nothing happens", gone_now is False and lan.S.listener is ls and ls.alive())
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="", HOEHWA_LAN_WATCH_SECONDS=None):
+            closed = lan._watch_once(ls)
+        ok_closed, _ = wait_closed("127.0.0.1", port, 3.0)
+        check("IP5 the Tailscale address vanished: the watcher closes the listener, enabled false (not saved), the reason is in S.error, port closed, code gone",
+              closed is True and lan.S.listener is None and lan.S.lan["enabled"] is False and lan.S.error == lan.MSG["tailscale_lost"] and ok_closed
+              and lan.S.bound == [] and lan._pairing_view()["code"] is None, (closed, lan.S.error[:20]))
+        st = lan._status()
+        check("IP5b _status shows it: enabled false, listening false, bind [], error = that reason", st["enabled"] is False and st["listening"] is False and st["bind"] == []
+              and st["error"] == lan.MSG["tailscale_lost"])
+        with _Env(**H1):
+            res = lan._configure({"enabled": True})
+        check("IP6 the next turn-on looks the address up again and works", res == (None, None) and lan.S.listener is not None and _tcp_ok(port) and lan.S.error == "", res)
+        with _Env(**H1):
+            lan._configure({"enabled": False})
+        check("IP6b turning it off closes the port again", wait_closed("127.0.0.1", port, 3.0)[0] and lan.S.listener is None)
+        # ---- watcher thread
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="127.0.0.1", HOEHWA_LAN_WATCH_SECONDS="0.5"):
+            res = lan._configure({"enabled": True})
+            os.environ["HOEHWA_LAN_ASSUME_TAILSCALE"] = ""
+            t0 = time.time()
+            while time.time() - t0 < 4.0 and lan.S.listener is not None:
+                time.sleep(0.1)
+        check("IP7 the watcher THREAD notices the vanished address on its own (interval 0.5 s) and closes the link",
+              res == (None, None) and lan.S.listener is None and lan.S.error == lan.MSG["tailscale_lost"] and wait_closed("127.0.0.1", port, 3.0)[0], "%.1fs" % (time.time() - t0))
+        # ---- B: two addresses
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="127.0.0.1,127.0.0.2", HOEHWA_LAN_WATCH_SECONDS=None), _Spy() as spy:
+            res = lan._configure({"enabled": True})
+        check("IP8 two Tailscale addresses: both are bound (one socket each), nothing else, no wildcard, no UDP",
+              res == (None, None) and sorted(lan.S.bound) == ["127.0.0.1", "127.0.0.2"] and sorted(spy.on_port(port)) == [("127.0.0.1", port), ("127.0.0.2", port)]
+              and not spy.wildcard() and not spy.udp(), (res, spy.on_port(port)))
+        check("IP8b both accept", connect_code("127.0.0.1", port) == 0 and connect_code("127.0.0.2", port) == 0)
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="127.0.0.2", HOEHWA_LAN_WATCH_SECONDS=None):
+            kept = lan._watch_once(lan.S.listener)
+        check("IP8c one of two addresses vanishing does not close the link (the other one still exists)", kept is False and lan.S.listener is not None and connect_code("127.0.0.2", port) == 0)
+        with _Env(**H1):
+            lan._configure({"enabled": False})
+        # ---- C: no address / address not on this PC / port busy
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="", HOEHWA_LAN_WATCH_SECONDS=None):
+            res = lan._configure({"enabled": True})
+        check("IP9 no Tailscale address: (409, no_tailscale), nothing listens, enabled stays false", res == (409, "no_tailscale") and lan.S.listener is None
+              and lan.S.lan["enabled"] is False and not _tcp_ok(port), res)
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="100.101.102.103", HOEHWA_LAN_WATCH_SECONDS=None):
+            res = lan._configure({"enabled": True})
+        check("IP10 an address that is not on this PC (bind: address not available): (409, no_tailscale), nothing listens", res == (409, "no_tailscale") and lan.S.listener is None
+              and not _tcp_ok(port), res)
+        blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        blocker.bind(("127.0.0.1", port))
+        blocker.listen(1)
+        try:
+            with _Env(**H1):
+                res = lan._configure({"enabled": True})
+        finally:
+            blocker.close()
+        check("IP11 port taken by another program: (409, lan_port_busy)", res == (409, "lan_port_busy") and lan.S.listener is None, res)
+        # ---- D: saved config at start (start_if_enabled) incl. stale keys of the old versions
+        stale = {"enabled": True, "port": port, "name": "", "discovery": True, "discovery_port": 8776, "allow_cgnat": True, "allow_tailscale": True}
+        with _Env(**H1):
+            cfg = _state(dict(stale), "d1")
+            keys_ok = set(cfg["lan"]) == {"enabled", "port", "name"}
+            lan.start_if_enabled()
+            up = lan.S.listener is not None and lan.S.listener.alive() and _tcp_ok(port)
+            err1 = lan.S.error
+            lan.shutdown()
+        check("IP12 saved enabled=true with stale discovery / allow_* keys: the keys are dropped (no error), start_if_enabled brings the link up on the Tailscale address",
+              keys_ok and up and err1 == "", (sorted(cfg["lan"]), up, err1))
+        check("IP12b shutdown closes the port", wait_closed("127.0.0.1", port, 3.0)[0])
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_TAILSCALE="", HOEHWA_LAN_WATCH_SECONDS=None):
+            cfg = _state(dict(stale), "d2")
+            lan.start_if_enabled()
+            err2, en2, up2 = lan.S.error, cfg["lan"]["enabled"], lan.S.listener is not None
+        check("IP13 saved enabled=true but no Tailscale address at start: stays off (not saved), error = the Korean no_tailscale text, nothing listens",
+              not up2 and en2 is False and err2 == NO_TAILSCALE_TEXT and not _tcp_ok(port), (up2, en2, err2[:20]))
+        cfg = _state({"enabled": False, "port": 80, "name": "  x  \n", "discovery": "weird"}, "d3", auto_start=False)
+        check("IP14 attach() repairs a bad port (-> 8775 default value, never opened here) and cleans the name; unknown keys vanish",
+              cfg["lan"] == {"enabled": False, "port": 8775, "name": "x"}, cfg["lan"])
+        cfg = _state({"enabled": True, "port": port, "name": ""}, "d4", auto_start=False)
+        check("IP15 a test server (auto_start False) never starts from a saved enabled=true", cfg["lan"]["enabled"] is False)
     finally:
+        try:
+            with _Env(**H1):
+                lan.shutdown()
+        except Exception:
+            pass
         lan.S = old_state
-
-
-def scenario_tailscale_boot():
-    """start_if_enabled with a saved config (in-process: the stub cannot carry a saved allow_tailscale). Own State object, 127.0.0.1 only."""
-    print("\n== Tailscale: saved config at start (start_if_enabled, in-process on 127.0.0.1)")
-    from fastapi import FastAPI
-    old_state = lan.S
-    out = {}
-    try:
-        for label, saved_ts, fake in (("on", True, FAKE_TS), ("off", False, FAKE_TS), ("none", True, "")):
-            port = pick(8840, 8849)
-            udp = pick(18776, 18790, udp=True)
-            lan.S = lan._State()
-            cfg = {"lan": {"enabled": True, "port": port, "discovery": False, "discovery_port": udp, "name": "", "allow_cgnat": False, "allow_tailscale": saved_ts}}
-            with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_PRIVATE="0", HOEHWA_LAN_FAKE_TAILSCALE=fake):
-                lan.attach(FastAPI(), cfg, lambda c: None, logging.getLogger("tsboot"), WORK, devices_file=os.path.join(WORK, "dev_tsboot_%s.json" % label),
-                           bind="127.0.0.1", persist=False, auto_start=True)
-                try:
-                    lan.start_if_enabled()
-                    up = lan.S.listener is not None and lan.S.listener.alive() and _tcp_ok(port)
-                    out[label] = (up, bool(cfg["lan"]["enabled"]), lan.S.error)
-                finally:
-                    lan.shutdown()
-            release(port)
-            release(udp)
-    finally:
-        lan.S = old_state
-    up, en, err = out["on"]
-    check("TS9a saved enabled + allow_tailscale + a Tailscale address (no private address): start_if_enabled turns the link on", up and en and err == "", out["on"])
-    up, en, err = out["off"]
-    check("TS9b saved enabled but allow_tailscale false and no private address: stays off, error = old sentence + hint", not up and not en and err.startswith(lan.MSG["no_private_network"]) and "Tailscale" in err[len(lan.MSG["no_private_network"]):], out["off"])
-    up, en, err = out["none"]
-    check("TS9c saved enabled + allow_tailscale but no Tailscale address: stays off, error = the no_tailscale text", not up and not en and err == lan.MSG["no_tailscale"], out["none"])
-    check("TS9d attach() keeps allow_tailscale only when it is exactly True (a string 'yes' in config.json becomes false)", _attach_ts("yes") is False and _attach_ts(True) is True and _attach_ts(None) is False)
-
-
+        base_env.__exit__()
+        release(port)
 def main():
     try:
         unit_checks()
         unit_security()
-        unit_discovery()
         unit_tailscale()
-        ip2, ip2_private = None, bool(lan.private_addresses())     # no 0.0.0.0 bind in tests, so no non-loopback address can be reached
-        print("\nprivate IPv4 addresses on this PC: %s (non-loopback reachability is not tested: tests bind 127.0.0.1 only)" % ("yes" if ip2_private else "none"))
-        if EXTERNAL:
-            lp, up = _arg("--lan-port"), _arg("--udp-port")
-            if not lp or not up:
-                sys.exit("--base mode needs --lan-port and --udp-port (free ports for the link of that server)")
-            T = Ext(EXTERNAL, int(lp), int(up))
+        scenario_inproc_link()
+        only_unit = _arg("--only") == "unit"
+        ip2 = None if only_unit else own_ip()
+        if only_unit:
+            pass
+        elif EXTERNAL:
+            lp = _arg("--lan-port")
+            if not lp:
+                sys.exit("--base mode needs --lan-port (a free port for the link of that server)")
+            T = Ext(EXTERNAL, int(lp))
             set_lan(T, enabled=False)       # start from "off, nobody paired" (this is a test server: it is yours to reset)
             http("POST", T.base + "/lan/devices/revoke", json={"all": True})
-            core(T, ip2, ip2_private)
+            core(T, ip2)
             for n in ("B-10b expiry", "B-16 restart persistence", "rate limit"):
                 skip(n, "needs to start/kill a server: only in self-hosted mode")
         else:
-            T = scenario_core_stub(ip2, ip2_private)
+            T = scenario_core_stub(ip2)
             scenario_ttl()
             scenario_netsafe()
-            scenario_tailscale()
-            scenario_tailscale_boot()
             scenario_slow()
             scenario_hdr()
             scenario_acl()
@@ -1612,13 +1506,13 @@ def main():
             scenario_rate()
             scenario_logs(sorted(os.path.join(WORK, f) for f in os.listdir(WORK) if f.startswith("stub_")))
     finally:
-        for s in list(Stub.live):
-            s.stop()
+        for s_ in list(Stub.live):
+            s_.stop()
     n = len(results)
     k = sum(1 for _, ok in results if ok)
-    still = [s for s in Stub.live]
+    still = [s_ for s_ in Stub.live]
     print()
-    if k == n and not skips and not still and n >= 27:
+    if k == n and not skips and not still and n >= (15 if _arg("--only") == "unit" else 27):
         print("LAN_TEST_RESULT PASS %d/%d%s" % (k, n, (" (notes: %s)" % "; ".join(notes)) if notes else ""))
         code = 0
     else:

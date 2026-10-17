@@ -2,6 +2,7 @@ class_name ConnectView
 extends Control
 ## 휴대폰의 "내 PC에 연결" 전체 화면 (docs/android_remote_design.md §4.8 가).
 ##
+## 연결은 Tailscale 전용이다(같은 와이파이·UDP 자동 찾기 없음): 사용자가 PC 의 Tailscale 주소(100.x.y.z)와 6자리 코드를 입력한다.
 ## 흐름: parse_address → hello(PC 닿는지, pairing_open) → pair → save → Api.set_remote → Backend.start().
 ## main.gd(W3) 가 CanvasLayer 에 올린다. 성공하면 `connected` 를 방출하고 스스로 닫는다.
 ##
@@ -13,14 +14,10 @@ signal cancelled
 ## 시험·W3 용: [연결] 시도가 끝났다(성공 true / 실패 false). 화면에는 이미 결과가 반영돼 있다.
 signal attempt_finished(ok: bool)
 
-## 처음 열릴 때 PC 자동 찾기를 한 번 돌린다(시험에서는 끈다).
-var auto_discover: bool = true
 ## 설정에서 "연결 변경"으로 열었으면 true (취소 버튼이 보인다). add_child 전에 정한다.
 var allow_cancel: bool = false
 
-var find_button: Button
-var found_box: VBoxContainer
-var find_status: Label
+var previous_label: Label
 var address_edit: LineEdit
 var code_edit: LineEdit
 var name_edit: LineEdit
@@ -31,7 +28,6 @@ var progress_label: Label
 var notice_label: Label
 
 var _busy: bool = false
-var _found: Array = []
 var _scroll: ScrollContainer
 
 ## 진행 중인 Flow 는 화면이 사라져도 끝까지 돌아야 하므로 여기서 붙잡아 둔다.
@@ -43,13 +39,6 @@ class Flow:
 	extends RefCounted
 	signal progress(text: String)
 	signal connect_done(res: Dictionary)  ## {ok, error, err_code}
-	signal find_done(found: Array)
-
-	func find() -> void:
-		ConnectView._live_flows.append(self)
-		var found: Array = await RemoteLink.discover(Engine.get_main_loop() as SceneTree)
-		ConnectView._live_flows.erase(self)
-		find_done.emit(found)
 
 	func connect_to(base: String, code: String, device_name: String) -> void:
 		ConnectView._live_flows.append(self)
@@ -108,21 +97,17 @@ func _ready() -> void:
 	outer.add_child(col)
 
 	col.add_child(UI.label("내 PC에 연결", "H1", false))
-	col.add_child(UI.label("같은 와이파이의 PC에서 회화 연습을 켜고 설정 > 휴대폰 연결을 켜 주세요.", "Muted"))
+	col.add_child(UI.label("① 휴대폰에 Tailscale을 설치하고 PC와 같은 구글 계정으로 로그인해 켜 주세요.", "Muted"))
+	col.add_child(UI.label("② PC의 회화 연습 > 설정 > 휴대폰 연결에 나오는 주소(100.x.y.z)와 6자리 코드를 입력하세요.", "Muted"))
 	notice_label = UI.colored("", Pal.WARN, "")
 	notice_label.visible = false
 	col.add_child(notice_label)
 
-	find_button = UI.button("PC 자동 찾기", "soft", Pal.EN, 48.0)
-	find_button.pressed.connect(func() -> void: find_pcs())
-	col.add_child(find_button)
-	find_status = UI.label("", "Small")
-	col.add_child(find_status)
-	found_box = UI.vbox(6)
-	col.add_child(found_box)
+	previous_label = UI.label("", "Small")
+	col.add_child(previous_label)
 
-	col.add_child(UI.label("또는 주소 직접 입력", "Strong", false))
-	address_edit = _line_edit("192.168.0.12:8775", 48.0)
+	col.add_child(UI.label("PC 주소 (Tailscale)", "Strong", false))
+	address_edit = _line_edit("100.101.102.103:8775", 48.0)
 	address_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_URL
 	address_edit.text_submitted.connect(func(_t: String) -> void: code_edit.grab_focus())
 	col.add_child(address_edit)
@@ -160,8 +145,6 @@ func _ready() -> void:
 	if Backend.status == Backend.Status.NEEDS_PAIRING and Backend.message != "":
 		notice_label.text = Backend.message
 		notice_label.visible = true
-	if auto_discover and address_edit.text == "":
-		find_pcs()
 
 
 func _line_edit(placeholder: String, min_h: float) -> LineEdit:
@@ -190,50 +173,18 @@ func _prefill() -> void:
 		address_edit.text = (str(p["host"]) + ":" + str(p["port"])) if p["ok"] else base.trim_prefix("http://")
 	var nm: String = str(conn.get("server_name", ""))
 	if nm != "":
-		find_status.text = "이전에 연결한 PC: " + nm
+		previous_label.text = "이전에 연결한 PC: " + nm
 
 
 func _set_busy(on: bool, msg: String = "") -> void:
 	_busy = on
 	connect_button.disabled = on
-	find_button.disabled = on
 	progress_label.text = msg
 
 
 func show_error(msg: String) -> void:
 	error_label.text = msg
 	error_label.visible = msg != ""
-
-
-## PC 자동 찾기 (UDP). 결과는 목록으로 나타난다.
-func find_pcs() -> void:
-	if _busy:
-		return
-	_set_busy(true)
-	find_status.text = "찾는 중… (2.5초)"
-	UI.clear(found_box)
-	var flow := Flow.new()
-	flow.find_done.connect(_on_find_done)
-	flow.find()
-
-
-func _on_find_done(found: Array) -> void:
-	_found = found
-	_busy = false
-	connect_button.disabled = false
-	find_button.disabled = false
-	if _found.is_empty():
-		find_status.text = "PC를 찾지 못했어요. 아래에 주소를 직접 입력해 주세요."
-		return
-	find_status.text = "찾은 PC를 눌러 주소를 채우세요."
-	for f in _found:
-		var b := UI.option_row("%s   %s" % [str(f["name"]), str(f["host"])])
-		var addr := "%s:%d" % [str(f["host"]), int(f["port"])]
-		b.custom_minimum_size.y = 48
-		b.pressed.connect(func() -> void:
-			address_edit.text = addr
-			code_edit.grab_focus())
-		found_box.add_child(b)
 
 
 ## [연결] 버튼. 끝나면 attempt_finished 가 나온다.

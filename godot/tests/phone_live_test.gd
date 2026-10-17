@@ -5,8 +5,8 @@ extends Node
 ## and the same Recorder conversion path as the phone (WavUtil.to_mono16).
 ##
 ##   godot --headless --path <project> res://tests/phone_live_test.tscn -- --phone \
-##       --live-admin=http://127.0.0.1:8857 --live-lan=http://127.0.0.1:8858 [--live-udp=18788]
-## --live-lan may be a private IPv4 of this PC (http://192.168.x.y:8775). Without --live-admin the test prints SKIP
+##       --live-admin=http://127.0.0.1:8862 --live-lan=http://127.0.0.1:8863
+## --live-lan is the PC's Tailscale address (http://100.x.y.z:8775), or the loopback address of a stub (hook). Without --live-admin the test prints SKIP
 ## (result "미검증") and exits 0. Tokens and codes are never printed.
 
 const REMOTE_FILE := "user://test_phone_live_remote.json"
@@ -15,7 +15,6 @@ var passed: int = 0
 var failed: int = 0
 var admin: String = ""
 var lan: String = ""
-var udp: int = 0
 var _saved_path: String = ""
 
 
@@ -35,8 +34,6 @@ func _ready() -> void:
 			admin = a.substr(13).rstrip("/")
 		elif a.begins_with("--live-lan="):
 			lan = a.substr(11).rstrip("/")
-		elif a.begins_with("--live-udp="):
-			udp = int(a.substr(11))
 	if admin == "" or lan == "":
 		print("  SKIP  no --live-admin / --live-lan given: not verified")
 		print("== phone live result: 0 passed, 0 failed (skipped) ==")
@@ -70,18 +67,15 @@ func _run() -> void:
 	ok(code.length() == 6, "a 6 digit pairing code is shown")
 	var hi: Dictionary = await RemoteLink.hello(lan)
 	ok(hi["ok"] and bool(hi["pairing_open"]), "hello through the LAN listener (no token)")
-	if udp > 0:
-		RemoteLink.test_discovery_port = udp
-		RemoteLink.test_extra_targets = ["127.0.0.1"]
-		var found: Array = await RemoteLink.discover(get_tree())
-		ok(found.size() >= 1 and str(found[0]["name"]) != "", "discovery finds the PC (%d answer)" % found.size())
 	var pr: Dictionary = await RemoteLink.pair(lan, code, "Live Test Phone")
 	ok(pr["ok"], "paired with the code")
 	if not pr["ok"]:
 		return
 	var conn := {"base_url": lan, "token": pr["token"], "device_id": pr["device_id"], "server_name": pr["server_name"]}
 	ok(RemoteLink.save(conn, REMOTE_FILE), "connection saved")
-	ok(await RemoteLink.proof_ok(lan, conn), "the PC proves it knows our token (/lan/proof)")
+	var nonce := "a1b2c3d4e5f60718"
+	var pf: Dictionary = await Api.post_json_to(lan, "/lan/proof", {"device_id": str(pr["device_id"]), "nonce": nonce}, 5.0, false).wait()
+	ok(pf["ok"] and pf["data"] is Dictionary and str((pf["data"] as Dictionary).get("proof", "")) == RemoteLink.expected_proof(str(pr["token"]), nonce), "the PC proves it knows our token (/lan/proof)")
 	Api.set_remote(lan, str(pr["token"]))
 	# /health
 	var h: Dictionary = await Api.get_json("/health", 10.0, false).wait()

@@ -26,7 +26,7 @@ const TIMEOUT_SHORT_PHONE := 90.0
 const TIMEOUT_LLM := 180.0
 
 const NOT_CONNECTED_TEXT := "PC에 연결되지 않았어요."
-const UNREACHABLE_TEXT := "PC에 닿지 않아요. PC가 켜져 있고 같은 와이파이인지, PC 앱의 '휴대폰 연결'이 켜져 있는지 확인해 주세요."
+const UNREACHABLE_TEXT := "PC에 닿지 않아요. 두 기기 모두 Tailscale이 켜져 있고 같은 계정인지, PC의 휴대폰 연결이 켜져 있는지 확인해 주세요."
 const RETRY_DELAY_SEC := 0.3
 const RESUME_GRACE_MSEC := 8000
 const EXIT_GRACE_MSEC := 1500
@@ -233,7 +233,7 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 	if req_call.done:
 		return
 	req_call.in_flight = false
-	# The connection broke (Wi-Fi hiccup, app just came back): one more try, only for requests without side effects.
+	# The connection broke (network hiccup, app just came back): one more try, only for requests without side effects.
 	if result != HTTPRequest.RESULT_SUCCESS and is_remote() and req_call.retries < 1 and _connection_broke(result) and is_idempotent(req_call.method, req_call.path):
 		req_call.retries += 1
 		_retry_later(req_call, report)

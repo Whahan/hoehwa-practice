@@ -207,7 +207,7 @@ if ($WithApk) {
         "- ``$apkName`` 을 휴대폰에서 받아 설치합니다. PC 앱도 같은 버전($Version) 이상이어야 휴대폰이 붙습니다.`n" +
         "- 설치할 때 '출처를 알 수 없는 앱 설치' 허용이 필요합니다. Play Protect 경고가 뜨면 '무시하고 설치'를 고르세요(Google Play 에 올린 앱이 아니라서 나오는 경고입니다).`n" +
         "- 이미 설치했다면 새 APK 를 그냥 덮어 설치하면 됩니다(같은 키로 서명되어 학습 기록이 남습니다).`n" +
-        "- 연결: PC 앱의 설정 > 휴대폰 연결을 켜고, 휴대폰 앱에서 PC 를 찾아 6자리 코드를 입력합니다. 집 같은 내가 관리하는 와이파이에서만 쓰세요.`n" +
+        "- 연결(Tailscale 전용): PC 와 휴대폰에 Tailscale 을 설치해 같은 구글 계정으로 로그인한 뒤, PC 앱의 설정 > 휴대폰 연결을 켜고 휴대폰 앱에 PC 화면의 Tailscale 주소(100.x.y.z)와 6자리 코드를 입력합니다.`n" +
         "- APK 의 SHA-256 은 ``SHA256SUMS.txt`` 에 있습니다.`n"
 }
 [System.IO.File]::WriteAllText($notesTmp, $body, (New-Object System.Text.UTF8Encoding($false)))

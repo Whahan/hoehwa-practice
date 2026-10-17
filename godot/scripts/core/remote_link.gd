@@ -1,28 +1,23 @@
 class_name RemoteLink
 extends RefCounted
-## 휴대폰 → PC 연결 정보와 페어링 (docs/android_remote_design.md §4.5).
+## 휴대폰 → PC 연결 정보와 페어링 (docs/android_remote_design.md §4.5). 연결은 Tailscale(100.x) 전용이고 자동 찾기(UDP)는 없다.
 ##
 ## 토큰은 어디에도 출력하지 않는다(로그·print 금지). 파일(user://remote.json)에만 저장한다.
 
 const PATH := "user://remote.json"          # {"v":1,"base_url","token","device_id","server_name","paired_at"}
 const DEFAULT_PORT := 8775
-const DISCOVERY_PORT := 8776
 
-const ADDRESS_HELP := "주소를 확인해 주세요. 예: 192.168.0.12 또는 192.168.0.12:8775 (이름 대신 숫자 주소만 쓸 수 있어요)"
-const UNREACHABLE_HELP := "PC에 닿지 않아요. ① PC 앱에서 '휴대폰 연결'이 켜져 있나요? ② 폰과 PC가 같은 와이파이인가요? ③ PC에 뜬 Windows 방화벽 허용 창을 눌렀나요? ④ 공공·게스트 와이파이는 기기끼리 통신을 막는 경우가 많아요."
+const ADDRESS_HELP := "주소를 확인해 주세요. 예: 100.101.102.103 또는 100.101.102.103:8775 (PC의 Tailscale 숫자 주소만 쓸 수 있어요)"
+const UNREACHABLE_HELP := "PC에 닿지 않아요. 두 기기 모두 Tailscale이 켜져 있고 같은 계정인지, PC의 휴대폰 연결이 켜져 있는지 확인해 주세요. PC에 Windows 방화벽 허용 창이 떴다면 허용해 주세요."
 const OLD_PC_HELP := "이 PC의 회화 연습이 옛 버전이에요. PC 앱을 1.1.0 이상으로 업데이트해 주세요."
 const NOT_HOEHWA_HELP := "이 주소에서 회화 연습 PC 앱을 찾지 못했어요. 주소를 다시 확인해 주세요."
 const NEED_CODE_HELP := "PC에서 '새 코드 만들기'를 눌러 주세요."
 
-## 시험 전용: 디스커버리 포트·추가 대상(예: 127.0.0.1) 덮어쓰기. 0 / 빈 배열이면 기본값.
-static var test_discovery_port: int = 0
-static var test_extra_targets: Array = []
-
 
 # ---------------------------------------------------------------- json
 
-## JSON.parse_string() prints an engine error for every non-JSON input; a broken remote.json or a stray
-## UDP packet is an expected input here, so parse quietly.
+## JSON.parse_string() prints an engine error for every non-JSON input; a broken remote.json is
+## an expected input here, so parse quietly.
 static func parse_json(text: String) -> Variant:
 	var j := JSON.new()
 	if j.parse(text) != OK:
@@ -32,7 +27,7 @@ static func parse_json(text: String) -> Variant:
 
 # ---------------------------------------------------------------- address
 
-## {ok, host, port, base_url, error}. IPv4(+선택 :포트)만. "http://", 끝 "/" 허용
+## {ok, host, port, base_url, error}. IPv4(+선택 :포트)만(Tailscale 주소 100.x.y.z 가 보통). "http://", 끝 "/" 허용
 static func parse_address(text: String) -> Dictionary:
 	var bad := {"ok": false, "host": "", "port": DEFAULT_PORT, "base_url": "", "error": ADDRESS_HELP}
 	var s: String = text.strip_edges()
@@ -75,93 +70,6 @@ static func _all_digits(s: String) -> bool:
 		if c < 48 or c > 57:
 			return false
 	return s.length() > 0
-
-
-# ---------------------------------------------------------------- discovery
-
-## await 가능. [{name, host, port, base_url}], 없으면 []. 자동 찾기가 꺼진 PC는 응답하지 않으므로 timeout 만큼 기다리고 [] 를 돌려준다.
-static func discover(tree: SceneTree, timeout_sec: float = 2.5) -> Array:
-	var found: Array = []
-	var seen: Dictionary = {}
-	var port: int = test_discovery_port if test_discovery_port > 0 else DISCOVERY_PORT
-	var udp := PacketPeerUDP.new()
-	udp.set_broadcast_enabled(true)
-	# explicit IPv4 socket: broadcasts from a dual-stack socket are unreliable on some Android versions
-	if udp.bind(0, "0.0.0.0") != OK:
-		return found
-	var targets: Array[String] = ["255.255.255.255"]
-	for ip in IP.get_local_addresses():
-		var t: String = _broadcast_of(str(ip))
-		if t != "" and not targets.has(t):
-			targets.append(t)
-	for e in test_extra_targets:
-		targets.append(str(e))
-	var ask: PackedByteArray = JSON.stringify({"hoehwa": 1, "op": "discover"}).to_utf8_buffer()
-	for t in targets:
-		if udp.set_dest_address(t, port) == OK:
-			udp.put_packet(ask)
-	var t0: int = Time.get_ticks_msec()
-	var first_at: int = -1
-	var last_send: int = t0
-	while true:
-		var now: int = Time.get_ticks_msec()
-		if float(now - t0) >= timeout_sec * 1000.0:
-			break
-		if first_at >= 0 and now - first_at >= 250:
-			break   # got an answer: give other PCs a moment, then stop
-		while udp.get_available_packet_count() > 0:
-			var from_ip: String = udp.get_packet_ip()
-			var pkt: PackedByteArray = udp.get_packet()
-			var info: Dictionary = _parse_here(pkt)
-			if info.is_empty() or from_ip == "":
-				continue
-			var key := "%s:%d" % [from_ip, int(info["port"])]
-			if seen.has(key):
-				continue
-			seen[key] = true
-			found.append({"name": info["name"], "host": from_ip, "port": int(info["port"]), "base_url": "http://%s:%d" % [from_ip, int(info["port"])]})
-			if first_at < 0:
-				first_at = Time.get_ticks_msec()
-		# a lost broadcast: ask once more after a second
-		if now - last_send >= 1000 and found.is_empty():
-			last_send = now
-			for t in targets:
-				if udp.set_dest_address(t, port) == OK:
-					udp.put_packet(ask)
-		await tree.process_frame
-	udp.close()
-	return found
-
-
-## a.b.c.255 for a private IPv4 address, "" otherwise.
-static func _broadcast_of(ip: String) -> String:
-	var p: PackedStringArray = ip.split(".")
-	if p.size() != 4:
-		return ""
-	var a: int = int(p[0])
-	var b: int = int(p[1])
-	var private_net: bool = a == 10 or (a == 172 and b >= 16 and b <= 31) or (a == 192 and b == 168)
-	if not private_net:
-		return ""
-	return "%s.%s.%s.255" % [p[0], p[1], p[2]]
-
-
-## {name, port} when the packet is exactly {"hoehwa":1,"op":"here","name":...,"port":...}, else {}.
-static func _parse_here(pkt: PackedByteArray) -> Dictionary:
-	if pkt.size() == 0 or pkt.size() > 512:
-		return {}
-	var d: Variant = parse_json(pkt.get_string_from_utf8())
-	if not (d is Dictionary):
-		return {}
-	var dd: Dictionary = d
-	if dd.size() != 4 or not dd.has("hoehwa") or not dd.has("op") or not dd.has("name") or not dd.has("port"):
-		return {}
-	if int(dd["hoehwa"]) != 1 or str(dd["op"]) != "here":
-		return {}
-	var port: int = int(dd["port"])
-	if port < 1 or port > 65535:
-		return {}
-	return {"name": str(dd["name"]), "port": port}
 
 
 # ---------------------------------------------------------------- calls (no Authorization header)
@@ -260,7 +168,8 @@ static func pair_error_text(err_code: String, attempts_left: int, server_text: S
 			return "연결하지 못했어요. 잠시 뒤 다시 시도해 주세요."
 
 
-## await. /lan/proof 를 nonce 로 호출해 HMAC 검증. conn 은 {token, device_id} 를 가져야 한다.
+## await. /lan/proof 를 nonce 로 호출해 HMAC 검증(PC 가 이 토큰을 아는지). conn 은 {token, device_id} 를 가져야 한다.
+## 자동 찾기가 없으므로 앱 흐름에서는 쓰지 않고, 계약 시험이 쓴다.
 static func proof_ok(base_url: String, conn: Dictionary) -> bool:
 	var tok: String = str(conn.get("token", ""))
 	var dev: String = str(conn.get("device_id", ""))

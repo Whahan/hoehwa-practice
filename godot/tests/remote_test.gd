@@ -1,21 +1,21 @@
 extends Node
 ## Phone remote mode: Api token header, RemoteLink pairing, Backend remote start, Recorder (desktop --phone),
-## discovery, retry, ConnectView, PhoneLinkPanel (docs/android_remote_design.md §9.2, R-01..R-15).
+## no discovery (Tailscale only), retry, ConnectView, PhoneLinkPanel (docs/android_remote_design.md §9.2, R-01..R-15).
 ##
 ##   phone:  godot --headless --path <project> res://tests/remote_test.tscn -- --phone
 ##   pc:     godot --headless --path <project> res://tests/remote_test.tscn          (PC mode must not change)
 ##
 ## By default everything runs against an in-process fake PC (two listeners like the real server: an admin
 ## listener without token = 127.0.0.1:8770's role, and a LAN listener that needs the bearer token).
-## To check the real thing, point the pairing tests at the backend stub of W1 instead:
-##   -- --phone --stub-admin=http://127.0.0.1:8830 --stub-lan=http://127.0.0.1:8840 --stub-udp=8841
+## To check the real thing, point the pairing tests at the backend stub (lan_stub_server.py) instead:
+##   -- --phone --stub-admin=http://127.0.0.1:8862 --stub-lan=http://127.0.0.1:8863
 ## (tests that need the fake's request log / fault injection are then reported as SKIP, not as PASS.)
 ## Exit code 0 = all checks passed. Tokens and pairing codes are never printed.
 
-const ADMIN_PORT := 8850
-const LAN_PORT := 8851
-const UDP_PORT := 8852
-const CLOSED_PORT := 8859
+const ADMIN_PORT := 8862          ## all test ports are in 8862-8869 (never 8770 / 8775 / 8776)
+const LAN_PORT := 8863
+const OTHER_PORT := 8864          ## a second fake PC
+const CLOSED_PORT := 8869
 const TEST_REMOTE := "user://test_remote.json"
 
 var passed: int = 0
@@ -24,7 +24,6 @@ var skipped: int = 0
 var fake: FakeLan = null
 var admin_url: String = ""
 var lan_url: String = ""
-var udp_port: int = UDP_PORT
 var phone: bool = false
 var _saved_remote_path: String = ""
 var _orphan_url: String = ""
@@ -70,13 +69,11 @@ func _ready() -> void:
 	_use_test_curriculum_path()
 	Api.remote_path = TEST_REMOTE
 	_cleanup_files()
-	RemoteLink.test_discovery_port = udp_port
-	RemoteLink.test_extra_targets = ["127.0.0.1"]
 	if fake == null and admin_url == "":
 		fake = FakeLan.new()
 		add_child(fake)
-		var started: bool = fake.start(ADMIN_PORT, LAN_PORT, UDP_PORT)
-		ok(started, "in-process fake PC listening (ports %d/%d/%d)" % [ADMIN_PORT, LAN_PORT, UDP_PORT])
+		var started: bool = fake.start(ADMIN_PORT, LAN_PORT)
+		ok(started, "in-process fake PC listening (ports %d/%d)" % [ADMIN_PORT, LAN_PORT])
 		if not started:
 			_finish()
 			return
@@ -95,8 +92,6 @@ func _parse_args() -> void:
 			admin_url = a.substr(13).rstrip("/")
 		elif a.begins_with("--stub-lan="):
 			lan_url = a.substr(11).rstrip("/")
-		elif a.begins_with("--stub-udp="):
-			udp_port = int(a.substr(11))
 		elif a.begins_with("--orphan-quit="):
 			_orphan_url = a.substr(14).rstrip("/")
 		elif a.begins_with("--orphan-mode="):
@@ -176,7 +171,7 @@ func _write_raw(path: String, text: String) -> void:
 # ---------------------------------------------------------------- quit with a request that never gets an answer
 
 ## Reproducible quit timing (run it against a server that accepts and never answers, see the report):
-##   godot --headless --path <project> res://tests/remote_test.tscn -- --phone --orphan-quit=http://127.0.0.1:8853 --orphan-mode=cancel
+##   godot --headless --path <project> res://tests/remote_test.tscn -- --phone --orphan-quit=http://127.0.0.1:8865 --orphan-mode=cancel
 ## Prints QUIT_CALLED <msec> right before quit(); the caller measures how long the process lives after that.
 ## modes: cancel = the request is cancelled first (orphan), inflight = still running, none = no request at all.
 func _quit_with_request() -> void:
@@ -201,11 +196,11 @@ func _phone_tests() -> void:
 	await _test_hello_pair_headers()
 	await _test_wrong_codes()
 	await _test_backend_paths()
-	await _test_rediscovery()
+	await _test_moved_pc_is_not_searched()
 	await _test_saved_token_stays_home()
 	await _test_not_connected()
 	await _test_auth_revoked()
-	await _test_discovery()
+	await _test_no_discovery()
 	await _test_retry()
 	await _test_recorder_desktop_phone()
 	await _test_pause_resume()
@@ -259,7 +254,7 @@ func _test_hello_pair_headers() -> void:
 	print("[hello / pair / headers]")
 	var code: String = await _open_pairing(true)
 	ok(code.length() == 6, "PC shows a 6 digit code after turning the link on")
-	# Api already holds a token (the re-discovery path asks an unverified address while the saved token is set):
+	# Api already holds a token (the saved token must never go to an unverified address):
 	# the pre-pairing calls must still go out WITHOUT Authorization
 	Api.set_remote("http://127.0.0.1:%d" % CLOSED_PORT, "hp1_" + "C".repeat(43))
 	var hi: Dictionary = await RemoteLink.hello(lan_url)
@@ -357,8 +352,7 @@ func _test_backend_paths() -> void:
 	ok(Backend.status == Backend.Status.READY and dt <= 5.0, "R-07a: saved connection -> READY in %.2f s" % dt)
 	ok(Backend.pid == -1 and not Backend.launched_by_us, "R-07a: no process was created (pid -1, launched_by_us false)")
 	ok(Api.base_url == lan_url and Api.token == str(conn["token"]), "R-07a: Api points at the paired PC with its token")
-	# (b) closed port (the PC does not answer discovery either, so there is nothing to find)
-	await _admin_post("/lan", {"discovery": false})
+	# (b) closed port (there is no discovery: the saved address is the only one tried)
 	var dead := conn.duplicate()
 	dead["base_url"] = "http://127.0.0.1:%d" % CLOSED_PORT
 	RemoteLink.save(dead, TEST_REMOTE)
@@ -367,9 +361,9 @@ func _test_backend_paths() -> void:
 	t0 = Time.get_ticks_msec()
 	await Backend.start()
 	dt = float(Time.get_ticks_msec() - t0) / 1000.0
-	ok(Backend.status == Backend.Status.FAILED and dt <= 10.0 and Backend.message.contains("PC에 닿지 않아요"), "R-07b: closed port -> FAILED in %.2f s with the 'PC에 닿지 않아요' text" % dt)
+	ok(Backend.status == Backend.Status.FAILED and dt <= 4.0 and Backend.message.contains("PC에 닿지 않아요"), "R-07b: closed port -> FAILED in %.2f s (no 2.5 s search) with the 'PC에 닿지 않아요' text" % dt)
+	ok(Backend.message.contains("Tailscale") and not Backend.message.contains("와이파이"), "R-07b: the text talks about Tailscale, not Wi-Fi")
 	ok(Backend.pid == -1 and not Backend.launched_by_us, "R-07b: no process was created")
-	await _admin_post("/lan", {"discovery": true})
 	# (c) no file
 	_cleanup_files()
 	Api.clear_remote()
@@ -402,55 +396,34 @@ func _test_backend_paths() -> void:
 	_cleanup_files()
 
 
-func _test_rediscovery() -> void:
-	print("[re-discovery of a moved PC]")
+func _test_moved_pc_is_not_searched() -> void:
+	print("[a moved PC is not searched for]")
 	if fake == null:
-		skip("3b needs two in-process fake PCs")
+		skip("needs a second in-process fake PC")
 		return
-	var lan2_port := 8854
 	var impostor := FakeLan.new()
 	add_child(impostor)
-	ok(impostor.start(0, lan2_port, 0), "second fake PC (same name, other address) listening")
+	ok(impostor.start(0, OTHER_PORT), "second fake PC (same name, other address) listening")
 	impostor._set_lan(true)
 	var conn: Dictionary = await _pair_new("Moved Phone")
+	for d in fake.devices:
+		if d["id"] == str(conn["device_id"]):
+			impostor.devices.append(d.duplicate())   # the other PC even knows this phone
 	var dead := conn.duplicate()
-	dead["base_url"] = "http://127.0.0.1:%d" % CLOSED_PORT   # the PC moved: the saved address is dead
-	fake.udp_reply_port = lan2_port                           # discovery now points at the other PC
-	fake.udp_mode = "on"
-	# 3b-1: the PC that answers has the same name but does not know our token -> refused, token never sent
+	dead["base_url"] = "http://127.0.0.1:%d" % CLOSED_PORT   # the saved address is dead
 	RemoteLink.save(dead, TEST_REMOTE)
 	Api.clear_remote()
 	_reset_backend()
-	await Backend.start()
-	ok(Backend.status == Backend.Status.FAILED and Backend.message.contains("PC에 닿지 않아요"), "3b: same-name PC that cannot prove the token -> FAILED, not connected")
-	ok(impostor.count("/lan/proof") == 1, "3b: the unverified PC was asked for a proof (/lan/proof)")
-	ok(not impostor.auth_seen() and impostor.count("/health") == 0, "3b: the saved token was NEVER sent to the unverified PC (no Authorization, no /health)")
-	ok(RemoteLink.load_saved(TEST_REMOTE).get("base_url", "") == dead["base_url"], "3b: the saved address was not replaced")
-	# 3b-2: the same PC really moved (it knows the device) -> accepted, address updated
-	for d in fake.devices:
-		if d["id"] == str(conn["device_id"]):
-			impostor.devices.append(d.duplicate())
 	impostor.reset_log()
-	Api.clear_remote()
-	_reset_backend()
 	await Backend.start()
-	ok(Backend.status == Backend.Status.READY and Api.base_url == "http://127.0.0.1:%d" % lan2_port, "3b: a PC that proves the token is accepted at its new address")
-	ok(RemoteLink.load_saved(TEST_REMOTE).get("base_url", "") == "http://127.0.0.1:%d" % lan2_port, "3b: the new address is saved")
-	ok(impostor.last_entry("/lan/proof").get("auth", true) == false and impostor.last_entry("/health").get("bearer", false) == true, "3b: proof without a token first, /health with it only afterwards")
-	await _wait_for(func() -> bool: return Api.active_count == 0, 5.0)   # (/curriculum after READY) before the server goes away
+	ok(Backend.status == Backend.Status.FAILED and Backend.message.contains("PC에 닿지 않아요"), "saved address dead -> FAILED (the PC is not looked for elsewhere)")
+	ok(impostor.log.is_empty(), "the other PC saw no request at all (no proof, no /health, no token)")
+	ok(RemoteLink.load_saved(TEST_REMOTE).get("base_url", "") == dead["base_url"], "the saved address was not replaced")
 	impostor.stop()
 	impostor.queue_free()
-	fake.udp_reply_port = 0
 	Api.clear_remote()
 	_reset_backend()
 	_cleanup_files()
-	# 3c: an answer with an extra key from a different socket is not a PC
-	fake.udp_mode = "other_garbage"
-	var found: Array = await RemoteLink.discover(get_tree(), 1.2)
-	ok(found.is_empty(), "3c: extra-key discovery answer from a different ip:port is rejected")
-	fake.udp_mode = "on"
-	found = await RemoteLink.discover(get_tree())
-	ok(found.size() == 1, "3c control: a proper answer is still found")
 
 
 func _test_saved_token_stays_home() -> void:
@@ -460,13 +433,13 @@ func _test_saved_token_stays_home() -> void:
 		return
 	var other := FakeLan.new()
 	add_child(other)
-	other.start(0, 8854, 0)
+	other.start(0, OTHER_PORT)
 	other._set_lan(true)
 	var conn: Dictionary = await _pair_new("Home Phone")
 	RemoteLink.save(conn, TEST_REMOTE)
 	var was_over: String = Api.cli_base_url
 	var was_cli: String = Api.cli_token
-	Api.cli_base_url = "http://127.0.0.1:8854"   # --api= points somewhere else than the pairing
+	Api.cli_base_url = "http://127.0.0.1:%d" % OTHER_PORT   # --api= points somewhere else than the pairing
 	Api.cli_token = ""
 	_reset_backend()
 	await Backend.start()
@@ -531,32 +504,24 @@ func _test_auth_revoked() -> void:
 	_cleanup_files()
 
 
-func _test_discovery() -> void:
-	print("[discovery]")
-	await _open_pairing(false)
-	var t0: int = Time.get_ticks_msec()
-	var found: Array = await RemoteLink.discover(get_tree())
-	var dt: float = float(Time.get_ticks_msec() - t0) / 1000.0
-	ok(found.size() == 1 and str(found[0]["name"]) != "" and int(found[0]["port"]) == int(lan_url.get_slice(":", 2)), "R-09: discovery on -> 1 PC with name and port (%.2f s)" % dt)
-	if found.size() == 1:
-		ok(str(found[0]["base_url"]) == "http://127.0.0.1:%d" % int(found[0]["port"]), "R-09: base_url is built from the packet's sender address")
-	if fake != null:
-		fake.udp_mode = "garbage"
-		found = await RemoteLink.discover(get_tree(), 1.2)
-		ok(found.is_empty(), "malformed answers (extra key / wrong op / bad port / not JSON) are ignored")
-		fake.udp_mode = "off"
-	else:
-		skip("malformed discovery answers need the in-process fake")
-	# discovery off: ask the PC to stop answering
-	var off: Dictionary = await _admin_post("/lan", {"discovery": false})
-	ok(off["ok"], "turned discovery off on the PC")
-	t0 = Time.get_ticks_msec()
-	found = await RemoteLink.discover(get_tree())
-	dt = float(Time.get_ticks_msec() - t0) / 1000.0
-	ok(found.is_empty() and dt < 3.5, "R-09: discovery off -> [] and the call returned in %.2f s (< 3.5)" % dt)
-	await _admin_post("/lan", {"discovery": true})
-	if fake != null:
-		fake.udp_mode = "on"
+func _test_no_discovery() -> void:
+	print("[no discovery]")
+	var props: Array = []
+	for pr in RemoteLink.new().get_script().get_script_property_list():
+		props.append(str(pr["name"]))
+	var consts: Dictionary = RemoteLink.new().get_script().get_script_constant_map()
+	ok(not RemoteLink.new().has_method("discover") and not RemoteLink.new().has_method("_broadcast_of") and not consts.has("DISCOVERY_PORT")
+		and not props.has("test_discovery_port") and not props.has("test_extra_targets"), "RemoteLink has no discover(), no UDP port constant, no discovery test switches")
+	var view := ConnectView.new()
+	add_child(view)
+	await _frames(2)
+	var vt: String = _text_of(view)
+	ok(not ("find_button" in view) and not ("auto_discover" in view) and not vt.contains("자동 찾기") and not vt.contains("같은 와이파이"), "ConnectView: no find button, no auto-discovery switch, no 'PC 자동 찾기' / '같은 와이파이' text")
+	ok(vt.contains("Tailscale을 설치하고 PC와 같은 구글 계정으로 로그인해 켜 주세요") and vt.contains("설정 > 휴대폰 연결에 나오는 주소(100.x.y.z)와 6자리 코드를 입력하세요"), "ConnectView: the two Tailscale steps are shown")
+	ok(view.address_edit.placeholder_text == "100.101.102.103:8775", "ConnectView: address placeholder is the Tailscale example")
+	view.queue_free()
+	await _frames(2)
+	_reset_backend()
 
 
 func _test_retry() -> void:
@@ -702,7 +667,6 @@ func _test_connect_view() -> void:
 	Api.clear_remote()
 	_reset_backend()
 	var view := ConnectView.new()
-	view.auto_discover = false
 	add_child(view)
 	await _frames(2)
 	ok(view.address_edit != null and view.code_edit != null and view.connect_button != null, "ConnectView builds its widgets")
@@ -722,7 +686,7 @@ func _test_connect_view() -> void:
 	view.address_edit.text = "127.0.0.1:%d" % CLOSED_PORT
 	view.code_edit.text = "123456"
 	await _submit_and_wait(view)
-	ok(view.error_label.text.contains("PC에 닿지 않아요") and view.error_label.text.contains("방화벽"), "closed port -> unreachable text with the firewall hint")
+	ok(view.error_label.text.contains("PC에 닿지 않아요") and view.error_label.text.contains("Tailscale") and not view.error_label.text.contains("와이파이"), "closed port -> unreachable text that names Tailscale (same account, link switched on), no Wi-Fi")
 	# wrong code
 	view.address_edit.text = "127.0.0.1:%d" % int(lan_url.get_slice(":", 2))
 	view.code_edit.text = "%06d" % ((int(code) + 1) % 1000000)
@@ -748,7 +712,6 @@ func _test_connect_view() -> void:
 	await _frames(3)
 	ok(Backend.status == Backend.Status.NEEDS_PAIRING, "revoked -> NEEDS_PAIRING")
 	var view2 := ConnectView.new()
-	view2.auto_discover = false
 	add_child(view2)
 	await _frames(2)
 	ok(view2.address_edit.text.begins_with("127.0.0.1:") and view2.notice_label.visible and view2.notice_label.text.contains("해제됐어요"), "connect screen after a revoke: address prefilled + 'revoked' notice")
@@ -771,7 +734,6 @@ func _test_view_closed_midway() -> void:
 	_reset_backend()
 	fake.delay_sec["/pair"] = 1.0
 	var view := ConnectView.new()
-	view.auto_discover = false
 	add_child(view)
 	await _frames(2)
 	view.address_edit.text = "127.0.0.1:%d" % LAN_PORT
@@ -889,7 +851,7 @@ func _pc_tests() -> void:
 
 ## A PC state as GET /lan would return it, with `over` replacing single keys.
 func _lan_fixture(over: Dictionary) -> Dictionary:
-	var d: Dictionary = {"enabled": true, "allow_tailscale": false, "addresses": ["192.168.0.12"], "tailscale_addresses": [], "network_safe": true, "network_reason": "", "port": 8775, "discovery": false, "discovery_listening": false, "discovery_port": 8776, "name": "TESTPC", "pairing": {"active": false, "code": null, "expires_in": 0, "locked": false, "attempts_left": 5}, "devices": [], "error": ""}
+	var d: Dictionary = {"enabled": true, "tailscale_addresses": ["100.101.102.103"], "network_safe": true, "network_reason": "", "port": 8775, "bind": ["100.101.102.103"], "listening": true, "name": "TESTPC", "pairing": {"active": false, "code": null, "expires_in": 0, "locked": false, "attempts_left": 5}, "devices": [], "error": ""}
 	for k in over:
 		d[k] = over[k]
 	return d
@@ -922,10 +884,12 @@ func _test_phone_link_panel() -> void:
 	var m := RegEx.new()
 	m.compile("^연결 코드  \\d{3} \\d{3}$")
 	ok(m.search(panel.code_label.text) != null, "R-14: code label shows 'xxx xxx'")
-	ok(panel.timer_label.text.contains("안에 입력") and (panel.address_label.text.contains(":") or panel.address_label.text.contains("포트")), "R-14: remaining time and address shown")
+	ok(panel.timer_label.text.contains("안에 입력") and panel.address_label.text.contains("Tailscale 주소") and (fake == null or panel.address_label.text.contains("100.101.102.103:%d" % LAN_PORT)), "R-14: remaining time and the Tailscale address 100.x.y.z:port shown")
 	var all_text: String = _text_of(panel)
-	ok(all_text.contains("개인 네트워크") and all_text.contains("공용 와이파이"), "R-14: panel text has the firewall ('개인 네트워크') and public wifi ('공용 와이파이') notes")
-	ok(all_text.contains("암호화되지 않아서") and all_text.contains("이 프로그램은 방화벽 설정을 직접 바꾸지 않아요"), "R-14: exact warning sentences present")
+	ok(all_text.contains("PC와 휴대폰에 Tailscale을 설치하고 같은 구글 계정으로 로그인하면, 와이파이가 달라도 휴대폰에서 이 PC의 회화 연습을 쓸 수 있어요. 통신은 Tailscale이 암호화해요."), "R-14: the description is the agreed Tailscale sentence")
+	ok(all_text.contains("방화벽") and all_text.contains("이 프로그램은 방화벽 설정을 직접 바꾸지 않아요") and all_text.contains("계정을 남과 공유하지 마세요"), "R-14: one firewall note (Tailscale network) and the shared-account warning are present")
+	ok(not all_text.contains("공용 와이파이") and not all_text.contains("같은 와이파이") and not all_text.contains("개인 네트워크") and not all_text.contains("자동으로 찾을") and not all_text.contains("UDP"), "R-14: no public-Wi-Fi warning, no same-Wi-Fi text, no '개인 네트워크' firewall note, no auto-find checkbox text")
+	ok(not ("discovery_check" in panel) and not ("tailscale_check" in panel) and not ("ts_address_label" in panel), "R-14: the auto-find checkbox and the 'allow Tailscale' switch are gone")
 	ok(panel.devices_title.text == "연결된 휴대폰 (0)", "R-14: no devices yet")
 	# a phone pairs
 	var code_text: String = panel.code_label.text.replace("연결 코드", "").replace(" ", "")
@@ -953,28 +917,28 @@ func _test_phone_link_panel() -> void:
 	await panel.set_enabled_remote(false)
 	await _wait_for(func() -> bool: return not panel.details.visible, 3.0)
 	ok(not panel.toggle.button_pressed and not panel.details.visible and not PhoneLinkPanel.last_enabled, "R-14: turned off -> details hidden, last_enabled false")
-	# security: no private network -> warning, switch stays off, no public address shown
+	# no Tailscale on the PC -> install / login guidance, switch stays off, nothing else is shown
 	if fake != null:
 		await panel.set_enabled_remote(false)
-		fake.private_network = false
-		fake.addresses = ["8.8.8.8"]
+		fake.tailscale_present = false
 		await panel.refresh()
-		ok(panel.network_warning != "" and panel.toggle.disabled and panel.error_label.visible and panel.error_label.text.contains("공유기"), "network_safe:false -> warning shown before trying, switch disabled")
+		ok(panel.network_warning != "" and panel.toggle.disabled and panel.error_label.visible and panel.error_label.text.contains("tailscale.com") and panel.error_label.text.contains("같은 구글 계정"), "network_safe:false -> install and Google-login guidance shown before trying, switch disabled")
 		await panel.set_enabled_remote(true)
-		ok(not panel.toggle.button_pressed and not panel.details.visible and not fake.lan_enabled, "409 no_private_network -> switch stays off, nothing is listening")
-		ok(panel.error_label.text.contains("사설 네트워크 주소"), "the Korean message from the server is shown")
-		fake.private_network = true
-		fake.addresses = ["8.8.8.8", "192.168.0.12"]
+		ok(not panel.toggle.button_pressed and not panel.details.visible and not fake.lan_enabled, "409 no_tailscale -> switch stays off, nothing is listening")
+		ok(panel.error_label.text.contains("Tailscale이 꺼져 있거나 설치되지 않았어요"), "the Korean message from the server is shown")
+		fake.tailscale_present = true
 		await panel.refresh()
-		ok(panel.network_warning == "" and not panel.toggle.disabled, "network is fine again -> warning gone, switch usable")
+		ok(panel.network_warning == "" and not panel.toggle.disabled, "Tailscale is there again -> guidance gone, switch usable")
 		await panel.set_enabled_remote(true)
 		await _wait_for(func() -> bool: return panel.details.visible, 3.0)
-		ok(not panel.address_label.text.contains("8.8.8.8") and panel.address_label.text.contains("192.168.0.12"), "a public address is never displayed, the private one is")
-		fake.addresses = ["8.8.8.8"]
+		fake.ts_addresses = ["8.8.8.8", "192.168.0.12", "100.101.102.104"]
 		await panel.refresh()
-		ok(not panel.address_label.text.contains("8.8.8.8"), "only a public address from the server -> not shown")
-		fake.addresses = ["192.168.0.12"]
-		ok(PhoneLinkPanel.is_private_ipv4("10.1.2.3") and PhoneLinkPanel.is_private_ipv4("172.20.0.1") and not PhoneLinkPanel.is_private_ipv4("172.32.0.1") and not PhoneLinkPanel.is_private_ipv4("169.254.1.1") and not PhoneLinkPanel.is_private_ipv4("abc"), "is_private_ipv4 accepts only RFC1918")
+		ok(panel.address_label.text.contains("100.101.102.104") and not panel.address_label.text.contains("8.8.8.8") and not panel.address_label.text.contains("192.168.0.12"), "only a 100.64/10 address is displayed (public and private ones never)")
+		fake.ts_addresses = ["8.8.8.8"]
+		await panel.refresh()
+		ok(not panel.address_label.text.contains("8.8.8.8") and panel.address_label.text.contains("찾지 못했어요"), "only a public address from the server -> not shown, 'not found' text")
+		fake.ts_addresses = ["100.101.102.103"]
+		ok(not PhoneLinkPanel.is_tailscale_ipv4("192.168.0.12") and not PhoneLinkPanel.is_tailscale_ipv4("8.8.8.8") and not PhoneLinkPanel.is_tailscale_ipv4("100.128.0.1"), "is_tailscale_ipv4 accepts nothing outside 100.64.0.0/10")
 		await panel.set_enabled_remote(false)
 		await _wait_for(func() -> bool: return not panel.details.visible, 3.0)
 	# rejected admin calls (local_only / bad_origin) -> generic error
@@ -996,37 +960,24 @@ func _test_phone_link_panel() -> void:
 		await get_tree().create_timer(1.3).timeout
 		fake.delay_sec.erase("/lan")
 		ok(Api.active_count == 0, "PhoneLinkPanel freed during GET /lan: nothing left in flight")
-	# Tailscale (allow_tailscale): injected PC states go through the real _handle_result path
+	# injected PC states go through the real _handle_result path
 	var le_before: bool = PhoneLinkPanel.last_enabled
 	ok(PhoneLinkPanel.is_tailscale_ipv4("100.64.0.0") and PhoneLinkPanel.is_tailscale_ipv4("100.127.255.255") and PhoneLinkPanel.is_tailscale_ipv4("100.101.102.103"), "is_tailscale_ipv4: 100.64.0.0, 100.127.255.255, 100.101.102.103 are inside 100.64.0.0/10")
 	ok(not PhoneLinkPanel.is_tailscale_ipv4("100.63.255.255") and not PhoneLinkPanel.is_tailscale_ipv4("100.128.0.0") and not PhoneLinkPanel.is_tailscale_ipv4("8.8.8.8") and not PhoneLinkPanel.is_tailscale_ipv4("192.168.0.2") and not PhoneLinkPanel.is_tailscale_ipv4("abc") and not PhoneLinkPanel.is_tailscale_ipv4("100.64.0"), "is_tailscale_ipv4: 100.63.x, 100.128.x, public, private, 'abc', '100.64.0' are rejected")
-	# (1) allow on, Tailscale + public address from the PC: only the Tailscale one is shown
-	panel._handle_result({"ok": true, "data": _lan_fixture({"allow_tailscale": true, "addresses": [], "tailscale_addresses": ["100.101.102.103", "8.8.8.8"]})})
+	# (1) Tailscale + public address from the PC: only the Tailscale one is shown, with the port
+	panel._handle_result({"ok": true, "data": _lan_fixture({"tailscale_addresses": ["100.101.102.103", "8.8.8.8"]})})
 	var t1: String = _text_of(panel)
-	ok(panel.ts_address_label.visible and panel.ts_address_label.text.contains("100.101.102.103:8775") and t1.contains("100.101.102.103:8775"), "Tailscale (1): 'Tailscale 100.101.102.103:8775' is shown")
+	ok(panel.address_label.text.contains("100.101.102.103:8775") and t1.contains("100.101.102.103:8775"), "Tailscale (1): 'Tailscale 주소  100.101.102.103:8775' is shown")
 	ok(not t1.contains("8.8.8.8"), "Tailscale (1): the public address 8.8.8.8 is never shown")
-	ok(panel.tailscale_check.button_pressed, "Tailscale (1): the Tailscale checkbox is on")
-	# (2) allow on, private + Tailscale: both lines
-	panel._handle_result({"ok": true, "data": _lan_fixture({"allow_tailscale": true, "addresses": ["192.168.0.12"], "tailscale_addresses": ["100.101.102.103"]})})
-	ok(panel.address_label.visible and panel.address_label.text.contains("192.168.0.12:8775") and panel.ts_address_label.text.contains("100.101.102.103:8775"), "Tailscale (2): private and Tailscale addresses are both shown")
-	# (3) allow off: no Tailscale address even though the PC reports one
-	panel._handle_result({"ok": true, "data": _lan_fixture({"allow_tailscale": false, "addresses": ["192.168.0.12"], "tailscale_addresses": ["100.101.102.103"]})})
-	ok(not _text_of(panel).contains("100.101.102.103") and not panel.ts_address_label.visible and not panel.tailscale_check.button_pressed and panel.address_label.text.contains("192.168.0.12"), "Tailscale (3): allow off -> no Tailscale address, checkbox off, private address still shown")
-	# (4) off + network warning: the main switch is disabled, the Tailscale checkbox is not and shows the saved value
-	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "allow_tailscale": true, "network_safe": false, "network_reason": "이 PC에는 공유기(사설) 주소가 없어요.", "addresses": [], "tailscale_addresses": ["100.101.102.103"]})})
-	ok(panel.toggle.disabled and not panel.tailscale_check.disabled and panel.tailscale_check.button_pressed, "Tailscale (4): warning disables the main switch, not the Tailscale checkbox, which shows allow_tailscale=true")
-	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "allow_tailscale": false, "network_safe": false, "network_reason": "이 PC에는 공유기(사설) 주소가 없어요.", "addresses": []})})
-	ok(not panel.tailscale_check.disabled and not panel.tailscale_check.button_pressed, "Tailscale (4b): warning + allow off -> checkbox usable and unchecked")
-	# (5) the checkbox sends exactly {"allow_tailscale": true} to POST /lan
-	if fake != null:
-		panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "allow_tailscale": false})})
-		fake.last_lan_body = {}
-		panel.tailscale_check.button_pressed = true
-		await _wait_for(func() -> bool: return not fake.last_lan_body.is_empty(), 3.0)
-		ok(fake.last_lan_body == {"allow_tailscale": true}, "Tailscale (5): checkbox on -> POST /lan body is exactly {\"allow_tailscale\": true}")
-		await _wait_for(func() -> bool: return not panel._busy, 3.0)
-	else:
-		skip("Tailscale (5): POST /lan body (stub PC: no request log)")
+	# (2) off + no Tailscale: the main switch is disabled and the guidance is shown with the warning sign
+	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "network_safe": false, "network_reason": PhoneLinkPanel.NO_NETWORK_TEXT, "tailscale_addresses": []})})
+	ok(panel.toggle.disabled and panel.error_label.visible and panel.error_label.text.begins_with("⚠ ") and panel.error_label.text.contains("tailscale.com"), "Tailscale (2): no Tailscale -> switch disabled, guidance with the warning sign")
+	# (3) the link was closed because the Tailscale address vanished: the PC's reason is shown
+	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "error": "이 PC의 Tailscale 연결이 사라져서 휴대폰 연결을 껐어요. Tailscale을 다시 켠 뒤 휴대폰 연결을 켜 주세요."})})
+	ok(panel.error_label.visible and panel.error_label.text.contains("Tailscale 연결이 사라져서") and not panel.toggle.disabled, "Tailscale (3): the reason the PC gave is shown, the switch can be tried again")
+	# (4) on: address + code, and the (single) text for the guidance does not appear twice
+	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": true, "error": ""})})
+	ok(panel.details.visible and panel.address_label.text == "Tailscale 주소  100.101.102.103:8775" and panel.error_label.visible == false, "Tailscale (4): on -> 'Tailscale 주소  100.101.102.103:8775', no error text")
 	PhoneLinkPanel.last_enabled = le_before
 	# 404 from an old PC engine
 	panel.queue_free()
@@ -1037,14 +988,13 @@ func _test_phone_link_panel() -> void:
 
 class FakeLan:
 	extends Node
+	const NO_TAILSCALE_TEXT := "이 PC에서 Tailscale이 꺼져 있거나 설치되지 않았어요. tailscale.com 에서 설치하고 휴대폰과 같은 구글 계정으로 로그인한 뒤 다시 켜 주세요."
 	var admin_port: int = 0
 	var lan_port: int = 0
-	var udp_port: int = 0
 	var server_name: String = "TESTPC"
 	var _admin := TCPServer.new()
 	var _lan := TCPServer.new()
 	var _lan_open: bool = false
-	var _udp: PacketPeerUDP = null
 	var _conns: Array = []
 	var log: Array = []                 ## {role, method, path, auth: bool, bearer: bool}
 	var devices: Array = []             ## {id, name, token, created}
@@ -1053,42 +1003,26 @@ class FakeLan:
 	var attempts_left: int = 5
 	var locked: bool = false
 	var lan_enabled: bool = false
-	var discovery: bool = true
-	var private_network: bool = true    ## false: the PC has no private IPv4 address
-	var addresses: Array = ["192.168.0.12"]
+	var tailscale_present: bool = true  ## false: Tailscale is off / not installed on this PC (409 no_tailscale)
+	var ts_addresses: Array = ["100.101.102.103"]
 	var reject_admin: String = ""       ## "" | "local_only" | "bad_origin": refuse POST /lan
-	var last_lan_body: Dictionary = {}  ## body of the last POST /lan (checked by the Tailscale checkbox test)
-	var udp_mode: String = "on"         ## on | off | garbage | other_garbage (extra-key answer from a second socket)
-	var udp_reply_port: int = 0         ## answer discovery with this TCP port instead of lan_port (a "moved" PC)
-	var _udp2: PacketPeerUDP = null
+	var last_lan_body: Dictionary = {}  ## body of the last POST /lan
 	var drop: Dictionary = {}           ## path -> how many requests to close without an answer
 	var delay_sec: Dictionary = {}      ## path -> seconds to hold the answer
 	var _next_id: int = 1
 	var _rng := RandomNumberGenerator.new()
 
-	func start(admin: int, lan: int, udp: int) -> bool:
+	func start(admin: int, lan: int) -> bool:
 		admin_port = admin
 		lan_port = lan
-		udp_port = udp
 		_rng.randomize()
 		if admin > 0 and _admin.listen(admin, "127.0.0.1") != OK:
 			return false
-		if udp > 0:
-			_udp = PacketPeerUDP.new()
-			if _udp.bind(udp, "127.0.0.1") != OK:
-				return false
-			_udp2 = PacketPeerUDP.new()
-			if _udp2.bind(0, "127.0.0.1") != OK:
-				return false
 		return true
 
 	func stop() -> void:
 		_admin.stop()
 		_lan.stop()
-		if _udp != null:
-			_udp.close()
-		if _udp2 != null:
-			_udp2.close()
 		for c in _conns:
 			(c["peer"] as StreamPeerTCP).disconnect_from_host()
 		_conns.clear()
@@ -1124,7 +1058,6 @@ class FakeLan:
 				_conns.append(_new_conn(_lan.take_connection(), "lan"))
 		for c in _conns.duplicate():
 			_pump(c)
-		_pump_udp()
 
 	func _new_conn(p: StreamPeerTCP, role: String) -> Dictionary:
 		return {"peer": p, "role": role, "buf": PackedByteArray(), "release_at": -1, "resp": PackedByteArray()}
@@ -1229,30 +1162,6 @@ class FakeLan:
 			_lan_open = false
 			code_active = false
 
-	func _pump_udp() -> void:
-		while _udp != null and _udp.get_available_packet_count() > 0:
-			var ip: String = _udp.get_packet_ip()
-			var port: int = _udp.get_packet_port()
-			var pkt: PackedByteArray = _udp.get_packet()
-			if ip == "" or ip.contains(":"):
-				continue
-			var d: Variant = RemoteLink.parse_json(pkt.get_string_from_utf8())
-			if not (d is Dictionary) or int((d as Dictionary).get("hoehwa", 0)) != 1 or str((d as Dictionary).get("op", "")) != "discover":
-				continue
-			if udp_mode == "off" or not lan_enabled or not discovery:
-				continue
-			if udp_mode == "other_garbage":
-				# an answer with an extra key, sent from ANOTHER socket (different source port)
-				_udp2.set_dest_address(ip, port)
-				_udp2.put_packet(('{"hoehwa":1,"op":"here","name":"%s","port":%d,"extra":"x"}' % [server_name, lan_port]).to_utf8_buffer())
-				continue
-			_udp.set_dest_address(ip, port)
-			if udp_mode == "garbage":
-				for bad in ['{"hoehwa":1,"op":"here","name":"X","port":%d,"extra":1}' % lan_port, '{"hoehwa":1,"op":"nope","name":"X","port":%d}' % lan_port, '{"hoehwa":1,"op":"here","name":"X","port":70000}', "not json at all", '{"hoehwa":2,"op":"here","name":"X","port":%d}' % lan_port]:
-					_udp.put_packet(bad.to_utf8_buffer())
-			else:
-				_udp.put_packet(JSON.stringify({"hoehwa": 1, "op": "here", "name": server_name, "port": udp_reply_port if udp_reply_port > 0 else lan_port}).to_utf8_buffer())
-
 	# ---- routing (mirrors docs/android_remote_design.md §3.4 / §3.5)
 
 	const ALLOW := ["GET /health", "GET /curriculum", "POST /tts", "GET /tts/voices", "POST /stt", "POST /score", "POST /prosody", "POST /chat", "POST /feedback", "POST /fix", "POST /lesson", "POST /reading/analyze", "POST /reading/gloss", "GET /examples", "GET /lan/me", "POST /lan/unpair"]
@@ -1328,11 +1237,9 @@ class FakeLan:
 				if reject_admin != "":
 					return _err(403, "거절됐어요.", reject_admin)
 				if body.has("enabled"):
-					if bool(body["enabled"]) and not private_network:
-						return _err(409, "이 PC에 사설 네트워크 주소가 없어서 휴대폰 연결을 켤 수 없어요.", "no_private_network")
+					if bool(body["enabled"]) and not tailscale_present:
+						return _err(409, NO_TAILSCALE_TEXT, "no_tailscale")
 					_set_lan(bool(body["enabled"]))
-				if body.has("discovery"):
-					discovery = bool(body["discovery"])
 				if body.has("name"):
 					pass
 				return {"json": _lan_state()}
@@ -1386,11 +1293,10 @@ class FakeLan:
 	func _lan_state() -> Dictionary:
 		var devs: Array = []
 		for d in devices:
-			devs.append({"id": d["id"], "name": d["name"], "created": d["created"], "last_seen": d["created"], "last_ip": "192.168.0.23"})
+			devs.append({"id": d["id"], "name": d["name"], "created": d["created"], "last_seen": d["created"], "last_ip": "100.101.102.50"})
 		return {
-			"enabled": lan_enabled, "listening": _lan_open, "port": lan_port, "bind": "0.0.0.0",
-			"discovery": discovery, "discovery_listening": lan_enabled and discovery, "discovery_port": udp_port,
-			"name": server_name, "addresses": addresses, "network_safe": private_network, "network_reason": "" if private_network else "이 PC에는 공유기(사설) 주소가 없어요.",
+			"enabled": lan_enabled, "listening": _lan_open, "port": lan_port, "bind": ts_addresses if _lan_open else [],
+			"name": server_name, "tailscale_addresses": ts_addresses if tailscale_present else [], "network_safe": tailscale_present, "network_reason": "" if tailscale_present else NO_TAILSCALE_TEXT,
 			"pairing": {"active": code_active, "code": code if code_active else null, "expires_in": 300 if code_active else 0, "locked": locked, "attempts_left": attempts_left},
 			"devices": devs, "error": "",
 		}

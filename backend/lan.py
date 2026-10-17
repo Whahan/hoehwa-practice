@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Phone link ("휴대폰 연결"): an extra LAN listener, pairing, device tokens and UDP discovery. Contract: ../API.md "휴대폰 연결".
+"""Phone link ("휴대폰 연결"): an extra listener on this PC's Tailscale address, pairing and device tokens. Contract: ../API.md "휴대폰 연결".
 
-Design (docs/android_remote_design.md section 3):
+Design (docs/android_remote_design.md section 3; since 2026-10-17 the phone link is Tailscale only):
   * The normal 127.0.0.1 server is never touched or restarted. Turning the link on starts a SECOND uvicorn server (own thread, own event
-    loop) on 0.0.0.0:<lan.port> that serves the same FastAPI app behind `LanGate`; turning it off closes that port.
-  * Authentication is per LISTENER: every request that arrives through the LAN listener needs `Authorization: Bearer hp1_...`,
+    loop) on this PC's Tailscale IPv4 address(es) (100.64.0.0/10 on the adapter named "Tailscale"):<lan.port>, never on 0.0.0.0. Without a
+    Tailscale address the link cannot be turned on (409 no_tailscale). Turning it off closes that port. If the Tailscale address
+    disappears while the link is on, a watcher closes the listener and says why.
+  * Only loopback and Tailscale sources (100.64.0.0/10, fd7a:115c:a1e0::/48) are served; a connection from anywhere else (private LAN,
+    link-local, other ULA, public) is aborted before a byte is read. There is no UDP discovery: no UDP socket is opened.
+  * Authentication is per LISTENER: every request that arrives through the link listener needs `Authorization: Bearer hp1_...`,
     even when its source IP is 127.0.0.1. The loopback listener keeps working without a token.
-  * Only an allow-list of paths is served on the LAN listener; management endpoints (`/lan`, `/lan/code`, `/lan/devices/*`) are
+  * Only an allow-list of paths is served on the link listener; management endpoints (`/lan`, `/lan/code`, `/lan/devices/*`) are
     loopback only.
   * Only SHA-256 hashes of the tokens are stored (backend/lan_devices.json). Tokens, codes and Authorization headers are never logged.
 
@@ -15,6 +19,7 @@ server.py only calls `attach()`, `start_if_enabled()` and `shutdown()`; everythi
 import asyncio
 import base64
 import ctypes
+import errno
 import hashlib
 import hmac
 import ipaddress
@@ -38,8 +43,7 @@ from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 
-DEFAULT_LAN = {"enabled": False, "port": 8775, "discovery": True, "discovery_port": 8776, "name": "", "allow_cgnat": False,
-               "allow_tailscale": False}
+DEFAULT_LAN = {"enabled": False, "port": 8775, "name": ""}      # older config.json keys (discovery, allow_*) are ignored
 
 CODE_TTL_SECONDS = 300
 CODE_MAX_FAILS = 5
@@ -50,8 +54,7 @@ DRAIN_CAP = 32 * 1024 * 1024           # an upload we refuse is read (and thrown
 RATE_FAILS = 30                        # bad tokens from one IP ...
 RATE_WINDOW = 600.0                    # ... within this many seconds -> 429
 FLUSH_SECONDS = 60.0                   # last_seen is written to disk at most this often
-DISCOVERY_MAX_PER_SEC = 10
-DISCOVERY_MAX_BYTES = 128
+WATCH_SECONDS = 5.0                    # how often a running link checks that its Tailscale address still exists
 DEVICES_FILE_MAX = 1024 * 1024
 BAD_TOKEN_MAX_IPS = 2000               # rate-limit table size cap
 PREAUTH_TIMEOUT = 10.0                 # seconds to receive a request before login (/pair, /lan/proof, rejected requests)
@@ -98,10 +101,9 @@ MSG = {
     "device_name_format": "이 휴대폰 이름은 1~40자로 입력해 주세요.",
     "store_failed": "연결 정보를 저장하지 못했어요. PC의 디스크 상태를 확인해 주세요.",
     "bad_origin": "허용되지 않은 요청이에요. 이 PC의 앱에서만 쓸 수 있어요.",
-    "no_private_network": "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요.",
     "request_timeout": "요청을 받는 데 시간이 너무 오래 걸려요.",
-    "tailscale_hint": "Tailscale 을 쓴다면 '고급'에서 'Tailscale 로 연결 허용'을 켜세요.",
-    "no_tailscale": "이 PC에서 Tailscale 주소를 찾지 못했어요. Tailscale 을 켜고 로그인했는지 확인해 주세요.",
+    "no_tailscale": "이 PC에서 Tailscale이 꺼져 있거나 설치되지 않았어요. tailscale.com 에서 설치하고 휴대폰과 같은 구글 계정으로 로그인한 뒤 다시 켜 주세요.",
+    "tailscale_lost": "이 PC의 Tailscale 연결이 사라져서 휴대폰 연결을 껐어요. Tailscale을 다시 켠 뒤 휴대폰 연결을 켜 주세요.",
 }
 
 
@@ -132,18 +134,8 @@ def _is_loopback(host):
     return ip.is_loopback
 
 
-def _is_private_lan(ip):
-    """10/8, 172.16/12, 192.168/16 only (no loopback, no 169.254 link-local)"""
-    try:
-        a = ipaddress.IPv4Address(ip)
-    except ValueError:
-        return False
-    return any(a in ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
-
-
-_V4_OK = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")]
-_V6_OK = [ipaddress.ip_network(n) for n in ("::1/128", "fe80::/10", "fc00::/7")]
-_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")           # Tailscale's IPv4 range
+_TS_V6 = ipaddress.ip_network("fd7a:115c:a1e0::/48")      # Tailscale's IPv6 range
 
 
 def _unmap(host):
@@ -157,74 +149,25 @@ def _unmap(host):
     return ip
 
 
-def _local_is_tailscale(local):
-    """True when `local` (the address of THIS PC that a connection came in on) is one of this PC's own Tailscale addresses"""
-    ip = _unmap(local) if isinstance(local, str) else None
-    return ip is not None and ip.version == 4 and ip in _CGNAT and str(ip) in tailscale_addresses()
-
-
-def _source_allowed(host, local=None):
-    """loopback, private (10/8, 172.16/12, 192.168/16), link-local, IPv6 ULA (Tailscale's fd7a:115c:a1e0::/48 is one);
-    CGNAT 100.64/10 only with lan.allow_cgnat, or with lan.allow_tailscale when the connection came in on this PC's own Tailscale
-    address (`local`): a carrier-CGNAT neighbour reaching our carrier-side address, or a spoofed 100.x source from the internet,
-    arrives on some other local address and stays out. Anything else (the public internet) gets no answer at all."""
+def _source_allowed(host):
+    """loopback and Tailscale only: IPv4 100.64.0.0/10, IPv6 fd7a:115c:a1e0::/48. Private LAN (10/8, 172.16/12, 192.168/16), link-local,
+    any other ULA and the public internet get no answer at all."""
     ip = _unmap(host)
     if ip is None:
         return False
+    if ip.is_loopback:
+        return True
     if ip.version == 4:
-        if any(ip in n for n in _V4_OK):
-            return True
-        if ip not in _CGNAT:
-            return False
-        if S.lan.get("allow_cgnat"):
-            return True
-        return bool(S.lan.get("allow_tailscale")) and _local_is_tailscale(local)
-    return any(ip in n for n in _V6_OK)
+        return ip in _CGNAT
+    return ip in _TS_V6
 
 
 def _peer_allowed(transport):
     try:
         peer = transport.get_extra_info("peername")
-        if not peer:
-            return False
-        sock = transport.get_extra_info("sockname")
-        return _source_allowed(peer[0], sock[0] if sock else None)
+        return bool(peer) and _source_allowed(peer[0])
     except Exception:
         return False
-
-
-def private_addresses(limit=3):
-    """This PC's private IPv4 addresses (default-route one first). The route lookup only connect()s a UDP socket: no packet is sent."""
-    cands = []
-    s = None
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.255.255.255", 1))
-        cands.append(s.getsockname()[0])
-    except OSError:
-        pass
-    finally:
-        if s is not None:
-            s.close()
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            cands.append(info[4][0])
-    except OSError:
-        pass
-    out = []
-    for ip in cands:
-        if _is_private_lan(ip) and ip not in out:
-            out.append(ip)
-    return out[:limit]
-
-
-def _forced_private():
-    """test hook: HOEHWA_TEST_HOOKS=1 + HOEHWA_LAN_ASSUME_PRIVATE=1 / 0 pretends this PC does / does not have a private address"""
-    if os.environ.get("HOEHWA_TEST_HOOKS") == "1":
-        v = os.environ.get("HOEHWA_LAN_ASSUME_PRIVATE")
-        if v in ("0", "1"):
-            return v == "1"
-    return None
 
 
 TAILSCALE_MAX = 3
@@ -318,30 +261,32 @@ _ts_cache = (float("-inf"), [])
 
 
 def _fake_tailscale():
-    """test hook: HOEHWA_TEST_HOOKS=1 and HOEHWA_LAN_FAKE_TAILSCALE set (an empty value = "no Tailscale") -> list | None (no hook)"""
-    if os.environ.get("HOEHWA_TEST_HOOKS") != "1" or "HOEHWA_LAN_FAKE_TAILSCALE" not in os.environ:
+    """test hook: HOEHWA_TEST_HOOKS=1 and HOEHWA_LAN_ASSUME_TAILSCALE set -> the addresses to treat as this PC's Tailscale addresses
+    (comma separated; only 100.64.0.0/10 and loopback 127.x are taken, so a test can bind on loopback; an empty value = "no Tailscale")
+    | None (no hook: the real adapters decide)"""
+    if os.environ.get("HOEHWA_TEST_HOOKS") != "1" or "HOEHWA_LAN_ASSUME_TAILSCALE" not in os.environ:
         return None
     out = []
-    for part in os.environ["HOEHWA_LAN_FAKE_TAILSCALE"].split(","):
+    for part in os.environ["HOEHWA_LAN_ASSUME_TAILSCALE"].split(","):
         try:
             a = ipaddress.IPv4Address(part.strip())
         except ValueError:
             continue
-        if a in _CGNAT and str(a) not in out:
+        if (a in _CGNAT or a.is_loopback) and str(a) not in out:
             out.append(str(a))
     return out[:TAILSCALE_MAX]
 
 
-def tailscale_addresses():
+def tailscale_addresses(fresh=False):
     """This PC's Tailscale IPv4 addresses (100.64.0.0/10 on an up adapter named / described "Tailscale"), at most 3. Never raises.
-    The adapter list is read at most every 5 seconds (every connection from a 100.x source asks)."""
+    The adapter list is cached for 5 seconds; fresh=True reads it again (turning the link on, the watcher)."""
     global _ts_cache
     fake = _fake_tailscale()
     if fake is not None:
         return fake
     with _ts_lock:
         now = time.monotonic()
-        if now - _ts_cache[0] < TAILSCALE_CACHE_SECONDS:
+        if not fresh and now - _ts_cache[0] < TAILSCALE_CACHE_SECONDS:
             return list(_ts_cache[1])
         try:
             found = _pick_tailscale(_windows_adapters())
@@ -349,30 +294,6 @@ def tailscale_addresses():
             found = []
         _ts_cache = (now, found)
         return list(found)
-
-
-def _network_via(addrs=None, allow_tailscale=None, ts_addrs=None):
-    """what makes the link safe to turn on: "private" (a private IPv4 on this PC; hook-aware) | "tailscale" (lan.allow_tailscale and a
-    Tailscale address) | "" (nothing: the PC is directly on the internet)"""
-    forced = _forced_private()
-    if (forced if forced is not None else bool(private_addresses() if addrs is None else addrs)):
-        return "private"
-    if S.lan.get("allow_tailscale") if allow_tailscale is None else allow_tailscale:
-        if tailscale_addresses() if ts_addrs is None else ts_addrs:
-            return "tailscale"
-    return ""
-
-
-def _network_ok(addrs=None, allow_tailscale=None):
-    """the link may only be turned on behind a router (a private IPv4 address on this PC) or on a Tailscale network (allow_tailscale)"""
-    return _network_via(addrs, allow_tailscale) != ""
-
-
-def _unsafe_message(allow_tailscale):
-    """why the link cannot be on: the Tailscale box is on but there is no Tailscale address / the box is off (with a hint)"""
-    if allow_tailscale:
-        return MSG["no_tailscale"]
-    return MSG["no_private_network"] + " " + MSG["tailscale_hint"]
 
 
 def _hook_seconds(name, default):
@@ -410,7 +331,6 @@ class _State:
         self.save = None
         self.persist = False
         self.log = logging.getLogger("backend.lan")
-        self.bind = "0.0.0.0"
         self.devices_path = ""
         self.devices = []
         self.dirty = False
@@ -418,7 +338,7 @@ class _State:
         self.lock = threading.RLock()        # guards devices / pairing / rate state
         self.op_lock = threading.Lock()      # one start/stop/reconfigure at a time
         self.listener = None
-        self.disc = None
+        self.bound = []                      # Tailscale addresses the running listener is bound to
         self.error = ""
         # pairing code
         self.code = None
@@ -792,7 +712,7 @@ class LanGate:
                     pass
             return
         ip = (scope.get("client") or ("?", 0))[0]
-        if not _source_allowed(ip, (scope.get("server") or (None,))[0]):
+        if not _source_allowed(ip):
             return      # public / unknown source: no answer (the protocol class normally closed the connection already)
         scope["hoehwa_lan"] = True
         scope.pop("hoehwa_device", None)
@@ -867,10 +787,11 @@ class LanGate:
 # ----------------------------------------------------------------------------------------------
 # listeners
 # ----------------------------------------------------------------------------------------------
-def _bind_tcp(port):
+def _bind_tcp(host, port):
+    """one listening IPv4 socket on `host`:`port` (host is always one of this PC's Tailscale addresses, never 0.0.0.0)"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.bind((S.bind, port))
+        sock.bind((host, port))
         sock.listen(128)
         sock.setblocking(False)
     except OSError:
@@ -880,23 +801,25 @@ def _bind_tcp(port):
 
 
 class _Listener:
-    """the second uvicorn server: own thread, own event loop, pre-bound socket"""
+    """the second uvicorn server: own thread, own event loop, pre-bound sockets (one per Tailscale address)"""
 
-    def __init__(self, port, sock):
+    def __init__(self, addrs, port, socks):
         import uvicorn
+        self.addrs = list(addrs)
         self.port = port
-        self.sock = sock
+        self.socks = list(socks)
         cfg = uvicorn.Config(LanGate(S.app), lifespan="off", log_config=None, access_log=False, timeout_graceful_shutdown=2,
                              timeout_keep_alive=5, proxy_headers=False, server_header=False, interface="asgi3", http=_make_protocol(),
                              h11_max_incomplete_event_size=MAX_HEADER_BYTES)
         self.server = uvicorn.Server(cfg)
         self.done = threading.Event()
+        self.watch_stop = threading.Event()
         self.crash = None
         self.thread = threading.Thread(target=self._main, name="lan-listener", daemon=True)
 
     def _main(self):
         try:
-            self.server.run(sockets=[self.sock])
+            self.server.run(sockets=self.socks)
         except BaseException as e:   # SystemExit from a failed startup included
             self.crash = repr(e)
             S.log.warning("lan: listener thread ended: %s", self.crash)
@@ -908,6 +831,7 @@ class _Listener:
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             if self.server.started:
+                threading.Thread(target=_watch_loop, args=(self,), name="lan-watch", daemon=True).start()
                 return
             if self.done.is_set():
                 break
@@ -919,86 +843,49 @@ class _Listener:
         return self.thread.is_alive() and self.server.started and not self.done.is_set()
 
     def stop(self):
+        self.watch_stop.set()
         self.server.should_exit = True
         if self.thread.is_alive():
             self.thread.join(5)
             if self.thread.is_alive():
                 self.server.force_exit = True
                 self.thread.join(3)
-        try:
-            self.sock.close()
-        except OSError:
-            pass
-
-
-class _Discovery:
-    """UDP discovery: answers {"hoehwa":1,"op":"discover"} with name and port, nothing else"""
-
-    def __init__(self, port):
-        self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            self.sock.bind((S.bind, port))     # production: 0.0.0.0; test servers may pass --lan-bind 127.0.0.1
-        except OSError:
-            self.sock.close()
-            raise
-        self.sock.settimeout(0.4)
-        self.stop_ev = threading.Event()
-        self.sent = deque()
-        self.thread = threading.Thread(target=self._loop, name="lan-discovery", daemon=True)
-        self.thread.start()
-
-    def _loop(self):
-        while not self.stop_ev.is_set():
+        for sock in self.socks:
             try:
-                data, addr = self.sock.recvfrom(4096)
-            except socket.timeout:
-                continue
+                sock.close()
             except OSError:
-                if self.stop_ev.is_set():
-                    return
-                time.sleep(0.05)
-                continue
-            try:
-                self._handle(data, addr)
-            except Exception:
-                S.log.debug("lan: discovery packet ignored", exc_info=True)
+                pass
 
-    def _handle(self, data, addr):
-        if len(data) > DISCOVERY_MAX_BYTES:
-            return
-        try:
-            msg = json.loads(data.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            return
-        if not isinstance(msg, dict) or set(msg) != {"hoehwa", "op"}:
-            return
-        if type(msg["hoehwa"]) is not int or msg["hoehwa"] != 1 or msg["op"] != "discover":
-            return
-        if not _source_allowed(addr[0]):    # LAN only
-            return
-        now = time.monotonic()
-        while self.sent and now - self.sent[0] > 1.0:
-            self.sent.popleft()
-        if len(self.sent) >= DISCOVERY_MAX_PER_SEC:
-            return
-        self.sent.append(now)
-        reply = {"hoehwa": 1, "op": "here", "name": S.name(), "port": int(S.lan["port"])}
-        self.sock.sendto(_json_bytes(reply), addr)
 
-    def stop(self):
-        self.stop_ev.set()
-        self.thread.join(3)
+def _watch_loop(ls):
+    """while the link is on: if none of the addresses it listens on is a Tailscale address of this PC any more, close it"""
+    while not ls.watch_stop.wait(_hook_seconds("HOEHWA_LAN_WATCH_SECONDS", WATCH_SECONDS)):
         try:
-            self.sock.close()
-        except OSError:
-            pass
+            if _watch_once(ls):
+                return
+        except Exception:
+            S.log.warning("lan: watcher error", exc_info=True)
+
+
+def _watch_once(ls):
+    """-> True when the listener `ls` was closed because its Tailscale address is gone"""
+    now = tailscale_addresses(fresh=True)
+    if any(a in now for a in ls.addrs):
+        return False
+    with S.op_lock:
+        if S.listener is not ls:
+            return False
+        _stop_all()
+        S.lan["enabled"] = False       # not saved: the setting comes back at the next start when Tailscale is there again
+        S.error = MSG["tailscale_lost"]
+        S.log.warning("lan: Tailscale address %s is gone; link closed", ",".join(ls.addrs))
+    return True
 
 
 # ----------------------------------------------------------------------------------------------
 # attach / start / stop / configure
 # ----------------------------------------------------------------------------------------------
-def attach(app, cfg, save_cfg, log, base_dir, tag=None, devices_file=None, bind="0.0.0.0", persist=True, auto_start=True):
+def attach(app, cfg, save_cfg, log, base_dir, tag=None, devices_file=None, persist=True, auto_start=True):
     """Connect to the host app. `cfg` is the server's whole config dict (cfg["lan"] is ours), `save_cfg(cfg)` persists it.
     auto_start=False (test servers): never start from the saved config, the link stays off until POST /lan says otherwise."""
     S.app = app
@@ -1006,21 +893,16 @@ def attach(app, cfg, save_cfg, log, base_dir, tag=None, devices_file=None, bind=
     S.save = save_cfg
     S.persist = bool(persist)
     S.log = log
-    S.bind = bind or "0.0.0.0"
     lan = cfg.get("lan")
     merged = dict(DEFAULT_LAN)
     if isinstance(lan, dict):
-        merged.update(lan)
-    cfg["lan"] = merged
-    for k in ("port", "discovery_port"):
-        v = merged.get(k)
-        if type(v) is not int or not (1024 <= v <= 65535):
-            merged[k] = DEFAULT_LAN[k]
-    merged["enabled"] = bool(merged.get("enabled")) and bool(auto_start)
-    merged["discovery"] = bool(merged.get("discovery"))
-    merged["allow_cgnat"] = merged.get("allow_cgnat") is True
-    merged["allow_tailscale"] = merged.get("allow_tailscale") is True
+        merged.update({k: v for k, v in lan.items() if k in DEFAULT_LAN})      # old keys (discovery, discovery_port, allow_*) are dropped
+    v = merged.get("port")
+    if type(v) is not int or not (1024 <= v <= 65535):
+        merged["port"] = DEFAULT_LAN["port"]
+    merged["enabled"] = merged.get("enabled") is True and bool(auto_start)
     merged["name"] = _clean_name(merged.get("name"))
+    cfg["lan"] = merged
     if devices_file:
         S.devices_path = os.path.abspath(devices_file)
     else:
@@ -1037,72 +919,75 @@ def _persist():
             S.log.warning("lan: could not save config.json", exc_info=True)
 
 
-def _start_listener(port):
-    """bind first (OSError if busy), then run the server; returns the _Listener"""
-    sock = _bind_tcp(port)
-    ls = _Listener(port, sock)
+def _start_listener(addrs, port):
+    """bind one socket per Tailscale address first (OSError if one is busy / gone), then run the server; returns the _Listener"""
+    socks = []
     try:
+        for host in addrs:
+            socks.append(_bind_tcp(host, port))
+        ls = _Listener(addrs, port, socks)
         ls.start()
     except OSError:
-        sock.close()
+        for sock in socks:
+            try:
+                sock.close()
+            except OSError:
+                pass
         raise
+    S.bound = list(addrs)
     return ls
 
 
-def _start_discovery(want, port):
-    """-> (_Discovery | None, error text). A busy UDP port is not fatal."""
-    if not want:
-        return None, ""
-    try:
-        return _Discovery(port), ""
-    except OSError:
-        return None, "자동 찾기를 켜지 못했어요(포트 %d 사용 중). 휴대폰에서 주소를 직접 입력하면 연결할 수 있어요." % port
+def _bind_failure(exc):
+    """OSError from _start_listener -> "no_tailscale" (the address is not on this PC any more) | "lan_port_busy" """
+    if getattr(exc, "errno", None) in (errno.EADDRNOTAVAIL, 10049):
+        return "no_tailscale"
+    return "lan_port_busy"
 
 
 def start_if_enabled():
-    """lifespan start: bring the link up when the saved config says so (a busy port turns it off again)"""
+    """lifespan start: bring the link up when the saved config says so (no Tailscale address / a busy port turns it off again)"""
     with S.op_lock:
         lan = S.lan
         if not lan["enabled"] or S.listener is not None:
             return
-        if not _network_ok():
-            lan["enabled"] = False      # not saved: the setting comes back when the PC is behind a router (or on Tailscale) again
-            S.error = _unsafe_message(bool(lan.get("allow_tailscale")))
-            S.log.warning("lan: no private network or Tailscale address at start; link stays off")
+        addrs = tailscale_addresses(fresh=True)
+        if not addrs:
+            lan["enabled"] = False      # not saved: the setting comes back when Tailscale is running again
+            S.error = MSG["no_tailscale"]
+            S.log.warning("lan: no Tailscale address at start; link stays off")
             return
         try:
-            S.listener = _start_listener(lan["port"])
-        except OSError:
+            S.listener = _start_listener(addrs, lan["port"])
+        except OSError as e:
             lan["enabled"] = False
-            S.error = "포트 %d를 다른 프로그램이 쓰고 있어서 휴대폰 연결을 켜지 못했어요." % lan["port"]
-            S.log.warning("lan: port %d busy at start; link stays off", lan["port"])
-            _persist()
+            if _bind_failure(e) == "no_tailscale":
+                S.error = MSG["no_tailscale"]
+            else:
+                S.error = "포트 %d를 다른 프로그램이 쓰고 있어서 휴대폰 연결을 켜지 못했어요." % lan["port"]
+                _persist()
+            S.log.warning("lan: could not listen on %s:%d at start; link stays off", ",".join(addrs), lan["port"])
             return
         _new_code()
-        S.disc, S.error = _start_discovery(lan["discovery"], lan["discovery_port"])
-        S.log.info("lan: listening on %s:%d (discovery %s)", S.bind, lan["port"], "on" if S.disc else "off")
+        S.log.info("lan: listening on %s:%d", ",".join(addrs), lan["port"])
 
 
 def shutdown():
     """lifespan end: close the port and flush the device file. The saved 'enabled' stays as it was."""
     with S.op_lock:
-        if S.disc is not None:
-            S.disc.stop()
-            S.disc = None
         if S.listener is not None:
             S.listener.stop()
             S.listener = None
+        S.bound = []
         _clear_code()
     _flush_if_due(force=True)
 
 
 def _stop_all():
-    if S.disc is not None:
-        S.disc.stop()
-        S.disc = None
     if S.listener is not None:
         S.listener.stop()
         S.listener = None
+    S.bound = []
     _clear_code()
 
 
@@ -1114,42 +999,29 @@ def _configure(upd):
         new.update(upd)
         S.error = ""
         was_on = S.listener is not None
-        new_ts = new.get("allow_tailscale") is True
-        if new["enabled"] and not was_on and not _network_ok(allow_tailscale=new_ts):
-            return 409, "no_private_network"
-        if new["enabled"] and was_on and "allow_tailscale" in upd and not _network_ok(allow_tailscale=new_ts):
-            # still on, but Tailscale was switched off on a PC without a private address: no safe network is left, close it.
-            # (other updates - name, discovery, port - never close a running link because of a passing network change)
-            _stop_all()
-            lan.update(new)
-            lan["enabled"] = False
-            S.error = _unsafe_message(new_ts)
-            _persist()
-            return None, None
         if new["enabled"]:
             if was_on and S.listener.port == new["port"] and not S.listener.alive():
                 S.listener.stop()      # a crashed listener may still hold the port: free it before binding again
                 S.listener = None
                 was_on = False
             if (not was_on) or S.listener.port != new["port"]:
-                try:
-                    fresh = _start_listener(new["port"])
-                except OSError:
+                addrs = tailscale_addresses(fresh=True)        # looked up again every time the link is turned on
+                if not addrs:
                     if not was_on:
                         lan["enabled"] = False
-                    return 409, "lan_port_busy"
+                    return 409, "no_tailscale"
+                try:
+                    fresh = _start_listener(addrs, new["port"])
+                except OSError as e:
+                    if not was_on:
+                        lan["enabled"] = False
+                    return 409, _bind_failure(e)
                 old, S.listener = S.listener, fresh
                 if old is not None:
                     old.stop()
             lan.update(new)
             if not was_on:
                 _new_code()
-            want_disc = bool(new["discovery"])
-            if S.disc is not None and (not want_disc or S.disc.port != new["discovery_port"]):
-                S.disc.stop()
-                S.disc = None
-            if S.disc is None:
-                S.disc, S.error = _start_discovery(want_disc, new["discovery_port"])
         else:
             _stop_all()
             lan.update(new)
@@ -1161,17 +1033,11 @@ def _status():
     lan = S.lan
     with S.lock:
         devices = [_public_device(d) for d in S.devices]
-    addrs = private_addresses()
-    ts_on = bool(lan.get("allow_tailscale"))
-    ts_addrs = tailscale_addresses()
-    via = _network_via(addrs, ts_on, ts_addrs)
-    safe = via != ""
-    return {"network_safe": safe, "network_reason": "" if safe else _unsafe_message(ts_on), "network_via": via,
-            "allow_cgnat": bool(lan.get("allow_cgnat")), "allow_tailscale": ts_on, "tailscale_addresses": ts_addrs,
-            "enabled": bool(lan["enabled"]), "listening": bool(S.listener is not None and S.listener.alive()), "port": lan["port"],
-            "bind": S.bind, "discovery": bool(lan["discovery"]), "discovery_listening": S.disc is not None,
-            "discovery_port": lan["discovery_port"], "name": S.name(), "addresses": addrs,
-            "pairing": _pairing_view(), "devices": devices, "error": S.error}
+    ts = tailscale_addresses()
+    listening = bool(S.listener is not None and S.listener.alive())
+    return {"network_safe": bool(ts), "network_reason": "" if ts else MSG["no_tailscale"], "tailscale_addresses": ts,
+            "enabled": bool(lan["enabled"]), "listening": listening, "port": lan["port"], "bind": list(S.bound) if listening else [],
+            "name": S.name(), "pairing": _pairing_view(), "devices": devices, "error": S.error}
 
 
 # ----------------------------------------------------------------------------------------------
@@ -1320,18 +1186,18 @@ def lan_get(request: Request):
 
 
 def _parse_update(data):
+    """validated POST /lan body -> update dict | None (400). Other keys (the old discovery, discovery_port, allow_cgnat, allow_tailscale)
+    are ignored."""
     upd = {}
-    for k in ("enabled", "discovery", "allow_cgnat", "allow_tailscale"):
-        if k in data:
-            if type(data[k]) is not bool:
-                return None
-            upd[k] = data[k]
-    for k in ("port", "discovery_port"):
-        if k in data:
-            v = data[k]
-            if type(v) is not int or not (1024 <= v <= 65535):
-                return None
-            upd[k] = v
+    if "enabled" in data:
+        if type(data["enabled"]) is not bool:
+            return None
+        upd["enabled"] = data["enabled"]
+    if "port" in data:
+        v = data["port"]
+        if type(v) is not int or not (1024 <= v <= 65535):
+            return None
+        upd["port"] = v
     if "name" in data:
         if not isinstance(data["name"], str) or len(data["name"]) > 80:
             return None
@@ -1350,8 +1216,8 @@ async def lan_set(request: Request):
         return _err(400, "bad_request")
     status, code = await run_in_threadpool(_configure, upd)
     if status:
-        if code == "no_private_network":
-            return _err(status, code, _unsafe_message(upd.get("allow_tailscale", S.lan.get("allow_tailscale")) is True))
+        if code == "no_tailscale":
+            return _err(status, code)
         port = upd.get("port", S.lan["port"])
         return _err(status, code, "포트 %d을(를) 다른 프로그램이 쓰고 있어요." % port)
     return await run_in_threadpool(_status)

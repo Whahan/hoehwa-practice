@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """Fake backend for developing / testing the phone link WITHOUT any model: same LAN layer as server.py (lan.py), canned answers.
 
-  .venv\\Scripts\\python.exe lan_stub_server.py --port 8830 [--tag w2] [--lan-bind 0.0.0.0] [--devices-file PATH]
-                                              [--lan-port 8840] [--lan-discovery-port 18776] [--lan-enabled]
+  .venv\\Scripts\\python.exe lan_stub_server.py --port 8862 [--tag w2] [--devices-file PATH] [--lan-port 8863] [--lan-enabled] [--no-hooks]
+
+  The phone link listens on this PC's Tailscale address. A stub runs on a PC without Tailscale, so it sets the test hooks
+  HOEHWA_TEST_HOOKS=1 HOEHWA_LAN_ASSUME_TAILSCALE=127.0.0.1 itself (unless the environment already has them, or --no-hooks is given):
+  the "Tailscale address" is then the loopback one.
 
   --port                 loopback HTTP port (127.0.0.1). Never the app's own server port.
-  --lan-port / --lan-discovery-port   what POST /lan {"enabled":true} binds when it names no port (defaults 8840 / 18776,
-                         NOT the real 8775 / 8776, so a stub never collides with the user's app)
+  --lan-port             what POST /lan {"enabled":true} binds when it names no port (default 8863, NOT the real 8775, so a stub
+                         never collides with the user's app)
   --lan-enabled          start with the phone link already on (like a saved "enabled": true)
   --devices-file         where tokens (SHA-256 only) are kept; default backend\\lan_devices-<tag>.json (git-ignored)
   --tag                  names the default devices file
@@ -33,6 +36,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+if "--no-hooks" not in sys.argv:
+    os.environ.setdefault("HOEHWA_TEST_HOOKS", "1")
+    os.environ.setdefault("HOEHWA_LAN_ASSUME_TAILSCALE", "127.0.0.1")
+
 import lan
 
 try:
@@ -44,16 +51,15 @@ except Exception:
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--port", type=int, required=True)
 ap.add_argument("--tag", default="")
-ap.add_argument("--lan-bind", default="0.0.0.0")
 ap.add_argument("--devices-file", default="")
-ap.add_argument("--lan-port", type=int, default=8840)
-ap.add_argument("--lan-discovery-port", type=int, default=18776)
+ap.add_argument("--lan-port", type=int, default=8863)
 ap.add_argument("--lan-enabled", action="store_true")
+ap.add_argument("--no-hooks", action="store_true", help="do not set the test hooks (the real Tailscale adapters decide)")
 ap.add_argument("--allow-real-ports", action="store_true", help="allow the app's real ports (never do this next to the app)")
 ARGS = ap.parse_args()
 APP_PORT = 8700 + 70    # the app's own backend port (written this way on purpose: tests must never mention or use it)
-if not ARGS.allow_real_ports and (ARGS.port == APP_PORT or ARGS.lan_port == lan.DEFAULT_LAN["port"] or ARGS.lan_discovery_port == lan.DEFAULT_LAN["discovery_port"]):
-    sys.exit("refusing the app's real ports (backend / phone link / discovery): pick other ports")
+if not ARGS.allow_real_ports and (ARGS.port == APP_PORT or ARGS.lan_port == lan.DEFAULT_LAN["port"]):
+    sys.exit("refusing the app's real ports (backend / phone link): pick other ports")
 
 log = logging.getLogger("stub")
 log.setLevel(logging.INFO)
@@ -61,20 +67,20 @@ _h = logging.StreamHandler(sys.stderr)
 _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
 log.addHandler(_h)
 
-CFG = {"lan": dict(lan.DEFAULT_LAN, enabled=bool(ARGS.lan_enabled), port=ARGS.lan_port, discovery_port=ARGS.lan_discovery_port)}
+CFG = {"lan": dict(lan.DEFAULT_LAN, enabled=bool(ARGS.lan_enabled), port=ARGS.lan_port)}
 
 
 @asynccontextmanager
 async def lifespan(app_):
     lan.start_if_enabled()
-    print("STUB_READY pid=%d port=%d lan_port=%d lan_discovery_port=%d lan_enabled=%s" % (
-        os.getpid(), ARGS.port, CFG["lan"]["port"], CFG["lan"]["discovery_port"], CFG["lan"]["enabled"]), flush=True)
+    print("STUB_READY pid=%d port=%d lan_port=%d lan_enabled=%s" % (
+        os.getpid(), ARGS.port, CFG["lan"]["port"], CFG["lan"]["enabled"]), flush=True)
     yield
     lan.shutdown()
 
 
 app = FastAPI(title="Phone link stub backend", lifespan=lifespan)
-lan.attach(app, CFG, lambda cfg: None, log, BASE, tag=ARGS.tag or None, devices_file=ARGS.devices_file or None, bind=ARGS.lan_bind,
+lan.attach(app, CFG, lambda cfg: None, log, BASE, tag=ARGS.tag or None, devices_file=ARGS.devices_file or None,
            persist=False, auto_start=True)
 
 

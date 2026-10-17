@@ -530,11 +530,11 @@ func _on_backend_status() -> void:
 		if _phone:
 			var pairing: bool = st == Backend.Status.NEEDS_PAIRING
 			_splash_title.text = "PC에 연결하지 못했어요" if failed else ("PC 연결이 필요해요" if pairing else "PC에 연결하는 중…")
-			_splash_msg.text = Backend.message if Backend.message != "" else ("같은 와이파이의 PC에서 회화 연습을 켜고 연결해 주세요." if pairing else "PC가 켜져 있고 같은 와이파이인지 확인하고 있어요.")
+			_splash_msg.text = Backend.message if Backend.message != "" else ("휴대폰에 Tailscale을 켜고, PC의 회화 연습에서 휴대폰 연결을 켠 뒤 연결해 주세요." if pairing else "PC가 켜져 있고 Tailscale이 연결돼 있는지 확인하고 있어요.")
 			_splash_bar.visible = not failed and not pairing
 			_splash_retry.visible = failed
 			_splash_find.visible = failed or pairing
-			_splash_find.text = "PC에 연결하기" if pairing else "PC 다시 찾기"
+			_splash_find.text = "PC에 연결하기" if pairing else "다시 연결"
 		else:
 			_splash_title.text = "AI 엔진을 시작하지 못했어요" if failed else "AI 엔진 준비 중…"
 			_splash_msg.text = Backend.message if Backend.message != "" else "처음에는 모델을 불러오느라 30초 정도 걸릴 수 있어요."
@@ -750,7 +750,7 @@ func _build_splash() -> void:
 	_splash_retry.pressed.connect(func() -> void: Backend.start())
 	row.add_child(_splash_retry)
 	if _phone:
-		_splash_find = UI.button("PC 다시 찾기", "default", Pal.INK, 46)
+		_splash_find = UI.button("다시 연결", "default", Pal.INK, 46)
 		_splash_find.pressed.connect(_open_connect_view)
 		row.add_child(_splash_find)
 	var skip := UI.button("연결 없이 계속" if _phone else "엔진 없이 계속", "default", Pal.INK, 46)

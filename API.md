@@ -252,19 +252,20 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 - 오류: 400(`pending`이 비었음), 404(알 수 없는 미션), 502(AI가 실패하거나 형식이 틀림 — 앱은 규칙 결과를 그대로 쓴다), 503(AI 없음).
 
 ## 휴대폰 연결 (/hello /pair /lan*)
-같은 와이파이의 안드로이드 폰이 이 PC의 백엔드를 쓰게 한다. 구현은 `backend/lan.py`, 설계는 `docs/android_remote_design.md` §3. **기본은 꺼짐**이다.
+안드로이드 폰이 **Tailscale 로** 이 PC의 백엔드를 쓰게 한다(2026-10-17부터 Tailscale 전용: 같은 와이파이·USB 테더링 같은 사설 네트워크 연결과 UDP 자동 찾기는 없다). 구현은 `backend/lan.py`, 설계는 `docs/android_remote_design.md` §3. **기본은 꺼짐**이다.
 
 ### 구조
-- 켜면 `127.0.0.1:<port>`(위 "공통")는 그대로 두고, **추가 리스너** `0.0.0.0:<lan.port>`(기본 8775)가 한 프로세스 안의 보조 스레드에서 같은 앱을 서비스한다. 서버 재시작은 없다. 끄면 그 포트가 바로 닫힌다.
+- 켜면 `127.0.0.1:<port>`(위 "공통")는 그대로 두고, **추가 리스너**가 **이 PC의 Tailscale IPv4 주소(들)`:<lan.port>`(기본 8775)에만** 바인딩해 한 프로세스 안의 보조 스레드에서 같은 앱을 서비스한다. `0.0.0.0`에는 바인딩하지 않는다(같은 와이파이·LAN 주소로는 포트가 열려 있지 않다). 서버 재시작은 없다. 끄면 그 포트가 바로 닫힌다.
 - **인증은 리스너 기준이다.** 추가 리스너로 들어온 요청은 소스 IP가 127.0.0.1이어도 전부 `Authorization: Bearer hp1_…` 토큰이 필요하다. 루프백 리스너(PC 앱)는 지금처럼 토큰이 없다.
 - 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`, 그리고 영어 v1.1의 `GET /practice/ping` `GET /practice/sentences` `GET /practice/phonemes` `GET /practice/phoneme` `GET /missions` `POST /missions/check` `POST /missions/judge`(모두 23개). 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
-- **출발지 주소 필터**: 추가 리스너는 루프백 · 사설(10/8, 172.16/12, 192.168/16) · 링크로컬(169.254/16, fe80::/10) · IPv6 ULA(fc00::/7)에서 온 연결만 받는다. 그 밖(인터넷의 공인 주소)에서 온 연결은 **응답 없이 바로 끊는다**(`/hello`도 안 보인다). CGNAT 100.64/10 출발지는 (a) 레거시 고급 옵션 `lan.allow_cgnat`이 true이거나, (b) **`lan.allow_tailscale`이 true이고 그 연결이 들어온 이 PC 쪽 주소(local, TCP의 `sockname` / ASGI `scope["server"]`)가 이 PC의 Tailscale 주소 안에 있을 때**만 받는다. 통신사 CGNAT 이웃이 PC의 통신사 쪽 주소로 들어오거나 인터넷에서 100.x 출발지를 위조해 보내면 local이 Tailscale 주소가 아니므로 거부(무응답)된다. `::ffff:100.x` 형태(IPv4-mapped)는 출발지·local 모두 풀어서 비교한다. UDP 디스커버리는 local을 모르므로 `allow_cgnat`일 때만 CGNAT를 받는다(Tailscale은 브로드캐스트를 싣지 않아 자동 찾기는 원래 안 된다: 폰에서 주소를 직접 입력).
-- **Tailscale 주소**: `lan.allow_tailscale`(기본 false)을 켜면 Tailscale 망(IPv4 100.64.0.0/10)으로도 연결을 받을 수 있다. 이 PC의 Tailscale 주소는 Windows `GetAdaptersAddresses`(ctypes, 새 의존성 없음)로 찾는다: 이름이나 설명에 `Tailscale`(대소문자 무시)이 들어가고 **켜져 있는(up) 어댑터**의 100.64/10 IPv4만, 최대 3개. 이름이 Ethernet 등인 어댑터의 100.x(통신사 CGNAT)는 Tailscale로 치지 않는다. 탐지 결과는 5초 캐시한다. 실패하거나 Windows가 아니면 빈 목록이다. Tailscale의 IPv6(`fd7a:115c:a1e0::/48`)는 출발지 필터에서는 이미 ULA(fc00::/7)로 허용되지만, 리스너가 IPv4 전용(`0.0.0.0`)이라서 **IPv6 주소는 표시하지 않는다**.
-- **안전한 망이 없으면 켜지지 않는다**: 이 PC에 사설 IPv4 주소가 하나도 없고(공유기 없이 인터넷에 직접 연결) Tailscale로도 못 켜면(`allow_tailscale`이 꺼져 있거나 Tailscale 주소가 없으면) `POST /lan {"enabled": true}`는 409 `no_private_network`이고 아무것도 열지 않는다. `code`는 항상 `no_private_network`이고 `error` 문구만 상황별이다: `allow_tailscale` 꺼짐이면 "이 PC는 공유기 없이 … 휴대폰 핫스팟을 쓰세요. Tailscale 을 쓴다면 '고급'에서 'Tailscale 로 연결 허용'을 켜세요.", 켜졌는데 Tailscale 주소가 없으면 "이 PC에서 Tailscale 주소를 찾지 못했어요. Tailscale 을 켜고 로그인했는지 확인해 주세요."(`GET /lan`의 `network_reason`도 같은 문구). 판정은 **갱신 후 값**으로 하므로 `{"enabled": true, "allow_tailscale": true}` 한 번에 켤 수 있다. 시작할 때 저장된 `enabled`가 true여도 같은 판정(저장된 `allow_tailscale` 반영)을 하고, 안전하지 않으면 꺼진 채 시작한다(`error`에 이유, 저장된 설정은 그대로). 공인 IP는 어떤 응답에도 넣지 않는다.
-- **켜진 채 안전한 망을 잃으면 링크가 꺼진다**: 이미 켜져 있을 때 갱신 결과가 안전하지 않게 되면(예: 사설 주소가 없는 PC에서 `allow_tailscale`을 끔) 두 포트를 닫고 코드를 폐기하고 `enabled: false`를 저장한 뒤, **200**과 새 상태(`enabled: false`, `listening: false`, `error`에 이유)를 돌려준다. 등록 기기는 유지된다.
+- **출발지 주소 필터**: 추가 리스너는 **루프백과 Tailscale 범위**(IPv4 100.64.0.0/10, IPv6 `fd7a:115c:a1e0::/48`)에서 온 연결만 받는다. 사설(10/8, 172.16/12, 192.168/16)·링크로컬·그 밖의 ULA·공인 주소에서 온 연결은 **응답 없이 바로 끊는다**(`/hello`도 안 보인다). `::ffff:100.x` 형태(IPv4-mapped)는 풀어서 비교한다.
+- **Tailscale 주소 탐지**: Windows `GetAdaptersAddresses`(ctypes, 새 의존성 없음)로 찾는다: 이름이나 설명에 `Tailscale`(대소문자 무시)이 들어가고 **켜져 있는(up) 어댑터**의 100.64/10 IPv4만, 최대 3개. 이름이 Ethernet 등인 어댑터의 100.x(통신사 CGNAT)는 Tailscale로 치지 않는다. 켤 때마다 새로 탐지하고(`GET /lan`의 표시용 값은 5초 캐시), 실패하거나 Windows가 아니면 빈 목록이다. 리스너는 IPv4 전용이라 IPv6 주소는 표시하지 않는다.
+- **Tailscale 주소가 없으면 켜지지 않는다**: `POST /lan {"enabled": true}`는 409 `no_tailscale`이고 아무것도 열지 않는다(`error`: "이 PC에서 Tailscale이 꺼져 있거나 설치되지 않았어요. tailscale.com 에서 설치하고 휴대폰과 같은 구글 계정으로 로그인한 뒤 다시 켜 주세요."; `GET /lan`의 `network_reason`도 같은 문구). 탐지한 주소에 bind 할 수 없을 때(주소가 사라짐)도 같은 409다. 시작할 때 저장된 `enabled`가 true여도 같은 판정을 하고, 주소가 없으면 꺼진 채 시작한다(`error`에 이유, 저장된 설정은 그대로).
+- **켜진 채 Tailscale 주소가 사라지면 링크가 꺼진다**: 리스너가 5초마다 자기 주소가 아직 이 PC의 Tailscale 주소인지 확인하고, 하나도 남지 않았으면 포트를 닫고 코드를 폐기한 뒤 `enabled: false`(저장하지 않음)와 `error`("이 PC의 Tailscale 연결이 사라져서 휴대폰 연결을 껐어요. …")로 보여 준다. 등록 기기는 유지된다. 다음에 켤 때 주소를 다시 탐지한다.
+- **UDP 디스커버리는 없다**: 이 서버는 UDP 소켓을 열지 않는다. 폰은 PC 화면에 나온 Tailscale 주소(100.x.y.z)를 직접 입력한다. 예전 `config.json`의 `discovery`·`discovery_port`·`allow_cgnat`·`allow_tailscale` 키와 `POST /lan`의 같은 키는 오류 없이 무시된다(저장할 때 사라진다).
 - 토큰은 `hp1_` + base64url(난수 32바이트) = 47자. 서버는 **SHA-256 해시만** `backend/lan_devices.json`(git·배포 제외; 시험 서버는 `lan_devices-<tag>.json`)에 저장하고, 토큰·연결 코드·`Authorization` 헤더는 로그에 남기지 않는다. 기기는 최대 8대. 파일이 깨졌으면 `*.bad`로 옮기고 빈 목록으로 시작한다(예전 토큰은 모두 무효).
 - 본문은 16 MB까지(로그인 전 경로 `/pair`·`/lan/proof`는 4 KB). 넘으면 413 `too_large`. 같은 IP에서 틀린 토큰이 10분에 30번이면 그 IP의 토큰 요청은 429 `rate_limited`(IP 표는 2000개까지). 요청을 다 보내지 않고 멈추면 로그인 전 요청은 10초, 로그인한 업로드는 120초 뒤 408 `request_timeout`으로 끊는다.
-- `config.json`: `"lan": {"enabled": false, "port": 8775, "discovery": true, "discovery_port": 8776, "name": "", "allow_cgnat": false, "allow_tailscale": false}`. 켠 상태는 재시작 뒤에도 유지된다(포트가 사용 중이면 꺼진 채 시작). 토큰·코드·기기 목록은 넣지 않는다. 시험 서버(`--port`)는 config.json의 `lan.enabled`로 시작하지 않고 설정을 저장하지 않는다. 시험용 서버 인자: `--lan-bind`(기본 `0.0.0.0`), `--devices-file`.
+- `config.json`: `"lan": {"enabled": false, "port": 8775, "name": ""}`. 켠 상태는 재시작 뒤에도 유지된다(포트가 사용 중이거나 Tailscale 주소가 없으면 꺼진 채 시작). 토큰·코드·기기 목록은 넣지 않는다. 시험 서버(`--port`)는 config.json의 `lan.enabled`로 시작하지 않고 설정을 저장하지 않는다. 시험용 서버 인자: `--devices-file`(`--lan-bind`는 없어졌다).
 - 모든 오류 본문은 `{"error": "한국어 문장", "code": "기계가 읽는 코드"}`이다. `code`는 이 절의 엔드포인트와 LAN 게이트에서만 붙고, 기존 엔드포인트의 오류 본문은 그대로다.
 
 ### 엔드포인트
@@ -272,11 +273,11 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 |---|---|---|---|
 | `GET /hello` | 둘 다 | 불필요 | → `{"hoehwa": 1, "name": "MYPC", "pairing_open": bool}` |
 | `POST /pair` | LAN | 불필요 | `{"code": "482913", "device_name": "Pixel 8"}` (코드는 숫자 6자리 문자열, 이름 1~40자) → `{"token": "hp1_…", "device_id": "a1b2c3d4", "server_name": "MYPC", "port": 8775}` |
-| `POST /lan/proof` | LAN | 불필요 | `{"device_id", "nonce": "<hex 8~64자>"}` → `{"proof": "<hex>"}` = HMAC-SHA256(키 = 토큰의 SHA-256 32바이트, 메시지 = nonce UTF-8). IP가 바뀐 PC를 다시 찾았을 때 토큰을 보내기 전에 진짜 그 PC인지 확인한다 |
+| `POST /lan/proof` | LAN | 불필요 | `{"device_id", "nonce": "<hex 8~64자>"}` → `{"proof": "<hex>"}` = HMAC-SHA256(키 = 토큰의 SHA-256 32바이트, 메시지 = nonce UTF-8). 토큰을 보내기 전에 진짜 그 PC인지 확인하는 데 쓸 수 있다(폰 앱은 자동 찾기가 없어 지금은 쓰지 않는다) |
 | `GET /lan/me` | LAN | 필요 | → `{"device_id", "name", "server_name"}` |
 | `POST /lan/unpair` | LAN | 필요 | → `{"ok": true}` (자기 기기만 삭제) |
 | `GET /lan` | 루프백만 | – | → 아래 상태 |
-| `POST /lan` | 루프백만 | – | `{"enabled"?, "discovery"?, "port"?, "discovery_port"?, "name"?}` (`allow_cgnat`·`allow_tailscale`은 불리언이고 아니면 400 `bad_request`, 포트 1024~65535, 모두 선택) → 상태. 포트를 먼저 bind 해 보고 실패하면 아무것도 바꾸지 않고 409 `lan_port_busy` |
+| `POST /lan` | 루프백만 | – | `{"enabled"?, "port"?, "name"?}` (포트 1024~65535, 모두 선택, 다른 키는 무시) → 상태. 켜기는 Tailscale 주소가 없으면 409 `no_tailscale`, 포트를 먼저 bind 해 보고 실패하면 아무것도 바꾸지 않고 409 `lan_port_busy` |
 | `POST /lan/code` | 루프백만 | – | `{}` → `{"code": "482913", "expires_in": 300}` (새 코드, 잠금 해제) · `{"cancel": true}` → `{"ok": true}` |
 | `POST /lan/devices/revoke` | 루프백만 | – | `{"id"}` 또는 `{"all": true}` → `{"ok": true, "revoked": n}` |
 
@@ -284,19 +285,16 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 
 `GET /lan` (토큰·해시는 어떤 응답에도 없다):
 ```json
-{"enabled": true, "listening": true, "port": 8775, "bind": "0.0.0.0", "discovery": true, "discovery_listening": true, "discovery_port": 8776,
- "name": "MYPC", "addresses": ["192.168.0.12"],
+{"enabled": true, "listening": true, "port": 8775, "bind": ["100.101.102.103"], "name": "MYPC",
+ "tailscale_addresses": ["100.101.102.103"], "network_safe": true, "network_reason": "",
  "pairing": {"active": true, "code": "482913", "expires_in": 274, "locked": false, "attempts_left": 5},
- "devices": [{"id": "a1b2c3d4", "name": "Pixel 8", "created": "ISO", "last_seen": "ISO", "last_ip": "192.168.0.23"}],
- "error": "", "network_safe": true, "network_reason": "", "network_via": "private", "allow_cgnat": false,
- "allow_tailscale": false, "tailscale_addresses": ["100.101.102.103"]}
+ "devices": [{"id": "a1b2c3d4", "name": "Pixel 8", "created": "ISO", "last_seen": "ISO", "last_ip": "100.101.102.50"}],
+ "error": ""}
 ```
-- `network_safe`: 이 PC에서 켤 수 있는가(사설 IPv4가 있거나, `allow_tailscale`이 켜져 있고 Tailscale 주소가 있음). false면 `network_reason`에 한국어 설명(켜기는 409 `no_private_network`; 문구는 위 "안전한 망이 없으면 켜지지 않는다").
-- `network_via`: 켤 수 있는 근거. `"private"`(사설 IPv4가 있음; 시험 훅 `HOEHWA_LAN_ASSUME_PRIVATE=1`도 이쪽) · `"tailscale"`(사설 주소는 없고 `allow_tailscale` + Tailscale 주소) · `""`(근거 없음, `network_safe`가 false). 사설 주소도 있으면 `"private"`이다.
-- `allow_tailscale`: 설정값(불리언). `tailscale_addresses`: 이 PC의 Tailscale IPv4(100.64.0.0/10)만 최대 3개. `allow_tailscale`과 상관없이 **항상 계산**한다(폰 앱 주소 칸에 입력할 값을 PC 화면이 미리 보여 주기 위해). IPv6는 넣지 않는다.
-- `addresses`: 이 PC의 사설 IPv4(10.x, 172.16~31.x, 192.168.x)만 최대 3개(링크로컬·루프백 제외). 공인 주소와 Tailscale(100.x) 주소는 넣지 않으므로 사설 주소가 없는 PC에서는 빈 배열이다(그래도 Tailscale이면 `network_safe`는 true일 수 있다). 공인 주소는 `addresses`·`tailscale_addresses` 어디에도 나오지 않는다.
-- `pairing.code`는 `active`일 때만 문자열, 아니면 `null`. `error`는 치명적이지 않은 문제의 한국어 설명(예: 자동 찾기 포트 사용 중이면 LAN은 켜지고 `discovery_listening: false`).
-- 켜기(`enabled: true`): 새 코드 생성. 끄기: 두 포트를 닫고 코드를 폐기하며 **등록 기기는 유지**한다.
+- `tailscale_addresses`: 이 PC의 Tailscale IPv4(100.64.0.0/10)만 최대 3개(IPv6·공인 주소는 어떤 응답에도 없다). `network_safe`: 켤 수 있는가(= Tailscale 주소가 있음). false면 `network_reason`에 위 안내 문구(켜기는 409 `no_tailscale`).
+- `bind`: 리스너가 실제로 바인딩한 주소 목록(꺼져 있으면 `[]`). 항상 Tailscale 주소이고 `0.0.0.0`이 아니다.
+- `pairing.code`는 `active`일 때만 문자열, 아니면 `null`. `error`는 치명적이지 않은 문제의 한국어 설명(예: Tailscale 주소가 사라져 링크가 꺼짐).
+- 켜기(`enabled: true`): 새 코드 생성. 끄기: 포트를 닫고 코드를 폐기하며 **등록 기기는 유지**한다.
 
 ### 페어링 코드
 숫자 6자리(앞 0 유지), 300초 유효, 1회용. 틀린 코드는 5번까지 `401 code_invalid`(본문에 `attempts_left` 4,3,2,1,0)이고 **5번째 실패에서 코드를 폐기하고 잠근다**. 6번째부터는 맞는 코드를 보내도 `429 pair_locked`. `POST /lan/code`나 껐다 켜기로 푼다. 형식 오류(`400 code_format`, `400 device_name_format`)와 코드 없음·만료·이미 사용(`410 no_active_code`)은 실패 횟수에 세지 않는다. 기기 8대가 차면 `409 device_limit`(코드는 소모하지 않는다).
@@ -311,19 +309,15 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 | 403 | `lan_forbidden` · `local_only` · `bad_origin` | 허용 목록 밖 경로 · LAN 리스너로 온 관리 요청 · 루프백 전용 엔드포인트에 Host/Origin/Content-Type이 맞지 않는 요청(웹 페이지가 보낸 것) |
 | 404 | `device_not_found` | 해제·증명할 기기 없음 |
 | 408 | `request_timeout` | 요청을 제때 다 보내지 않음 |
-| 409 | `lan_port_busy` · `lan_off` · `device_limit` · `no_private_network` | 포트 bind 실패 · 꺼진 상태에서 `/lan/code` · 기기 8대 초과 · 이 PC에 사설 IPv4 주소도 쓸 수 있는 Tailscale 주소도 없어 켤 수 없음 |
+| 409 | `lan_port_busy` · `lan_off` · `device_limit` · `no_tailscale` | 포트 bind 실패 · 꺼진 상태에서 `/lan/code` · 기기 8대 초과 · 이 PC에 Tailscale 주소가 없어 켤 수 없음 |
 | 410 | `no_active_code` | 코드 없음·만료·사용됨 |
 | 413 | `too_large` | 본문 16 MB(로그인 전 경로는 4 KB) 초과 |
 | 429 | `pair_locked` · `rate_limited` | 코드 5번 실패 뒤 · 같은 IP의 틀린 토큰 30회/10분 |
 | 500 | `store_failed` | 기기 파일을 쓰지 못함(토큰을 내주지 않는다) |
 
-### UDP 자동 찾기
-UDP `0.0.0.0:<lan.discovery_port>`(기본 8776)는 **폰 연결이 켜져 있고 `discovery`가 true일 때만** 열린다(끄면 닫혀서 다른 프로그램이 쓸 수 있다). 요청은 UTF-8 JSON 128바이트 이하 `{"hoehwa": 1, "op": "discover"}`(키가 정확히 이 둘)일 때만 답한다. 답은 보낸 곳으로 유니캐스트 `{"hoehwa": 1, "op": "here", "name": "MYPC", "port": 8775}` — 키는 정확히 이 4개(IP·버전·기기 목록 없음). 모르는 형식·큰 패킷·JSON 아님·사설/루프백/링크로컬이 아닌 송신지는 **무응답**이고, 응답은 초당 10개까지다. 폰은 `255.255.255.255`와 각 사설 IP의 `/24` 브로드캐스트(`a.b.c.255`)로 보내고 2.5초 기다린다.
-
 ### 알아 둘 것
-- 폰과 PC 사이는 평문 HTTP다. 공용 와이파이에서는 켜지 말고, 안 쓸 때는 꺼 둔다(앱의 휴대폰 연결 카드에 같은 경고가 있다). Windows 방화벽의 허용 창은 사용자가 누르며, 이 프로그램은 방화벽 설정을 바꾸지 않는다.
-- Tailscale 로 쓰려면 PC와 휴대폰 모두 Tailscale 앱을 깔고 **같은 계정**으로 로그인해야 한다. 같은 Tailscale 계정(테일넷)에 들어온 기기는 이 PC의 연결 포트에 닿을 수 있다(연결 코드나 토큰이 있어야 쓸 수 있다). 계정을 남과 공유하지 않는다. 통신은 Tailscale 이 암호화한다.
-- 시험: `backend/lan_stub_server.py`(모델 없이 뜨는 가짜 서버, 같은 `lan.py`를 쓴다)와 `backend/test_lan.py`. 시험 훅(`HOEHWA_TEST_HOOKS=1`일 때만 읽힌다): `HOEHWA_LAN_ASSUME_PRIVATE=0|1`(사설 주소가 있는 척/없는 척), `HOEHWA_LAN_FAKE_TAILSCALE=100.101.102.103[,…]`(환경변수가 **있으면** 빈 문자열이어도 실제 어댑터 탐지 대신 쉼표로 나눈 값 중 100.64/10 IPv4만 쓴다; 빈 문자열 = Tailscale 없음).
+- 연결은 Tailscale 전용이다. PC와 휴대폰 모두 Tailscale 앱(tailscale.com, 개인용 무료 요금제가 있다 — 조건은 공식 사이트에서 확인)을 깔고 **같은 계정**(예: 같은 구글 계정)으로 로그인해야 한다. 같은 Tailscale 계정(테일넷)에 들어온 기기는 이 PC의 연결 포트에 닿을 수 있다(연결 코드나 토큰이 있어야 쓸 수 있다). 계정을 남과 공유하지 않고, 안 쓸 때는 끈다. 통신은 Tailscale 이 암호화한다. Windows 방화벽이 허용 창을 띄울 수 있으며, 이 프로그램은 방화벽 설정을 바꾸지 않는다.
+- 시험: `backend/lan_stub_server.py`(모델 없이 뜨는 가짜 서버, 같은 `lan.py`를 쓴다)와 `backend/test_lan.py`. 시험 훅(`HOEHWA_TEST_HOOKS=1`일 때만 읽힌다): `HOEHWA_LAN_ASSUME_TAILSCALE=127.0.0.1[,100.101.102.103…]`(환경변수가 **있으면** 빈 문자열이어도 실제 어댑터 탐지 대신 쉼표로 나눈 값 중 100.64/10 IPv4와 루프백 127.x만 쓴다. 그래서 Tailscale 이 없는 PC에서도 루프백에 바인딩해 시험할 수 있다. 빈 문자열 = Tailscale 없음), `HOEHWA_LAN_WATCH_SECONDS`(감시 간격 초), `HOEHWA_LAN_CODE_TTL`, `HOEHWA_LAN_PREAUTH_TIMEOUT`·`HOEHWA_LAN_BODY_TIMEOUT`·`HOEHWA_LAN_HEADER_TIMEOUT`.
 
 ## 학습 단계 기준 (stage)
 | stage | 영어 | 일본어 |

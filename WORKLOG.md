@@ -9,7 +9,7 @@
 
 ## 남은 작업 (위에서부터 순서대로)
 
-**⏸ 사용자 요청으로 중단 (2026-10-17 18:30)** — Tailscale 전용 전환 작업을 멈춤. 자동 이어하기 세션은 이 작업을 이어서 하지 말 것(사용자가 다시 지시할 때까지). 반쯤 된 변경은 패치로 보관: `D:\Ai\언어pp_wt	ailscale_only_wip.patch`(같은 파일이 scratchpad `w_tsonly\` 에도), main 작업 폴더는 마지막 커밋(a38d3fb) 상태로 되돌림. 이어서 할 때: `git apply D:\Ai\언어pp_wt	ailscale_only_wip.patch` 후 남은 부분(server.py 연결·stub·Godot 화면·문서·시험) 진행.
+**✔ Tailscale 전용 전환 완료 (2026-10-17)** — 리스너는 이 PC 의 Tailscale IPv4(≤3)에만 바인딩, 출발지는 루프백+100.64/10+fd7a:115c:a1e0::/48 만, Tailscale 없으면 409 no_tailscale, UDP 자동 찾기 제거, 주소가 사라지면 감시 스레드가 포트를 닫음, PC 카드·폰 연결 화면·문서 Tailscale 기준. test_lan 194/194, 보안 검토 합격(우회 40여 개·변이 8종 모두 차단). 1.1.1 후보: 감시/부팅 때 메모리에서만 끈 enabled=false 가 다른 설정 저장 때 함께 저장될 수 있음(다시 켜면 됨), test_lan 이 리스너 시작 실패 시 합계 줄 없이 중단. 다음: 진짜 키 APK 재빌드 → 사용자 Tailscale 설치·키 백업·실기 시험 → APK 공개 + PC 1.1.1(사용자 확인).
 
 **[진행 중 2026-10-16 21:10] 안드로이드 A안(PC 연결형)** — 사용자 요청. 폰 앱은 Godot 화면만, 같은 와이파이의 PC 백엔드에 페어링 코드+토큰으로 연결. designer 설계 중 → `docsndroid_remote_design.md`. 그다음: 설계 확정 → 다운로드 승인(Godot 안드로이드 export 템플릿, platform-tools, 필요 시 JDK 17) → W1 백엔드 / W2 Godot 네트워크·녹음·PC 설정 / W3 폰 레이아웃·export 병렬 → reviewer → 실제 폰 시험 → 커밋·푸시 → (사용자 확인 후) 릴리스에 APK.
   - 2026-10-16 22:30 안드로이드 설계 완료(`docsndroid_remote_design.md`, §17.0 결정). Phase 0 스텁 커밋 bb5049e(푸시). worktree `D:\Ai\언어pp_wt\w1~w4`(브랜치 android/w1~w4)에서 W1 백엔드 LAN·W2 네트워크/녹음/연결 화면·W3 폰 레이아웃·W4 설정/export/서명 스크립트 동시 진행(커밋은 각 브랜치, push 금지). 진짜 릴리스 키스토어는 사용자 확인 후. 병합 순서: W1·W2·W4 → W3 → 영어 v1.1 T5 연결.

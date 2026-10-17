@@ -7,7 +7,7 @@ enum Status { IDLE, CHECKING, STARTING, READY, FAILED, NEEDS_PAIRING }
 
 const MAX_WAIT_SECONDS := 90
 const HEALTH_REFRESH_SECONDS := 15.0
-const UNREACHABLE_TEXT := "PC에 닿지 않아요. PC가 켜져 있고 같은 와이파이인지, PC 앱의 '휴대폰 연결'이 켜져 있는지 확인해 주세요."
+const UNREACHABLE_TEXT := "PC에 닿지 않아요. 두 기기 모두 Tailscale이 켜져 있고 같은 계정인지, PC의 휴대폰 연결이 켜져 있는지 확인해 주세요."
 const REVOKED_TEXT := "PC에서 이 휴대폰의 연결이 해제됐어요. 다시 연결해 주세요."
 
 var status: Status = Status.IDLE
@@ -236,30 +236,7 @@ func _start_remote() -> void:
 		return
 	if status == Status.NEEDS_PAIRING:
 		return   # the PC answered 401: the pairing was revoked (see _on_auth_failed)
-	# The PC may have a new IP address: look for it again and accept it only if it proves it knows our token.
-	_set_status(Status.CHECKING, "PC를 다시 찾는 중…")
-	var found: Array = await RemoteLink.discover(get_tree())
-	if status == Status.NEEDS_PAIRING:
-		return
-	var want_name: String = str(conn.get("server_name", ""))
-	for f in found:
-		if want_name == "" or str(f["name"]) != want_name:
-			continue
-		var new_base: String = str(f["base_url"])
-		if new_base == str(conn["base_url"]):
-			continue
-		if not await RemoteLink.proof_ok(new_base, conn):
-			continue
-		Api.set_remote(new_base, str(conn["token"]))
-		if await check_health():
-			conn["base_url"] = new_base
-			RemoteLink.save(conn, Api.remote_path)
-			_fail_streak = 0
-			_set_status(Status.READY)
-			Store.refresh_curriculum()
-			return
-	if status == Status.NEEDS_PAIRING:
-		return
+	# No discovery (the link is Tailscale only): the saved address is the only one we try.
 	Api.set_remote(str(conn["base_url"]), str(conn["token"]))
 	health = {}
 	_set_status(Status.FAILED, UNREACHABLE_TEXT)
