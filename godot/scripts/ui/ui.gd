@@ -137,6 +137,30 @@ static func on_tap(c: Control, cb: Callable) -> void:
 				cb.call())
 
 
+## Connects RichTextLabel.meta_clicked to `cb(meta)`. Phone: a click that ends a drag (the finger moved more than
+## PhoneLayout.TAP_SLOP since the press, i.e. the page was scrolled) is ignored, so scrolling over a word or a link
+## does not select it on lift-off. PC: plain connect.
+static func on_meta_click(rtl: RichTextLabel, cb: Callable) -> void:
+	if not Platform.is_phone():
+		rtl.meta_clicked.connect(cb)
+		return
+	var st := {"start": Vector2.ZERO, "moved": false}
+	rtl.gui_input.connect(func(ev: InputEvent) -> void: # the signal runs before the label emits meta_clicked
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			var mb := ev as InputEventMouseButton
+			if mb.pressed:
+				st["start"] = mb.global_position
+				st["moved"] = false
+			elif (mb.global_position - (st["start"] as Vector2)).length() > PhoneLayout.TAP_SLOP:
+				st["moved"] = true
+		elif ev is InputEventMouseMotion and ((ev as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			if ((ev as InputEventMouseMotion).global_position - (st["start"] as Vector2)).length() > PhoneLayout.TAP_SLOP:
+				st["moved"] = true)
+	rtl.meta_clicked.connect(func(meta: Variant) -> void:
+		if not st["moved"]:
+			cb.call(meta))
+
+
 static func spacer() -> Control:
 	var c := Control.new()
 	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -108,6 +108,8 @@ func _ready() -> void:
 
 	await _nested_test()
 	await _gesture_fixture_test()
+	await _reader_regression()
+	await _recorder_regression()
 	for sc in _scenarios():
 		await _run_scenario(sc)
 
@@ -869,11 +871,11 @@ func _nested_test() -> void:
 # ---------------------------------------------------------------- gestures on a synthetic page
 
 ## Drags the finger from `from` by `total` in steps of about DRAG_STEP; returns the end position (still down).
-func _swipe(from: Vector2, total: Vector2) -> Vector2:
+func _swipe(from: Vector2, total: Vector2, steps: int = 0) -> Vector2:
 	var pos: Vector2 = from
 	_touch(pos, true)
 	await get_tree().process_frame
-	var n: int = maxi(1, int(maxf(absf(total.x), absf(total.y)) / DRAG_STEP))
+	var n: int = steps if steps > 0 else maxi(1, int(maxf(absf(total.x), absf(total.y)) / DRAG_STEP))
 	var step: Vector2 = total / float(n)
 	for i in n:
 		pos += step
@@ -1006,6 +1008,196 @@ func _gesture_fixture_test() -> void:
 	le.release_focus()
 	holder.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- reader words and the record button
+
+func _rec_reset() -> void:
+	if Recorder.recording:
+		Recorder.cancel()
+	Recorder.stopping = false
+	await _frames(5)
+
+
+## A drag that starts on a word must scroll the reader and not select the word on lift-off (meta_clicked);
+## a short tap still selects.
+func _reader_regression() -> void:
+	print("[reader: drag over a word]")
+	var rv: ReadingView = main_node.views["reading"]
+	main_node.show_view("reading")
+	rv.storage_dir = TEST_READING
+	rv.auto_fetch = false
+	rv.glosses.clear()
+	var rdata: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/sample_reading_analyze.json"))
+	var rtext: String = ""
+	for t in rdata["tokens"]:
+		rtext += str(t["t"])
+	rtext = rtext + " " + rtext + " " + rtext # long enough to scroll 150 px both ways
+	var rd: Dictionary = rv.new_doc("Rain", "en", rtext)
+	rd["id"] = "tt8"
+	rv.save_doc(rd)
+	rv.open_doc(rd)
+	rv.set_analysis(rdata, false)
+	rv.apply_glosses(JSON.parse_string(FileAccess.get_file_as_string("res://tests/sample_reading_gloss.json")))
+	await _frames(15)
+	rv.close_panel()
+	await _frames(5)
+	var rtl: RichTextLabel = rv._rtl
+	var sc: ScrollContainer = rv._text_scroll
+	var r: Rect2 = rtl.get_global_rect().intersection(sc.get_global_rect())
+	var found := Vector2(-1, -1)
+	var y: float = r.position.y + 15.0
+	while y < r.end.y - 5.0 and found.x < 0:
+		var x: float = r.position.x + 10.0
+		while x < r.end.x - 5.0 and found.x < 0:
+			await _tap(Vector2(x, y))
+			if rv.selected >= 0:
+				found = Vector2(x, y)
+			x += 12.0
+		y += 14.0
+	ok(found.x >= 0, "reader: a tap on a word selects it (at %s)" % str(found))
+	if found.x < 0:
+		return
+	rv.close_panel()
+	await _frames(5)
+	rv.selected = -1
+	ok(_max_scroll(sc) >= 300, "reader: the text scrolls (range %d)" % _max_scroll(sc))
+	# a short tap with a 6 px wobble still selects
+	var end: Vector2 = await _swipe(found, Vector2(0, -6))
+	_touch(end, false)
+	await _frames(4)
+	ok(rv.selected >= 0, "reader: a tap with a 6 px wobble selects the word (%d)" % rv.selected)
+	rv.close_panel()
+	rv.selected = -1
+	await _frames(5)
+	# a scrolling drag up, lifted over a word
+	sc.scroll_vertical = 0
+	await _frames(3)
+	var v0: int = sc.scroll_vertical
+	end = await _swipe(found, Vector2(0, -150))
+	var moved: int = sc.scroll_vertical - v0
+	_touch(end, false)
+	await _frames(5)
+	ok(moved >= 100 and rv.selected == -1, "reader: drag up from a word scrolls (%d px) and selects nothing (selected=%d)" % [moved, rv.selected])
+	await _settle(sc)
+	rv.close_panel()
+	rv.selected = -1
+	# a scrolling drag down
+	sc.scroll_vertical = 250
+	await _frames(3)
+	v0 = sc.scroll_vertical
+	end = await _swipe(found, Vector2(0, 150))
+	moved = v0 - sc.scroll_vertical
+	_touch(end, false)
+	await _frames(5)
+	ok(moved >= 100 and rv.selected == -1, "reader: drag down from a word scrolls (%d px) and selects nothing (selected=%d)" % [moved, rv.selected])
+	await _settle(sc)
+	rv.close_panel()
+	rv.selected = -1
+	rv.back_to_library()
+	await _frames(3)
+
+
+## A scroll drag that starts on the record button must not leave a recording running.
+func _recorder_regression() -> void:
+	print("[recorder button: drag, tap, hold]")
+	var old_mode: String = Recorder.mode_override
+	var old_src: Callable = Recorder.test_audio_source
+	Recorder.mode_override = "phone"
+	Recorder.test_audio_source = func() -> AudioStreamWAV: return WavUtil.sine(1.0, 48000, 440.0, 0.5, true)
+	var holder := Control.new()
+	holder.size = SCREEN
+	add_child(holder)
+	var page := PageScroll.new(960.0)
+	page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.add_child(page)
+	for i in 3:
+		var b := Button.new()
+		b.text = "pad%d" % i
+		b.custom_minimum_size = Vector2(0, 200)
+		page.content.add_child(b)
+	var rw := RecorderWidget.new(true, Pal.EN, false)
+	var recorded: Array = []
+	rw.recorded.connect(func(res: Dictionary) -> void: recorded.append(res))
+	page.content.add_child(rw)
+	for i in 10:
+		var b := Button.new()
+		b.text = "f%d" % i
+		b.custom_minimum_size = Vector2(0, 200)
+		page.content.add_child(b)
+	await _frames(8)
+	var btn: Button = rw._btn
+	page.scroll_vertical = 500
+	await _frames(4)
+	var pos: Vector2 = btn.get_global_rect().get_center()
+	# tap toggles on, tap toggles off
+	await _tap(pos)
+	ok(rw.is_mine_recording(), "recorder: a short tap starts recording")
+	await _tap(pos)
+	await _frames(20)
+	ok(not rw.is_mine_recording(), "recorder: the second tap stops it")
+	await _rec_reset()
+	# a scrolling drag that starts on the button: no recording, nothing delivered
+	recorded.clear()
+	page.scroll_vertical = 500
+	await _frames(4)
+	var v0: int = page.scroll_vertical
+	var end: Vector2 = await _swipe(pos, Vector2(0, -150))
+	var moved: int = page.scroll_vertical - v0
+	var during: bool = rw.is_mine_recording()
+	_touch(end, false)
+	await _frames(20)
+	ok(moved >= 100, "recorder: the drag from the record button scrolls the page (%d px)" % moved)
+	ok(not during and not rw.is_mine_recording() and not Recorder.recording, "recorder: no recording during or after the scroll drag (during=%s, after=%s)" % [str(during), str(rw.is_mine_recording())])
+	ok(recorded.is_empty(), "recorder: the cancelled recording is not delivered for scoring (%d)" % recorded.size())
+	await _settle(page)
+	await _rec_reset()
+	# a quick flick (short, fast) also leaves nothing running
+	page.scroll_vertical = 500
+	await _frames(4)
+	end = await _swipe(pos, Vector2(0, -60), 4)
+	_touch(end, false)
+	await _frames(20)
+	ok(not Recorder.recording, "recorder: a quick flick from the button leaves recording off")
+	await _settle(page)
+	await _rec_reset()
+	# push-to-talk: hold 0.7 s with a 9 px wobble, then lift: recording stops and is delivered
+	recorded.clear()
+	page.scroll_vertical = 500
+	await _frames(4)
+	_touch(pos, true)
+	await get_tree().create_timer(0.7).timeout
+	ok(rw.is_mine_recording(), "recorder: a hold of 0.7 s is recording")
+	var e2: Vector2 = pos
+	for i in 3:
+		e2 += Vector2(0, -3)
+		_drag_ev(e2, Vector2(0, -3))
+		await _frames(1)
+	ok(rw.is_mine_recording(), "recorder: a 9 px wobble while holding keeps recording")
+	_touch(e2, false)
+	await _frames(40)
+	ok(not Recorder.recording, "recorder: lifting after the hold stops recording")
+	ok(recorded.size() == 1, "recorder: the push-to-talk recording is delivered once (%d)" % recorded.size())
+	await _rec_reset()
+	# push-to-talk where the finger then travels far enough to scroll: the lift must still end the recording
+	recorded.clear()
+	page.scroll_vertical = 500
+	await _frames(4)
+	_touch(pos, true)
+	await get_tree().create_timer(0.7).timeout
+	e2 = pos
+	for i in 5:
+		e2 += Vector2(0, -6)
+		_drag_ev(e2, Vector2(0, -6))
+		await _frames(1)
+	_touch(e2, false)
+	await _frames(40)
+	ok(not Recorder.recording, "recorder: hold 0.7 s, drift 30 px, lift: recording is off")
+	await _rec_reset()
+	holder.queue_free()
+	await _frames(2)
+	Recorder.mode_override = old_mode
+	Recorder.test_audio_source = old_src
 
 
 # ---------------------------------------------------------------- report

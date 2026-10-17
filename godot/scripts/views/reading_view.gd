@@ -616,7 +616,7 @@ func _build_reader() -> void:
 	_rtl.add_theme_constant_override("line_separation", 9)
 	_rtl.add_theme_constant_override("text_highlight_h_padding", 1)
 	_rtl.add_theme_constant_override("text_highlight_v_padding", 2)
-	_rtl.meta_clicked.connect(on_meta_clicked)
+	UI.on_meta_click(_rtl, on_meta_clicked)
 	_text_card.body.add_child(_rtl)
 	_text_content.add_child(_text_card)
 

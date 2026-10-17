@@ -24,6 +24,7 @@ var _meter: ProgressBar
 var _enabled: bool = true
 var _press_msec: int = 0
 var _swallow_release: bool = false
+var _btn_down: bool = false ## the button is held and this widget started the recording with that press
 var _space_started: bool = false
 var _was_recording: bool = false
 
@@ -146,9 +147,23 @@ func _on_down() -> void:
 	if Recorder.begin(get_instance_id()):
 		_press_msec = Time.get_ticks_msec()
 		_swallow_release = false
+		_btn_down = true
+
+
+## Phone: a page scroll that starts on the record button (ScrollContainer sends SCROLL_BEGIN once the finger leaves
+## its dead zone) must not leave a recording behind: a press that is still short (before the push-to-talk hold)
+## and began this recording is cancelled, nothing is saved or scored. A long hold keeps its push-to-talk meaning.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_SCROLL_BEGIN and Platform.is_phone() and _btn_down:
+		_btn_down = false
+		if is_mine_recording() and Time.get_ticks_msec() - _press_msec < HOLD_MSEC:
+			Recorder.cancel()
+			_swallow_release = false
+			_refresh()
 
 
 func _on_up() -> void:
+	_btn_down = false
 	if _swallow_release:
 		_swallow_release = false
 		return
