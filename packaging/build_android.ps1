@@ -99,7 +99,7 @@ function Test-Apk([string]$apk, $tools, [string]$expectVersion, [string]$pinFile
             if ($AllowNewKey) { Write-Host "    경고: 서명 인증서가 기록된 지문과 달라요(-AllowNewKey). 이 APK 는 기존 설치 위에 덮어 설치되지 않아요." -ForegroundColor Yellow }
             else {
                 $script:ExitCode = 3
-                Fail "APK 서명 인증서가 기록된 릴리스 지문(android_cert.sha256)과 달라요. 키를 잃어버리고 새로 만든 게 아니라면 올바른 키 폴더인지 확인하세요. 정말 새 키로 내보내려면 -AllowNewKey 를 쓰세요(기존 사용자는 앱을 지우고 다시 설치해야 해요)."
+                Fail "APK 서명 인증서가 기록된 릴리스 지문(android_cert.sha256)과 달라요. 키를 잃어버리고 새로 만든 게 아니라면 올바른 키 폴더인지 확인하세요. 정말 새 키로 내보내려면 -AllowNewKey(publish_release.ps1 에서는 -AcceptNewKey)를 쓰세요(기존 사용자는 앱을 지우고 다시 설치해야 해요)."
             }
         }
         else { Write-Host "    인증서가 android_cert.sha256 과 같아요." }
