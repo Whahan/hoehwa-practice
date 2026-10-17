@@ -10,7 +10,7 @@
 ## 1. 목표와 범위
 
 ### 1.1 목표
-1. 폰에서 공부한 것이 PC 에도, PC 에서 한 것이 폰에도 반영된다(복습 카드, 로드맵 체크, 공부한 날, 날짜별 공부 시간·정답률·발음 점수, 연속 기록·보호권, 미션 최고 기록, 음소 통계, 아는 단어, 일부 설정).
+1. 폰에서 공부한 것이 PC 에도, PC 에서 한 것이 폰에도 반영된다(복습 카드, 로드맵 체크, 공부한 날, 날짜별 공부 시간·정답률·발음 점수, 연속 일수(합친 '공부한 날'로 계산), 미션 최고 기록, 음소 통계, 아는 단어, 일부 설정).
 2. **학습 기록이 사라지지 않는다.** 첫 동기화는 양쪽을 "합친다"(덮어쓰기 없음). 어느 한쪽 결과가 줄어드는 병합은 저장 전에 검사로 막는다.
 3. 폰이 PC 에 닿지 않아도(Tailscale 꺼짐, PC 꺼짐) 공부는 폰에 그대로 쌓이고, 다음 연결 때 반영된다. 별도의 "보낼 목록"(outbox)이 필요 없다(§3.3).
 4. 시험이 실제 사용자 폴더를 쓰지 않는다. 동기화 전 백업이 있고 되돌릴 수 있다.
@@ -39,7 +39,8 @@
 | D7 | **순서: 받기 → 병합·적용(동기, await 없음) → 올리기.** 올리기가 실패해도 로컬은 이미 일관된 상태이고 다음 라운드가 같은 내용을 다시 올린다. | 병합 계산과 적용 사이에 사용자 조작이 끼어들 틈이 없다. 끊겨도 잃는 것이 없다. |
 | D8 | 적용 전 **백업**(최대 10개 + 첫 동기화 백업 영구) → **병합 결과 검사**(줄어듦 금지 등) → **저널(pending)** 을 먼저 쓰고 파일 3개를 쓴 뒤 저널 삭제. | 파일 여러 개를 쓰는 도중 꺼져도 다음 시작에 이어서 끝낸다. |
 | D9 | API 는 `GET /sync/pull`, `POST /sync/push` 두 개. 인증은 폰=Bearer 토큰(기존 `lan.py` 문), PC=루프백 + Host/Origin/Content-Type 검사(`/lan*` 와 같은 수준). | `Api`(api.gd)가 GET/POST 만 지원, `lan.py` 허용 목록이 (메서드, 경로) 정확 일치라 PUT 을 쓰려면 둘 다 고쳐야 한다. 기존 로드맵의 `GET/PUT /sync/progress` 는 이 구조에 맞춰 바꿨다. |
-| D10 | 동기화는 기본 켜짐(PC·폰 모두, 설정에서 끌 수 있음). 첫 병합에서 로컬이 바뀌면 "합쳤어요" 안내를 한 번 띄운다. | 사용자 요구가 "자동 반영". 되돌릴 수단(백업)이 있어 기본 켬이 안전하다. 확인 대화상자를 원하면 §12 Q1. |
+| D10 | **첫 연결 때 한 번 묻는다**: "PC와 학습 기록을 합칠까요? / 따로 쓸까요?"(PC 앱은 "폰과 …"). 합치기를 고르면 동기화가 켜지고, 따로 쓰기를 고르면 꺼지며 **다시 묻지 않는다**. 선택 전에는 폰은 네트워크 요청을 **0번** 보낸다. 설정에 '학습 기록 동기화' 켜기/끄기 스위치가 있어 언제든 바꾼다(PC·폰 같은 스위치). **끄면 받기·올리기를 모두 하지 않는다**(요청 0). 허브의 내 복제본은 남고, 다시 켜면 합집합으로 재합류한다(§4.8.1). | 사용자 결정(Q1). 합집합·백업이 있어 합치기는 손실이 없지만, 처음 한 번은 사용자가 고르게 한다. |
+| D11 | **보호권은 동기화하지 않는다(기기별).** 연속 일수는 합쳐진 '공부한 날'(`progress.days` 집합)로 각 기기에서 `StudyLog.settle()` 이 다시 계산한다. | 사용자 결정(Q9). 보호권 병합 휴리스틱(±1 오차)을 없애 규칙을 단순하게 한다. |
 
 ---
 
@@ -74,7 +75,7 @@
 ### 3.3 한 라운드(SyncEngine.sync_now)
 
 ```
-0. 점검: 켜짐? 읽기 전용(Store.progress_read_only / StudyLog.is_read_only / prefs_read_only)이면 중단(local_read_only).
+0. 점검: `choice=="undecided"` 이거나 스위치가 꺼짐(`enabled==false`)이면 **네트워크 요청 없이** 즉시 `disabled` 로 끝(§4.8.1). 읽기 전용(Store.progress_read_only / StudyLog.is_read_only / prefs_read_only)이면 중단(local_read_only).
          사이드카에 pending(저널)이 있으면 먼저 그것을 적용해 끝낸다.
 1. GET /sync/pull?device_id=<내 id>&rev=<마지막 rev>      (await)
      - 404 → old_pc.  hub_id 가 저장된 것과 다르면 §4.9(hub_changed).
@@ -123,7 +124,7 @@
 | `v`, `saved` | 정수 | 동기화 안 함(로컬 값 유지) |
 | `days.<iso>.<lang>` | `{sec, by:{view:sec}, n:{kind:count}, lesson:[ok,total], score:[count,sum]}` | **모든 숫자 잎(leaf)** 을 자기 몫 합산. 합친 뒤 `sec`·`by.*` ≤ 86400, 나머지 ≤ 1,000,000(`StudyLog` 상한)로 자른다. 400일(`KEEP_DAYS`)보다 오래된 날은 저장 때 `StudyLog` 가 알아서 자른다 |
 | `phon.<lang>.<p>` | `{h:"0110…"(최대 30자, 1=틀림), heard:{소리:횟수}}` | `h`: 기기별 **자기 관찰**만 올리고(§4.5) 병합 때 복제본을 `(t, device_id)` 오름차순으로 이어 붙여 **뒤 30자**. `heard`: 자기 몫 합산 후 `PhonemeStats` 규칙(상위 8개, 음소 80개)으로 자름 |
-| `freeze.<lang>` | `{tokens(0~2), frozen:[iso], awarded, last(일 번호)}` | §4.6 |
+| `freeze.<lang>` | `{tokens(0~2), frozen:[iso], awarded, last(일 번호)}` | **동기화 안 함(기기별)**. 허브에 올리지도, 적용 때 건드리지도 않는다(§4.6) |
 | `missions.<id>` | `{stars(0~3), plays, last(iso), done_goals}` | `stars`·`done_goals` = max, `last` = 늦은 날, `plays` = 자기 몫 합산 |
 | 모르는 최상위 키 | 보존 대상 | **보내지 않고**, 적용할 때 건드리지 않는다(로컬에 그대로 남음) |
 
@@ -157,7 +158,6 @@
   "known": {"en": ["go"], "ja": []},
   "days": {"2026-10-17": {"en": {"sec": 600, "by": {"lesson": 300}, "n": {"lessons": 1}, "lesson": [3, 5], "score": [2, 160]}}},
   "phon": {"en": {"θ": {"h": "0110", "heard": {"s": 5}}}, "ja": {}},
-  "freeze": {"en": {"tokens": 1, "frozen": ["2026-10-14"], "awarded": 0, "last": 20378}, "ja": {"tokens": 1, "frozen": [], "awarded": 0, "last": 0}},
   "missions": {"cafe_order": {"stars": 2, "plays": 3, "last": "2026-10-16", "done_goals": 2}},
   "prefs": {"daily_goal_min": 10, "lesson_source": "tatoeba", "auto_fix_cards": true, "tts_voice_en": "af_heart", "tts_voice_ja": "jf_alpha", "tts_speed": 1.0}
 }
@@ -182,7 +182,6 @@
   "studylog": {
     "days":     {"2026-10-17": {"en": {"sec": 600, "by": {}, "n": {}, "lesson": [0, 0], "score": [0, 0]}}},
     "phon":     {"en": {"θ": {"h": "0110", "t": 1760000000, "heard": {"s": 5}}}, "ja": {}},
-    "freeze":   {"en": {"tokens": 1, "frozen": [], "awarded": 0, "last": 20378}, "ja": {"tokens": 1, "frozen": [], "awarded": 0, "last": 0}},
     "missions": {"cafe_order": {"stars": 2, "done_goals": 2, "last": "2026-10-16", "plays": 3}}
   },
   "prefs": {"daily_goal_min": {"value": 10, "t": 0}, "lesson_source": {"value": "tatoeba", "t": 0}, "auto_fix_cards": {"value": true, "t": 0},
@@ -203,11 +202,11 @@
 |---|---|---|
 | `own` | replica doc 또는 `{}` | 이 기기의 지난번 복제본(사이드카) |
 | `local` | 지역 뷰 | 지금 로컬(`extract`) |
-| `base` | 지역 뷰에서 `cards.data`·`freeze`·`prefs` 를 뺀 것(카드는 키 배열) 또는 `{}` | 마지막 적용 직후 로컬. `{}` = 처음 동기화 |
+| `base` | 지역 뷰에서 `cards.data`·`prefs` 를 뺀 것(카드는 키 배열) 또는 `{}` | 마지막 적용 직후 로컬. `{}` = 처음 동기화 |
 | `peers` | `[{device_id, saved_hub, doc}]` | 허브에서 받은 **남의** 복제본 |
 | `stamp` | int | 이 라운드의 허브 시각 추정값(새 이벤트의 `t`) |
 | `hub_now` | int | 허브 응답의 시각 |
-| `today` | int | 일 번호(`Plan.days_from_civil`), 보호권·보관 기간 계산 |
+| `today` | int | 일 번호(`Plan.days_from_civil`), 삭제 흔적 보관 기간 계산 |
 | `rebase` | `{"sets_at": int}` 또는 null | §4.8 되돌리기 직후 1회 |
 
 반환: `{ok: bool, own: replica doc, view: 지역 뷰, report: {...}, problems: [String]}`. 입력은 바꾸지 않는다. 시계·파일·네트워크·난수에 접근하지 않는다(같은 입력 → 같은 출력).
@@ -221,15 +220,14 @@
    - `start`·prefs 레지스터: base 가 `{}` 이면 `value == 기본값` 일 때 `t=0`, 아니면 `stamp`. base 가 있으면 `local != base` 일 때만 `{local, stamp}`, 같으면 이전 `own` 값을 유지(없으면 `{local, 0}`).
    - phon: `new = new_outcomes(base.h, local.h)`; `own.h' = (own.h + new)` 뒤 30자; `new != ""` 이면 `t = stamp`; `heard` 는 카운터 잎 규칙.
    - missions: `stars/done_goals = max(own, local)`, `last = max`.
-   - freeze: 로컬 값 그대로(절대 상태).
 3. **병합(`merge`)** — 대상 복제본 = `own'` + 유효한 `peers`:
    - 카운터: 복제본별 몫의 **잎 단위 합**. 그 뒤 §4.1 의 상한으로 자름.
    - 집합: `add_max[k] = max add`, `del_max[k] = max del`; **있음 ⇔ `add_max[k] ≥ del_max[k]`**(del 이 없으면 add 만 있으면 있음). 결과 키는 `(add_max 오름차순, 키)` 순.
    - 카드: 있음으로 판정된 키마다 `data` 를 가진 복제본들 중 D5 순서의 승자. 로컬에 같은 키가 있으면 `id` 는 로컬 것 유지.
    - `start`/prefs: 키별 `t` 최대(자른 뒤), 같으면 `canonical(value)` 가 큰 쪽, 모두 `t=0` 이면 기본값.
    - 미션: `stars`/`done_goals` max, `last` 늦은 날, `plays` 합.
-   - phon: §4.5. freeze: §4.6.
-4. **채택(adopt)**: `own''` = `own'` 에서 집합의 `add` 를 병합 결과의 `add_max` 로 올리고(있는 항목 전부), 카드 `data` 를 병합 승자로, `start`·prefs 를 병합 레지스터로, freeze 를 병합 freeze 로, 미션 `stars/done_goals/last` 를 병합값으로 바꾼다. 카운터 몫과 phon 은 **자기 것 그대로**. 자기 `del` 중 400일 지난 것(`stamp − t > 400일`)은 버린다.
+   - phon: §4.5. (보호권/freeze 는 병합 대상이 아니다, §4.6)
+4. **채택(adopt)**: `own''` = `own'` 에서 집합의 `add` 를 병합 결과의 `add_max` 로 올리고(있는 항목 전부), 카드 `data` 를 병합 승자로, `start`·prefs 를 병합 레지스터로, 미션 `stars/done_goals/last` 를 병합값으로 바꾼다. 카운터 몫과 phon 은 **자기 것 그대로**. 자기 `del` 중 400일 지난 것(`stamp − t > 400일`)은 버린다.
 5. **검사(`check`)**: §7.2 의 불변식이 하나라도 깨지면 `ok=false`, `problems` 에 사유(키 이름만, 값 없음), `own`·`view` 는 입력 그대로(`local`).
 6. `view` 를 정렬·정규화해 돌려준다.
 
@@ -249,23 +247,12 @@
 | 30자 `"0"*30` | `"0"*29+"1"` | `"1"` (링이 밀림: d=1) |
 | `"0101"` | `"1111"` | `"1111"` (관계 없음 → 전부 새것) |
 
-### 4.6 연속 기록·보호권
+### 4.6 연속 기록·보호권 (단순안: 보호권은 기기별)
 
-- **연속 일수는 동기화하지 않고 다시 계산한다.** 입력은 합쳐진 `marks`(공부한 날 집합, 두 기기 합집합)이고, `StudyLog.settle()` 이 로컬에서 평소처럼 돌린다.
-- `frozen` = 복제본들의 합집합(미래 날짜와 400일 지난 날 제거). `awarded` = max. `last` = max(시계 되돌림 방지 기준이 후퇴하지 않게).
-- `tokens` = 다음 식(복제본마다 `tokens_i`, `frozen_i`):
-  `R* = tokens 가 가장 큰 복제본(동률이면 awarded 큰 쪽, 그다음 device_id 작은 쪽)`
-  `tokens = clamp(tokens_R* − |frozen_합집합 ∖ frozen_R*|, 0, 2)`
-  뜻: 가장 많이 가진 쪽을 기준으로, 그 기기가 모르는 보호된 날이 있으면 그만큼 이미 쓴 것으로 친다(같은 빠진 날에 두 기기가 보호권을 각각 쓰는 이중 지출을 한 번으로).
-
-| 시나리오 | 폰 | PC | 결과 `tokens` / `frozen` / `awarded` |
-|---|---|---|---|
-| F1 한쪽만 보호권 사용 | tokens 0, frozen {D1} | tokens 1, frozen {} | 0 / {D1} / – |
-| F2 한쪽만 보상 받음 | tokens 1, awarded 0 | tokens 2, awarded 1 | 2 / – / 1 |
-| F3 보상 + 다른 쪽 사용 | tokens 0, frozen {D1} | tokens 2, awarded 1, frozen {} | 1 / {D1} / 1 |
-| F4 서로 다른 날 사용 | tokens 0, frozen {D2} | tokens 0, frozen {D1} | 0 / {D1,D2} / – (0 아래로 안 내려감) |
-
-한계(§11.1 R17): 규칙은 결정적이고 멱등이지만 한 기기만 썼을 때의 값과 ±1 다를 수 있다. 성질 시험(0 ≤ tokens ≤ 2, 합집합, 멱등, 교환)만 보장한다.
+- **보호권(`freeze.<lang>`: tokens, frozen, awarded, last)은 동기화하지 않는다.** 복제본·지역 뷰에 없고, `SyncDoc.to_local` / `StudyLog.apply_sync` 는 `freeze` 를 읽지도 쓰지도 않는다. 각 기기는 자기 보호권을 계속 따로 쓰고 받는다.
+- **연속 일수는 합쳐진 '공부한 날'로 계산한다.** 입력은 `progress.days` 표시(집합, 두 기기 합집합)이고 `StudyLog.settle()` 이 로컬에서 평소처럼 돌린다. 그래서 폰에서 공부한 날도 PC 의 연속 일수에 들어간다.
+- 결과: 한 기기에서 보호권으로 이은 날은 그 기기에서만 "보호된 날"이다. 다른 기기가 그 날 공부했다면(표시가 합쳐져 들어오면) 보호권을 쓸 필요가 없어져 연속이 이어진다. 두 기기가 같은 빠진 날에 각각 보호권을 쓰면 두 개가 소모될 수 있다(드문 경우, §11.1 R17).
+- 시험: 합쳐진 표시로 연속 일수가 늘어나는 것(U18), 동기화 전후 로컬 `freeze` 가 바이트 단위로 같은 것(U17).
 
 ### 4.7 시계가 틀린 기기
 
@@ -281,6 +268,22 @@
 - **"모든 기록 지우기"(설정)**: 전파하지 않는다. 동기화가 켜져 있으면 확인 문구가 바뀐다 — "동기화가 켜져 있어요. 지우면 이 기기의 동기화 연결이 끊기고, PC 보관함에 올라간 기록은 그대로 남아요. (PC 보관함까지 지우려면 PC의 backend\data\sync 폴더를 지우세요.)" 확인하면 `SyncManager.unlink_for_reset()`(백업 `unlink` → `enabled=false` → 사이드카의 `own`/`base`/`hub_id` 비움)을 먼저 하고 평소대로 지운다. 다시 켜면 새 기기 id 로 가입해 보관함 기록이 돌아온다(복원처럼 보인다).
 - **동기화에서 되돌리기(`restore_backup`)**: 백업 폴더의 `progress/studylog/prefs` 를 되돌리기 직전 상태를 먼저 백업(`restore`)한 뒤 복사하고, `enabled=false` 로 끄며, 사이드카에 `rebase={"sets_at": 백업 시각(허브 시각 추정)}` 를 남기고 `own`은 **그대로 둔다**(사이드카는 복원하지 않는다: 과거 몫으로 허브의 몫을 되돌리면 상대 기기의 "줄어듦 검사"가 깨지기 때문). 다시 켜면 첫 라운드에서 집합은 처음 동기화처럼 `sets_at` 시각으로 추가되고(그 뒤의 남의 삭제가 이긴다), 카운터는 `max(0, local−base)=0` 이라 중복 없이, 허브의 최신 합이 다시 들어온다. 안내 문구: "되돌렸어요. 자동 동기화를 껐어요. 다시 켜면 PC와 다시 합쳐져요."
 
+### 4.8.1 첫 연결 선택, 켜기/끄기 스위치, 재합류 (사용자 결정 Q1)
+
+상태 두 개: `choice` ∈ {`undecided`, `merge`, `separate`}, `enabled`(설정의 '학습 기록 동기화' 스위치). 동기화는 `choice != "undecided"` 이고 `enabled == true` 일 때만 한다.
+
+| 상황 | 동작 |
+|---|---|
+| **폰: 첫 연결**(`Backend.status` 가 처음 `READY`, 사이드카 없음) | 대화상자 "PC와 학습 기록을 합칠까요?"(§6.3). 선택 전에는 `/sync/*` 요청을 **0번** 보낸다. |
+| **PC 앱: 첫 연결** | 사이드카가 없고 `choice=="undecided"` 인 동안에만, 60초마다 **읽기 전용 확인용 `GET /sync/pull`(probe)** 을 보낸다(적용·올리기 없음, 사이드카 안 만듦). 응답에 **다른 기기 복제본이 하나라도** 있으면 대화상자 "폰과 학습 기록을 합칠까요?"를 띄운다. 폰이 없는 PC 는 아무것도 묻지 않는다. 선택하면 probe 는 멈춘다. |
+| **합치기** 선택 | `choice="merge"`, `enabled=true`, 기기 id 생성, 첫 동기화(백업 `first` 후 합집합 적용 + 토스트 "PC와 폰의 학습 기록을 합쳤어요…") |
+| **따로 쓰기** 선택 | `choice="separate"`, `enabled=false`. **다시 묻지 않는다.** 요청 0. 허브에는 이 기기의 복제본이 생기지 않는다. 나중에 설정 스위치를 켜면 평범한 첫 동기화(합집합)가 된다. |
+| **스위치 끔**(언제든) | `enabled=false`, `disabled_at=지금(허브 시각 추정)`. 이후 받기·올리기·폴링·probe **전부 0 요청**(수동 '지금 동기화' 버튼은 비활성). 허브에 있는 내 복제본은 지우지 않는다. 로컬 기록은 평소처럼 쌓인다. |
+| **스위치 다시 켬**(합치기를 이미 고른 기기) | **합집합으로 재합류**: 사이드카의 `rebase={"sets_at": disabled_at}` 를 설정하고 첫 라운드를 돌린다. 카운터는 `max(0, 로컬−base)` 라 꺼져 있던 동안 공부한 양이 정확히 한 번 자기 몫에 더해진다. 집합(체크·카드·단어·공부한 날 표시)은 `sets_at` 시각의 추가로 취급하므로 꺼진 동안 이 기기에서 지운 항목은 **삭제로 전파되지 않고** 허브의 항목이 다시 들어온다(합집합). 꺼진 동안 다른 기기가 지운 것(더 늦은 삭제)은 그대로 이긴다. 재합류 첫 라운드 전에 백업(`auto`)을 만든다. |
+| **스위치 켬**(따로 쓰기를 고른 기기) | 사이드카에 `own`/`base` 가 없으므로 첫 가입과 같다(합집합, 백업 `first`). |
+
+원칙: 어느 경우에도 로컬 기록을 지우지 않는다. 재합류 때 새 기기 id 를 만들지 않는다(같은 id 를 계속 써야 이중 계산이 안 생긴다). '따로 쓰기' 이후에도 사용자가 명시적으로 켜기 전에는 요청 0.
+
 ### 4.9 스키마 버전·허브 신원
 
 - 복제본 `v`=1, 사이드카 `v`=1, 허브 `hub.json` `v`=1. 더 큰 `v` 를 만난 읽는 쪽은 **그 복제본을 병합에서 빼고** 알린다(자기 복제본은 계속 올린다). 허브는 `doc.v != 1` 을 `400 bad_doc` 으로 거절한다(새 앱이 옛 PC 에 올리면 "PC 앱을 업데이트해 주세요").
@@ -294,12 +297,14 @@
   "v": 1,
   "device_id": "a3f91c07d2e84b56",
   "enabled": true,
+  "choice": "merge",
+  "disabled_at": 0,
   "hub_id": "9c1e5a7b3d204f68",
   "seq": 17,
   "hub_rev": 42,
   "skew": 0,
   "own": { "…replica doc…": 1 },
-  "base": { "…지역 뷰에서 cards.data/freeze/prefs 를 뺀 것…": 1 },
+  "base": { "…지역 뷰에서 cards.data/prefs 를 뺀 것…": 1 },
   "pushed_hash": "<sha256 hex of canonical(own) 마지막으로 허브가 받은 것>",
   "push_pending": false,
   "last_ok": 1760000000,
@@ -310,6 +315,7 @@
   "first_done": true
 }
 ```
+- `choice`: `"undecided"`(처음, 아직 안 물음) | `"merge"`(합치기) | `"separate"`(따로 쓰기, 다시 묻지 않음). `enabled` 는 설정 스위치. `disabled_at`: 스위치를 끈 시각(허브 시각 추정, §4.8.1 재합류에 쓴다). 사이드카는 첫 선택을 하는 순간 만들어진다.
 - `device_id`: `Crypto.new().generate_random_bytes(8).hex_encode()`(16자 hex), 처음 켤 때 만든다. 토큰(`remote.json`)과 **따로**라 다시 페어링해도 같은 id 가 유지된다(이중 계산 방지).
 - `pending` = `{"view": …, "own": …, "seq": n}` — 저널(§7.3).
 - 저장은 `Progress.write_text_atomic` 로, 읽기는 `Progress.read_json_file`(깨졌으면 `.bad` 격리) 규칙을 따른다. 쓰기 전에 이전 파일을 `sync_state.json.prev` 로 한 세대 남긴다.
@@ -427,6 +433,8 @@ backend/data/sync/
 | 지금 동기화 버튼 | 즉시, 최소 간격 무시 | 진행 중이면 무시 |
 | PC 창 닫기 | **하지 않음**(종료를 지연시키지 않는다. 다음 시작 때 반영) | |
 
+**전제**: 위 모든 계기는 `choice != "undecided"` 이고 `enabled == true` 일 때만 동작한다. 그렇지 않으면 타이머·신호·폴링·백그라운드/복귀 훅 어디서도 `/sync/*` 요청을 만들지 않는다(요청 0). 예외는 PC 앱의 `undecided` 상태 probe 하나(§4.8.1)뿐이다.
+
 한 번에 하나만 실행(`_busy`). 실행 중 새 요청은 "한 번 더" 플래그 하나로 합친다.
 
 ### 6.2 실패와 재시도
@@ -443,14 +451,18 @@ backend/data/sync/
 
 | 요소 | 문구 |
 |---|---|
-| 제목 | 기록 동기화 |
+| 제목 | 학습 기록 동기화 |
+| 첫 연결 대화상자(폰) | 제목 `PC와 학습 기록을 합칠까요?` · 본문 `이 폰과 PC에 따로 쌓인 학습 기록을 하나로 합쳐요. 어느 쪽 기록도 지워지지 않고, 합치기 전에 백업해 둬요. 설정에서 언제든 끌 수 있어요.` · 버튼 `합치기` / `따로 쓰기` |
+| 첫 연결 대화상자(PC) | 제목 `폰과 학습 기록을 합칠까요?` · 본문·버튼은 위와 같고 `PC` 대신 `폰` |
+| 따로 쓰기 확인(토스트) | `따로 쓰기로 했어요. 설정의 '학습 기록 동기화'를 켜면 언제든 합칠 수 있어요.` |
 | 설명(PC) | 휴대폰 연결을 켜고 폰 앱에서 이 PC에 연결하면, 폰과 PC의 학습 기록이 자동으로 합쳐져요. |
 | 설명(폰) | PC에 연결돼 있으면 공부한 기록이 PC와 자동으로 합쳐져요. 연결이 안 될 때 공부한 것도 다음 연결 때 반영돼요. |
 | 마지막 동기화 줄 | `마지막 동기화: 방금 전` (<60초) · `3분 전` (<1시간) · `오늘 14:32` · `10월 16일 21:05` · `아직 동기화하지 않았어요` |
 | 기기 줄 | `함께 쓰는 기기: 내 폰, PC` (peers 이름) / 없으면 `아직 다른 기기가 없어요` |
 | 상태 줄 | `동기화 중…` / `동기화됐어요` / 오류 문구(`Pal.BAD` 색, 아래 표) |
 | 버튼 | `지금 동기화` (진행 중엔 비활성 + `동기화 중…`) |
-| 스위치 | `자동으로 동기화` |
+| 스위치 | `학습 기록 동기화` (켜기/끄기. 끄면 받기·올리기를 모두 멈춰요) |
+| 스위치 설명(끌 때 한 줄) | 끄면 이 기기의 기록은 PC와 주고받지 않아요. 다시 켜면 PC에 남아 있는 기록과 합쳐져요. |
 | 링크 | `이전 상태로 되돌리기` → 백업 목록(날짜·이유 `첫 동기화 전/동기화 전/되돌리기 전/초기화 전`) → `이 시점으로 되돌릴까요? 자동 동기화가 꺼져요.` [되돌리기] [취소] |
 | 첫 병합 안내(토스트 1회) | `PC와 폰의 학습 기록을 합쳤어요. 합치기 전 기록은 백업해 뒀어요.` |
 | 수동 성공 토스트 | `동기화했어요.` (+ 새로 들어온 카드가 있으면 ` 복습 카드 N장이 새로 들어왔어요.`) |
@@ -475,7 +487,9 @@ backend/data/sync/
 
 ### 6.4 `SyncEngine.sync_now()` 결과 Dictionary(계약)
 
-`{"ok": bool, "code": String("ok"|위 코드), "error": String(한국어, ok 면 ""), "applied": bool, "pushed": bool, "reason": "start|reconnect|change|poll|pause|resume|manual", "peers": int, "changes": {"cards_added": int, "cards_removed": int, "checks_changed": int, "marks_changed": int, "known_added": int, "known_removed": int}, "trimmed": {"cards": int, "known": int}, "clock_off_sec": int, "warnings": [String], "duration_ms": int}`
+`choice=="undecided"` 또는 스위치 꺼짐이면 요청 없이 `{ok:false, code:"disabled", error:"", ...}` 를 돌려준다(UI 는 오류로 표시하지 않음).
+
+`{"ok": bool, "code": String("ok"|위 코드|"disabled"), "error": String(한국어, ok 면 ""), "applied": bool, "pushed": bool, "reason": "start|reconnect|change|poll|pause|resume|manual", "peers": int, "changes": {"cards_added": int, "cards_removed": int, "checks_changed": int, "marks_changed": int, "known_added": int, "known_removed": int}, "trimmed": {"cards": int, "known": int}, "clock_off_sec": int, "warnings": [String], "duration_ms": int}`
 
 ---
 
@@ -492,7 +506,7 @@ backend/data/sync/
 1. 카운터: 모든 잎에서 `view ≥ local`(적용 대상 기간 안, 상한으로 잘린 값은 상한과 비교).
 2. 집합: `local` 에만 있고 `view` 에 없는 키는, **다른 복제본의 `del` 이 그 키의 모든 `add` 보다 큰 경우에만** 허용(독립적으로 다시 계산).
 3. 카드: 같은 키의 `view.reps ≥ local.reps`; `view` 카드 수 ≥ 복제본 카드 키의 합집합 − 삭제된 키 − `trimmed`.
-4. 미션: `stars`, `done_goals` 가 줄지 않음. 보호권 0~2, `frozen` 은 유효한 ISO 날짜.
+4. 미션: `stars`, `done_goals` 가 줄지 않음.
 5. 형식: `start` 유효 ISO, prefs 값 타입·범위(`daily_goal_min` 0~240 정수, `lesson_source` ∈ {ai, tatoeba}), `to_local` 결과가 `Progress.normalize` / `StudyLog._normalize` 를 거쳐도 카드·단어 수가 같다(다르면 `trimmed` 로 보고하되 상한 때문인 경우만 허용).
 6. JSON 왕복(`stringify → parse`)이 같다.
 - 시험용 훅 `SyncMerge.test_corrupt: Callable`(비어 있음)이 있으면 `check` 직전에 `view` 를 변조해 적용한다 → "검사기가 실제로 막는지" 를 시험한다(기존 `Progress.write_hook` 방식).
@@ -529,13 +543,13 @@ backend/data/sync/
 | S5 | worker | 허브 시험 + 허브 변이 시험 | 신규 `backend/test_sync_hub.py`, `backend/sync_hub_mutations.json`, `backend/run_sync_hub_mutations.ps1` | 문서만 보고 작성(구현 코드를 읽지 않는다). 실행·변이는 S1 뒤 | S1·S2 와 동시(작성) |
 | S6a | worker | 병합 단위 시험 | 신규 `godot/tests/sync_merge_test.gd`, `.tscn`(+ `.uid`) | 문서만 보고 작성. 실행은 S2 뒤 | 동시(작성) |
 | S6b | worker | 병합 변이 시험 | 신규 `godot/tests/sync_mutations.json`, `godot/tests/run_sync_mutations.ps1` | S2 완료 + S6a | S6a 뒤 |
-| S3 | **worker-hard** | 엔진: 사이드카·백업·저널·포트·라운드 + 저장소 적용 함수 | 신규 `godot/scripts/sync/sync_engine.gd`, `sync_state.gd`, `sync_backup.gd`, `sync_ports.gd`(+ `.uid`); 기존 `godot/scripts/autoload/store.gd`(`apply_sync_progress`, `apply_sync_prefs` 추가만), `godot/scripts/core/study_log.gd`(`apply_sync` 추가만), `godot/scripts/core/progress.gd`(`MAX_REVIEW` 1000→3000 한 줄), `godot/tests/t5_wiring_test.gd`(307행 `MAX_REVIEW == 1000` → `3000` 한 줄), `godot/scripts/autoload/api.gd`(`IDEMPOTENT_POST` 에 `"/sync/push"` 한 항목) | S2 의 함수 시그니처(문서 §9.1)는 지금 확정이므로 병행 착수 가능. 시험 실행은 S1·S2 뒤 | S4·S7 과 병행(S4·S7 은 S3 의 공개 함수가 생긴 뒤 실행) |
-| S4 | worker | 엔진 시험·왕복·끊김·동시·격리 러너 | 신규 `godot/tests/sync_engine_test.gd/.tscn`, `godot/tests/sync_roundtrip_test.gd/.tscn`, `godot/tests/sync_fixtures/*.json`, `godot/tests/run_sync_tests.ps1`, `godot/tests/sync_engine_mutations.json` | S1·S2·S3 | S7 과 병행 |
-| S7 | worker | 매니저(타이머·생명주기)·설정 패널·연결 | 신규 `godot/scripts/sync/sync_manager.gd`, `sync_panel.gd`(+ `.uid`); 기존 `godot/scripts/main.gd`(`add_sync()` 추가와 `add_v11_tabs()` 옆 호출 1곳), `godot/scripts/views/today_view.gd`(`SyncPanel` 마운트 1줄 + 초기화 확인 문구 §4.8) | S3 | S4 와 병행. `today_view.gd` 는 다른 작업자와 겹치는지 오케스트레이터가 착수 전 확인 |
+| S3 | **worker-hard** | 엔진: 사이드카·백업·저널·포트·라운드 + 저장소 적용 함수 | 신규 `godot/scripts/sync/sync_engine.gd`, `sync_state.gd`, `sync_backup.gd`, `sync_ports.gd`(+ `.uid`; 선택·스위치·재합류·probe 포함, §4.8.1); 기존 `godot/scripts/autoload/store.gd`(`apply_sync_progress`, `apply_sync_prefs` 추가만), `godot/scripts/core/study_log.gd`(`apply_sync` 추가만), `godot/scripts/core/progress.gd`(`MAX_REVIEW` 1000→3000 한 줄), `godot/tests/t5_wiring_test.gd`(307행 `MAX_REVIEW == 1000` → `3000` 한 줄), `godot/scripts/autoload/api.gd`(`IDEMPOTENT_POST` 에 `"/sync/push"` 한 항목) | S2 의 함수 시그니처(문서 §9.1)는 지금 확정이므로 병행 착수 가능. 시험 실행은 S1·S2 뒤 | S4·S7 과 병행(S4·S7 은 S3 의 공개 함수가 생긴 뒤 실행) |
+| S4 | worker | 엔진 시험·왕복·끊김·동시·스위치·선택·격리 러너 | 신규 `godot/tests/sync_engine_test.gd/.tscn`, `godot/tests/sync_roundtrip_test.gd/.tscn`, `godot/tests/sync_fixtures/*.json`, `godot/tests/run_sync_tests.ps1`, `godot/tests/sync_engine_mutations.json` | S1·S2·S3 | S7 과 병행 |
+| S7 | worker | 매니저(타이머·생명주기)·설정 패널·연결 | 신규 `godot/scripts/sync/sync_manager.gd`, `sync_panel.gd`(스위치·상태), `sync_choice_dialog.gd`(첫 연결 선택 대화상자), 시험 `godot/tests/sync_manager_test.*`, `godot/tests/sync_panel_test.*`(+ `.uid`); 기존 `godot/scripts/main.gd`(`add_sync()` 추가와 `add_v11_tabs()` 옆 호출 1곳), `godot/scripts/views/today_view.gd`(`SyncPanel` 마운트 1줄 + 초기화 확인 문구 §4.8) | S3 | S4 와 병행. 지금 `today_view.gd` 를 고치는 다른 작업자는 없다(Q6). 이후 UI 전면 개편 예정이므로 화면 변경은 독립 `SyncPanel`(+ 별도 대화상자 파일)과 마운트 1줄로 한정해 나중에 옮기기 쉽게 한다 |
 | S8 | worker | 문서 | `API.md`("기록 동기화" 절 추가, 휴대폰 허용 목록 23개 → 25개 문구), `ROADMAP.md` 는 **오케스트레이터가** | S1 | |
 | R1~R4 | reviewer | 새 컨텍스트 독립 검토: R1=S1+S5(허브), R2=S2+S6(병합), R3=S3+S4(엔진·왕복), R4=S7+S8(UI·문서)+통합 | 코드 수정 없음 | 각 묶음 완료 후 | R1·R2 동시 |
 
-겹침 점검: `sync_*.gd` 는 파일마다 소유자가 하나. 기존 파일은 S1(`server.py`, `lan.py`, `lan_stub_server.py`, `test_lan.py`)·S3(`store.gd`, `study_log.gd`, `progress.gd`, `t5_wiring_test.gd`, `api.gd`)·S7(`main.gd`, `today_view.gd`)가 서로 다른 파일만 고친다. S3 가 건드리는 `store.gd`/`study_log.gd` 는 다른 진행 중인 작업이 없다고 가정한다(추측: 오케스트레이터 확인 필요).
+겹침 점검: `sync_*.gd` 는 파일마다 소유자가 하나. 기존 파일은 S1(`server.py`, `lan.py`, `lan_stub_server.py`, `test_lan.py`)·S3(`store.gd`, `study_log.gd`, `progress.gd`, `t5_wiring_test.gd`, `api.gd`)·S7(`main.gd`, `today_view.gd`)가 서로 다른 파일만 고친다. S3 가 건드리는 `store.gd`/`study_log.gd` 는 다른 진행 중인 작업이 없다고 가정한다(Q6/Q7 결정: 지금 다른 작업자 없음. 단 이후 UI 전면 개편이 예정되어 있으므로 S7 의 화면 변경은 `SyncPanel` 독립 패널 + 설정 카드에 마운트 1줄로 한정한다).
 
 실행 순서: **1단계(병렬)** S1, S2, S5(작성), S6a(작성), S8 준비 → **2단계** S3(+S5·S6a 실행), S6b → **3단계(병렬)** S4, S7 → **4단계** R1·R2(1·2단계 직후 가능), R3, R4 → 오케스트레이터 통합·실제 폰 확인.
 
@@ -558,7 +572,7 @@ static func extract(progress: Dictionary, studylog: Dictionary, prefs: Dictionar
 static func to_local(view: Dictionary, skew: int, progress: Dictionary, studylog: Dictionary, prefs: Dictionary) -> Dictionary
 ## 복제본 구조 검사. 문제 없으면 [], 있으면 ["doc.progress.xp.en: not int", ...] (값은 담지 않음)
 static func validate_replica(doc: Variant) -> Array
-## base 로 저장할 축약본(cards.data·freeze·prefs 제거)
+## base 로 저장할 축약본(cards.data·prefs 제거)
 static func to_base(view: Dictionary) -> Dictionary
 
 class_name SyncMerge extends RefCounted
@@ -568,7 +582,6 @@ static var test_corrupt: Callable = Callable()   # 시험 전용: (view) -> view
 static func sync_round(args: Dictionary) -> Dictionary   # §4.4
 static func new_outcomes(base_h: String, local_h: String) -> String   # §4.5
 static func card_wins(a: Dictionary, b: Dictionary) -> bool   # a 가 b 를 이기나(D5). 같으면 false
-static func merge_freeze(items: Array, today: int) -> Dictionary   # items=[{device_id, freeze_lang_dict}], §4.6
 static func canonical(v: Variant) -> String   # 키 정렬 JSON (비교·지문용)
 ```
 
@@ -596,8 +609,11 @@ class_name SyncEngine extends RefCounted
 signal finished(result: Dictionary)
 func _init(ports: SyncPorts) -> void
 func sync_now(reason: String) -> Dictionary        # await 가능. §6.4 결과
-func status() -> Dictionary    # {enabled, linked, busy, last_ok, last_error{code,error,at}, peers[], backups:int, clock_off_sec, first_done}
-func set_enabled(on: bool) -> void
+func status() -> Dictionary    # {enabled, choice, linked, busy, last_ok, last_error{code,error,at}, peers[], backups:int, clock_off_sec, first_done}
+func set_enabled(on: bool) -> void                # 스위치. 끄면 disabled_at 기록, 켜면(합치기 선택자) rebase 설정
+func needs_choice() -> bool                        # choice=="undecided" (사이드카 없음 포함)
+func set_choice(choice: String) -> Dictionary      # "merge" | "separate". merge → 첫 동기화까지 수행해 결과 반환, separate → enabled=false
+func probe_peers() -> int                          # PC undecided 전용: 읽기 전용 pull 1번, 다른 기기 복제본 수(-1=실패). 사이드카·로컬을 바꾸지 않는다
 func list_backups() -> Array   # [{name, reason, at, md5}]
 func restore_backup(name: String) -> Dictionary   # {ok, error}
 func unlink_for_reset() -> void
@@ -605,7 +621,8 @@ func relink_fresh() -> Dictionary                  # '이 PC와 새로 합치기
 func local_fingerprint() -> String
 
 class_name SyncManager extends Node     # S7: 타이머·생명주기·Store/Backend 신호 연결
-func request_sync(reason: String) -> void
+func request_sync(reason: String) -> void       # disabled/undecided 이면 아무 요청도 만들지 않음
+signal choice_needed(kind: String)                # "phone"|"pc" — SyncPanel/대화상자가 받는다
 ```
 
 ### 9.3 저장소 적용 함수 (S3 가 추가, 이름 고정)
@@ -615,7 +632,7 @@ func request_sync(reason: String) -> void
 func apply_sync_progress(p: Dictionary) -> bool   # progress_read_only 면 false. Progress.normalize 후 교체, 원자적 저장, 실패 시 메모리 원복, 성공 시 changed.emit()
 func apply_sync_prefs(changes: Dictionary) -> bool   # SHARED_PREFS 키만 반영, 원자적 저장, prefs_changed.emit()
 # study_log.gd
-static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,missions}; _read_only 면 false; _normalize 후 즉시 쓰기(_write_text), 실패 시 원복
+static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,missions} (freeze 는 건드리지 않음); _read_only 면 false; _normalize 후 즉시 쓰기(_write_text), 실패 시 원복
 ```
 
 ---
@@ -694,14 +711,14 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | U14 | 날짜별 시간: 같은 날 폰 300 + PC 600 / 서로 다른 날 / 합이 86400 초과 | 900 / 두 날 모두 / 86400 로 잘림 |
 | U15 | 이중 계산 방지 잎 전부: `by`, `n`, `lesson`, `score` 도 같은 규칙 | 각 잎이 합, 두 번째 라운드에도 같음 |
 | U16 | 미션: 별 폰 2·PC 3, done_goals 1·2, last, plays | stars 3, done_goals 2, last 늦은 날, plays 합(자기 몫 합) |
-| U17 | 보호권 F1~F4(§4.6 표) | 표의 값, 항상 0≤tokens≤2 |
+| U17 | 보호권 비동기화: 서로 다른 `freeze` 를 가진 폰·PC 로 `sync_round`+`to_local` | `extract` 결과·복제본에 `freeze` 키 없음, `to_local` 결과 `studylog` 에 `freeze` 가 입력과 바이트 단위로 같음 |
 | U18 | 연속 기록: PC 가 월·화, 폰이 수·목 공부 | 합친 marks 로 `StreakCalc.settle` 계산 시 연속 4(시험은 marks 합집합 4일을 단언) |
 | U19 | 음소: `new_outcomes` 표(§4.5) 5행 + 두 기기 `h` 가 `t` 순으로 이어짐, 30자 초과 시 뒤 30자, `heard` 합 | 표대로 |
 | U20 | 시계: ① 미래 `t`(saved_hub+10일)로 올린 삭제 이벤트가 이후 정직한 추가(saved_hub+1)를 이기지 못함 ② `extract(…, skew=−7200)` → `to_local(…, −7200)` 왕복이 카드 due/last_review 를 보존 ③ skew=+7200 에서 같은 카드의 hub 시각 | 단언대로 |
 | U21 | 스키마: peer `doc.v=2` → 병합에서 빠지고 `report.peers_skipped[0].reason=="newer"`; `doc.v` 누락/문자열 → `invalid`; peer 가 `null`/배열/섹션 타입 틀림 → 예외 없이 무시 | |
 | U22 | 깨진 own: `own={"progress":5}`, `own=null`, `own="x"` | `{}` 취급, 예외 없음 |
 | U23 | 깨진 숫자: 음수, NaN, `inf`, 문자열, 1e30 | 0 또는 상한, 예외 없음, `view` 의 모든 숫자가 정수·상한 안 |
-| U24 | 검사기 막음: `test_corrupt` 로 `view.xp.en` 을 `local` 보다 작게, 카드 수 줄임, 별 3→1, 보호권 5 로 변조 | 각각 `ok==false`, `problems` 비어 있지 않음, 반환 `view` == `local`(변조 아님) |
+| U24 | 검사기 막음: `test_corrupt` 로 `view.xp.en` 을 `local` 보다 작게, 카드 수 줄임, 별 3→1 로 변조 | 각각 `ok==false`, `problems` 비어 있지 않음, 반환 `view` == `local`(변조 아님) |
 | U25 | 검사기 통과: 정상 병합 100개 무작위 시나리오(시드 고정) | 모두 `ok==true` |
 | U26 | prefs: 기본값 vs 사용자가 바꾼 값(t=0 vs t>0), 둘 다 바꾼 경우 늦은 쪽, 값 타입 틀림(`daily_goal_min:"x"`, `lesson_source:"zzz"`) 무시, `mic_device` 는 `extract` 결과에 없음 | |
 | U27 | known_words: 합집합, 해제 전파, 상한 초과 시 `trimmed.known` 보고, 오래된 것부터 잘림 | |
@@ -733,7 +750,7 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | MG9 | 시각 자르기(`TIME_SLACK`) 제거 | U20 |
 | MG10 | 첫 동기화에서 늦은 복제본이 통째로 이김(덮어쓰기) | U01·U02 |
 | MG11 | `check()` 가 항상 `[]` | U24 |
-| MG12 | 보호권을 `max` 로 | U17(F1) |
+| MG12 | `to_local` 이 합쳐진 값으로 `freeze` 를 덮어씀(또는 `extract` 가 `freeze` 를 복제본에 넣음) | U17 |
 | MG13 | `new_outcomes` 가 항상 `local_h` 전체 | U19 |
 | MG14 | 카드 `id` 를 승자의 것으로 교체 | U12 |
 | MG15 | `peers` 순서에 의존(첫 승자 우선) | U05 |
@@ -771,6 +788,12 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | E-H2 | `hub_id` 가 바뀜 + 허브 비어 있음 | 새 id 채택, 자기 몫 재업로드 |
 | E-B1 | 되돌리기: `restore_backup(first)` | 세 파일 MD5 == 백업 MD5, `enabled==false`, `rebase` 설정, `restore` 백업 생김, 사이드카 `own` 불변 |
 | E-B2 | 되돌리기 후 다시 켬 → 라운드 | 지운 적 없는 항목이 되살아나고, 카운터 이중 계산 없음 |
+| E-S1 | **스위치 끔 → 요청 0**: `choice=merge` 로 동기화한 뒤 `set_enabled(false)`; 가짜 포트의 `http_get/http_post` 호출 횟수 카운터를 0 으로 놓고 `sync_now("manual"/"poll"/"change"/"pause"/"resume")` 와 `SyncManager` 타이머를 가상 시간으로 1시간 진행 | 카운터 0, 결과 `code=="disabled"`, 로컬·사이드카 불변 |
+| E-S2 | **첫 연결 선택 두 경로(폰)**: 사이드카 없음 → `needs_choice()==true`, 선택 전 `sync_now` 와 매니저 타이머 1시간 → 요청 0. (a) `set_choice("merge")` → 첫 동기화(백업 `first` 생성, 합집합) (b) `set_choice("separate")` → `enabled==false`, 요청 0 | (a)(b) 각각 새 엔진 인스턴스(재시작 흉내)에서 `needs_choice()==false` — **다시 묻지 않음** |
+| E-S3 | **따로 쓰기 후 켜기 = 무손실 재합류**: 따로 쓰기 선택 뒤 폰 로컬에 공부·카드·체크 누적, PC/허브에도 별개 기록 → 스위치 켬 | 결과는 합집합: 양쪽 모든 카드·체크 존재, 카운터 = 폰 몫 + PC 몫(정확히 한 번씩), 백업 `first` 존재 |
+| E-S4 | **합치기 후 껐다 켜기 재합류**: 동기화 → 스위치 끔 → 폰에서 공부 +120초·카드 삭제 1개·체크 추가 1개, PC 에서 공부 +60초·카드 추가 1개 → 스위치 켬 | 폰 몫에 +120초가 **정확히 한 번** 더해짐(이중 계산 0), 꺼진 동안 폰이 지운 카드는 되살아남(삭제 전파 안 됨), PC 의 새 카드 도착, 폰의 새 체크 도착, 어떤 항목도 사라지지 않음(켜기 전 로컬 키 ⊆ 켠 후 키, 단 PC 의 더 늦은 삭제는 예외) |
+| E-S5 | PC `undecided` probe: 허브가 비어 있음 → `probe_peers()==0`, 대화상자 요청 없음; 허브에 폰 복제본 있음 → `probe_peers()==1`; probe 후 사이드카 파일이 생기지 않음 | |
+| E-S6 | 선택 대화상자: `choice_needed` 신호가 폰은 첫 `READY` 에, PC 는 probe>0 일 때만 1번 발생 | |
 | E-F1 | 초기화 연동: `unlink_for_reset()` | `enabled==false`, `own`·`base`·`hub_id` 비워짐, `unlink` 백업 생김, 허브의 내 복제본은 그대로 |
 
 **왕복 `sync_roundtrip_test`** — 한 Godot 프로세스 안에서 가짜 기기 두 개("pc"=루프백, "phone"=같은 허브)를 서로 다른 `SyncPorts`(별도 사이드카·별도 로컬 데이터 홀더)로 돌리고 실제 스텁 허브와 HTTP 로 통신. 픽스처 `sync_fixtures/pc_local.json`, `phone_local.json`(아래 값 고정).
@@ -786,14 +809,17 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | E-RT8 | 서버가 `push` 에 409 `stale_seq` | 한 번 재시도 후 성공 |
 | E-RT9 | 폰 모드 + 토큰: `-- --phone --api=… --token=…` 로 :8775 리스너에 붙는 경로(스텁 `--lan-enabled`, 훅) | 토큰 없으면 `token_missing` 계열 실패, 있으면 성공 |
 | E-RT10 | 사용자 폴더 불변 | 래퍼의 MD5·목록 비교 PASS |
+| E-RT11 | 실제 허브 상대: 폰 `separate` → 스텁 서버 요청 로그(스텁이 세는 `/sync/*` 호출 수)가 0 → 켬 → 합집합 재합류, 이후 PC 가 폰 기록을 받음 | 호출 수 0 확인 후 양쪽 `view` 동일 |
+| E-RT12 | 스위치 끄고 켜기 왕복: E-S4 를 실제 허브·두 기기로, 끈 동안 서버 요청 로그 0 | 양쪽 카운터 합 정확, 손실 0 |
 
-엔진 변이(`sync_engine_mutations.json`, 사본에서): ME1 백업 생략, ME2 검사 생략, ME3 저널 생략(pending 안 씀), ME4 base 를 병합 결과로 저장(적용 후 재추출 안 함 — 상한 사례에서 어긋남), ME5 `seq` 갱신 안 함, ME6 pull 전에 push, ME7 허브 시각 대신 로컬 시각 사용(E-C1), ME8 `rebase` 무시. 합격: 각 변이에서 지정 시험(E-U1/E-C2/E-J1/E-U2 or E-RT1/E-RT8/E-RT3/E-C1/E-B2) FAIL.
+엔진 변이(`sync_engine_mutations.json`, 사본에서): ME1 백업 생략, ME2 검사 생략, ME3 저널 생략(pending 안 씀), ME4 base 를 병합 결과로 저장(적용 후 재추출 안 함 — 상한 사례에서 어긋남), ME5 `seq` 갱신 안 함, ME6 pull 전에 push, ME7 허브 시각 대신 로컬 시각 사용(E-C1), ME8 `rebase` 무시, ME9 스위치가 꺼져도 pull 수행(E-S1), ME10 `undecided` 에서 요청 전송(E-S2), ME11 재합류 때 새 기기 id 생성(E-S3/E-S4 이중 계산), ME12 `separate` 선택을 저장하지 않아 다시 물음(E-S2). 합격: 각 변이에서 지정 시험(E-U1/E-C2/E-J1/E-U2 or E-RT1/E-RT8/E-RT3/E-C1/E-B2/E-S1/E-S2/E-S4/E-S2) FAIL.
 
 ### 10.8 S7 매니저·UI (worker)
 | ID | 명령 | 기대 | 판정 |
 |---|---|---|---|
 | UI-01 | `GODOT --headless --path ...\godot --quit` | 0 오류 | O/X |
-| UI-02 | `sync_manager_test`(S7 가 작성: `godot/tests/sync_manager_test.gd/.tscn`, 가짜 엔진·가짜 시계로 타이머 규칙 검증) | `== sync_manager result: N passed, 0 failed ==`, N ≥ 15: 20초 debounce, 최소 30초 간격, 백오프 30/60/120/240/300, `READY` 복귀 시 즉시, PAUSED 시 지문 다를 때만, 진행 중 중복 요청 합침 | O/X |
+| UI-02 | `sync_manager_test`(S7 가 작성: `godot/tests/sync_manager_test.gd/.tscn`, 가짜 엔진·가짜 시계로 타이머 규칙 검증) | `== sync_manager result: N passed, 0 failed ==`, N ≥ 20: 20초 debounce, 최소 30초 간격, 백오프 30/60/120/240/300, `READY` 복귀 시 즉시, PAUSED 시 지문 다를 때만, 진행 중 중복 요청 합침, **스위치 꺼짐/undecided 에서 모든 계기가 요청 0**, PC undecided probe 60초 주기와 선택 후 중단 | O/X |
+| UI-02b | `sync_panel_test`(S7: `godot/tests/sync_panel_test.gd/.tscn`): 스위치 끔/켬이 엔진 `set_enabled` 를 부르고 끈 상태에서 '지금 동기화' 버튼이 비활성; 첫 연결 대화상자 두 버튼이 `set_choice("merge"/"separate")` 를 부르고 문구가 §6.3 과 글자 단위로 같음; 따로 쓰기 후 패널 재생성 시 대화상자 안 뜸 | `== sync_panel result: N passed, 0 failed ==`, N ≥ 10 | O/X |
 | UI-03 | 회귀 `phone_layout_test`, `smoke`, `t5_wiring_test` (`--headless`) | 기준선과 같은 통과 수 | O/X |
 | UI-04 | 문구 점검: `sync_panel.gd` 의 한국어 문구가 §6.3 표와 글자 단위로 같음(`grep`) | 표의 모든 문구 존재 | O/X |
 | UI-05 | `today_view.gd`/`main.gd` 변경 줄 수 | `today_view.gd`: 마운트 1줄 + 초기화 문구 블록만, `main.gd`: `add_sync` 함수 + 호출 1곳. 그 밖 차이 0(`fc`) | O/X |
@@ -812,7 +838,7 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | I-02 | 병합·엔진·허브 변이 시험 3종 | 변이 전부 탐지(지정 시험 FAIL), 원본 MD5 불변 |
 | I-03 | 회귀 일괄: 백엔드 `test_lan.py`, `test_backend.py`; Godot `persist_test`, `study_log_test`, `fsrs_test`, `review_walk_test`, `streak_test`, `stats_view_test`, `remote_test -- --phone`, `smoke` | 기준선과 같은 통과 수 |
 | I-04 | 실제 사용자 폴더 3개 파일 MD5 + `backend\data\sync` 목록, 작업 시작 전/후 | 동일 |
-| I-05 | 사람 확인(오케스트레이터/사용자): 실제 폰 + PC 로 §12 Q 결정 후 시나리오 3개(폰에서 카드 복습→PC 에서 보임, PC 에서 체크→폰에서 보임, 폰 Tailscale 끈 채 공부→켠 뒤 PC 에 보임) | 육안 확인 |
+| I-05 | 사람 확인(오케스트레이터/사용자): 실제 폰 + PC 로 시나리오 3개(폰에서 카드 복습→PC 에서 보임, PC 에서 체크→폰에서 보임, 폰 Tailscale 끈 채 공부→켠 뒤 PC 에 보임) | 육안 확인 |
 
 ---
 
@@ -835,9 +861,9 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | R12 | 폰이 새 앱, PC 가 옛 앱 | 동기화 안 됨 | 404 → `old_pc` 안내, 로컬 영향 없음 |
 | R13 | 사용자가 초기화 후 동기화를 다시 켬 | 보관함 기록이 되돌아옴(원하지 않을 수 있음) | 초기화 확인 문구에 설명, PC 보관함 폴더 삭제 방법 안내 |
 | R14 | PC 앱 두 개 동시 실행 | 같은 사이드카/로컬 파일 경합 | 기존 문제. `seq` 가 허브 쪽 덮어쓰기를 막음. 해결은 이번 범위 밖 |
-| R15 | `StudyLog.settle()` 이 적용 직후 토스트("보호권을 써서…")를 띄움 | 놀라움 | 정상 동작(합쳐진 기록 기준 재계산). 문서화만 |
+| R15 | `StudyLog.settle()` 이 적용 직후 토스트("보호권을 써서…")를 띄움 | 놀라움 | 정상 동작(합쳐진 공부한 날 기준 재계산). 문서화만 |
 | R16 | 병합 중 `Store.changed` 로 화면이 다시 그려짐(복습 중) | 진행 중 카드 화면 깜빡임 | 복습 화면은 `status=="idle"` 일 때만 다시 그림(기존). 녹음 중 적용 연기 |
-| R17 | 보호권 휴리스틱(§4.6)이 ±1 차이 가능 | 보호권 개수가 기대와 다름 | 성질 시험으로 범위·멱등·교환만 보장, 한계 명시 |
+| R17 | 보호권이 기기별이라 같은 빠진 날에 두 기기가 각각 보호권을 쓸 수 있음 | 보호권이 한 개 더 줄어듦 | 사용자 결정(Q9)으로 감수. 연속 일수 자체는 합친 공부한 날로 계산되어 일치 |
 | R18 | 추측: `Time.get_unix_time_from_system()` 이 폰에서 정수 초로 충분 | 영향 없음 | – |
 | R19 | 추측: `OS.get_model_name()` 이 Android 에서 기기 이름을 돌려줌 | 이름이 비면 `휴대폰` | 빈 값이면 `"휴대폰"` 사용 |
 
@@ -862,20 +888,19 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 
 ---
 
-## 12. 오케스트레이터가 정할 사항
+## 12. 결정 완료 (사용자·오케스트레이터)
 
-| Q | 질문 | 추천 |
-|---|---|---|
-| Q1 | 첫 동기화를 **확인 없이 자동**으로 하나, 아니면 "PC와 기록을 합칠까요?" 한 번 묻나(모든 합치기는 합집합·백업이 있어 손실은 없음) | 자동 + 합친 뒤 토스트 안내(문서 기준). 묻고 싶다면 `SyncPanel` 에 첫 실행 확인 한 단계 추가(S7 에 0.5일) |
-| Q2 | `MAX_REVIEW` 1000 → 3000 상향과 `t5_wiring_test` 307행 단언 수정 허용? (유지하면 두 기기 카드 합이 1000 을 넘을 때 오래된 카드가 이 기기에서 잘림) | 3000 으로 상향 |
-| Q3 | 공유할 설정 6개(`daily_goal_min`, `lesson_source`, `auto_fix_cards`, `tts_voice_en/ja`, `tts_speed`)가 맞나? 더 공유/덜 공유하고 싶은 것 | 현 6개 |
-| Q4 | 초기화 정책: 이 기기만 지우고 연결 해제(문서 기준)로 충분한가, 전 기기 초기화(PC 전용)를 1.2 에 넣을까 | 1.2 는 문서 기준, 전 기기 초기화는 1.3 |
-| Q5 | 시험 포트 `18791~18799` 사용 가능? (기존 문서는 8811~8824, 8830~8859, 8862~8869, 18771~18790 사용) | 가능하면 그대로 |
-| Q6 | `views/today_view.gd` 를 지금 다른 작업자가 고치고 있나? (S7 가 설정 카드에 2곳 수정) 겹치면 S7 을 그 작업 뒤로 | 확인 후 착수 |
-| Q7 | `store.gd`, `study_log.gd`, `api.gd`, `main.gd` 를 지금 다른 작업이 고치고 있나? (S3·S7 이 함수 추가/한 줄 수정) | 없다고 가정, 확인 필요 |
-| Q8 | 폰 앱 버전: 1.2 동기화를 쓰려면 PC 도 1.2 여야 한다(옛 PC 는 404 안내). 같은 태그로 릴리스? | 같은 태그(기존 Q7 결정과 동일) |
-| Q9 | 보호권 규칙(§4.6, ±1 오차 가능)을 받아들이나, 아니면 "보호권은 동기화하지 않고 기기별" 로 단순화? | 문서 기준 유지. 불안하면 기기별로 단순화하고 연속 일수만 합친 공부한 날로 계산 |
-| Q10 | 실제 폰 확인(§10.10 I-05)을 누가·언제 하나 | 통합 직후 사용자 폰으로 3개 시나리오 |
+| Q | 질문 | 결정 | 문서 반영 |
+|---|---|---|---|
+| Q1 | 첫 동기화 방식 | **사용자 결정**: 첫 연결 때 "PC와 학습 기록을 합칠까요? / 따로 쓸까요?" 를 한 번 묻는다. 설정에 '학습 기록 동기화' 켜기/끄기 스위치(PC·폰 공통). 끄면 받기·올리기 모두 안 함(허브의 내 복제본은 남고 다시 켜면 합집합 재합류). 따로 쓰기를 고르면 다시 묻지 않음. 첫 실행 확인 단계는 S7 | D10, §4.8.1, §4.10 `choice`, §6.1·6.3·6.4, §9.2, S3·S7, E-S1~S6, E-RT11·12, ME9~ME12 |
+| Q2 | `MAX_REVIEW` 상향 | 3000 으로 상향, `t5_wiring_test` 307행 수정 포함 | §4.1, S3 |
+| Q3 | 공유할 설정 | 6개 그대로 | §4.1 |
+| Q4 | 초기화 정책 | 이 기기만 초기화 + 연결 해제. 전 기기 초기화는 1.3 | §4.8, §11.3 |
+| Q5 | 시험 포트 | `18791~18799` 사용 | §7.4, §8 |
+| Q6/Q7 | 다른 작업자와 파일 겹침 | 지금 다른 작업자 없음. 이후 UI 전면 개편 예정 → S7 화면 변경은 설정 화면에 **독립 패널 `SyncPanel`**(+ 별도 대화상자 파일)과 마운트 1줄로 한정 | S7, §8 겹침 점검 |
+| Q8 | 폰·PC 릴리스 태그 | 같은 태그 | – |
+| Q9 | 보호권 | **사용자 결정**: 동기화하지 않고 기기별. 연속 일수는 합친 '공부한 날'로 계산 | D11, §4.6, U17·U18, MG12, R17 |
+| Q10 | 실제 폰 확인 | 통합 뒤 사용자 폰으로 3개 시나리오(§10.10 I-05) + 첫 연결 선택 두 경로·스위치 끄고 켜기 | §10.10 |
 
 ---
 
@@ -886,8 +911,8 @@ static func apply_sync(parts: Dictionary) -> bool    # parts={days,phon,freeze,m
 | S1 | `SYNC_HUB_TEST_RESULT PASS ≥45`, `LAN_TEST_RESULT PASS`(기준선 동일), 허용 목록 25, 실제 폴더 불변 |
 | S2 | `sync_merge` 시험 ≥90 통과 0 실패, 순수성 grep 0건, 성능 ≤5초 |
 | S3 | `sync_engine` ≥40 통과, 회귀 기준선 동일, 기존 파일 변경은 지정 줄만 |
-| S4 | `SYNC_E2E_RESULT PASS`, 엔진 변이 8개 탐지, 사용자 폴더 MD5·목록 불변 |
+| S4 | `SYNC_E2E_RESULT PASS`, 엔진 변이 12개 탐지, 사용자 폴더 MD5·목록 불변 |
 | S5 | 허브 변이 7개 탐지, 원본 MD5 불변 |
 | S6 | 병합 변이 15개 탐지, 원본 MD5 불변 |
-| S7 | `sync_manager` ≥15 통과, 회귀 동일, 문구 일치 |
+| S7 | `sync_manager` ≥20 + `sync_panel` ≥10 통과, 회귀 동일, 문구 일치 |
 | S8 | API.md 에 두 경로·오류 코드·25개 반영 |
