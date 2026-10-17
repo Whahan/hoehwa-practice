@@ -8,15 +8,16 @@ const H := 915.0           ## logical height
 const PAD := 16            ## page side padding
 const TOP_H := 40.0        ## top status strip
 const TAB_H := 56.0        ## bottom tab bar (without the safe-area inset)
-const BTN_H := 48.0        ## minimum height of buttons, options and fields
-const LINK_H := 44.0       ## minimum size of text links
+const BTN_H := 48.0        ## minimum height of buttons, options and fields (= Ds.touch_min() on a 412 dp phone)
+const LINK_H := 48.0       ## minimum size of text links (48 dp touch target, docs/ui_redesign_design.md §5.3)
 
 ## Tests overwrite these (docs §5.1): keyboard height in logical px (>= 0 overrides), and
 ## {"top","bottom","left","right"} insets in logical px (null = ask the OS).
 static var test_keyboard_height: float = -1.0
 static var test_insets: Variant = null
 
-static var _theme_done: bool = false
+## Marks a Theme that apply_theme has already adjusted (it runs once per theme: light and dark are two themes).
+const _THEME_META := "phone_done"
 
 
 ## Logical px of the screen that the status bar, notch and gesture bar cover. Always zero off Android.
@@ -68,27 +69,42 @@ static func is_narrow(width: float) -> bool:
 	return width < 700.0
 
 
-## Text sizes of the phone: 16 -> 17, "Small" 13 -> 14, "Eyebrow" 12 -> 13 (docs §5.1). Idempotent via apply_theme.
+## dp per logical px: below 1.0 on a phone narrower than the 412 dp the logical canvas assumes, so 48 logical px
+## are fewer than 48 dp. 1.0 off Android (desktop tests). Ds.touch_min() = 48 / dp_scale().
+static func dp_scale() -> float:
+	if not Platform.is_android():
+		return 1.0
+	var dpi: float = float(DisplayServer.screen_get_dpi())
+	var ppl: float = _px_per_logical()
+	if dpi <= 0.0 or ppl <= 0.0:
+		return 1.0
+	return clampf(ppl / (dpi / 160.0), 0.5, 2.0)
+
+
+## Text sizes of the phone from the Ds table (16 -> 17, "Small" 13 -> 14, "Eyebrow" 12 -> 13, H1..H3 +1..2).
 static func font_bump(theme: Theme) -> void:
-	theme.default_font_size = 17
-	var bumps := {"Small": 14, "Eyebrow": 13, "Muted": 16, "Strong": 17}
-	for k in bumps.keys():
-		theme.set_font_size("font_size", k, int(bumps[k]))
+	Ds.apply_type_sizes(theme, true)
 
 
-## Raises the theme's text sizes and tightens card padding for the small screen. Idempotent.
+## Raises the theme's text sizes and tightens card padding for the small screen. Idempotent per theme.
 static func apply_theme(theme: Theme) -> void:
-	if theme == null or _theme_done:
+	if theme == null or theme.has_meta(_THEME_META):
 		return
-	_theme_done = true
+	theme.set_meta(_THEME_META, true)
 	font_bump(theme)
-	for spec in [["Card", 14, 14], ["BigCard", 16, 16], ["Sunk", 12, 12]]:
+	# card padding 16 on the phone, no outline (the grey page background separates the cards); radius stays R_CARD
+	for spec in [["Card", 16, 16], ["BigCard", 16, 16], ["Sunk", 12, 12]]:
 		var sb: StyleBox = theme.get_stylebox("panel", spec[0])
 		if sb != null:
 			sb.content_margin_left = float(spec[1])
 			sb.content_margin_right = float(spec[1])
 			sb.content_margin_top = float(spec[2])
 			sb.content_margin_bottom = float(spec[2])
+			if sb is StyleBoxFlat and spec[0] != "Sunk":
+				(sb as StyleBoxFlat).set_border_width_all(0)
+	# a little more air between lines of Korean body text (Godot default Label 3: PC 4, phone 5; RichTextLabel 0: PC 2, phone 3)
+	theme.set_constant("line_spacing", "Label", 5)
+	theme.set_constant("line_separation", "RichTextLabel", 3)
 	# Android has none of the Windows fonts: put common system names behind them.
 	var f: Font = theme.default_font
 	if f is SystemFont:
