@@ -9,7 +9,7 @@
 
 param(
     [string]$GodotSrc = '',
-    [string]$Scratch = 'C:\Users\rtyu6\AppData\Local\Temp\claude\D--Ai---\9cb41c31-c114-4117-abfc-6c62dfb3d0b7\scratchpad\w_S6b',
+    [string]$Scratch = (Join-Path $env:TEMP 'sync_merge_mut_work'),
     [string]$Godot = (Join-Path $env:USERPROFILE 'Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe'),
     [int]$TimeoutSec = 300,
     [string]$MutationsPath = '',
