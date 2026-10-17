@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import deque
 
 import requests
 
@@ -960,6 +961,47 @@ def unit_security():
     lan.S.bad_tokens.clear()
 
 
+class FakeSock:
+    def __init__(self):
+        self.sent = []
+
+    def sendto(self, data, addr):
+        self.sent.append((data, addr))
+
+
+def disc_reply(ip, payload=None):
+    """feed one UDP packet from a made-up source address to the discovery handler -> replies it would send"""
+    d = lan._Discovery.__new__(lan._Discovery)
+    d.sock = FakeSock()
+    d.sent = deque()
+    d._handle(payload if payload is not None else DISCOVER, (ip, 4444))
+    return d.sock.sent
+
+
+def unit_discovery():
+    print("\n== UDP discovery source filter (in-process)")
+    saved = lan.S.lan.get("allow_cgnat")
+    try:
+        lan.S.lan["allow_cgnat"] = False
+        denied = {ip: disc_reply(ip) for ip in ("8.8.8.8", "175.212.223.8", "100.64.0.1", "2606:4700::1111", "::ffff:8.8.8.8", "junk")}
+        allowed = {ip: disc_reply(ip) for ip in ("127.0.0.1", "192.168.0.7", "10.2.3.4", "172.16.9.9", "169.254.3.3", "fd00::1", "fe80::5")}
+        check("S1k discovery: a valid discover packet from a public / CGNAT / junk source gets NO reply", all(v == [] for v in denied.values()),
+              {k: len(v) for k, v in denied.items()})
+        ok = all(len(v) == 1 for v in allowed.values())
+        body = json.loads(allowed["192.168.0.7"][0][0].decode()) if ok else {}
+        check("S1l discovery: the same packet from loopback / private / link-local / ULA sources is answered (keys hoehwa,op,name,port; sent back to the asker)",
+              ok and set(body) == {"hoehwa", "op", "name", "port"} and allowed["192.168.0.7"][0][1] == ("192.168.0.7", 4444), {k: len(v) for k, v in allowed.items()})
+        lan.S.lan["allow_cgnat"] = True
+        check("S1m discovery: with lan.allow_cgnat a CGNAT source is answered, a public one still is not",
+              len(disc_reply("100.64.0.1")) == 1 and disc_reply("8.8.8.8") == [])
+        lan.S.lan["allow_cgnat"] = False
+        check("S1n discovery: a bad packet from an allowed source is still ignored (wrong keys, bool, 2 KB)",
+              disc_reply("192.168.0.7", b'{"hoehwa":true,"op":"discover"}') == [] and disc_reply("192.168.0.7", b"x" * 2048) == []
+              and disc_reply("192.168.0.7", b'{"hoehwa":1,"op":"discover","x":1}') == [])
+    finally:
+        lan.S.lan["allow_cgnat"] = saved
+
+
 def csrf_checks(T):
     """S2: management endpoints refuse a web page's request (Origin / Host / Content-Type); the PC app's own style still works"""
     port = T.http_port
@@ -1151,6 +1193,76 @@ def scenario_slow():
 
 
 
+def scenario_acl():
+    print("\n== S4 device-file ACL uses the process account, not the USERNAME variable")
+    if os.name != "nt":
+        note("S4k ACL scenario not run", "not Windows")
+        return
+    T = Stub("acl", env={"USERNAME": "Administrator"}).start()      # a wrong USERNAME must not lock the real user out
+    try:
+        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        tok, dev = pair_token(T)
+        try:
+            data = json.load(open(T.devfile, "r", encoding="utf-8"))
+            readable = data.get("version") == 1 and len(data.get("devices", [])) == 1
+        except Exception as e:
+            readable = False
+            print("      read failed:", repr(e)[:80])
+        r = subprocess.run(["icacls", T.devfile], capture_output=True, text=True, errors="replace")
+        aces = re.findall(r"(\S+):\(", r.stdout.replace(T.devfile, ""))
+        real = os.environ.get("USERNAME", "")
+        check("S4k with USERNAME=Administrator the device file is still readable by the real account, and the only ACE is that account",
+              bool(tok) and readable and len(aces) == 1 and aces[0].lower().endswith(real.lower()) and "administrator" not in aces[0].lower(), "aces=%s" % aces)
+    finally:
+        T.stop()
+    T.enabled = True
+    T.start(keep_ports=True)
+    try:
+        check("S4l ... and after a restart the token is still accepted (the file is not treated as broken, no .bad)",
+              http("GET", lurl(T, "/health"), token=tok).status_code == 200 and not os.path.exists(T.devfile + ".bad"))
+    finally:
+        T.stop()
+        T.release_ports()
+
+
+def scenario_hdr():
+    print("\n== S4 header-phase slowloris (default limit 10 s, headers capped at 16 KB)")
+    T = Stub("hdr").start()
+    try:
+        set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        tok, _ = pair_token(T)
+        data, dt = _raw(T.lan_port, b"GET /hello HTTP/1.1\r\nHost: x\r\nX-A: ", 15)
+        check("S4m a connection that sends half a header and stalls is closed by the server after ~10 s (not held open)", data == b"" and 8.0 <= dt <= 12.5, "%.1fs" % dt)
+        s1 = socket.create_connection(("127.0.0.1", T.lan_port), timeout=5)
+        s1.settimeout(5)
+        s1.sendall(b"GET /hello HTTP/1.1\r\nHost: x\r\n")
+        time.sleep(1.5)
+        s1.sendall(b"Connection: close\r\n\r\n")
+        got = b""
+        try:
+            while True:
+                c = s1.recv(4096)
+                if not c:
+                    break
+                got += c
+        except OSError:
+            pass
+        s1.close()
+        check("S4n a request whose headers arrive in two pieces 1.5 s apart is served normally (200)", b" 200 " in got, got[:30])
+        data, dt = _raw(T.lan_port, b"GET /hello HTTP/1.1\r\nHost: x\r\nX-A: " + b"a" * 40000 + b"\r\n\r\n", 6)
+        check("S4o 40 KB of headers are refused (no 200)", b" 200 " not in data, data[:30])
+        check("S4p afterwards normal requests are unaffected (/hello, token /health, loopback /health)",
+              http("GET", lurl(T, "/hello")).status_code == 200 and http("GET", lurl(T, "/health"), token=tok).status_code == 200
+              and http("GET", T.base + "/health").status_code == 200)
+        r = requests.get(lurl(T, "/health"), headers={"Authorization": "Bearer " + tok}, timeout=10)
+        s2 = requests.Session()
+        ok = all(s2.get(lurl(T, "/health"), headers={"Authorization": "Bearer " + tok}, timeout=10).status_code == 200 for _ in range(5))
+        check("S4q keep-alive connections (5 requests on one session) are not cut by the header timer", r.status_code == 200 and ok)
+    finally:
+        T.stop()
+        T.release_ports()
+
+
 def scenario_logs(stubs_logs, codes_seen=()):
     print("\n== B-25 log hygiene")
     pat = re.compile(r"hp1_[A-Za-z0-9_-]{20,}")
@@ -1178,6 +1290,7 @@ def main():
     try:
         unit_checks()
         unit_security()
+        unit_discovery()
         ip2, ip2_private = None, bool(lan.private_addresses())     # no 0.0.0.0 bind in tests, so no non-loopback address can be reached
         print("\nprivate IPv4 addresses on this PC: %s (non-loopback reachability is not tested: tests bind 127.0.0.1 only)" % ("yes" if ip2_private else "none"))
         if EXTERNAL:
@@ -1195,6 +1308,8 @@ def main():
             scenario_ttl()
             scenario_netsafe()
             scenario_slow()
+            scenario_hdr()
+            scenario_acl()
             scenario_restart()
             scenario_rate()
             scenario_logs(sorted(os.path.join(WORK, f) for f in os.listdir(WORK) if f.startswith("stub_")))
