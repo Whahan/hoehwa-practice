@@ -154,7 +154,9 @@ func start() -> void:
 	_starting = true
 	if remote_mode:
 		# Phone: never look for / launch a local server (no find_backend_dir, python_path, create_process).
-		await _start_remote()
+		# A pairing made while this check was waiting restarts the check for the new connection.
+		while not await _start_remote():
+			pass
 		_starting = false
 		return
 	_adopt_config_port()
@@ -219,27 +221,32 @@ func _saved_connection() -> Dictionary:
 	return conn
 
 
-func _start_remote() -> void:
+## Returns false when the connection was replaced (new pairing / disconnect) while the check was waiting: the late
+## result belongs to the old connection and is dropped; the caller starts over with the current one.
+func _start_remote() -> bool:
 	var conn: Dictionary = _saved_connection()
 	if str(conn.get("token", "")) == "" or str(conn.get("base_url", "")) == "":
 		# Not paired: no network at all.
 		Api.clear_remote()
 		health = {}
 		_set_status(Status.NEEDS_PAIRING, "")
-		return
+		return true
 	Api.set_remote(str(conn["base_url"]), str(conn["token"]))
 	_set_status(Status.CHECKING, "PC에 연결 중…")
-	if await check_health():
+	var ok: bool = await check_health()
+	if status == Status.NEEDS_PAIRING:
+		return true   # the PC answered 401: the pairing was revoked (see _on_auth_failed)
+	if Api.base_url != str(conn["base_url"]).rstrip("/") or Api.token != str(conn["token"]):
+		return false
+	if ok:
 		_fail_streak = 0
 		_set_status(Status.READY)
 		Store.refresh_curriculum()
-		return
-	if status == Status.NEEDS_PAIRING:
-		return   # the PC answered 401: the pairing was revoked (see _on_auth_failed)
+		return true
 	# No discovery (the link is Tailscale only): the saved address is the only one we try.
-	Api.set_remote(str(conn["base_url"]), str(conn["token"]))
 	health = {}
 	_set_status(Status.FAILED, UNREACHABLE_TEXT)
+	return true
 
 
 ## The PC no longer knows this phone: forget the token (keep address and PC name for the connect screen).

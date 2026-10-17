@@ -26,6 +26,8 @@ BAD_NAME = [
     (r"(^|/)secrets\.json", "secrets.json"),
     (r"(^|/)(auth\.json|\.env)$", "credentials file"),
     (r"(^|/)lan_devices[^/]*\.json", "paired-phone tokens (lan_devices*.json)"),
+    (r"(^|/)remote\.json$", "remote-access settings (remote.json)"),
+    (r"^(?!defaults/prefs\.json$)(.*/)?prefs\.json$", "personal settings (prefs.json; only the sanitized defaults/prefs.json may ship)"),
     (r"\.sqlite(-journal|-wal)?$", "database"),
     (r"(^|/)__pycache__/", "__pycache__"),
     (r"\.(pyc|log)$", "pyc/log"),
@@ -36,6 +38,7 @@ if not allow_models:
     BAD_NAME.append((r"^backend/models/", "models folder"))
 if not allow_progress:
     BAD_NAME.append((r"(^|/)progress\.json$", "learning history"))
+    BAD_NAME.append((r"(^|/)studylog\.json$", "learning history (studylog.json)"))
 
 bad = []
 z = zipfile.ZipFile(zpath)

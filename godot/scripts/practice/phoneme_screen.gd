@@ -56,6 +56,7 @@ func _exit_tree() -> void:
 	_serial += 1
 	SpeakDrill.cancel_call(_call)
 	_call = null
+	_leave_drill() ## _render() takes the drill and its recorder out of the tree: they would never be freed with this screen
 
 
 ## args: {p: "θ"} 가 있으면 소리 목록을 읽은 뒤 그 소리의 설명 화면으로 바로 간다.

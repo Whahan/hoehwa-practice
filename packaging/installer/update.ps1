@@ -55,6 +55,7 @@ function Ask-YN([string]$prompt) {
         $a = Read-Host $prompt
         if ($a -match '^[yY]') { return $true }
         if ($a -match '^[nN]') { return $false }
+        if ([string]::IsNullOrEmpty($a)) { return $false }   # 빈 입력 / 입력 끝(EOF): 안전한 쪽(N)으로 끝낸다
     }
 }
 $script:LastOutput = @()

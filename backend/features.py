@@ -430,6 +430,7 @@ _ph_vocab = None
 _ph_lock = threading.Lock()
 _ph_run_lock = threading.Lock()
 _logit_cache = OrderedDict()
+_logit_lock = threading.Lock()   # guards _logit_cache (pool threads and request threads both use it)
 
 
 def phoneme_ready():
@@ -467,16 +468,20 @@ def phoneme_probs(x):
     model = phoneme_load()
     x = np.asarray(x, dtype=np.float32)[: SR * 20]
     key = hashlib.sha1(x.tobytes()).hexdigest()
-    if key in _logit_cache:
-        _logit_cache.move_to_end(key)
-        return _logit_cache[key]
+    with _logit_lock:
+        hit = _logit_cache.get(key)
+        if hit is not None:
+            _logit_cache.move_to_end(key)
+            return hit
     xn = (x - x.mean()) / np.sqrt(x.var() + 1e-7)
     with _ph_run_lock, torch.inference_mode():
         lg = model(torch.from_numpy(xn)[None]).logits[0]
         P = torch.softmax(lg.float(), dim=-1).numpy()
-    _logit_cache[key] = P
-    while len(_logit_cache) > 6:
-        _logit_cache.popitem(last=False)
+    with _logit_lock:
+        _logit_cache[key] = P
+        _logit_cache.move_to_end(key)
+        while len(_logit_cache) > 6:
+            _logit_cache.popitem(last=False)
     return P
 
 

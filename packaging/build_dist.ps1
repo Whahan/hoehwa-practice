@@ -5,7 +5,7 @@ param(
     [switch]$IncludeModels,    # also pack backend\models\hf (about 2 GB more, fully offline model install)
     [switch]$IncludeProgress,  # also pack progress.json (learning history) for the user's own second PC
     [switch]$SkipExport,       # reuse app\dist\회화연습.exe instead of re-exporting from Godot
-    [string]$GodotExe = "C:\Users\rtyu6\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe",
+    [string]$GodotExe = $(if ($env:HOEHWA_GODOT_EXE) { $env:HOEHWA_GODOT_EXE } else { Join-Path $env:USERPROFILE "Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe" }),
     [string]$OutDir,
     [string]$Release,          # x.y.z : also build the update zip + out\release_<x.y.z>\ (GitHub assets, SHA256SUMS.txt)
     [string]$Notes = "",       # release notes (only written into the local latest.json used for testing)
@@ -184,7 +184,7 @@ try {
         "$($RelCfg.min_installer_version)", "$($RelCfg.installer_version)", (Join-Path $Dest "manifest.json"), "--exclude-from-update") + $notInUpdate)
     if ($code -ne 0) { throw "manifest failed" }
     # last safety net: nothing secret / personal in the package
-    $bad = Get-ChildItem -LiteralPath $Dest -Recurse -File | Where-Object { $_.Name -match '^(secrets\.json.*|auth\.json|\.env|lan_devices.*\.json.*)$' -or ($_.Name -eq "progress.json" -and -not $IncludeProgress) }
+    $bad = Get-ChildItem -LiteralPath $Dest -Recurse -File | Where-Object { $_.Name -match '^(secrets\.json.*|auth\.json|\.env|lan_devices.*\.json.*|remote\.json|studylog\.json)$' -or ($_.Name -eq "progress.json" -and -not $IncludeProgress) }
     if ($bad) { throw ("secret/personal file in package: " + ($bad.FullName -join ", ")) }
     $code = Run-Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "make_zip.py"), $Stage, $RootName, $ZipPath)
     if ($code -ne 0) { throw "zip failed" }

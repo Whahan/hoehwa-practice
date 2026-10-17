@@ -2,7 +2,7 @@
 """Offline grammar correction with a local LanguageTool server (no AI model needed).
 
 LanguageTool (https://languagetool.org, LGPL) runs as a Java child process on a free 127.0.0.1 port:
-    java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port <p> --allow-origin
+    java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port <p>
 It is started on first use (or by warmup), tied to this process with a Windows job object (so it dies even if
 the backend is killed hard), and stopped by PID at exit. Never by image name.
 
@@ -232,7 +232,7 @@ def start(wait=60.0):
         os.makedirs(LOG_DIR, exist_ok=True)
         out = open(os.path.join(LOG_DIR, "languagetool.log"), "ab")
         args = [java, "-Xmx1g", "-Dfile.encoding=UTF-8", "-cp", jar, "org.languagetool.server.HTTPServer",
-                "--port", str(port), "--allow-origin"]
+                "--port", str(port)]
         t0 = time.time()
         try:
             proc = subprocess.Popen(args, cwd=os.path.dirname(jar), stdin=subprocess.DEVNULL, stdout=out,

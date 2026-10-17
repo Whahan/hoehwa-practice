@@ -106,22 +106,94 @@ static func _known_words(v: Variant) -> Dictionary:
 	return out
 
 
-static func load_file(path: String) -> Dictionary:
+## Tests only: (tmp_path: String, text: String) -> bool, replaces writing the `.tmp` file in write_text_atomic()
+## (a hook that writes half of the text and returns false imitates a crash while writing).
+static var write_hook: Callable = Callable()
+## Tests only: (path: String) -> FileAccess or null, replaces FileAccess.open(path, READ) in read_json_file().
+static var open_hook: Callable = Callable()
+const KEEP_BAD := 3 ## .bad, .bad.1, .bad.2
+## "new" | "ok" | "empty" | "bad" | "unreadable" -- how the last load_file() went.
+static var last_load_status: String = ""
+
+
+## Reads a JSON file. Returns {"status": "new"|"ok"|"empty"|"bad"|"unreadable", "data": Variant}.
+##   new = no file, empty = blank file, bad = not valid JSON or not an object (the file is moved to `<path>.bad`,
+##   older .bad files shift to .bad.1, .bad.2), unreadable = the file exists but cannot be opened (left untouched).
+static func read_json_file(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		return blank()
-	var f := FileAccess.open(path, FileAccess.READ)
+		return {"status": "new", "data": null}
+	var f: FileAccess = open_hook.call(path) if open_hook.is_valid() else FileAccess.open(path, FileAccess.READ)
 	if f == null:
-		return blank()
-	var parsed: Variant = JSON.parse_string(f.get_as_text())
-	return normalize(parsed)
+		return {"status": "unreadable", "data": null}
+	var text: String = f.get_as_text()
+	f.close()
+	if text.strip_edges() == "":
+		return {"status": "empty", "data": null}
+	var js := JSON.new()
+	if js.parse(text) != OK or not (js.data is Dictionary):
+		quarantine(path)
+		return {"status": "bad", "data": null}
+	return {"status": "ok", "data": js.data}
+
+
+## Moves a broken file to `<path>.bad` (never overwrites one: older ones shift to .bad.1, .bad.2; KEEP_BAD at most).
+static func quarantine(path: String) -> void:
+	var gp: String = ProjectSettings.globalize_path(path)
+	var i: int = KEEP_BAD - 1
+	while i >= 0:
+		var from: String = gp + (".bad" if i == 0 else ".bad.%d" % i)
+		if FileAccess.file_exists(from):
+			if i == KEEP_BAD - 1:
+				DirAccess.remove_absolute(from)
+			else:
+				var to: String = gp + ".bad.%d" % (i + 1)
+				if FileAccess.file_exists(to):
+					DirAccess.remove_absolute(to)
+				DirAccess.rename_absolute(from, to)
+		i -= 1
+	DirAccess.rename_absolute(gp, gp + ".bad")
+
+
+## Writes `text` to `<path>.tmp` and then renames it over `path`, so a failure while writing leaves the old file.
+static func write_text_atomic(path: String, text: String) -> bool:
+	var tmp: String = path + ".tmp"
+	var gt: String = ProjectSettings.globalize_path(tmp)
+	if write_hook.is_valid():
+		if not bool(write_hook.call(tmp, text)):
+			DirAccess.remove_absolute(gt)
+			return false
+	else:
+		var f: FileAccess = FileAccess.open(tmp, FileAccess.WRITE)
+		if f == null:
+			return false
+		f.store_string(text)
+		var err: int = f.get_error()
+		f.close()
+		if err != OK:
+			DirAccess.remove_absolute(gt)
+			return false
+	if DirAccess.rename_absolute(gt, ProjectSettings.globalize_path(path)) == OK:
+		return true
+	# rename refused (target busy?): the .tmp file is complete, so fall back to a plain overwrite
+	var f2: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if f2 == null:
+		return false
+	f2.store_string(text)
+	f2.close()
+	DirAccess.remove_absolute(gt)
+	return true
+
+
+## Never throws away a file it could not understand: broken -> `.bad` + blank, unreadable -> blank with
+## last_load_status == "unreadable" (the caller must then not save over it).
+static func load_file(path: String) -> Dictionary:
+	var r: Dictionary = read_json_file(path)
+	last_load_status = str(r["status"])
+	return normalize(r["data"])
 
 
 static func save_file(path: String, data: Dictionary) -> bool:
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_string(JSON.stringify(data, "\t"))
-	return true
+	return write_text_atomic(path, JSON.stringify(data, "\t"))
 
 
 static func new_id() -> String:

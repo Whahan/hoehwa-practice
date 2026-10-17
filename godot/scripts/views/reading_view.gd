@@ -941,7 +941,8 @@ func _scroll_to_selected() -> void:
 		return
 	await get_tree().process_frame
 	await get_tree().process_frame
-	if selected < 0 or not is_instance_valid(_rtl):
+	# the text may have been replaced (or the view closed) during the two frames
+	if not is_inside_tree() or selected < 0 or selected >= tokens.size() or not is_instance_valid(_rtl) or not is_instance_valid(_text_scroll):
 		return
 	var ch := 0
 	for k in selected:

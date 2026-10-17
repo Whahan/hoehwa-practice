@@ -409,11 +409,24 @@ func _test_back(main: Control) -> void:
 	back.call()
 	ok(tv.status == "setup" and tv.msgs.is_empty(), "L-09: second back leaves the chat")
 	# connect screen
+	var saved_status: int = Backend.status
+	Backend.status = Backend.Status.NEEDS_PAIRING
 	main.call("_open_connect_view")
 	ok(main.is_connect_open(), "L-09 setup: connect screen open")
+	ok((main._connect_view as ConnectView).cancel_button == null, "1.1.1: opened while not connected (pairing needed): no cancel button")
 	back.call()
 	await _frames(2)
 	ok(not main.is_connect_open(), "L-09: back closes the connect screen")
+	# 1.1.1: "연결 변경" while connected shows the cancel button, and it closes the screen
+	Backend.status = Backend.Status.READY
+	main.call("_open_connect_view")
+	await _frames(2)
+	var cv: ConnectView = main._connect_view as ConnectView
+	ok(main.is_connect_open() and cv.cancel_button != null, "1.1.1: opened while connected (연결 변경): cancel button shown")
+	cv.cancel_button.pressed.emit()
+	await _frames(3)
+	ok(not main.is_connect_open(), "1.1.1: the cancel button closes the connect screen")
+	Backend.status = saved_status as Backend.Status
 	# other tab -> 오늘
 	main.show_view("review")
 	back.call()

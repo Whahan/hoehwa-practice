@@ -54,6 +54,7 @@ func _exit_tree() -> void:
 	_serial += 1
 	SpeakDrill.cancel_call(_call)
 	_call = null
+	_leave_run() ## _render() takes the drill and its recorder out of the tree: they would never be freed with this screen
 
 
 ## 허브 계약. args: {source: "week"|"review"} 가 있으면 시작 화면 없이 바로 시작한다.

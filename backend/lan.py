@@ -1121,6 +1121,7 @@ async def pair(request: Request):
             S.log.warning("lan: could not write the device file; pairing cancelled")
             return _err(500, "store_failed")
         S.code, S.code_exp, S.fails = None, 0.0, 0     # single use
+        S.bad_tokens.pop(ip, None)                     # a successful pairing clears this address's bad-token record (else the new token gets 429 for up to RATE_WINDOW)
         S.log.info("lan: paired device %s (%s) from %s", dev_id, name, ip)
     return {"token": token, "device_id": dev_id, "server_name": S.name(), "port": int(S.lan["port"])}
 

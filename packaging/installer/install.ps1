@@ -712,7 +712,7 @@ try {
         if ($have -and $have.sha256 -eq $lt.sha256) { Info ("LanguageTool {0} 이(가) 이미 설치되어 있습니다." -f $lt.version) }
         else {
             New-Item -ItemType Directory -Force $ltRoot | Out-Null
-            $zip = Join-Path $env:TEMP ("LanguageTool-{0}.zip" -f $lt.version)
+            $zip = Join-Path $env:TEMP ("LanguageTool-{0}-{1}.zip" -f $lt.version, $PID)   # 설치를 두 개 동시에 돌려도 부딪히지 않게 프로세스마다 다른 이름
             $tmpDir = Join-Path $ltRoot "_extract"
             try {   # 아래 어디서 실패하든(다운로드, 해시, 압축 풀기, Ctrl+C) finally 에서 받은 zip 과 _extract 폴더를 지운다
             if (-not ((Test-Path -LiteralPath $zip) -and (Get-Sha256 $zip) -eq $lt.sha256)) {

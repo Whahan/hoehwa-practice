@@ -31,6 +31,9 @@ const DEFAULT_PREFS := {
 
 var progress_path: String = PROGRESS_PATH
 var prefs_path: String = PREFS_PATH ## tests point this at a temp file
+## The file exists but could not be opened at load time: nothing is saved over it until the next load.
+var progress_read_only: bool = false
+var prefs_read_only: bool = false
 var progress: Dictionary = Progress.blank()
 var prefs: Dictionary = DEFAULT_PREFS.duplicate(true)
 var curriculum: Dictionary = {}
@@ -48,30 +51,33 @@ func _ready() -> void:
 
 func load_progress() -> void:
 	progress = Progress.load_file(progress_path)
+	# The file exists but could not be opened: keep it as it is (no saving) until the next load.
+	progress_read_only = Progress.last_load_status == "unreadable"
+	if progress_read_only:
+		Toast.info("진행 기록 파일을 읽지 못했어요. 이번에는 진행 기록을 저장하지 않고, 다음에 다시 시도해요.")
 
 
 func save_progress() -> void:
 	progress["updatedAt"] = int(Time.get_unix_time_from_system())
-	if not Progress.save_file(progress_path, progress):
+	if progress_read_only:
+		pass ## the real file could not be read: do not overwrite it
+	elif not Progress.save_file(progress_path, progress):
 		Toast.error("진행 기록을 저장하지 못했어요.")
 	changed.emit()
 
 
 func load_prefs() -> void:
 	prefs = DEFAULT_PREFS.duplicate(true)
-	if FileAccess.file_exists(prefs_path):
-		var f := FileAccess.open(prefs_path, FileAccess.READ)
-		if f != null:
-			var parsed: Variant = JSON.parse_string(f.get_as_text())
-			if parsed is Dictionary:
-				for k in (parsed as Dictionary).keys():
-					prefs[k] = (parsed as Dictionary)[k]
+	var r: Dictionary = Progress.read_json_file(prefs_path)
+	prefs_read_only = r["status"] == "unreadable"
+	if r["status"] == "ok":
+		for k in (r["data"] as Dictionary).keys():
+			prefs[k] = (r["data"] as Dictionary)[k]
 
 
 func save_prefs() -> void:
-	var f := FileAccess.open(prefs_path, FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(prefs, "\t"))
+	if not prefs_read_only:
+		Progress.write_text_atomic(prefs_path, JSON.stringify(prefs, "\t"))
 	prefs_changed.emit()
 
 
@@ -124,9 +130,7 @@ func refresh_curriculum() -> void:
 	if res["ok"] and _valid_curriculum(res["data"]):
 		curriculum = res["data"]
 		curriculum_from_backend = true
-		var f := FileAccess.open(curriculum_cache_path, FileAccess.WRITE)
-		if f != null:
-			f.store_string(JSON.stringify(curriculum))
+		Progress.write_text_atomic(curriculum_cache_path, JSON.stringify(curriculum))
 		curriculum_updated.emit()
 
 

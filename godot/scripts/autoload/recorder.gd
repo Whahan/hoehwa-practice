@@ -140,6 +140,7 @@ func end() -> void:
 	if mode() != "pc":
 		_end_godot(who)
 		return
+	_start_serial += 1 ## a /mic/start still waiting for its answer must not report a second `finished`
 	var req = Api.post_json("/mic/stop", {}, 20.0, false)
 	var res: Dictionary = await req.wait()
 	stopping = false

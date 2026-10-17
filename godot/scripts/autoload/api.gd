@@ -207,6 +207,8 @@ func _send(req_call: ApiCall, report: bool) -> int:
 
 func _finish_later(req_call: ApiCall, res: Dictionary, report: bool) -> void:
 	await get_tree().process_frame
+	if req_call.done:
+		return ## cancelled in the same frame: cancel() already gave the count back and nobody wants the error
 	active_count = maxi(0, active_count - 1)
 	if report and res.get("error", "") != "":
 		Toast.error(res["error"])

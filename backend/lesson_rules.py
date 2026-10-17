@@ -92,6 +92,7 @@ for _s in sorted(JA_STEMS, key=len, reverse=True):
     _JA_BY_FIRST.setdefault(_s[0], []).append(_s)
 _HIRA = re.compile(r"[ぁ-ゟ]+")
 _ja_cache = {}
+_ja_cache_lock = threading.Lock()
 BLOCK_RULES_VERSION = "3"  # bump when the matching logic (not the word lists) changes: it is part of the pool cache signature
 # Korean: 총 / 죽 alone are NOT blocked (총장 총무 총 3개 / 호박죽 죽 한 그릇 are fine): only the weapon / killing / dying forms are.
 # 죽 counts only at the start of a word (a preceding syllable means 호박죽 / 팥죽 ...) and only with a verb ending (죽이 / 죽을 먹다 pass).
@@ -110,7 +111,8 @@ def _ja_blocked(text):
     """True if the Japanese `text` contains a blocked word on morpheme boundaries (or a morpheme whose dictionary form is one)"""
     if not BLOCK_JA.search(text):
         return False
-    hit = _ja_cache.get(text)
+    with _ja_cache_lock:
+        hit = _ja_cache.get(text)
     if hit is not None:
         return hit
     try:
@@ -148,9 +150,10 @@ def _ja_blocked(text):
                     break
             if hit:
                 break
-    if len(_ja_cache) > 20000:
-        _ja_cache.clear()
-    _ja_cache[text] = hit
+    with _ja_cache_lock:
+        if len(_ja_cache) > 20000:
+            _ja_cache.clear()
+        _ja_cache[text] = hit
     return hit
 
 
@@ -220,13 +223,15 @@ infra inter intra iso macro mal mega meta micro mid mini mis mono multi neo non 
 quasi re retro self semi step sub super supra sur syn techno tele trans tri ultra un under uni up vice with""".split())
 NOT_WORDS = set("gon wan ca sha ai ain isn gonna wanna gotta lemme gimme kinda sorta cuz tho thru til mapo".split())
 _vocab_ok = {}
+_vocab_ok_lock = threading.Lock()
 
 
 def _real_word(surf, lemma, wn):
     """True if `surf` can stand on its own as an English word: not an affix / contraction stub, common enough as written,
     not a rare inflection of a common word, and known to WordNet (when it is available)"""
     key = (surf, lemma)
-    v = _vocab_ok.get(key)
+    with _vocab_ok_lock:
+        v = _vocab_ok.get(key)
     if v is not None:
         return v
     z, zl = reading.zipf(surf, "en"), reading.zipf(lemma, "en")
@@ -237,7 +242,8 @@ def _real_word(surf, lemma, wn):
                 ok = bool(wn.synsets(surf) or wn.synsets(lemma))
             except Exception:
                 pass
-    _vocab_ok[key] = ok
+    with _vocab_ok_lock:
+        _vocab_ok[key] = ok
     return ok
 
 
@@ -298,6 +304,7 @@ _wn_state = {"wn": None, "tried": False}
 _wn_lock = threading.Lock()      # guards loading
 _wn_q_lock = threading.Lock()    # NLTK's WordNet reader seeks in shared file handles: one query at a time
 _rel_cache = {}
+_rel_cache_lock = threading.Lock()
 
 
 def ensure_wordnet_data():
@@ -619,7 +626,8 @@ def en_related(a, b, tag):
     if a == b:
         return True
     key = (a, b, tag[:1])
-    hit = _rel_cache.get(key)
+    with _rel_cache_lock:
+        hit = _rel_cache.get(key)
     if hit is not None:
         return hit
     ga, gb = EN_GROUP.get(a), EN_GROUP.get(b)
@@ -642,7 +650,8 @@ def en_related(a, b, tag):
                                 break
                 except Exception:
                     res = False
-    _rel_cache[key] = res
+    with _rel_cache_lock:
+        _rel_cache[key] = res
     return res
 
 
@@ -871,6 +880,7 @@ class Pool:
         self.tri = set()      # (left, word, right) seen in the pool
         self.bits = None      # en: bit set of word triples of the whole English corpus (see _load_bits)
         seen = set()
+        seen_ch = set()       # (head pos1, chunk, head lemma): each chunk once, so frequent chunks are not over-drawn
         for it in items:
             toks = it["toks"]
             words = ["<s>"] + [self.norm(t[0]) for t in toks if self.is_wordtok(t)] + ["</s>"]
@@ -889,9 +899,14 @@ class Pool:
                     seen.add((key, surf))
                     self.vocab.setdefault(key, []).append((surf, t[2], t[5]))
             if lang == "ja" and it["bt"]:
+                pos = 0
                 for ch in it["bt"]:
-                    head = next((t for t in toks if ch.startswith(t[0]) and t[3] in JA_HEAD), None)
-                    if head and len(ch) <= 6 and not re.search(r"[、。！？!?]", ch):
+                    s0, e0 = pos, pos + len(ch)
+                    pos = e0
+                    # head = first content word INSIDE this chunk, skipping a prefix (お茶を -> 茶, not お)
+                    head = next((t for t in toks if s0 <= t[1] < e0 and t[3] in JA_HEAD and t[3] != "接頭辞"), None)
+                    if head and len(ch) <= 6 and not re.search(r"[、。！？!?]", ch) and (head[3], ch, head[2]) not in seen_ch:
+                        seen_ch.add((head[3], ch, head[2]))
                         self.chunks.setdefault(head[3], []).append((ch, head[2]))
 
     def refine_vocab(self, wn):

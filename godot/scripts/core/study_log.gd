@@ -488,7 +488,7 @@ static func add_mission(lang: String, id: String, stars: int, done_goals: int) -
 	m["stars"] = maxi(int(m["stars"]), clampi(stars, 0, 3))
 	m["plays"] = mini(int(m["plays"]) + 1, MAX_COUNT)
 	m["last"] = Plan.days_to_iso(today())
-	m["done_goals"] = clampi(done_goals, 0, 1000)
+	m["done_goals"] = maxi(int(m["done_goals"]), clampi(done_goals, 0, 1000)) ## best, like stars
 	ms[id] = m
 	_dirty = true
 

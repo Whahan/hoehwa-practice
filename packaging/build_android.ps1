@@ -11,7 +11,7 @@
 # Exit codes: 0 ok, 1 failure, 3 signing certificate differs from the pinned fingerprint.
 param(
     [string]$Version,
-    [string]$GodotExe = "C:\Users\rtyu6\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe",
+    [string]$GodotExe = $(if ($env:HOEHWA_GODOT_EXE) { $env:HOEHWA_GODOT_EXE } else { Join-Path $env:USERPROFILE "Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe" }),
     [string]$OutDir,
     [string]$KeysDir,
     [string]$JavaHome,

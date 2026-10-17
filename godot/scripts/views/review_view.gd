@@ -25,6 +25,8 @@ var _page: PageScroll
 var _score_call = null
 var _record_widget: RecorderWidget = null
 var _serial: int = 0
+var _leave_msec: int = -100000 ## first Android back press during a session (see go_back)
+var _stale: bool = false ## on_hide() cancelled the scoring request: redraw when the tab comes back
 
 
 func _ready() -> void:
@@ -44,11 +46,48 @@ func refresh() -> void:
 		_render()
 	elif status == "done":
 		_render()
+	elif status == "run" and _stale:
+		_stale = false
+		_render()
 
 
 func on_hide() -> void:
 	if _record_widget != null and is_instance_valid(_record_widget):
 		_record_widget.stop_if_recording()
+	Tts.stop()
+	if _score_call != null:
+		_score_call.cancel()
+		_score_call = null
+		scoring = false
+		_stale = true
+
+
+## Android back button. During a session the first press only asks; the second one within 2 s goes back to the
+## review home (the schedule of cards already rated is kept). Returns false on the review home.
+func go_back() -> bool:
+	match status:
+		"done":
+			status = "idle"
+			_render()
+			return true
+		"run":
+			var now: int = Time.get_ticks_msec()
+			if now - _leave_msec > 2000:
+				_leave_msec = now
+				Toast.info("복습을 그만두면 남은 카드는 그대로 두고 처음 화면으로 가요. 나가려면 한 번 더 눌러 주세요.")
+				return true
+			quit_session()
+			return true
+	return false
+
+
+func quit_session() -> void:
+	_leave_msec = -100000
+	_stale = false
+	_reset_item()
+	Tts.stop()
+	status = "idle"
+	_render()
 
 
 func _start() -> void:
@@ -243,11 +282,7 @@ func _render_run(c: VBoxContainer) -> void:
 	var n: int = items.size()
 	var bar_row := UI.hbox(12)
 	var quit := UI.link_button("그만")
-	quit.pressed.connect(func() -> void:
-		_reset_item()
-		Tts.stop()
-		status = "idle"
-		_render())
+	quit.pressed.connect(quit_session)
 	bar_row.add_child(quit)
 	bar_row.add_child(UI.progress_bar(float(idx) / float(n), acc, 12.0))
 	bar_row.add_child(UI.label("%d/%d" % [idx + 1, n], "Muted", false))

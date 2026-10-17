@@ -1,4 +1,4 @@
-# 회화 연습 제거 스크립트. 보통은 제거.bat 을 더블클릭해서 실행합니다.
+﻿# 회화 연습 제거 스크립트. 보통은 제거.bat 을 더블클릭해서 실행합니다.
 # 지우는 것: 이 폴더 안의 runtime, backend\models, backend\logs, backend\cache, backend\tools(LanguageTool), backend\secrets.json(API 키), backend\lan_devices.json(연결된 휴대폰 목록), install.log
 # 지우지 않는 것: Ollama 와 AI 모델, OpenCode/Node.js, 학습 기록/설정(%APPDATA%\Godot\app_userdata\회화 연습), 프로그램 파일 자체
 param([switch]$Yes)
@@ -19,10 +19,10 @@ if (-not $Yes) {
     if ($a -notmatch '^[yY]') { Write-Host "취소했습니다."; exit 0 }
 }
 
-# 이 폴더의 파이썬으로 돌고 있는 서버 / 앱 종료
-$rt = (Join-Path $Root "runtime") + "\"
+# 이 폴더 안의 실행 파일로 돌고 있는 프로세스(서버, 회화연습.exe 등) 종료. 접두어는 "<폴더>\" 로 정확히 비교한다 (이름만 비슷한 다른 폴더는 건드리지 않는다).
+$rt = $Root.TrimEnd("\") + "\"
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($rt, [StringComparison]::OrdinalIgnoreCase) } |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($rt, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $PID } |
     ForEach-Object { Write-Host "  실행 중인 프로세스 종료: $($_.Name) ($($_.ProcessId))"; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 1
 

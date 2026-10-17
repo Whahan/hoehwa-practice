@@ -912,6 +912,35 @@ func _test_lifecycle() -> void:
 	holds = {}
 	holder = null
 	ms = null
+	# 1.1.1: 끝내기를 누르면 녹음 중이던 것도 멈춘다 (마이크는 열지 않고 Recorder 상태만 흉내)
+	default_routes()
+	await make_screen(1280, 800)
+	await to_brief()
+	await start_ai()
+	var old_rec_mode: String = Recorder.mode_override
+	Recorder.mode_override = "phone"
+	Recorder.recording = true
+	Recorder.owner_id = ms._mic.get_instance_id()
+	ms._finish()
+	ok(ms.status == "result" and not Recorder.recording, "1.1.1: _finish() 가 녹음 중이면 멈춘다")
+	Recorder.recording = false
+	Recorder.owner_id = 0
+	Recorder.mode_override = old_rec_mode
+	# 1.1.1: 확인 요청을 기다리는 동안 /chat 은 아직 _pending 에 없다 -> 화면을 새로 시작해도 취소돼야 한다
+	default_routes()
+	await make_screen(1280, 800)
+	await to_brief()
+	await start_ai()
+	holds = {"/chat": true, "/missions/check": true}
+	ms._input.text = "Hi, good morning"
+	ms._send_message()
+	await settle(3)
+	var early_chat: FakeCall = (held["/chat"] as Array)[0]
+	ok(ms.status == "wait" and not early_chat.done, "1.1.1: 확인 응답을 기다리는 중 /chat 도 나가 있음")
+	ms._reset_run()
+	ok(early_chat.done and early_chat.result.get("cancelled", false), "1.1.1: _cancel_all() 이 아직 대기 목록에 없던 /chat 요청도 취소")
+	holds = {}
+	await settle(2)
 	# 언어 전환(open 다시 호출) 중 이전 응답 무시
 	default_routes()
 	holds = {"/missions": true}

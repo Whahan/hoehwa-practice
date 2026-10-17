@@ -29,6 +29,7 @@ var notice_label: Label
 
 var _busy: bool = false
 var _scroll: ScrollContainer
+var _flow: Flow ## the running attempt (its signals are cut when this screen leaves the tree)
 
 ## 진행 중인 Flow 는 화면이 사라져도 끝까지 돌아야 하므로 여기서 붙잡아 둔다.
 static var _live_flows: Array = []
@@ -147,6 +148,17 @@ func _ready() -> void:
 		notice_label.visible = true
 
 
+## Closed while waiting for the PC (back button etc.): the Flow keeps running (the issued token is still saved) but must
+## not call back into this freed screen.
+func _exit_tree() -> void:
+	if _flow != null:
+		if _flow.progress.is_connected(_on_progress):
+			_flow.progress.disconnect(_on_progress)
+		if _flow.connect_done.is_connected(_on_connect_done):
+			_flow.connect_done.disconnect(_on_connect_done)
+		_flow = null
+
+
 func _line_edit(placeholder: String, min_h: float) -> LineEdit:
 	var le := LineEdit.new()
 	le.placeholder_text = placeholder
@@ -204,6 +216,7 @@ func submit() -> void:
 		return
 	_set_busy(true, "PC에 연결하는 중…")
 	var flow := Flow.new()
+	_flow = flow
 	flow.progress.connect(_on_progress)
 	flow.connect_done.connect(_on_connect_done)
 	flow.connect_to(str(addr["base_url"]), code, name_edit.text)

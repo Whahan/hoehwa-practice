@@ -288,6 +288,11 @@ func _cancel_all() -> void:
 	for r in _pending.duplicate():
 		r.cancel()
 	_pending.clear()
+	# _ai_turn() starts /chat before it waits for /missions/check, so it is not in _pending yet at that moment
+	if _chat_req != null:
+		_chat_req.cancel()
+	if _fb_req != null:
+		_fb_req.cancel()
 	_chat_req = null
 	_fb_req = null
 
@@ -1100,6 +1105,8 @@ func _finish() -> void:
 		return
 	_serial += 1
 	_cancel_all()
+	if _mic != null and is_instance_valid(_mic):
+		_mic.stop_if_recording() ## a recording that is still running must not end up in a finished mission
 	status = "result"
 	judge_note = ""
 	_commit()

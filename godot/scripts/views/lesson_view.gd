@@ -42,6 +42,8 @@ var _loading_label: Label
 var _loading_start: int = 0
 var _record_widget: RecorderWidget = null
 var _lesson_serial: int = 0
+var _leave_msec: int = -100000 ## first Android back press while solving (see go_back)
+var _stale: bool = false ## on_hide() cancelled a request of the current exercise: redraw when the tab comes back
 var _autoplayed: int = -1
 var _req_source: String = "tatoeba" # source of the lesson currently being requested
 
@@ -79,6 +81,9 @@ func refresh() -> void:
 		lang = Store.lang()
 		if status == "idle":
 			_set_default_selection()
+		_render()
+	elif status == "run" and _stale:
+		_stale = false
 		_render()
 
 
@@ -357,6 +362,8 @@ static func review_from_exercise(e: Dictionary, l: String) -> Dictionary:
 
 func quit_lesson() -> void:
 	_lesson_serial += 1
+	_leave_msec = -100000
+	_stale = false
 	if _call != null:
 		_call.cancel()
 		_call = null
@@ -369,6 +376,41 @@ func quit_lesson() -> void:
 func on_hide() -> void:
 	if _record_widget != null and is_instance_valid(_record_widget):
 		_record_widget.stop_if_recording()
+	Tts.stop()
+	if status == "loading":
+		quit_lesson() ## the lesson request is cancelled; the lesson home is shown when the tab comes back
+		return
+	if status != "run":
+		return
+	if _score_call != null:
+		_score_call.cancel()
+		_score_call = null
+		scoring = false
+		_stale = true
+	if _prosody_call != null:
+		_prosody_call.cancel()
+		_prosody_call = null
+		_prosody_key = -1 ## asked again by the next render
+		_prosody_state = "loading"
+		_stale = true
+
+
+## Android back button. While solving, the first press only asks (the progress would be lost); the second one within
+## 2 s goes back to the lesson home. Returns false on the lesson home (main.gd then goes to 오늘).
+func go_back() -> bool:
+	match status:
+		"loading", "done":
+			quit_lesson()
+			return true
+		"run":
+			var now: int = Time.get_ticks_msec()
+			if now - _leave_msec > 2000:
+				_leave_msec = now
+				Toast.info("레슨을 나가면 지금까지 푼 것이 사라져요. 나가려면 한 번 더 눌러 주세요.")
+				return true
+			quit_lesson()
+			return true
+	return false
 
 
 # ---------------------------------------------------------------- rendering

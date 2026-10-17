@@ -588,6 +588,7 @@ func _open_connect_view() -> void:
 	var cv := ConnectView.new()
 	cv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cv.allow_cancel = _connect_keep_open ## opened from "연결 변경" while connected: show the cancel button
 	cv.connected.connect(func() -> void:
 		_connect_dismissed = false
 		_close_connect_view())

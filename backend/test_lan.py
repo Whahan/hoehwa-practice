@@ -795,6 +795,11 @@ def scenario_rate():
         check("/hello and /pair are not rate limited (pairing has its own lock)", http("GET", lurl(T, "/hello")).status_code == 200
               and http("POST", lurl(T, "/pair"), json={"code": "000000", "device_name": "x"}).status_code in (401, 410, 429))
         check("loopback listener unaffected", http("GET", T.base + "/health").status_code == 200)
+        # re-pairing from the rate-limited address clears its bad-token record: the NEW token works at once (not 429 for 10 minutes)
+        tok2, _ = pair_token(T, name="Pixel 8 again")
+        r = http("GET", lurl(T, "/health"), token=tok2) if tok2 else None
+        check("after 30 bad tokens, a successful re-pairing from that IP -> new token gets 200 (not 429)",
+              bool(tok2) and r is not None and r.status_code == 200, r.status_code if r is not None else "pairing failed")
     finally:
         T.stop()
         T.release_ports()
