@@ -217,6 +217,12 @@ func _test_parse_address() -> void:
 	print("[parse_address]")
 	var a: Dictionary = RemoteLink.parse_address("192.168.0.12")
 	ok(a["ok"] and int(a["port"]) == 8775 and a["base_url"] == "http://192.168.0.12:8775", "ip only -> port 8775")
+	a = RemoteLink.parse_address("100.101.102.103")
+	ok(a["ok"] and a["base_url"] == "http://100.101.102.103:8775", "Tailscale address 100.101.102.103 -> base_url http://100.101.102.103:8775")
+	a = RemoteLink.parse_address("100.101.102.103:9000")
+	ok(a["ok"] and int(a["port"]) == 9000 and a["host"] == "100.101.102.103", "Tailscale address with port 9000")
+	a = RemoteLink.parse_address("http://100.64.0.1:8775/")
+	ok(a["ok"] and a["base_url"] == "http://100.64.0.1:8775", "http://100.64.0.1:8775/ (Tailscale range start) is accepted")
 	a = RemoteLink.parse_address("192.168.0.12:9000")
 	ok(a["ok"] and int(a["port"]) == 9000 and a["host"] == "192.168.0.12", "ip:port")
 	a = RemoteLink.parse_address("http://192.168.0.12:8775/")
@@ -881,6 +887,14 @@ func _pc_tests() -> void:
 	Api.base_url = saved_base
 
 
+## A PC state as GET /lan would return it, with `over` replacing single keys.
+func _lan_fixture(over: Dictionary) -> Dictionary:
+	var d: Dictionary = {"enabled": true, "allow_tailscale": false, "addresses": ["192.168.0.12"], "tailscale_addresses": [], "network_safe": true, "network_reason": "", "port": 8775, "discovery": false, "discovery_listening": false, "discovery_port": 8776, "name": "TESTPC", "pairing": {"active": false, "code": null, "expires_in": 0, "locked": false, "attempts_left": 5}, "devices": [], "error": ""}
+	for k in over:
+		d[k] = over[k]
+	return d
+
+
 func _text_of(node: Node) -> String:
 	var out := ""
 	if node is Label:
@@ -982,6 +996,38 @@ func _test_phone_link_panel() -> void:
 		await get_tree().create_timer(1.3).timeout
 		fake.delay_sec.erase("/lan")
 		ok(Api.active_count == 0, "PhoneLinkPanel freed during GET /lan: nothing left in flight")
+	# Tailscale (allow_tailscale): injected PC states go through the real _handle_result path
+	var le_before: bool = PhoneLinkPanel.last_enabled
+	ok(PhoneLinkPanel.is_tailscale_ipv4("100.64.0.0") and PhoneLinkPanel.is_tailscale_ipv4("100.127.255.255") and PhoneLinkPanel.is_tailscale_ipv4("100.101.102.103"), "is_tailscale_ipv4: 100.64.0.0, 100.127.255.255, 100.101.102.103 are inside 100.64.0.0/10")
+	ok(not PhoneLinkPanel.is_tailscale_ipv4("100.63.255.255") and not PhoneLinkPanel.is_tailscale_ipv4("100.128.0.0") and not PhoneLinkPanel.is_tailscale_ipv4("8.8.8.8") and not PhoneLinkPanel.is_tailscale_ipv4("192.168.0.2") and not PhoneLinkPanel.is_tailscale_ipv4("abc") and not PhoneLinkPanel.is_tailscale_ipv4("100.64.0"), "is_tailscale_ipv4: 100.63.x, 100.128.x, public, private, 'abc', '100.64.0' are rejected")
+	# (1) allow on, Tailscale + public address from the PC: only the Tailscale one is shown
+	panel._handle_result({"ok": true, "data": _lan_fixture({"allow_tailscale": true, "addresses": [], "tailscale_addresses": ["100.101.102.103", "8.8.8.8"]})})
+	var t1: String = _text_of(panel)
+	ok(panel.ts_address_label.visible and panel.ts_address_label.text.contains("100.101.102.103:8775") and t1.contains("100.101.102.103:8775"), "Tailscale (1): 'Tailscale 100.101.102.103:8775' is shown")
+	ok(not t1.contains("8.8.8.8"), "Tailscale (1): the public address 8.8.8.8 is never shown")
+	ok(panel.tailscale_check.button_pressed, "Tailscale (1): the Tailscale checkbox is on")
+	# (2) allow on, private + Tailscale: both lines
+	panel._handle_result({"ok": true, "data": _lan_fixture({"allow_tailscale": true, "addresses": ["192.168.0.12"], "tailscale_addresses": ["100.101.102.103"]})})
+	ok(panel.address_label.visible and panel.address_label.text.contains("192.168.0.12:8775") and panel.ts_address_label.text.contains("100.101.102.103:8775"), "Tailscale (2): private and Tailscale addresses are both shown")
+	# (3) allow off: no Tailscale address even though the PC reports one
+	panel._handle_result({"ok": true, "data": _lan_fixture({"allow_tailscale": false, "addresses": ["192.168.0.12"], "tailscale_addresses": ["100.101.102.103"]})})
+	ok(not _text_of(panel).contains("100.101.102.103") and not panel.ts_address_label.visible and not panel.tailscale_check.button_pressed and panel.address_label.text.contains("192.168.0.12"), "Tailscale (3): allow off -> no Tailscale address, checkbox off, private address still shown")
+	# (4) off + network warning: the main switch is disabled, the Tailscale checkbox is not and shows the saved value
+	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "allow_tailscale": true, "network_safe": false, "network_reason": "이 PC에는 공유기(사설) 주소가 없어요.", "addresses": [], "tailscale_addresses": ["100.101.102.103"]})})
+	ok(panel.toggle.disabled and not panel.tailscale_check.disabled and panel.tailscale_check.button_pressed, "Tailscale (4): warning disables the main switch, not the Tailscale checkbox, which shows allow_tailscale=true")
+	panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "allow_tailscale": false, "network_safe": false, "network_reason": "이 PC에는 공유기(사설) 주소가 없어요.", "addresses": []})})
+	ok(not panel.tailscale_check.disabled and not panel.tailscale_check.button_pressed, "Tailscale (4b): warning + allow off -> checkbox usable and unchecked")
+	# (5) the checkbox sends exactly {"allow_tailscale": true} to POST /lan
+	if fake != null:
+		panel._handle_result({"ok": true, "data": _lan_fixture({"enabled": false, "allow_tailscale": false})})
+		fake.last_lan_body = {}
+		panel.tailscale_check.button_pressed = true
+		await _wait_for(func() -> bool: return not fake.last_lan_body.is_empty(), 3.0)
+		ok(fake.last_lan_body == {"allow_tailscale": true}, "Tailscale (5): checkbox on -> POST /lan body is exactly {\"allow_tailscale\": true}")
+		await _wait_for(func() -> bool: return not panel._busy, 3.0)
+	else:
+		skip("Tailscale (5): POST /lan body (stub PC: no request log)")
+	PhoneLinkPanel.last_enabled = le_before
 	# 404 from an old PC engine
 	panel.queue_free()
 	await _frames(2)
@@ -1011,6 +1057,7 @@ class FakeLan:
 	var private_network: bool = true    ## false: the PC has no private IPv4 address
 	var addresses: Array = ["192.168.0.12"]
 	var reject_admin: String = ""       ## "" | "local_only" | "bad_origin": refuse POST /lan
+	var last_lan_body: Dictionary = {}  ## body of the last POST /lan (checked by the Tailscale checkbox test)
 	var udp_mode: String = "on"         ## on | off | garbage | other_garbage (extra-key answer from a second socket)
 	var udp_reply_port: int = 0         ## answer discovery with this TCP port instead of lan_port (a "moved" PC)
 	var _udp2: PacketPeerUDP = null
@@ -1277,6 +1324,7 @@ class FakeLan:
 			"GET /lan":
 				return {"json": _lan_state()}
 			"POST /lan":
+				last_lan_body = body.duplicate()
 				if reject_admin != "":
 					return _err(403, "거절됐어요.", reject_admin)
 				if body.has("enabled"):

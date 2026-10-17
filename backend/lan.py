@@ -14,6 +14,7 @@ server.py only calls `attach()`, `start_if_enabled()` and `shutdown()`; everythi
 """
 import asyncio
 import base64
+import ctypes
 import hashlib
 import hmac
 import ipaddress
@@ -24,6 +25,7 @@ import os
 import re
 import secrets
 import socket
+import struct
 import subprocess
 import threading
 import time
@@ -36,7 +38,8 @@ from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 
-DEFAULT_LAN = {"enabled": False, "port": 8775, "discovery": True, "discovery_port": 8776, "name": "", "allow_cgnat": False}
+DEFAULT_LAN = {"enabled": False, "port": 8775, "discovery": True, "discovery_port": 8776, "name": "", "allow_cgnat": False,
+               "allow_tailscale": False}
 
 CODE_TTL_SECONDS = 300
 CODE_MAX_FAILS = 5
@@ -97,6 +100,8 @@ MSG = {
     "bad_origin": "허용되지 않은 요청이에요. 이 PC의 앱에서만 쓸 수 있어요.",
     "no_private_network": "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요.",
     "request_timeout": "요청을 받는 데 시간이 너무 오래 걸려요.",
+    "tailscale_hint": "Tailscale 을 쓴다면 '고급'에서 'Tailscale 로 연결 허용'을 켜세요.",
+    "no_tailscale": "이 PC에서 Tailscale 주소를 찾지 못했어요. Tailscale 을 켜고 로그인했는지 확인해 주세요.",
 }
 
 
@@ -141,26 +146,49 @@ _V6_OK = [ipaddress.ip_network(n) for n in ("::1/128", "fe80::/10", "fc00::/7")]
 _CGNAT = ipaddress.ip_network("100.64.0.0/10")
 
 
-def _source_allowed(host):
-    """loopback, private (10/8, 172.16/12, 192.168/16), link-local, IPv6 ULA; CGNAT 100.64/10 only with lan.allow_cgnat.
-    Anything else (the public internet) gets no answer at all."""
+def _unmap(host):
+    """text -> ipaddress object (an IPv4-mapped IPv6 address becomes the IPv4 one) | None when it is not an address"""
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
-        return False
+        return None
     if getattr(ip, "ipv4_mapped", None) is not None:
         ip = ip.ipv4_mapped
+    return ip
+
+
+def _local_is_tailscale(local):
+    """True when `local` (the address of THIS PC that a connection came in on) is one of this PC's own Tailscale addresses"""
+    ip = _unmap(local) if isinstance(local, str) else None
+    return ip is not None and ip.version == 4 and ip in _CGNAT and str(ip) in tailscale_addresses()
+
+
+def _source_allowed(host, local=None):
+    """loopback, private (10/8, 172.16/12, 192.168/16), link-local, IPv6 ULA (Tailscale's fd7a:115c:a1e0::/48 is one);
+    CGNAT 100.64/10 only with lan.allow_cgnat, or with lan.allow_tailscale when the connection came in on this PC's own Tailscale
+    address (`local`): a carrier-CGNAT neighbour reaching our carrier-side address, or a spoofed 100.x source from the internet,
+    arrives on some other local address and stays out. Anything else (the public internet) gets no answer at all."""
+    ip = _unmap(host)
+    if ip is None:
+        return False
     if ip.version == 4:
         if any(ip in n for n in _V4_OK):
             return True
-        return bool(S.lan.get("allow_cgnat")) and ip in _CGNAT
+        if ip not in _CGNAT:
+            return False
+        if S.lan.get("allow_cgnat"):
+            return True
+        return bool(S.lan.get("allow_tailscale")) and _local_is_tailscale(local)
     return any(ip in n for n in _V6_OK)
 
 
 def _peer_allowed(transport):
     try:
         peer = transport.get_extra_info("peername")
-        return bool(peer) and _source_allowed(peer[0])
+        if not peer:
+            return False
+        sock = transport.get_extra_info("sockname")
+        return _source_allowed(peer[0], sock[0] if sock else None)
     except Exception:
         return False
 
@@ -199,12 +227,152 @@ def _forced_private():
     return None
 
 
-def _network_ok(addrs=None):
-    """the link may only be turned on behind a router: at least one private IPv4 address on this PC"""
+TAILSCALE_MAX = 3
+TAILSCALE_CACHE_SECONDS = 5.0
+
+
+def _pick_tailscale(adapters):
+    """adapters = [(friendly_name, description, is_up, [ip text, ...]), ...] -> up to 3 Tailscale IPv4 addresses (100.64.0.0/10).
+    Only an adapter that is up AND has "tailscale" in its name or description counts: a carrier-CGNAT address on a normal
+    adapter (Ethernet, Wi-Fi ...) is not ours to trust. IPv6 and non-CGNAT addresses of a Tailscale adapter are left out."""
+    out = []
+    for name, desc, up, ips in adapters:
+        if not up or "tailscale" not in ("%s %s" % (name or "", desc or "")).lower():
+            continue
+        for text in ips or ():
+            try:
+                a = ipaddress.IPv4Address(text)
+            except ValueError:
+                continue
+            if a in _CGNAT and str(a) not in out:
+                out.append(str(a))
+    return out[:TAILSCALE_MAX]
+
+
+class _UnicastAddress(ctypes.Structure):
+    pass
+
+
+_UnicastAddress._fields_ = [("Length", ctypes.c_ulong), ("Flags", ctypes.c_ulong), ("Next", ctypes.POINTER(_UnicastAddress)),
+                            ("lpSockaddr", ctypes.c_void_p), ("iSockaddrLength", ctypes.c_int)]
+
+
+class _AdapterAddresses(ctypes.Structure):
+    """IP_ADAPTER_ADDRESSES_LH up to OperStatus (the rest is never read)"""
+
+
+_AdapterAddresses._fields_ = [("Length", ctypes.c_ulong), ("IfIndex", ctypes.c_ulong), ("Next", ctypes.POINTER(_AdapterAddresses)),
+                              ("AdapterName", ctypes.c_char_p), ("FirstUnicastAddress", ctypes.POINTER(_UnicastAddress)),
+                              ("FirstAnycastAddress", ctypes.c_void_p), ("FirstMulticastAddress", ctypes.c_void_p),
+                              ("FirstDnsServerAddress", ctypes.c_void_p), ("DnsSuffix", ctypes.c_wchar_p),
+                              ("Description", ctypes.c_wchar_p), ("FriendlyName", ctypes.c_wchar_p),
+                              ("PhysicalAddress", ctypes.c_ubyte * 8), ("PhysicalAddressLength", ctypes.c_ulong),
+                              ("Flags", ctypes.c_ulong), ("Mtu", ctypes.c_ulong), ("IfType", ctypes.c_ulong), ("OperStatus", ctypes.c_int)]
+
+
+def _windows_adapters():
+    """iphlpapi.GetAdaptersAddresses -> [(friendly_name, description, is_up, [ip text, ...]), ...]; [] on any failure"""
+    try:
+        if os.name != "nt":
+            return []
+        fn = ctypes.windll.iphlpapi.GetAdaptersAddresses
+        fn.argtypes = [ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        fn.restype = ctypes.c_ulong
+        size = ctypes.c_ulong(16384)
+        buf = None
+        for _ in range(4):
+            buf = ctypes.create_string_buffer(size.value)
+            rc = fn(2, 0xE, None, buf, ctypes.byref(size))      # AF_INET; skip anycast / multicast / DNS server lists
+            if rc == 0:
+                break
+            if rc != 111:                                       # ERROR_BUFFER_OVERFLOW: retry with the size it asked for
+                return []
+        else:
+            return []
+        out = []
+        p = ctypes.cast(buf, ctypes.POINTER(_AdapterAddresses))
+        n = 0
+        while p and n < 512:
+            a = p.contents
+            ips = []
+            u, m = a.FirstUnicastAddress, 0
+            while u and m < 64:
+                ua = u.contents
+                if ua.lpSockaddr and 8 <= ua.iSockaddrLength <= 128:
+                    raw = ctypes.string_at(ua.lpSockaddr, ua.iSockaddrLength)
+                    fam = struct.unpack_from("<H", raw)[0]
+                    if fam == 2:
+                        ips.append(socket.inet_ntop(socket.AF_INET, raw[4:8]))
+                    elif fam == 23 and len(raw) >= 24:
+                        ips.append(socket.inet_ntop(socket.AF_INET6, raw[8:24]))
+                u, m = ua.Next, m + 1
+            out.append((a.FriendlyName or "", a.Description or "", a.OperStatus == 1, ips))
+            p, n = a.Next, n + 1
+        return out
+    except Exception:
+        return []
+
+
+_ts_lock = threading.Lock()
+_ts_cache = (float("-inf"), [])
+
+
+def _fake_tailscale():
+    """test hook: HOEHWA_TEST_HOOKS=1 and HOEHWA_LAN_FAKE_TAILSCALE set (an empty value = "no Tailscale") -> list | None (no hook)"""
+    if os.environ.get("HOEHWA_TEST_HOOKS") != "1" or "HOEHWA_LAN_FAKE_TAILSCALE" not in os.environ:
+        return None
+    out = []
+    for part in os.environ["HOEHWA_LAN_FAKE_TAILSCALE"].split(","):
+        try:
+            a = ipaddress.IPv4Address(part.strip())
+        except ValueError:
+            continue
+        if a in _CGNAT and str(a) not in out:
+            out.append(str(a))
+    return out[:TAILSCALE_MAX]
+
+
+def tailscale_addresses():
+    """This PC's Tailscale IPv4 addresses (100.64.0.0/10 on an up adapter named / described "Tailscale"), at most 3. Never raises.
+    The adapter list is read at most every 5 seconds (every connection from a 100.x source asks)."""
+    global _ts_cache
+    fake = _fake_tailscale()
+    if fake is not None:
+        return fake
+    with _ts_lock:
+        now = time.monotonic()
+        if now - _ts_cache[0] < TAILSCALE_CACHE_SECONDS:
+            return list(_ts_cache[1])
+        try:
+            found = _pick_tailscale(_windows_adapters())
+        except Exception:
+            found = []
+        _ts_cache = (now, found)
+        return list(found)
+
+
+def _network_via(addrs=None, allow_tailscale=None, ts_addrs=None):
+    """what makes the link safe to turn on: "private" (a private IPv4 on this PC; hook-aware) | "tailscale" (lan.allow_tailscale and a
+    Tailscale address) | "" (nothing: the PC is directly on the internet)"""
     forced = _forced_private()
-    if forced is not None:
-        return forced
-    return bool(private_addresses() if addrs is None else addrs)
+    if (forced if forced is not None else bool(private_addresses() if addrs is None else addrs)):
+        return "private"
+    if S.lan.get("allow_tailscale") if allow_tailscale is None else allow_tailscale:
+        if tailscale_addresses() if ts_addrs is None else ts_addrs:
+            return "tailscale"
+    return ""
+
+
+def _network_ok(addrs=None, allow_tailscale=None):
+    """the link may only be turned on behind a router (a private IPv4 address on this PC) or on a Tailscale network (allow_tailscale)"""
+    return _network_via(addrs, allow_tailscale) != ""
+
+
+def _unsafe_message(allow_tailscale):
+    """why the link cannot be on: the Tailscale box is on but there is no Tailscale address / the box is off (with a hint)"""
+    if allow_tailscale:
+        return MSG["no_tailscale"]
+    return MSG["no_private_network"] + " " + MSG["tailscale_hint"]
 
 
 def _hook_seconds(name, default):
@@ -624,7 +792,7 @@ class LanGate:
                     pass
             return
         ip = (scope.get("client") or ("?", 0))[0]
-        if not _source_allowed(ip):
+        if not _source_allowed(ip, (scope.get("server") or (None,))[0]):
             return      # public / unknown source: no answer (the protocol class normally closed the connection already)
         scope["hoehwa_lan"] = True
         scope.pop("hoehwa_device", None)
@@ -851,6 +1019,7 @@ def attach(app, cfg, save_cfg, log, base_dir, tag=None, devices_file=None, bind=
     merged["enabled"] = bool(merged.get("enabled")) and bool(auto_start)
     merged["discovery"] = bool(merged.get("discovery"))
     merged["allow_cgnat"] = merged.get("allow_cgnat") is True
+    merged["allow_tailscale"] = merged.get("allow_tailscale") is True
     merged["name"] = _clean_name(merged.get("name"))
     if devices_file:
         S.devices_path = os.path.abspath(devices_file)
@@ -897,9 +1066,9 @@ def start_if_enabled():
         if not lan["enabled"] or S.listener is not None:
             return
         if not _network_ok():
-            lan["enabled"] = False      # not saved: the setting comes back when the PC is behind a router again
-            S.error = MSG["no_private_network"]
-            S.log.warning("lan: no private network address at start; link stays off")
+            lan["enabled"] = False      # not saved: the setting comes back when the PC is behind a router (or on Tailscale) again
+            S.error = _unsafe_message(bool(lan.get("allow_tailscale")))
+            S.log.warning("lan: no private network or Tailscale address at start; link stays off")
             return
         try:
             S.listener = _start_listener(lan["port"])
@@ -945,8 +1114,18 @@ def _configure(upd):
         new.update(upd)
         S.error = ""
         was_on = S.listener is not None
-        if new["enabled"] and not was_on and not _network_ok():
+        new_ts = new.get("allow_tailscale") is True
+        if new["enabled"] and not was_on and not _network_ok(allow_tailscale=new_ts):
             return 409, "no_private_network"
+        if new["enabled"] and was_on and "allow_tailscale" in upd and not _network_ok(allow_tailscale=new_ts):
+            # still on, but Tailscale was switched off on a PC without a private address: no safe network is left, close it.
+            # (other updates - name, discovery, port - never close a running link because of a passing network change)
+            _stop_all()
+            lan.update(new)
+            lan["enabled"] = False
+            S.error = _unsafe_message(new_ts)
+            _persist()
+            return None, None
         if new["enabled"]:
             if was_on and S.listener.port == new["port"] and not S.listener.alive():
                 S.listener.stop()      # a crashed listener may still hold the port: free it before binding again
@@ -983,8 +1162,12 @@ def _status():
     with S.lock:
         devices = [_public_device(d) for d in S.devices]
     addrs = private_addresses()
-    safe = _network_ok(addrs)
-    return {"network_safe": safe, "network_reason": "" if safe else MSG["no_private_network"], "allow_cgnat": bool(lan.get("allow_cgnat")),
+    ts_on = bool(lan.get("allow_tailscale"))
+    ts_addrs = tailscale_addresses()
+    via = _network_via(addrs, ts_on, ts_addrs)
+    safe = via != ""
+    return {"network_safe": safe, "network_reason": "" if safe else _unsafe_message(ts_on), "network_via": via,
+            "allow_cgnat": bool(lan.get("allow_cgnat")), "allow_tailscale": ts_on, "tailscale_addresses": ts_addrs,
             "enabled": bool(lan["enabled"]), "listening": bool(S.listener is not None and S.listener.alive()), "port": lan["port"],
             "bind": S.bind, "discovery": bool(lan["discovery"]), "discovery_listening": S.disc is not None,
             "discovery_port": lan["discovery_port"], "name": S.name(), "addresses": addrs,
@@ -1138,7 +1321,7 @@ def lan_get(request: Request):
 
 def _parse_update(data):
     upd = {}
-    for k in ("enabled", "discovery", "allow_cgnat"):
+    for k in ("enabled", "discovery", "allow_cgnat", "allow_tailscale"):
         if k in data:
             if type(data[k]) is not bool:
                 return None
@@ -1168,7 +1351,7 @@ async def lan_set(request: Request):
     status, code = await run_in_threadpool(_configure, upd)
     if status:
         if code == "no_private_network":
-            return _err(status, code)
+            return _err(status, code, _unsafe_message(upd.get("allow_tailscale", S.lan.get("allow_tailscale")) is True))
         port = upd.get("port", S.lan["port"])
         return _err(status, code, "포트 %d을(를) 다른 프로그램이 쓰고 있어요." % port)
     return await run_in_threadpool(_status)

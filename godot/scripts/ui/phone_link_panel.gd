@@ -15,6 +15,7 @@ const WARN_TEXT := "카페·학교·호텔 같은 공용 와이파이에서는 �
 const FIREWALL_TEXT := "처음 켜면 Windows가 '이 앱이 네트워크에서 통신하도록 허용하시겠습니까?' 창을 띄워요. '개인 네트워크'를 체크하고 '액세스 허용'을 눌러 주세요. 창이 안 보이면 작업 표시줄을 확인해 보세요. 이 프로그램은 방화벽 설정을 직접 바꾸지 않아요. 그래도 폰에서 안 잡히면: 설정 > 네트워크 및 인터넷 > 와이파이 > 이 네트워크의 '네트워크 프로필'이 '개인'인지 확인하세요. 회사·학교 와이파이는 기기끼리 통신을 막는 경우가 많아요. PC가 잠들면 연결이 끊겨요."
 const NO_NETWORK_TEXT := "이 PC에 집이나 사무실 같은 사설 네트워크 주소가 없어서 휴대폰 연결을 켤 수 없어요. 공유기(와이파이)에 연결한 뒤 다시 시도해 주세요."
 const LOCKED_TEXT := "코드를 5번 틀려서 잠겼어요. '새 코드 만들기'를 눌러 주세요."
+const TAILSCALE_HELP := "Tailscale 로 밖에서 쓰는 법: ① PC와 휴대폰에 Tailscale 앱을 설치하고 같은 계정(구글 등)으로 로그인하세요. ② 이 칸을 켜고 위 '휴대폰 연결'을 켜세요. ③ 휴대폰 앱의 주소 칸에 아래 'Tailscale' 주소(100. 으로 시작)와 포트를 입력하고 연결 코드를 넣으세요. ④ Tailscale 에서는 자동 찾기가 안 돼요. 주소를 직접 입력해 주세요.\n위험: 같은 Tailscale 계정(테일넷)에 들어온 기기는 이 PC의 연결 포트에 닿을 수 있어요(연결 코드나 토큰이 있어야 쓸 수 있어요). 계정을 남과 공유하지 마세요. PC와 휴대폰 사이 통신은 Tailscale 이 암호화해요."
 
 var state: Dictionary = {}          ## 마지막 GET /lan 응답
 var error_text: String = ""
@@ -26,6 +27,7 @@ var state_label: Label
 var code_label: Label
 var timer_label: Label
 var address_label: Label
+var ts_address_label: Label
 var new_code_button: Button
 var revoke_all_button: Button
 var devices_title: Label
@@ -36,6 +38,7 @@ var details: VBoxContainer
 var read_first_button: Button
 var advanced_box: VBoxContainer
 var discovery_check: CheckBox
+var tailscale_check: CheckBox
 var port_edit: LineEdit
 var name_edit: LineEdit
 
@@ -90,6 +93,9 @@ func _ready() -> void:
 	code_label = UI.label("", "H2", false)
 	arow.add_child(code_label)
 	details.add_child(arow)
+	ts_address_label = UI.label("", "Strong", false)
+	ts_address_label.visible = false
+	details.add_child(ts_address_label)
 	var trow := UI.hbox(10)
 	timer_label = UI.label("", "Small", false)
 	trow.add_child(timer_label)
@@ -120,6 +126,17 @@ func _ready() -> void:
 		if not _busy:
 			update_settings({"discovery": on}))
 	advanced_box.add_child(discovery_check)
+	tailscale_check = CheckBox.new()
+	tailscale_check.text = "Tailscale 로 연결 허용 (다른 와이파이·모바일 데이터에서도)"
+	tailscale_check.focus_mode = Control.FOCUS_NONE
+	tailscale_check.toggled.connect(func(on: bool) -> void:
+		if _busy:
+			# a change is already in flight: show the saved value again
+			tailscale_check.set_pressed_no_signal(bool(state.get("allow_tailscale", false)))
+		else:
+			update_settings({"allow_tailscale": on}))
+	advanced_box.add_child(tailscale_check)
+	advanced_box.add_child(UI.label(TAILSCALE_HELP, "Small"))
 	var prow := UI.hbox(8)
 	port_edit = LineEdit.new()
 	port_edit.placeholder_text = "8775"
@@ -259,6 +276,30 @@ static func is_private_ipv4(ip: String) -> bool:
 	return a == 10 or (a == 172 and b >= 16 and b <= 31) or (a == 192 and b == 168)
 
 
+## Tailscale 주소 대역 100.64.0.0/10 (100.64.0.0 ~ 100.127.255.255) 만 참. 통신사 CGNAT 의 다른 100.x 는 거짓.
+static func is_tailscale_ipv4(ip: String) -> bool:
+	var o: PackedStringArray = ip.split(".")
+	if o.size() != 4:
+		return false
+	for x in o:
+		if not x.is_valid_int() or int(x) < 0 or int(x) > 255:
+			return false
+	return int(o[0]) == 100 and int(o[1]) >= 64 and int(o[1]) <= 127
+
+
+## 켜져 있고 allow_tailscale 이 켜진 경우에만, 서버가 준 Tailscale 주소 중 첫 번째 100.64/10 주소. 없으면 "".
+func _tailscale_ip() -> String:
+	if not bool(state.get("allow_tailscale", false)):
+		return ""
+	var ts: Variant = state.get("tailscale_addresses", null)
+	if not (ts is Array):
+		return ""
+	for a in ts:
+		if is_tailscale_ipv4(str(a)):
+			return str(a)
+	return ""
+
+
 func _port_busy_text(_res: Dictionary) -> String:
 	var port: int = int(state.get("port", 8775))
 	return "포트 %d를 다른 프로그램이 쓰고 있어요. 다른 프로그램을 끄거나 아래 '고급'에서 포트를 바꿔 주세요." % port
@@ -381,6 +422,10 @@ func _apply_state() -> void:
 	var enabled: bool = bool(state.get("enabled", false))
 	toggle.set_pressed_no_signal(enabled)
 	toggle.disabled = (state.is_empty() and error_text != "") or (network_warning != "" and not enabled)
+	# not disabled by the network warning: this is the switch that lets a PC without a private address turn the link on
+	if tailscale_check != null:
+		tailscale_check.set_pressed_no_signal(bool(state.get("allow_tailscale", false)))
+		tailscale_check.disabled = state.is_empty() and error_text != ""
 	state_label.text = "켜짐" if enabled else "꺼짐"
 	details.visible = enabled
 	var texts: Array[String] = []
@@ -402,10 +447,14 @@ func _apply_state() -> void:
 			if is_private_ipv4(str(a)):
 				addrs.append(str(a))
 		var port: int = int(state.get("port", 8775))
+		var ts_ip: String = _tailscale_ip()
+		address_label.visible = not addrs.is_empty() or ts_ip == ""
 		if addrs.is_empty():
 			address_label.text = "주소를 찾지 못했어요 (포트 %d)" % port
 		else:
 			address_label.text = "주소  %s:%d" % [str(addrs[0]), port]
+		ts_address_label.visible = ts_ip != ""
+		ts_address_label.text = "Tailscale  %s:%d" % [ts_ip, port]
 		if p.get("active", false) and p.get("code", null) != null:
 			code_label.text = "연결 코드  " + format_code(str(p["code"]))
 			_expires_at_msec = Time.get_ticks_msec() + int(p.get("expires_in", 0)) * 1000

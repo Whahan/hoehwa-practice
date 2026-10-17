@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import shutil
@@ -259,7 +260,8 @@ class Stub:
             self.lan_port = pick(8840, 8849)
             self.udp_port = pick(18776, 18790, udp=True)
         env = dict(os.environ)
-        for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_PRIVATE", "HOEHWA_LAN_PREAUTH_TIMEOUT", "HOEHWA_LAN_BODY_TIMEOUT"):
+        for k in ("HOEHWA_TEST_HOOKS", "HOEHWA_LAN_CODE_TTL", "HOEHWA_LAN_ASSUME_PRIVATE", "HOEHWA_LAN_PREAUTH_TIMEOUT", "HOEHWA_LAN_BODY_TIMEOUT",
+              "HOEHWA_LAN_FAKE_TAILSCALE"):
             env.pop(k, None)
         base_env = {"HOEHWA_TEST_HOOKS": "1", "HOEHWA_LAN_ASSUME_PRIVATE": "1"}   # this PC may have no private address: pretend it has one
         base_env.update(self.env)
@@ -885,8 +887,9 @@ class FakeTransport:
         pass
 
 
-def gate_call(ip, method="GET", path="/hello", headers=None):
-    """run LanGate in-process with a made-up scope['client'] -> (app_called, messages sent to the client)"""
+def gate_call(ip, method="GET", path="/hello", headers=None, server=None):
+    """run LanGate in-process with a made-up scope['client'] (and scope['server'] = this PC's address the connection came in on)
+    -> (app_called, messages sent to the client)"""
     import asyncio
     called, sent = [], []
 
@@ -902,6 +905,8 @@ def gate_call(ip, method="GET", path="/hello", headers=None):
         return {"type": "http.request", "body": b"", "more_body": False}
 
     scope = {"type": "http", "method": method, "path": path, "client": (ip, 1234), "headers": headers or []}
+    if server is not None:
+        scope["server"] = server
     asyncio.run(lan.LanGate(app)(scope, receive, send))
     return bool(called), sent
 
@@ -1116,7 +1121,8 @@ def acl_check(T):
 
 def scenario_netsafe():
     print("\n== S3 turning the link on needs a private network address")
-    expect_msg = "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요."
+    old_msg = "이 PC는 공유기 없이 인터넷에 직접 연결돼 있어요. 휴대폰 연결을 켜면 인터넷에서 접근될 수 있어요. 공유기에 연결하거나 휴대폰 핫스팟을 쓰세요."
+    expect_msg = old_msg + " Tailscale 을 쓴다면 '고급'에서 'Tailscale 로 연결 허용'을 켜세요."     # allow_tailscale is off here: the old sentence + the hint
     T = Stub("net0", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0"}).start()
     try:
         st = get_lan(T)
@@ -1310,11 +1316,277 @@ def scenario_logs(stubs_logs, codes_seen=()):
     check("B-25 no hp1_ token text and no auth-header text in %d stub log file(s) and %d server log file(s)" % (n, len(server_logs)), not bad and n > 0, bad)
 
 
+# ----------------------------------------------------------------------------------------------
+# Tailscale (lan.allow_tailscale): adapter picking, test hook, source filter with the local address, switch-off rule
+# ----------------------------------------------------------------------------------------------
+class _Env:
+    """set / unset environment variables for a block and put them back afterwards"""
+
+    def __init__(self, **kv):
+        self.kv = kv
+        self.saved = {}
+
+    def __enter__(self):
+        for k, v in self.kv.items():
+            self.saved[k] = os.environ.get(k)
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        return self
+
+    def __exit__(self, *a):
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+FAKE_TS = "100.101.102.103"
+
+
+class _TsTransport(FakeTransport):
+    """FakeTransport that also knows the local (socket) address of the connection"""
+
+    def __init__(self, host, sock):
+        super().__init__(host)
+        self.sock = sock
+
+    def get_extra_info(self, name):
+        return (self.sock, 8775) if name == "sockname" else super().get_extra_info(name)
+
+
+def unit_tailscale():
+    print("\n== Tailscale helpers (in-process)")
+    pick = lan._pick_tailscale
+    check("TS1a _pick_tailscale: adapter named Tailscale with 100.101.1.2 is taken", pick([("Tailscale", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"])
+    check("TS1b ... also when only the description says Tailscale (renamed adapter '이더넷 3'), and in any letter case",
+          pick([("이더넷 3", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"]
+          and pick([("TAILSCALE", "wintun", True, ["100.64.0.1"])]) == ["100.64.0.1"])
+    check("TS1c carrier CGNAT: adapter 'Ethernet' / 'Realtek' with 100.70.0.5 is NOT taken (next to a Tailscale adapter only the Tailscale address is the result)",
+          pick([("Ethernet", "Realtek PCIe GbE", True, ["100.70.0.5"])]) == []
+          and pick([("Ethernet", "Realtek PCIe GbE", True, ["100.70.0.5"]), ("Tailscale", "Tailscale Tunnel", True, ["100.101.1.2"])]) == ["100.101.1.2"])
+    check("TS1d a Tailscale adapter that is down gives nothing", pick([("Tailscale", "Tailscale Tunnel", False, ["100.101.1.2"])]) == [])
+    check("TS1e on a Tailscale adapter 192.168.x, 8.8.8.8, 100.128.0.1 / 100.63.255.255 (outside 100.64/10), IPv6 (also fd7a:115c:a1e0::) and junk are left out",
+          pick([("Tailscale", "Tailscale Tunnel", True, ["192.168.1.5", "8.8.8.8", "100.128.0.1", "100.63.255.255", "fd7a:115c:a1e0::1", "2606:4700::1111", "junk", ""])]) == []
+          and pick([("Tailscale", "Tailscale Tunnel", True, ["192.168.1.5", "8.8.8.8", "fd7a:115c:a1e0::1", "100.127.255.255"])]) == ["100.127.255.255"])
+    check("TS1f at most 3 addresses, no duplicates; None names do not crash",
+          pick([("Tailscale", "", True, ["100.64.0.1", "100.64.0.2", "100.64.0.2", "100.64.0.3", "100.64.0.4", "100.64.0.5"])]) == ["100.64.0.1", "100.64.0.2", "100.64.0.3"]
+          and pick([(None, None, True, ["100.64.0.1"])]) == [])
+    # ---- test hook
+    with _Env(HOEHWA_TEST_HOOKS=None, HOEHWA_LAN_FAKE_TAILSCALE="100.101.1.2"):
+        lan._ts_cache = (float("-inf"), [])
+        check("TS2a HOEHWA_LAN_FAKE_TAILSCALE is ignored without HOEHWA_TEST_HOOKS=1", lan._fake_tailscale() is None and "100.101.1.2" not in lan.tailscale_addresses())
+    lan._ts_cache = (float("-inf"), [])
+    with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE="100.101.1.2, 8.8.8.8,100.64.0.1,192.168.0.9,fd7a:115c:a1e0::1,junk,100.128.0.1,100.101.1.2"):
+        check("TS2b with the hook only 100.64/10 IPv4 is taken (8.8.8.8, 192.168.x, IPv6, junk, 100.128.x out; duplicates once)",
+              lan.tailscale_addresses() == ["100.101.1.2", "100.64.0.1"], lan.tailscale_addresses())
+    with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE="100.64.0.1,100.64.0.2,100.64.0.3,100.64.0.4"):
+        check("TS2c the hook list is capped at 3", len(lan.tailscale_addresses()) == 3)
+    real_adapters = lan._windows_adapters
+    calls = []
+    try:
+        lan._windows_adapters = lambda: (calls.append(1) or [("Tailscale", "Tailscale Tunnel", True, ["100.101.9.9"]), ("Ethernet", "Realtek", True, ["100.70.0.5"])])
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE=""):
+            check("TS2d an EMPTY hook value means 'no Tailscale' (the real adapters are not consulted)", lan._fake_tailscale() == [] and lan.tailscale_addresses() == [] and not calls, calls)
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE=None):
+            lan._ts_cache = (float("-inf"), [])
+            a1, a2 = lan.tailscale_addresses(), lan.tailscale_addresses()
+            check("TS2e without the hook value the adapter list decides (only the Tailscale adapter's 100.x), and the result is cached (second call does not read adapters)",
+                  a1 == ["100.101.9.9"] and a2 == a1 and len(calls) == 1, (a1, len(calls)))
+            lan._ts_cache = (time.monotonic() - 6.0, ["100.1.1.1"])
+            check("TS2f the cache expires after 5 s", lan.tailscale_addresses() == ["100.101.9.9"] and len(calls) == 2)
+        lan._windows_adapters = lambda: (_ for _ in ()).throw(OSError("boom"))
+        with _Env(HOEHWA_TEST_HOOKS=None, HOEHWA_LAN_FAKE_TAILSCALE=None):
+            lan._ts_cache = (float("-inf"), [])
+            check("TS2g an adapter-listing failure gives [] and no exception", lan.tailscale_addresses() == [])
+    finally:
+        lan._windows_adapters = real_adapters
+        lan._ts_cache = (float("-inf"), [])
+    # ---- source filter with the local address
+    saved = {k: lan.S.lan.get(k) for k in ("allow_cgnat", "allow_tailscale")}
+    try:
+        with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_FAKE_TAILSCALE=FAKE_TS):
+            lan.S.lan["allow_cgnat"] = False
+            lan.S.lan["allow_tailscale"] = True
+            sa = lan._source_allowed
+            check("TS3a allow_tailscale + local = our Tailscale address: 100.64/10 hosts are allowed (edges too), 100.128.x / 100.63.x are not",
+                  sa("100.64.0.9", FAKE_TS) and sa("100.127.255.255", FAKE_TS) and sa("100.101.1.2", FAKE_TS)
+                  and not sa("100.128.0.1", FAKE_TS) and not sa("100.63.255.255", FAKE_TS))
+            check("TS3b ... but local = a public address (203.0.113.5), a carrier-CGNAT address (100.70.0.5), None, '' or junk is refused",
+                  not sa("100.64.0.9", "203.0.113.5") and not sa("100.64.0.9", "100.70.0.5") and not sa("100.64.0.9", None) and not sa("100.64.0.9", "")
+                  and not sa("100.64.0.9") and not sa("100.64.0.9", "junk"))
+            check("TS3c ... a private or loopback local address does not make a CGNAT host acceptable either", not sa("100.64.0.9", "192.168.0.7") and not sa("100.64.0.9", "127.0.0.1"))
+            check("TS3d a public host is refused whatever the local address is", not sa("8.8.8.8", FAKE_TS) and not sa("175.212.223.8", FAKE_TS)
+                  and not sa("2606:4700::1111", FAKE_TS) and not sa("::ffff:8.8.8.8", FAKE_TS))
+            check("TS3e IPv4-mapped forms: host '::ffff:100.64.0.9' with local '::ffff:%s' is allowed, with a mapped public local it is not" % FAKE_TS,
+                  sa("::ffff:100.64.0.9", "::ffff:" + FAKE_TS) and sa("100.64.0.9", "::ffff:" + FAKE_TS) and sa("::ffff:100.64.0.9", FAKE_TS)
+                  and not sa("::ffff:100.64.0.9", "::ffff:203.0.113.5"))
+            check("TS3f the Tailscale IPv6 range (ULA fd7a:115c:a1e0::/48) and ordinary private hosts stay allowed as before",
+                  sa("fd7a:115c:a1e0::1") and sa("192.168.0.7") and sa("127.0.0.1") and sa("10.1.2.3", "203.0.113.5"))
+            lan.S.lan["allow_tailscale"] = False
+            check("TS3g allow_tailscale off: the same CGNAT host with the Tailscale local address is refused", not sa("100.64.0.9", FAKE_TS) and not sa("100.101.1.2", FAKE_TS))
+            lan.S.lan["allow_cgnat"] = True
+            check("TS3h the old lan.allow_cgnat still admits CGNAT hosts without any local address (unchanged), and still no public host",
+                  sa("100.64.0.9") and sa("100.64.0.9", "203.0.113.5") and not sa("8.8.8.8", FAKE_TS))
+            lan.S.lan["allow_cgnat"] = False
+            lan.S.lan["allow_tailscale"] = True
+            # LanGate: scope["server"] is the local address
+            ok = gate_call("100.64.0.9", server=(FAKE_TS, 8775))
+            bad_pub = gate_call("100.64.0.9", server=("203.0.113.5", 8775))
+            bad_cg = gate_call("100.64.0.9", server=("100.70.0.5", 8775))
+            bad_none = gate_call("100.64.0.9")
+            pub_ts = gate_call("8.8.8.8", server=(FAKE_TS, 8775))
+            check("TS4a LanGate: CGNAT client + scope['server'] = our Tailscale address is served; the same client with a public / carrier-CGNAT / missing server address gets NO answer",
+                  ok[0] and not bad_pub[0] and not bad_pub[1] and not bad_cg[0] and not bad_cg[1] and not bad_none[0] and not bad_none[1],
+                  (ok[0], bad_pub, bad_cg, bad_none))
+            check("TS4b LanGate: a public client gets no answer even when the server address is ours", not pub_ts[0] and not pub_ts[1])
+            lan.S.lan["allow_tailscale"] = False
+            off = gate_call("100.64.0.9", server=(FAKE_TS, 8775))
+            check("TS4c LanGate: with allow_tailscale off the Tailscale client is not served", not off[0] and not off[1])
+            lan.S.lan["allow_tailscale"] = True
+            check("TS4d _peer_allowed uses the transport's sockname: CGNAT peer via our Tailscale address yes, via a public socket address no, without a sockname no",
+                  lan._peer_allowed(_TsTransport("100.64.0.9", FAKE_TS)) and not lan._peer_allowed(_TsTransport("100.64.0.9", "203.0.113.5"))
+                  and not lan._peer_allowed(FakeTransport("100.64.0.9")) and lan._peer_allowed(_TsTransport("192.168.0.7", "203.0.113.5")))
+            # discovery has no local address: Tailscale alone does not open it
+            check("TS4e UDP discovery: a CGNAT source gets no reply with allow_tailscale alone (only allow_cgnat admits it); a private one is still answered",
+                  disc_reply("100.64.0.1") == [] and disc_reply("192.168.0.7") != [])
+    finally:
+        for k, v in saved.items():
+            lan.S.lan[k] = v
+    # ---- config parsing
+    check("TS5a _parse_update takes allow_tailscale only as a real bool", lan._parse_update({"allow_tailscale": True}) == {"allow_tailscale": True}
+          and lan._parse_update({"allow_tailscale": False}) == {"allow_tailscale": False}
+          and all(lan._parse_update({"allow_tailscale": v}) is None for v in ("yes", 1, 0, None, "true", [])))
+    check("TS5b DEFAULT_LAN has allow_tailscale false and allow_cgnat is still there", lan.DEFAULT_LAN.get("allow_tailscale") is False and lan.DEFAULT_LAN.get("allow_cgnat") is False)
+
+
+def _tcp_ok(port):
+    return connect_code("127.0.0.1", port) == 0
+
+
+def scenario_tailscale():
+    print("\n== Tailscale: turning the link on without a private address (hooks: no private address, fake Tailscale %s)" % FAKE_TS)
+    old_msg = lan.MSG["no_private_network"]
+    T = Stub("ts1", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0", "HOEHWA_LAN_FAKE_TAILSCALE": FAKE_TS}).start()
+    try:
+        st = get_lan(T)
+        check("TS6a fresh server: allow_tailscale false, network_safe false, network_via '', tailscale_addresses lists the fake address (always computed)",
+              st.get("allow_tailscale") is False and st.get("network_safe") is False and st.get("network_via") == "" and st.get("tailscale_addresses") == [FAKE_TS], st)
+        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        j = jb(r)
+        check("TS6b allow_tailscale off: enabling -> 409 no_private_network, text = the old sentence + a Tailscale hint, nothing listening",
+              r.status_code == 409 and j.get("code") == "no_private_network" and j.get("error", "").startswith(old_msg) and "Tailscale" in j.get("error", "")[len(old_msg):]
+              and not _tcp_ok(T.lan_port) and get_lan(T).get("enabled") is False, (r.status_code, j))
+        r = set_lan(T, allow_tailscale="yes")
+        r2 = set_lan(T, allow_tailscale=1)
+        check("TS6c allow_tailscale as a string / number -> 400 bad_request, and the setting is unchanged", r.status_code == 400 and r2.status_code == 400
+              and jb(r).get("code") == "bad_request" and get_lan(T).get("allow_tailscale") is False)
+        r = set_lan(T, enabled=True, allow_tailscale=True, port=T.lan_port, discovery_port=T.udp_port)
+        st = jb(r)
+        listening = _tcp_ok(T.lan_port)
+        check("TS6d {enabled:true, allow_tailscale:true} in one request -> 200: listening, network_safe true, network_via 'tailscale', tailscale_addresses [fake], allow_tailscale true",
+              r.status_code == 200 and st.get("enabled") is True and st.get("listening") is True and st.get("allow_tailscale") is True and st.get("network_safe") is True
+              and st.get("network_via") == "tailscale" and st.get("tailscale_addresses") == [FAKE_TS] and st.get("network_reason") == "" and listening, (r.status_code, st.get("network_via")))
+        st = get_lan(T)
+        text = http("GET", T.base + "/lan").text
+        ips = set(re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", text))
+        pub = [i for i in ips if not (lan._is_private_lan(i) or i in ("127.0.0.1", FAKE_TS))]
+        check("TS6e GET /lan: addresses has only private IPv4 (no 100.x, no public), tailscale_addresses only 100.64/10, and no public IP appears anywhere in the text",
+              all(lan._is_private_lan(a) for a in st.get("addresses", [])) and FAKE_TS not in st.get("addresses", [])
+              and all(lan._unmap(a) in lan._CGNAT for a in st.get("tailscale_addresses", [])) and not pub, (st.get("addresses"), pub))
+        check("TS6f the link answers (/hello on the LAN port) and a device can pair through it",
+              http("GET", lurl(T, "/hello")).status_code == 200 and bool(pair_token(T)[0]))
+        r = set_lan(T, allow_tailscale=False)
+        st = jb(r)
+        closed, _ = wait_closed("127.0.0.1", T.lan_port, 3.0)
+        check("TS7a switching allow_tailscale off while the link is on (no private address) -> 200, link off: enabled false, listening false, port closed, error says why, no pairing code",
+              r.status_code == 200 and st.get("enabled") is False and st.get("listening") is False and closed and bool(st.get("error"))
+              and (st.get("pairing") or {}).get("code") is None and st.get("allow_tailscale") is False and st.get("network_via") == "", (r.status_code, st.get("error")))
+        check("TS7b ... the error is the Tailscale hint text and GET /lan afterwards agrees (still off, UDP port free)",
+              "Tailscale" in st.get("error", "") and get_lan(T).get("enabled") is False and udp_free(T.udp_port))
+        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        check("TS7c ... and it cannot be turned on again until allow_tailscale is back on (409)", r.status_code == 409 and jb(r).get("code") == "no_private_network")
+    finally:
+        T.stop()
+        T.release_ports()
+    T = Stub("ts2", env={"HOEHWA_LAN_ASSUME_PRIVATE": "0", "HOEHWA_LAN_FAKE_TAILSCALE": ""}).start()
+    try:
+        st = get_lan(T)
+        check("TS8a no Tailscale address (empty hook): tailscale_addresses [], network_via ''", st.get("tailscale_addresses") == [] and st.get("network_via") == "" and st.get("network_safe") is False)
+        r = set_lan(T, enabled=True, allow_tailscale=True, port=T.lan_port, discovery_port=T.udp_port)
+        j = jb(r)
+        check("TS8b allow_tailscale on but no Tailscale address: enabling -> 409 no_private_network with the no_tailscale text, nothing opened, and the failed request changed nothing",
+              r.status_code == 409 and j.get("code") == "no_private_network" and j.get("error") == lan.MSG["no_tailscale"] and "Tailscale" in j.get("error", "")
+              and not _tcp_ok(T.lan_port) and get_lan(T).get("allow_tailscale") is False, (r.status_code, j))
+        r0 = set_lan(T, allow_tailscale=True)
+        r = set_lan(T, enabled=True, port=T.lan_port, discovery_port=T.udp_port)
+        j = jb(r)
+        st = get_lan(T)
+        check("TS8c allow_tailscale saved first, then enabling -> 409 with the no_tailscale text; network_reason in GET /lan is that text too",
+              r0.status_code == 200 and jb(r0).get("allow_tailscale") is True and r.status_code == 409 and j.get("error") == lan.MSG["no_tailscale"]
+              and st.get("network_reason") == lan.MSG["no_tailscale"] and st.get("enabled") is False and st.get("listening") is False, (r0.status_code, r.status_code))
+    finally:
+        T.stop()
+        T.release_ports()
+    # a CGNAT neighbour cannot be simulated over a real socket here (tests bind 127.0.0.1 only): the in-process checks above (TS3, TS4) cover it.
+
+
+def _attach_ts(v):
+    """lan.attach() on a fresh State with allow_tailscale = v in the config -> what it keeps"""
+    from fastapi import FastAPI
+    old_state = lan.S
+    try:
+        lan.S = lan._State()
+        cfg = {"lan": {"allow_tailscale": v}}
+        lan.attach(FastAPI(), cfg, lambda c: None, logging.getLogger("tsattach"), os.path.join(WORK), devices_file=os.path.join(WORK, "dev_tsattach.json"),
+                   bind="127.0.0.1", persist=False, auto_start=False)
+        return cfg["lan"]["allow_tailscale"]
+    finally:
+        lan.S = old_state
+
+
+def scenario_tailscale_boot():
+    """start_if_enabled with a saved config (in-process: the stub cannot carry a saved allow_tailscale). Own State object, 127.0.0.1 only."""
+    print("\n== Tailscale: saved config at start (start_if_enabled, in-process on 127.0.0.1)")
+    from fastapi import FastAPI
+    old_state = lan.S
+    out = {}
+    try:
+        for label, saved_ts, fake in (("on", True, FAKE_TS), ("off", False, FAKE_TS), ("none", True, "")):
+            port = pick(8840, 8849)
+            udp = pick(18776, 18790, udp=True)
+            lan.S = lan._State()
+            cfg = {"lan": {"enabled": True, "port": port, "discovery": False, "discovery_port": udp, "name": "", "allow_cgnat": False, "allow_tailscale": saved_ts}}
+            with _Env(HOEHWA_TEST_HOOKS="1", HOEHWA_LAN_ASSUME_PRIVATE="0", HOEHWA_LAN_FAKE_TAILSCALE=fake):
+                lan.attach(FastAPI(), cfg, lambda c: None, logging.getLogger("tsboot"), WORK, devices_file=os.path.join(WORK, "dev_tsboot_%s.json" % label),
+                           bind="127.0.0.1", persist=False, auto_start=True)
+                try:
+                    lan.start_if_enabled()
+                    up = lan.S.listener is not None and lan.S.listener.alive() and _tcp_ok(port)
+                    out[label] = (up, bool(cfg["lan"]["enabled"]), lan.S.error)
+                finally:
+                    lan.shutdown()
+            release(port)
+            release(udp)
+    finally:
+        lan.S = old_state
+    up, en, err = out["on"]
+    check("TS9a saved enabled + allow_tailscale + a Tailscale address (no private address): start_if_enabled turns the link on", up and en and err == "", out["on"])
+    up, en, err = out["off"]
+    check("TS9b saved enabled but allow_tailscale false and no private address: stays off, error = old sentence + hint", not up and not en and err.startswith(lan.MSG["no_private_network"]) and "Tailscale" in err[len(lan.MSG["no_private_network"]):], out["off"])
+    up, en, err = out["none"]
+    check("TS9c saved enabled + allow_tailscale but no Tailscale address: stays off, error = the no_tailscale text", not up and not en and err == lan.MSG["no_tailscale"], out["none"])
+    check("TS9d attach() keeps allow_tailscale only when it is exactly True (a string 'yes' in config.json becomes false)", _attach_ts("yes") is False and _attach_ts(True) is True and _attach_ts(None) is False)
+
+
 def main():
     try:
         unit_checks()
         unit_security()
         unit_discovery()
+        unit_tailscale()
         ip2, ip2_private = None, bool(lan.private_addresses())     # no 0.0.0.0 bind in tests, so no non-loopback address can be reached
         print("\nprivate IPv4 addresses on this PC: %s (non-loopback reachability is not tested: tests bind 127.0.0.1 only)" % ("yes" if ip2_private else "none"))
         if EXTERNAL:
@@ -1331,6 +1603,8 @@ def main():
             T = scenario_core_stub(ip2, ip2_private)
             scenario_ttl()
             scenario_netsafe()
+            scenario_tailscale()
+            scenario_tailscale_boot()
             scenario_slow()
             scenario_hdr()
             scenario_acl()
