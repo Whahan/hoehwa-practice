@@ -12,6 +12,9 @@ const PREFS_PATH := "user://prefs.json"
 const CURRICULUM_CACHE := "user://curriculum.json"
 const CURRICULUM_BUNDLED := "res://data/curriculum.json"
 
+## Tests point this at user://test_*.json so a test server never overwrites the real cache.
+var curriculum_cache_path: String = CURRICULUM_CACHE
+
 const DEFAULT_PREFS := {
 	"lang": "en",
 	"tts_speed": 1.0,
@@ -93,7 +96,7 @@ func set_lang(l: String) -> void:
 # ---------------------------------------------------------------- curriculum
 
 func _load_curriculum_local() -> void:
-	for path in [CURRICULUM_CACHE, CURRICULUM_BUNDLED]:
+	for path in [curriculum_cache_path, CURRICULUM_BUNDLED]:
 		if FileAccess.file_exists(path):
 			var f := FileAccess.open(path, FileAccess.READ)
 			if f == null:
@@ -121,7 +124,7 @@ func refresh_curriculum() -> void:
 	if res["ok"] and _valid_curriculum(res["data"]):
 		curriculum = res["data"]
 		curriculum_from_backend = true
-		var f := FileAccess.open(CURRICULUM_CACHE, FileAccess.WRITE)
+		var f := FileAccess.open(curriculum_cache_path, FileAccess.WRITE)
 		if f != null:
 			f.store_string(JSON.stringify(curriculum))
 		curriculum_updated.emit()

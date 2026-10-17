@@ -216,6 +216,12 @@ func _finish(job: Job) -> void:
 	sequence_finished.emit()
 
 
+## The phone leaves the foreground: stop the speech.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		stop()
+
+
 func _on_finished() -> void:
 	var job: Job = _job
 	if job == null or job.cancelled:
