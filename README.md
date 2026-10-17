@@ -135,8 +135,8 @@
 ## 개발자: 안드로이드 APK 만들기와 서명
 
 - 필요한 것: Godot 4.6.3 안드로이드 export 템플릿(Godot 편집기 > 편집기 > 내보내기 템플릿 관리), JDK 17, Android SDK(platform-tools, build-tools 36.1.0, platforms android-36). 편집기 설정 > 내보내기 > Android 에 SDK·JDK 경로가 한 번 들어 있어야 합니다. Gradle·Android Studio는 필요 없습니다.
-- **릴리스 키 만들기(딱 한 번):** `packaging\make_release_key.ps1` 은 `%LOCALAPPDATA%\hoehwa-practice\keys\` 에 `release.keystore` 와 무작위 비밀번호 파일 `release.pass` 를 만들고(이미 있으면 거부, 덮어쓰지 않습니다), 인증서 지문을 `packagingndroid_cert.sha256` 에 적습니다. 그 지문 파일만 커밋하세요. 키 파일은 저장소 밖에만 두고, 저장소 안에 두면 빌드가 거부합니다.
-- **빌드:** `packaginguild_android.ps1 -Version 1.1.0` 은 `godot\project.godot`·export preset의 버전과 맞는지 확인한 뒤 서명된 `packaging\outndroid\hoehwa-practice-android-<버전>.apk` 를 만들고, 서명·패키지 이름(`io.github.whahan.hoehwa`)·versionCode·권한(INTERNET, ACCESS_NETWORK_STATE, RECORD_AUDIO뿐)·arm64-v8a만 들었는지 검사합니다. `-Debug` 는 시험 설치용 디버그 서명 APK(올리면 안 됩니다)입니다. 키스토어 비밀번호는 환경변수로 Godot 자식 프로세스에만 전달되며 `export_presets.cfg` 에는 쓰지 않습니다.
+- **릴리스 키 만들기(딱 한 번):** `packaging\make_release_key.ps1` 은 `%LOCALAPPDATA%\hoehwa-practice\keys\` 에 `release.keystore` 와 무작위 비밀번호 파일 `release.pass` 를 만들고(이미 있으면 거부, 덮어쓰지 않습니다), 인증서 지문을 `packaging\android_cert.sha256` 에 적습니다. 그 지문 파일만 커밋하세요. 키 파일은 저장소 밖에만 두고, 저장소 안에 두면 빌드가 거부합니다.
+- **빌드:** `packaging\build_android.ps1 -Version 1.1.0` 은 `godot\project.godot`·export preset의 버전과 맞는지 확인한 뒤 서명된 `packaging\out\android\hoehwa-practice-android-<버전>.apk` 를 만들고, 서명·패키지 이름(`io.github.whahan.hoehwa`)·versionCode·권한(INTERNET, ACCESS_NETWORK_STATE, RECORD_AUDIO뿐)·arm64-v8a만 들었는지 검사합니다. `-Debug` 는 시험 설치용 디버그 서명 APK(올리면 안 됩니다)입니다. 키스토어 비밀번호는 환경변수로 Godot 자식 프로세스에만 전달되며 `export_presets.cfg` 에는 쓰지 않습니다.
 - **릴리스:** `packaging\publish_release.ps1 -Version 1.1.0 -WithApk -Notes "바뀐 점"` 은 설치 zip·업데이트 zip과 함께 APK를 `SHA256SUMS.txt` 에 넣어 올립니다. APK 서명 인증서가 `android_cert.sha256` 과 다르면 멈춥니다(`-AcceptNewKey` 로만 넘어갈 수 있고, 그러면 기존 사용자는 덮어 설치가 안 됩니다). 공개 전 검사(`-ScanOnly`)는 `.keystore` `.jks` `.p12` `.apk` `release.pass`, 키스토어 비밀번호가 적힌 줄이 추적되고 있으면 멈춥니다.
 - **경고 — 키스토어를 잃어버리지 마세요.** 이 키스토어를 잃어버리거나 비밀번호를 잊으면 같은 앱을 덮어 설치할 수 없습니다. 사용자는 앱을 지우고 다시 설치해야 하고, 그러면 폰에 있던 학습 기록이 사라집니다. `keys` 폴더 전체를 서로 다른 두 곳(예: USB와 암호 관리자)에 백업하세요. 저장소에 올리지 마세요.
 

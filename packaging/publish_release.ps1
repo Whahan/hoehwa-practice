@@ -2,9 +2,9 @@
 #   powershell -ExecutionPolicy Bypass -File packaging\publish_release.ps1 -Version 1.0.0 -Notes "바뀐 점 ..."
 #   add -DryRun to run every check and the build but stop before anything is pushed or uploaded,
 #   add -ScanOnly to run just the secret/personal-data scan of the tracked files.
-#   add -WithApk to also build + verify the signed Android APK (packaginguild_android.ps1) and publish it next to the zips
+#   add -WithApk to also build + verify the signed Android APK (packaging\build_android.ps1) and publish it next to the zips
 #   (needs the release key from packaging\make_release_key.ps1; stops when the APK is signed with a different key than
-#   packagingndroid_cert.sha256 unless -AcceptNewKey is given). With -SkipBuild the APK must already be in packaging\outelease_<ver>\.
+#   packaging\android_cert.sha256 unless -AcceptNewKey is given). With -SkipBuild the APK must already be in packaging\out\release_<ver>\.
 # Needs: git (this folder is a clone of the repo in packaging\release.json, clean working tree, HEAD already pushed)
 # and the GitHub CLI (`gh auth login` done). Nothing is uploaded before every check passes. The git tag is created by
 # `gh release create --target <commit>` itself, so a failed release leaves no tag behind (and is cleaned up again).
@@ -20,7 +20,7 @@ param(
     [switch]$DryRun,        # checks + build + asset verification, then stop (no tag, no push, no GitHub call)
     [switch]$ScanOnly,      # only the secret / personal data scan
     [switch]$WithApk,       # also build/verify and upload hoehwa-practice-android-<Version>.apk
-    [switch]$AcceptNewKey   # with -WithApk: do not stop when the APK certificate differs from packagingndroid_cert.sha256
+    [switch]$AcceptNewKey   # with -WithApk: do not stop when the APK certificate differs from packaging\android_cert.sha256
 )
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
@@ -153,12 +153,12 @@ if ($WithApk) {
     $buildAndroid = Join-Path $Pkg "build_android.ps1"
     if (-not $SkipBuild) {
         Write-Host "== android apk" -ForegroundColor Cyan
-        $apkOut = Join-Path $Pkg "outndroid"
+        $apkOut = Join-Path $Pkg "out\android"
         $a3 = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $buildAndroid, "-Version", $Version, "-OutDir", $apkOut)
         if ($GodotExe) { $a3 += @("-GodotExe", $GodotExe) }
         if ($AcceptNewKey) { $a3 += "-AllowNewKey" }
         & powershell.exe @a3
-        if ($LASTEXITCODE -eq 3) { throw "APK 서명 인증서가 packagingndroid_cert.sha256 의 지문과 달라요. 올바른 키인지 확인하세요. 정말 새 키로 올리려면 -AcceptNewKey (기존 사용자는 앱을 지우고 다시 설치해야 해요)." }
+        if ($LASTEXITCODE -eq 3) { throw "APK 서명 인증서가 packaging\android_cert.sha256 의 지문과 달라요. 올바른 키인지 확인하세요. 정말 새 키로 올리려면 -AcceptNewKey (기존 사용자는 앱을 지우고 다시 설치해야 해요)." }
         if ($LASTEXITCODE -ne 0) { throw "build_android.ps1 failed" }
         Copy-Item -LiteralPath (Join-Path $apkOut "hoehwa-practice-android-$Version.apk") -Destination $apkInRel -Force
     }
@@ -167,7 +167,7 @@ if ($WithApk) {
     $a4 = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $buildAndroid, "-Version", $Version, "-VerifyApk", $apkInRel)
     if ($AcceptNewKey) { $a4 += "-AllowNewKey" }
     & powershell.exe @a4
-    if ($LASTEXITCODE -eq 3) { throw "APK 서명 인증서가 packagingndroid_cert.sha256 의 지문과 달라요. 올바른 키인지 확인하세요. 정말 새 키로 올리려면 -AcceptNewKey (기존 사용자는 앱을 지우고 다시 설치해야 해요)." }
+    if ($LASTEXITCODE -eq 3) { throw "APK 서명 인증서가 packaging\android_cert.sha256 의 지문과 달라요. 올바른 키인지 확인하세요. 정말 새 키로 올리려면 -AcceptNewKey (기존 사용자는 앱을 지우고 다시 설치해야 해요)." }
     if ($LASTEXITCODE -ne 0) { throw "APK verification failed" }
     # SHA256SUMS.txt gets the APK line (an older line for the same file is replaced)
     $sumsPath = Join-Path $RelDir "SHA256SUMS.txt"
