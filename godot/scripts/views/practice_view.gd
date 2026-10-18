@@ -12,7 +12,7 @@ extends AppView
 ##      영어만 되는 항목이면 `_item(kind, 제목, 설명, 버튼, en_only, 영어 아닐 때 설명)` 처럼 enabled 와 대체 설명을 준다.
 ## 화면 클래스는 `closed` 신호와 `open(lang: String, args: Dictionary)` 를 가져야 하고, `on_hide()`·`go_back() -> bool` 은 있으면 불린다.
 
-const KINDS := ["mission", "shadow", "dictation", "phoneme"]
+const KINDS := ["mission", "shadow", "dictation", "phoneme", "kana"]
 const OLD_SERVER_TEXT := "PC 프로그램을 최신 버전으로 업데이트해 주세요. 이 서버에는 아직 연습 기능이 없어요."
 
 ## kind ∈ mission|shadow|dictation|phoneme, 쉐도잉·약한 소리는 선택 인자(source, p)를 같이 둘 수 있다.
@@ -166,6 +166,8 @@ func _make_screen(kind: String) -> Control:
 			return DictationScreen.new()
 		"phoneme":
 			return PhonemeScreen.new()
+		"kana":
+			return KanaScreen.new()
 	return null
 
 
@@ -251,6 +253,7 @@ func _hub_items() -> Array:
 		_item("shadow", "쉐도잉", "원어민 목소리를 듣고 바로 따라 말해요. 점수와 억양 그래프를 보여 줘요.", "쉐도잉 시작"),
 		_item("dictation", "받아쓰기", "문장을 듣고 직접 타자로 써요. 단어마다 맞고 틀린 것을 알려 줘요.", "받아쓰기 시작", en_only, "받아쓰기는 영어만 지원해요."),
 		_item("phoneme", "약한 소리", "자주 틀리는 소리만 모아 집중 연습해요.", "약한 소리 연습", en_only, "약한 소리 연습은 영어만 지원해요.", _weak_box() if en_only else null),
+		_item("kana", "히라가나·가타카나 익히기", "50음도 표로 글자와 소리를 익히고, 퀴즈로 확인해요.", "글자 익히기", KanaScreen.available(lang), "히라가나·가타카나 익히기는 일본어 탭에서 할 수 있어요."),
 	]
 
 

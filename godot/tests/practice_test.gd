@@ -286,7 +286,7 @@ func _test_hub() -> void:
 		var h := host(v, sz)
 		v.refresh()
 		await frames(3)
-		ok(v.card_kinds().size() == 4 and v.card_kinds().has("mission") and v.card_kinds().has("shadow") and v.card_kinds().has("dictation") and v.card_kinds().has("phoneme"), "%s: 4 cards" % str(sz))
+		ok(v.card_kinds().size() == 5 and v.card_kinds().has("mission") and v.card_kinds().has("shadow") and v.card_kinds().has("dictation") and v.card_kinds().has("phoneme") and v.card_kinds().has("kana"), "%s: 5 cards" % str(sz))
 		ok(v._grid.columns == (1 if sz.x < 700 else 2), "%s: grid columns follow the width (%d)" % [str(sz), v._grid.columns])
 		ok(await layout_ok(v, sz.x, "hub " + str(sz)), "%s: layout rules L1/L2" % str(sz))
 		await free_host(h)

@@ -453,7 +453,7 @@ func _hub_test() -> void:
 	host.add_child(v)
 	v.size = host.size
 	await _frames(4)
-	ok(v.card_kinds() == ["mission", "shadow", "dictation", "phoneme"], "hub cards in order: %s" % str(v.card_kinds()))
+	ok(v.card_kinds() == ["mission", "shadow", "dictation", "phoneme", "kana"], "hub cards in order: %s" % str(v.card_kinds()))
 	for k in v.card_kinds():
 		ok(PracticeView.KINDS.has(k), "card kind %s is in KINDS" % k)
 		ok(v._make_screen(k) != null, "_make_screen(%s) builds a screen" % k)
@@ -464,9 +464,10 @@ func _hub_test() -> void:
 	ok(v.current_screen() == null, "open_screen of an unknown kind does nothing")
 	var all_on := true
 	for k in v.card_kinds():
-		if (v._cards[k] as Button).disabled:
+		if k != "kana" and (v._cards[k] as Button).disabled:
 			all_on = false
-	ok(all_on, "english: every start button is enabled")
+	ok(all_on, "english: every start button except kana is enabled")
+	ok((v._cards["kana"] as Button).disabled, "english: the kana card is off (Japanese only)")
 	ok((v._cards["mission"] as Button).get_global_rect().size.y >= (47.5 if _phone else 40.0), "start button height %.0f" % (v._cards["mission"] as Button).get_global_rect().size.y)
 	ok(v.header_block() != null and v.scroll_host() != null, "hub gives the app bar its header block and scroll host")
 	ok(v.page_title() == "", "hub has no page title of its own (main uses the tab name)")
@@ -479,6 +480,11 @@ func _hub_test() -> void:
 	ok((v._cards["dictation"] as Button).disabled and (v._cards["phoneme"] as Button).disabled, "japanese: dictation and weak sounds are disabled")
 	ok(not (v._cards["mission"] as Button).disabled and not (v._cards["shadow"] as Button).disabled, "japanese: mission and shadowing stay enabled")
 	ok(_label_with(v, "받아쓰기는 영어만 지원해요.") != null and _label_with(v, "약한 소리 연습은 영어만 지원해요.") != null, "japanese: the 'english only' texts show")
+	ok(not (v._cards["kana"] as Button).disabled, "japanese: the kana card is enabled")
+	v.open_screen("kana")
+	ok(v.current_screen() is KanaScreen, "japanese: the kana card opens KanaScreen")
+	v.go_back()
+	ok(v.current_screen() == null, "japanese: back from the kana screen returns to the hub")
 	# a sub screen: title / subtitle contract and back
 	Store.prefs["lang"] = "en"
 	v.refresh()
@@ -489,7 +495,7 @@ func _hub_test() -> void:
 	ok(v.page_title() == "받아쓰기", "sub screen title for the bar (%s)" % v.page_title())
 	ok(v.go_back(), "go_back closes the sub screen")
 	await _frames(3)
-	ok(v.current_screen() == null and v.card_kinds().size() == 4, "back at the hub with its cards")
+	ok(v.current_screen() == null and v.card_kinds().size() == 5, "back at the hub with its cards")
 	# the widget test of the phone: touch targets on the hub
 	if _phone:
 		var small := 0
