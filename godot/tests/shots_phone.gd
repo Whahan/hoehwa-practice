@@ -3,6 +3,13 @@ extends Node
 ## and for the "PC screens stay pixel-identical" comparison.
 ##   phone:  godot --path <project> --resolution 412x915 --audio-driver Dummy res://tests/shots_phone.tscn -- <out dir> --phone [--api=http://127.0.0.1:8860]
 ##   PC:     godot --path <project> --resolution 1280x800 --audio-driver Dummy res://tests/shots_phone.tscn -- <out dir>
+## Options (docs/ui_redesign_design.md §8.4 W1b), after `--`:
+##   --dark              dark colour scheme (UiBoot.apply "dark"); default light
+##   --font-scale=<f>    text scale as Ds.set_font_scale (1.0 default; 9.0 -> 1.5; NaN/0 -> 1.0)
+##   --only=<prefix>     write PNGs only for states whose name starts with <prefix>; the walk itself is unchanged
+## File names: <platform>_NN_<state>.png with no option given (unchanged). With --dark or --font-scale the tag
+## goes after the platform: phone_dark_NN_..., pc_light_f150_NN_... (f150 = scale 1.5, omitted at 1.0).
+## Needs a real renderer (no --headless) for the PNGs. The phone_layout_test walk accepts the same options.
 ## Files are named <prefix>_NN_<state>.png (prefix = "phone" or "pc"). Needs a real renderer (no --headless).
 ## Fixed fixtures and a fixed random seed make two runs of the same build produce identical PNGs.
 
@@ -17,6 +24,7 @@ var state_hook: Callable = Callable()
 var quit_when_done: bool = true
 var _n: int = 0
 var _phone: bool = false
+var _only: String = "" ## --only=<prefix>: PNG output filter by state name
 
 const READING_DIR := "user://shots_phone_reading"
 
@@ -26,7 +34,29 @@ func _ready() -> void:
 	if out_dir == "":
 		out_dir = args[0] if args.size() > 0 and not args[0].begins_with("--") else "user://shots_phone"
 	_phone = Platform.is_phone()
-	prefix = "phone" if _phone else "pc"
+	var scheme := "light"
+	var scale_given := false
+	var scale := 1.0
+	for a in args:
+		if a == "--dark":
+			scheme = "dark"
+		elif a.begins_with("--font-scale="):
+			scale_given = true
+			var raw := a.substr(13)
+			if not raw.is_valid_float():
+				push_error("shots_phone: bad --font-scale '%s', using 1.0" % raw)
+			scale = raw.to_float() if raw.is_valid_float() else 1.0
+		elif a.begins_with("--only="):
+			_only = a.substr(7)
+	# Scheme and scale are applied before the app is built (the code-built UI copies Pal colours at build time).
+	UiBoot.apply(get_tree().root, scheme, scale)
+	var tag := ""
+	if scheme == "dark" or scale_given:
+		tag = scheme
+		if absf(Ds.font_scale - 1.0) > 0.001:
+			tag += "_f%d" % roundi(Ds.font_scale * 100.0)
+	prefix = ("phone" if _phone else "pc") + ("_" + tag if tag != "" else "")
+	print("shots scheme=%s font_scale=%s prefix=%s only=%s" % [scheme, Ds.font_scale, prefix, _only])
 	if not state_hook.is_valid():
 		DirAccess.make_dir_recursive_absolute(out_dir)
 	seed(7)
@@ -109,6 +139,8 @@ func _shot(state: String, hide_toast: bool = true) -> void:
 	if state_hook.is_valid():
 		state_hook.call(state, main_node)
 		return
+	if _only != "" and not state.begins_with(_only):
+		return # numbering (_n) still counts every state, so names stay the same with or without --only
 	var img: Image = get_viewport().get_texture().get_image()
 	var fname := "%s_%02d_%s.png" % [prefix, _n, state]
 	img.save_png(out_dir.path_join(fname))
