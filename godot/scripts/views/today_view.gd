@@ -422,6 +422,10 @@ func _settings_panel() -> Control:
 	card.body.add_child(mic)
 	card.body.add_child(UI.hline())
 
+	# Japanese sound spelling in Hangul under the reading line
+	card.body.add_child(UI.pref_switch("한글 발음 표시", "show_hangul_ja"))
+	card.body.add_child(UI.hline())
+
 	# backend status
 	var be := UI.vbox(6)
 	be.add_child(UI.label("PC 연결 상태" if Platform.is_phone() else "AI 엔진 상태", "Strong"))

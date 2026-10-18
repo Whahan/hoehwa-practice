@@ -1071,6 +1071,11 @@ class Maker:
     def reading(self, s):
         return H["ja_reading"](s) if self.lang == "ja" else ""
 
+    def pron(self, s):
+        """katakana pronunciation form (ja only): the app builds its Hangul sound spelling from it"""
+        f = H.get("ja_pron")
+        return f(s) if (self.lang == "ja" and f) else ""
+
     def explain_for(self, it, word=None):
         if word:
             return _explain(word, self.meanings)
@@ -1129,11 +1134,11 @@ class Maker:
         for d in ds:
             self.use(d)
         opts, ans = self.options(it["ko"], [d["ko"] for d in ds])
-        return {"type": "listen", "audio": it["text"], "reading": self.reading(it["text"]), "options": opts, "answer": ans,
+        return {"type": "listen", "audio": it["text"], "reading": self.reading(it["text"]), "pron": self.pron(it["text"]), "options": opts, "answer": ans,
                 "explain": self.explain_for(it)}
 
     def speak(self, it):
-        return {"type": "speak", "text": it["text"], "reading": self.reading(it["text"]), "ko": it["ko"]}
+        return {"type": "speak", "text": it["text"], "reading": self.reading(it["text"]), "pron": self.pron(it["text"]), "ko": it["ko"]}
 
     def build(self, it):
         bt = it["bt"]
@@ -1143,7 +1148,7 @@ class Maker:
         if not extra:
             return None
         joined = "".join(bt) if self.lang == "ja" else " ".join(bt)
-        return {"type": "build", "ko": it["ko"], "answer": list(bt), "extra": extra, "reading": self.reading(joined),
+        return {"type": "build", "ko": it["ko"], "answer": list(bt), "extra": extra, "reading": self.reading(joined), "pron": self.pron(joined),
                 "explain": self.explain_for(it)}
 
     def bad_word(self, w):
@@ -1272,7 +1277,7 @@ class Maker:
                 continue
             sentence = it["text"][:b[1]] + "___" + it["text"][b[1] + len(b[0]):]
             opts, ans = self.options(b[0], ds)
-            yield {"type": "fill", "sentence": sentence, "reading": self.reading(sentence), "ko": it["ko"], "options": opts,
+            yield {"type": "fill", "sentence": sentence, "reading": self.reading(sentence), "pron": self.pron(sentence), "ko": it["ko"], "options": opts,
                    "answer": ans, "explain": self.explain_for(it, b[2])}
 
     def fill(self, it):

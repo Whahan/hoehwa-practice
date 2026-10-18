@@ -591,9 +591,9 @@ func _render_done(c: VBoxContainer) -> void:
 	c.add_child(card)
 
 
-func _reading_label(r: Variant) -> Control:
-	if lang == "ja" and Store.pref_bool("show_reading") and str(r) != "":
-		return UI.label(str(r), "Small")
+func _reading_label(r: Variant, pron: Variant = "") -> Control:
+	if lang == "ja" and str(r) != "":
+		return ReadingLine.make(str(r), lang, Store.pref_bool("show_reading"), 0.0, str(pron))
 	return null
 
 
@@ -622,7 +622,7 @@ func _render_run(c: VBoxContainer) -> void:
 			panel.body.add_child(_options(e))
 		"fill":
 			panel.body.add_child(_big_text(str(e["sentence"])))
-			var r := _reading_label(e.get("reading", ""))
+			var r := _reading_label(e.get("reading", ""), e.get("pron", ""))
 			if r != null:
 				panel.body.add_child(r)
 			if str(e.get("ko", "")) != "":
@@ -642,7 +642,7 @@ func _render_run(c: VBoxContainer) -> void:
 			panel.body.add_child(row)
 			if checked:
 				panel.body.add_child(_big_text(str(e["audio"])))
-				var r2 := _reading_label(e.get("reading", ""))
+				var r2 := _reading_label(e.get("reading", ""), e.get("pron", ""))
 				if r2 != null:
 					panel.body.add_child(r2)
 			else:
@@ -656,7 +656,7 @@ func _render_run(c: VBoxContainer) -> void:
 			panel.body.add_child(_build_area(e))
 		"speak":
 			panel.body.add_child(_big_text(str(e["text"])))
-			var r3 := _reading_label(e.get("reading", ""))
+			var r3 := _reading_label(e.get("reading", ""), e.get("pron", ""))
 			if r3 != null:
 				panel.body.add_child(r3)
 			if str(e.get("ko", "")) != "":
@@ -904,7 +904,7 @@ func _render_footer(e: Dictionary, t: String) -> void:
 	if t == "build" and not correct:
 		f.add_child(UI.label("정답", "Small", false))
 		f.add_child(UI.label(join_tokens(e["answer"], lang), "Strong"))
-		var rr := _reading_label(e.get("reading", ""))
+		var rr := _reading_label(e.get("reading", ""), e.get("pron", ""))
 		if rr != null:
 			f.add_child(rr)
 	elif t == "fill":

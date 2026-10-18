@@ -350,7 +350,7 @@ def live_tests(full):
         check("id 중복 없음", len({s["id"] for s in ss}) == len(ss) == 8)
         check("단어 수가 EN_LEN[1]=%d~%d 안, words 필드와 일치" % (lo, hi), all(lo <= len(s["text"].split()) <= hi and s["words"] == len(s["text"].split()) for s in ss))
         check("ko에 한글, url이 tatoeba 주소, 필드 모양", all(HANGUL.search(s["ko"]) and s["url"] == "https://tatoeba.org/sentences/show/%d" % s["id"]
-                                                          and set(s) == {"id", "text", "ko", "reading", "words", "url"} for s in ss))
+                                                          and set(s) == {"id", "text", "ko", "reading", "pron", "words", "url"} for s in ss))
         check("attribution 있음", "Tatoeba" in d.get("attribution", ""), d.get("attribution"))
         check("응답 필드(lang, mode, stage)", (d.get("lang"), d.get("mode"), d.get("stage")) == ("en", "shadow", 1))
 
@@ -380,6 +380,7 @@ def live_tests(full):
         check("일본어 shadow 8개, reading이 비어 있지 않고 히라가나만", j.status_code == 200 and len(js) == 8 and all(hira_ok(s["reading"]) for s in js),
               "%s %s" % (j.status_code, [s["reading"] for s in js if not hira_ok(s["reading"])][:3]))
         check("일본어 ko에 한글", all(HANGUL.search(s["ko"]) for s in js))
+        check("일본어 pron이 가타카나만", all(re.fullmatch(r"[ァ-ヶー、，。！？\s・…「」]+", s.get("pron", "")) for s in js), [s.get("pron") for s in js][:2])
 
     print("\n== 틀린 입력 (500 없음, 오류는 {\"error\": 한글})")
     bad = [

@@ -1029,7 +1029,7 @@ func _render_panel_word() -> void:
 	var ipa: String = str(gl.get("ipa", ""))
 	if lang == "en" and ipa != "" and not (ipa.begins_with("/") or ipa.begins_with("[")):
 		ipa = "/%s/" % ipa
-	if ipa != "":
+	if ipa != "" and lang != "ja": # Japanese: the reading goes under the buttons in the ReadingLine style (below)
 		var il := UI.label(ipa, "", false)
 		il.add_theme_font_size_override("font_size", 17)
 		il.add_theme_color_override("font_color", Pal.MUTED)
@@ -1049,6 +1049,8 @@ func _render_panel_word() -> void:
 	sp.add_child(b2)
 	sp.add_child(b3)
 	_panel_body.add_child(sp)
+	if lang == "ja" and ipa != "":
+		ReadingLine.add(_panel_body, ipa, lang, true, 0.0, str(gl.get("pron", ""))) # hiragana + Hangul sound spelling
 
 	# meaning
 	var mean := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, 10, 14, 12)
@@ -1374,7 +1376,7 @@ func apply_glosses(data: Variant, l: String = "") -> int:
 		if lem == "" or str(gd.get("ko", "")).strip_edges() == "":
 			continue
 		var key: String = lem.to_lower() if l == "en" else lem
-		cache[key] = {"lemma": lem, "pos": str(gd.get("pos", "")), "ko": str(gd.get("ko", "")).strip_edges(), "ipa": str(gd.get("ipa", "")).strip_edges(), "note": str(gd.get("note", "")).strip_edges()}
+		cache[key] = {"lemma": lem, "pos": str(gd.get("pos", "")), "ko": str(gd.get("ko", "")).strip_edges(), "ipa": str(gd.get("ipa", "")).strip_edges(), "note": str(gd.get("note", "")).strip_edges(), "pron": str(gd.get("pron", "")).strip_edges()}
 		_backfill_review(l, lem, cache[key])
 		n += 1
 	if n > 0:

@@ -13,6 +13,7 @@ import logging
 import threading
 import re
 import unicodedata
+import functools
 import difflib
 import math
 import random
@@ -958,18 +959,24 @@ def ja_fix_foreign(text: str) -> str:
     return "".join((SIMP_TO_JA.get(c, "") if c in bad else c) for c in text)
 
 
-def ja_reading(text: str) -> str:
-    """hiragana reading (spelling form: は stays は) of a Japanese string; punctuation kept, ___ kept, spaces dropped.
-    Characters OpenJTalk cannot read (Chinese-only ideographs) are replaced by their Japanese form when known, else dropped,
-    so the result never contains ideographs."""
+KATA_PRON_RE = re.compile(r"[ァ-ヶー]+")
+
+
+@functools.lru_cache(maxsize=4096)
+def _ja_pair(text: str):
+    """(reading, pron) of a Japanese string from ONE OpenJTalk pass (cached: ja_reading and ja_pron on the same text cost one).
+    reading: hiragana, spelling form (は stays は). pron: katakana, pronunciation form (topic は -> ワ, へ -> エ, long vowels
+    with ー: センセー, accent marks removed). Punctuation / ___ are kept in both, spaces dropped, never an ideograph."""
     import jaconv
     text = text or ""
     if not text.strip():
-        return ""
+        return "", ""
     parts = []
+    prons = []
     for seg in re.split(r"(___)", text):
         if seg == "___":
             parts.append("___")
+            prons.append("___")
             continue
         if not seg.strip():
             continue
@@ -981,12 +988,32 @@ def ja_reading(text: str) -> str:
                 st = m.get("string", "")
                 if re.fullmatch(r"[ァ-ヶー]+", r):
                     parts.append(jaconv.kata2hira(r))
+                    p = (m.get("pron") or "").replace("’", "")
+                    p = p if KATA_PRON_RE.fullmatch(p) else r
+                    if p == "イウ" and m.get("orig") in ("言う", "いう"):   # the verb 言う (という too) is read ユー; うち / ない+うち stay イウ
+                        p = "ユー"
+                    prons.append(p)
                 elif st.strip():
-                    parts.append(HAN_ANY.sub("", st.strip()))
+                    s2 = HAN_ANY.sub("", st.strip())
+                    parts.append(s2)
+                    prons.append(s2)
         except Exception:
             log.exception("ja_reading failed")
-    out = "".join(parts)
-    return out.replace(",", "、").replace(".", "。").replace("!", "！").replace("?", "？")
+    fix = lambda s: s.replace(",", "、").replace(".", "。").replace("!", "！").replace("?", "？")
+    return fix("".join(parts)), fix("".join(prons))
+
+
+def ja_reading(text: str) -> str:
+    """hiragana reading (spelling form: は stays は) of a Japanese string; punctuation kept, ___ kept, spaces dropped.
+    Characters OpenJTalk cannot read (Chinese-only ideographs) are replaced by their Japanese form when known, else dropped,
+    so the result never contains ideographs."""
+    return _ja_pair(text or "")[0]
+
+
+def ja_pron(text: str) -> str:
+    """katakana pronunciation form of a Japanese string (ワタシワガクセーデス): what the Hangul sound spelling in the app is made
+    from. Same punctuation / ___ rules as ja_reading."""
+    return _ja_pair(text or "")[1]
 
 
 def fix_ja_reading(reading, source: str) -> str:
@@ -2078,7 +2105,8 @@ def run_chat(req):
     if last_me and not req.skip_fix:
         fix, fix_ko = correct_learner(lang, stage, last_me, prev_ai)
     suggest = [x.strip() for x in (data.get("suggest") or []) if isinstance(x, str) and x.strip()][:2]
-    return {"reply": reply, "reading": reading, "ko": ko, "fix": fix, "fix_ko": fix_ko, "suggest": suggest}
+    pron = ja_pron(reply) if lang == "ja" else ""
+    return {"reply": reply, "reading": reading, "pron": pron, "ko": ko, "fix": fix, "fix_ko": fix_ko, "suggest": suggest}
 
 
 def run_feedback(req):
@@ -2120,7 +2148,7 @@ def run_feedback(req):
             continue
         seen_c.add((norm_text(you, lang), norm_text(better, lang)))
         rd = ja_reading(better) if lang == "ja" else ""
-        corr.append({"you": you, "better": better, "reading": rd, "ko": scrub_ko(str(c.get("ko", "") or ""), lang), "why": scrub_ko(str(c.get("why", "") or ""), lang)})
+        corr.append({"you": you, "better": better, "reading": rd, "pron": ja_pron(better) if lang == "ja" else "", "ko": scrub_ko(str(c.get("ko", "") or ""), lang), "why": scrub_ko(str(c.get("why", "") or ""), lang)})
     phr = []
     seen_p = set()
     for p in data.get("phrases") or []:
@@ -2129,7 +2157,7 @@ def run_feedback(req):
         seen_p.add(norm_text(str(p["phrase"]), lang))
         ph = str(p["phrase"]).strip()
         rd = ja_reading(ph) if lang == "ja" else ""
-        phr.append({"phrase": ph, "reading": rd, "ko": scrub_ko(str(p.get("ko", "") or ""), lang)})
+        phr.append({"phrase": ph, "reading": rd, "pron": ja_pron(ph) if lang == "ja" else "", "ko": scrub_ko(str(p.get("ko", "") or ""), lang)})
     return {"scores": scores, "summary": scrub_ko(str(data.get("summary", "") or ""), "en"), "corrections": corr[:6], "phrases": phr[:5]}
 
 
@@ -2194,12 +2222,14 @@ def finish_ex(e, lang):
         out["explain"] = s("explain")
         filled = out["sentence"].replace("___", out["options"][out["answer"]], 1)
         out["reading"] = ja_reading(out["sentence"]) if lang == "ja" else ""  # keeps ___
+        out["pron"] = ja_pron(out["sentence"]) if lang == "ja" else ""
     elif t == "listen":
         out["audio"] = jf(s("audio"))
         if not out["audio"] or len(out["audio"]) > 140:
             return None
         out["explain"] = s("explain")
         out["reading"] = ja_reading(out["audio"]) if lang == "ja" else ""
+        out["pron"] = ja_pron(out["audio"]) if lang == "ja" else ""
     elif t == "build":
         ans = [jf(x.strip()) for x in e["answer"]]
         if not all(ans):   # a token that was only Chinese-only characters is gone: no sentence left to build
@@ -2211,12 +2241,14 @@ def finish_ex(e, lang):
         out["extra"] = extra
         out["explain"] = s("explain")
         out["reading"] = ja_reading("".join(ans)) if lang == "ja" else ""
+        out["pron"] = ja_pron("".join(ans)) if lang == "ja" else ""
     elif t == "speak":
         out["text"] = jf(s("text"))
         if not out["text"] or len(out["text"]) > 140:
             return None
         out["ko"] = s("ko")
         out["reading"] = ja_reading(out["text"]) if lang == "ja" else ""
+        out["pron"] = ja_pron(out["text"]) if lang == "ja" else ""
     return out
 
 
@@ -2390,7 +2422,8 @@ def fill_from_build(b, lang, pool):
     blanked = toks[:i] + ["___"] + toks[i + 1:]
     sentence = (" ".join(blanked) if lang == "en" else "".join(blanked))
     return {"type": "fill", "sentence": sentence, "ko": b.get("ko", ""), "options": opts, "answer": opts.index(correct),
-            "explain": b.get("explain", ""), "reading": ja_reading(sentence) if lang == "ja" else ""}
+            "explain": b.get("explain", ""), "reading": ja_reading(sentence) if lang == "ja" else "",
+            "pron": ja_pron(sentence) if lang == "ja" else ""}
 
 
 class LessonUnchecked(Exception):
@@ -2521,13 +2554,13 @@ llm_opencode.init(log=log)
 
 import reading as readmode  # reading mode (/reading/*) + Tatoeba examples (/examples)
 
-readmode.init(log=log, ApiError=ApiError, ollama_json=ollama_json, ko_ok=ko_ok, ja_reading=ja_reading,
+readmode.init(log=log, ApiError=ApiError, ollama_json=ollama_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
              patch_espeak=_patch_espeak_for_nonascii_path)
 
 
 import lesson_rules  # rule-based lessons from Tatoeba sentences (POST /lesson, source "tatoeba")
 
-lesson_rules.init(log=log, ApiError=ApiError, ja_reading=ja_reading, curriculum=get_curriculum, plain=plain)
+lesson_rules.init(log=log, ApiError=ApiError, ja_reading=ja_reading, ja_pron=ja_pron, curriculum=get_curriculum, plain=plain)
 
 
 class ReadingAnalyzeReq(BaseModel):
@@ -3159,7 +3192,7 @@ def examples(lang: str = "en", q: str = "", limit: int = 5):
 import practice
 import missions
 
-practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, readmode=readmode, lesson_rules=lesson_rules, features=features)
+practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, ja_pron=ja_pron, readmode=readmode, lesson_rules=lesson_rules, features=features)
 missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)
 app.include_router(practice.router)
 app.include_router(missions.router)

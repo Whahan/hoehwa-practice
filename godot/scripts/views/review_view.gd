@@ -345,7 +345,7 @@ func _render_run(c: VBoxContainer) -> void:
 	target.add_theme_font_override("font", UI.bold_font())
 	ans.body.add_child(target)
 	if lang == "ja" and str(it["reading"]) != "":
-		ans.body.add_child(UI.label(str(it["reading"]), "Small"))
+		ReadingLine.add(ans.body, str(it["reading"]), lang) # no pron is stored with a review card: the heuristic spelling
 	ans.body.add_child(UI.speak_buttons(str(it["target"]), lang))
 	if str(it["note"]) != "":
 		ans.body.add_child(UI.label(str(it["note"]), "Muted"))

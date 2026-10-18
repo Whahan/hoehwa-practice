@@ -487,6 +487,17 @@ def _gloss_llm(lang, items):
     return got
 
 
+def _ja_pron(lang, lemma):
+    """katakana pronunciation form of a Japanese lemma (not cached with the gloss: one OpenJTalk pass); "" for English / on failure"""
+    f = H.get("ja_pron")
+    if lang != "ja" or f is None or not JA_CHARS.search(lemma or ""):
+        return ""
+    try:
+        return f(lemma)
+    except Exception:
+        return ""
+
+
 def gloss(lang, items):
     if not isinstance(items, list) or not items:
         raise _err("뜻을 찾을 단어를 보내 주세요.", 400)
@@ -545,7 +556,8 @@ def gloss(lang, items):
                 continue
             g = results[k] or cache.get(_gkey(lang, r["lemma"], r["sentence"]))
             if g:
-                out.append({"i": k, "lemma": r["lemma"], "pos": g["pos"], "ko": g["ko"], "ipa": g["ipa"], "note": g["note"]})
+                out.append({"i": k, "lemma": r["lemma"], "pos": g["pos"], "ko": g["ko"], "ipa": g["ipa"], "note": g["note"],
+                            "pron": _ja_pron(lang, r["lemma"])})
     _log().info("gloss %s: %d asked, %d answered (%.1fs)", lang, len(reqs), len(out), time.time() - t0)
     if not out:
         raise _err("AI가 단어 뜻을 만들지 못했어요. 다시 시도해 주세요.", 502)

@@ -2,6 +2,7 @@
 """Tests reading mode (/reading/analyze, /reading/gloss) and Tatoeba examples (/examples) against a RUNNING server.
 Usage:  .venv\\Scripts\\python.exe test_reading.py --base http://127.0.0.1:8796
 """
+import re
 import sys
 import time
 import requests
@@ -170,6 +171,10 @@ def test_gloss(lang, pairs):
     if lang == "ja":
         tb = next((g for g in gl if g["lemma"] == "食べる"), None)
         check("食べる reading たべる", tb and tb["ipa"] == "たべる", tb and tb["ipa"])
+        check("食べる pron タベル", tb and tb.get("pron") == "タベル", tb and tb.get("pron"))
+        check("every ja gloss has a katakana pron", all(re.fullmatch(r"[ァ-ヶー]+", g.get("pron", "")) for g in gl), [g.get("pron") for g in gl][:5])
+    else:
+        check("en gloss: pron is ''", all(g.get("pron", None) == "" for g in gl))
     r = call("POST", "/reading/gloss", "gloss %s cached" % lang, json=body)
     check("second call served from cache (< 1 s)", r.status_code == 200 and timings[-1][1] < 1.0, "%.2fs" % timings[-1][1])
     check("same answers from cache", r.json().get("glosses") == gl)

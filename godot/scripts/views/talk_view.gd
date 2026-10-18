@@ -527,6 +527,7 @@ func _apply_reply(d: Dictionary) -> void:
 	msgs.append({
 		"role": "ai", "reply": reply,
 		"reading": str(d.get("reading", "")) if lang == "ja" else "",
+		"pron": str(d.get("pron", "")) if lang == "ja" else "",
 		"ko": str(d.get("ko", "")), "suggest": sugg,
 	})
 	if Store.pref_bool("auto_speak"):
@@ -692,13 +693,12 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 	var col := UI.vbox(4)
 	col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var bub := _bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, 16)
-	if lang == "ja" and Store.pref_bool("show_reading") and str(m["reading"]) != "":
+	var rd := ReadingLine.make(str(m.get("reading", "")), lang, Store.pref_bool("show_reading"), max_w, str(m.get("pron", "")))
+	if rd != null:
 		var inner := bub.get_child(0) as Label
 		bub.remove_child(inner)
 		var v := UI.vbox(2)
 		v.add_child(inner)
-		var rd := UI.label(str(m["reading"]), "Small")
-		rd.custom_minimum_size = Vector2(minf(UI.text_width(str(m["reading"]), 13) + 6.0, max_w), 0)
 		v.add_child(rd)
 		bub.add_child(v)
 	col.add_child(bub)
@@ -898,7 +898,7 @@ func _render_fb() -> void:
 				iv.add_child(UI.rich("[s][color=#B83A3A]%s[/color][/s]" % UI.bb_escape(str(d["you"])), 16))
 			iv.add_child(UI.colored(str(d["better"]), Pal.OK, "Strong"))
 			if lang == "ja" and str(d.get("reading", "")) != "":
-				iv.add_child(UI.label(str(d["reading"]), "Small"))
+				ReadingLine.add(iv, str(d["reading"]), lang, true, 0.0, str(d.get("pron", "")))
 			if str(d.get("ko", "")) != "":
 				iv.add_child(UI.label(str(d["ko"]), "Muted"))
 			if str(d.get("why", "")) != "":
@@ -922,7 +922,7 @@ func _render_fb() -> void:
 			var iv2 := UI.vbox(3)
 			iv2.add_child(UI.label(str(d2["phrase"]), "Strong"))
 			if lang == "ja" and str(d2.get("reading", "")) != "":
-				iv2.add_child(UI.label(str(d2["reading"]), "Small"))
+				ReadingLine.add(iv2, str(d2["reading"]), lang, true, 0.0, str(d2.get("pron", "")))
 			if str(d2.get("ko", "")) != "":
 				iv2.add_child(UI.label(str(d2["ko"]), "Muted"))
 			iv2.add_child(UI.speak_buttons(str(d2["phrase"]), lang))

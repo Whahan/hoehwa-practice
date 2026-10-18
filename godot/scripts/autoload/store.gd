@@ -24,6 +24,7 @@ const DEFAULT_PREFS := {
 	"auto_speak": true,
 	"show_fix": true,
 	"show_reading": true,
+	"show_hangul_ja": true,
 	"show_ko": false,
 	"auto_send": true,
 	"open_months": {},

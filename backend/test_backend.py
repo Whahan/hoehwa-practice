@@ -247,6 +247,7 @@ def main():
     print("  ", json.dumps(d, ensure_ascii=False))
     check("chat ja shape + reading hiragana", r.status_code == 200 and bool(d.get("reading")) and re.fullmatch(r"[ぁ-ゖー、。！？\s]+", d["reading"]) is not None, d.get("reading"))
     check("chat ja reply is Japanese", bool(re.search(r"[ぁ-んァ-ン]", d.get("reply", ""))))
+    check("chat ja has a katakana pron (pronunciation form of the reply)", re.fullmatch(r"[ァ-ヶー、，。！？\s・…「」]+", d.get("pron", "")) is not None, d.get("pron"))
 
     print("\n== /feedback")
     fb_req = {"lang": "en", "stage": 1, "history": en_hist}
@@ -256,7 +257,7 @@ def main():
     check("feedback shape", r.status_code == 200 and set(d.get("scores", {})) == {"fluency", "accuracy", "vocabulary"} and all(1 <= v <= 5 for v in d["scores"].values()))
     check("feedback summary Korean", bool(HANGUL.search(d.get("summary", ""))))
     check("feedback has corrections list + phrases", isinstance(d.get("corrections"), list) and len(d.get("phrases", [])) >= 1)
-    check("feedback corrections have you/better/reading/ko/why", all(set(c) == {"you", "better", "reading", "ko", "why"} for c in d["corrections"]))
+    check("feedback corrections have you/better/reading/pron/ko/why", all(set(c) == {"you", "better", "reading", "pron", "ko", "why"} for c in d["corrections"]))
     r = call("POST", "/feedback", "POST /feedback (no learner lines)", json={"lang": "en", "stage": 1, "history": [{"role": "ai", "text": "Hi!"}]})
     check("feedback without learner lines -> 4xx {error}", 400 <= r.status_code < 500 and "error" in r.json())
 
@@ -280,6 +281,7 @@ def main():
         if lang == "ja":
             need = [e for e in ex if e["type"] in ("fill", "listen", "speak", "build")]
             check("lesson ja: readings present", all(e.get("reading") for e in need))
+            check("lesson ja: pron present (katakana)", all(re.fullmatch(r"[ァ-ヶー、，。！？\s・…「」_]+", e.get("pron", "")) for e in need), [e.get("pron") for e in need][:2])
 
     print("\n================ SUMMARY ================")
     print("%-42s %8s" % ("call", "seconds"))

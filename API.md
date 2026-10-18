@@ -117,8 +117,9 @@ app/
 ```
 요청에 선택 필드 `tts_speed`(기본 1.0), `tts_voice`, `presynth`(기본 true; 앱의 자동 읽기가 꺼져 있으면 false)를 붙이면, 서버가 답을 만드는 즉시 백그라운드에서 답의 문장들을 그 속도·목소리로 합성해 TTS 캐시에 넣는다(첫 문장 먼저). 앱이 곧이어 보내는 `/tts`는 캐시 적중이거나 진행 중인 합성에 합류한다. 응답에 `"tts_chunks": [str, ...]`가 붙는다(읽을 조각 순서; 문장 단위, 첫 문장이 길면 첫 쉼표에서 한 번 더 자른다). 앱은 이 조각을 순서대로 `/tts`로 받아 첫 조각이 오는 대로 재생한다.
 `history`가 비어 있으면 AI가 먼저 첫 마디를 한다. 마지막이 `me`면 그에 대한 답.
-응답 `{"reply": str, "reading": str, "ko": str, "fix": str, "fix_ko": str, "suggest": [str, str]}`
-- `reply`: 목표 언어로 1~3문장. `reading`: 일본어면 히라가나 읽기, 영어면 "".
+응답 `{"reply": str, "reading": str, "pron": str, "ko": str, "fix": str, "fix_ko": str, "suggest": [str, str]}`
+- `reply`: 목표 언어로 1~3문장. `reading`: 일본어면 히라가나 읽기(철자형: 조사 は는 は), 영어면 "".
+- `pron`: 일본어면 같은 문장의 발음형 가타카나(OpenJTalk `pron`, 조사 は→ワ, へ→エ, 장음은 ー: `ワタシワガクセーデス`; 앱이 이것으로 한글 소리 표기를 만든다), 영어면 "". `reading`을 주는 모든 응답에 같은 규칙으로 붙는다(아래 `/feedback` corrections·phrases, `/lesson` 문제, `/practice/sentences`, `/reading/gloss`).
 - `fix`/`fix_ko`: 학습자의 마지막 말이 틀렸거나 어색하면 자연스럽게 고친 문장과 한국어 한 줄 설명, 아니면 "".
 - `suggest`: 학습자가 다음에 할 만한 말 2개(목표 언어).
 
@@ -128,8 +129,8 @@ app/
 ```json
 {"scores": {"fluency": 1-5, "accuracy": 1-5, "vocabulary": 1-5},
  "summary": "한국어 2~3문장",
- "corrections": [{"you": str, "better": str, "reading": str, "ko": str, "why": str}],
- "phrases": [{"phrase": str, "reading": str, "ko": str}]}
+ "corrections": [{"you": str, "better": str, "reading": str, "pron": str, "ko": str, "why": str}],
+ "phrases": [{"phrase": str, "reading": str, "pron": str, "ko": str}]}
 ```
 
 ### POST /lesson  (듀오링고식 레슨 생성)
@@ -137,10 +138,11 @@ app/
 응답 `{"title": "한국어 제목", "exercises": [Exercise, ...]}` (8~10개, 유형 섞임)
 Exercise 유형:
 - `{"type":"choice","question":str,"options":[4],"answer":idx,"explain":str}`
-- `{"type":"fill","sentence":"___ 포함 문장","reading":str,"ko":str,"options":[4],"answer":idx,"explain":str}`
-- `{"type":"build","ko":str,"answer":[토큰...],"extra":[오답 토큰 2개],"reading":str,"explain":str}` (일본어 토큰은 의미 덩어리: 毎朝 / 七時に / 起きます)
-- `{"type":"listen","audio":"읽어줄 문장","reading":str,"options":[한국어 뜻 4개],"answer":idx,"explain":str}`
-- `{"type":"speak","text":"따라 말할 문장","reading":str,"ko":str}` → 앱이 녹음해 `/score`로 채점
+- `{"type":"fill","sentence":"___ 포함 문장","reading":str,"pron":str,"ko":str,"options":[4],"answer":idx,"explain":str}`
+- `{"type":"build","ko":str,"answer":[토큰...],"extra":[오답 토큰 2개],"reading":str,"pron":str,"explain":str}` (일본어 토큰은 의미 덩어리: 毎朝 / 七時に / 起きます)
+- `{"type":"listen","audio":"읽어줄 문장","reading":str,"pron":str,"options":[한국어 뜻 4개],"answer":idx,"explain":str}`
+- `{"type":"speak","text":"따라 말할 문장","reading":str,"pron":str,"ko":str}` → 앱이 녹음해 `/score`로 채점
+(`reading`·`pron`은 일본어 문제에서만 채워지고 영어는 `""`. `pron`은 `reading`과 같은 문장의 가타카나 발음형.)
 서버는 형식이 틀린 문제를 걸러내고, 4개 미만이면 한 번 다시 생성한 뒤에도 부족하면 에러를 돌려준다.
 
 요청에 `"source"`를 붙일 수 있다(생략하면 `"tatoeba"`).
@@ -177,7 +179,7 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 - `zipf`: 단어 빈도(wordfreq, 0~8, 높을수록 흔함). `level`: zipf ≥ 4.5 easy, 3.5~4.5 mid, < 3.5 hard. 숫자·고유명사·기호는 `w:false`로 둔다.
 
 `POST /reading/gloss` `{"lang", "items": [{"lemma", "sentence"}]}` (최대 30개) →
-`{"glosses": [{"lemma", "pos": "동사|명사|…", "ko": "문맥에 맞는 한국어 뜻(짧게)", "ipa": "영어 IPA, 일본어는 히라가나 읽기", "note": "용법 한 줄 또는 \"\""}]}`
+`{"glosses": [{"lemma", "pos": "동사|명사|…", "ko": "문맥에 맞는 한국어 뜻(짧게)", "ipa": "영어 IPA, 일본어는 히라가나 읽기", "note": "용법 한 줄 또는 \"\"", "pron": "일본어는 lemma의 가타카나 발음형(캐시하지 않고 응답 때 계산), 영어는 \"\""}]}`
 현재 AI 엔진(무료 DeepSeek 또는 오프라인 로컬)으로 한 번에 생성한다. 같은 (lang, lemma, sentence)는 서버가 캐시한다.
 
 `GET /examples?lang=en&q=<lemma>&limit=5` →
@@ -204,11 +206,11 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 - 이번 달·주 어휘가 들어 있는 Tatoeba 문장을 먼저 고른다(레슨과 같은 순위 방식). 받아쓰기는 3~10단어, 숫자 없음, 첫 단어와 `I` 외에 대문자 단어 없음인 문장만. 일본어는 히라가나 읽기를 만들지 못한 문장을 뺀다.
 ```json
 {"lang": "en", "mode": "shadow", "stage": 1,
- "sentences": [{"id": 101, "text": "I run every morning.", "ko": "나는 매일 아침 달린다.", "reading": "", "words": 4,
+ "sentences": [{"id": 101, "text": "I run every morning.", "ko": "나는 매일 아침 달린다.", "reading": "", "pron": "", "words": 4,
                 "url": "https://tatoeba.org/sentences/show/101"}],
  "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"}
 ```
-- `reading`은 일본어에서만 채워진다. `words`는 영어는 단어 수, 일본어는 글자 수. 화면은 `attribution`을 항상 보여 준다.
+- `reading`(히라가나)과 `pron`(가타카나 발음형)은 일본어에서만 채워진다. `words`는 영어는 단어 수, 일본어는 글자 수. 화면은 `attribution`을 항상 보여 준다.
 - 오류: 400(`lang`/`mode`), 503(예문 DB가 없거나 읽을 수 없음. 메시지는 "예문 데이터가 아직 준비되지 않았어요…").
 
 ### GET /practice/phonemes

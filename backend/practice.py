@@ -178,7 +178,13 @@ def _pick(lang, mode, stage, month, week, n, seed, exclude):
                 if not _ja_reading_ok(reading):
                     continue
         seen_text.add(it["text"])
-        out.append({"id": it["id"], "text": it["text"], "ko": it.get("ko") or "", "reading": reading,
+        pron = ""
+        if lang == "ja" and H.get("ja_pron") is not None:
+            try:
+                pron = H["ja_pron"](it["text"])
+            except Exception:
+                pron = ""
+        out.append({"id": it["id"], "text": it["text"], "ko": it.get("ko") or "", "reading": reading, "pron": pron,
                     "words": _word_count(it, lang), "url": "https://tatoeba.org/sentences/show/%d" % it["id"]})
     return out
 
