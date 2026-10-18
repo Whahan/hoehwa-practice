@@ -7,6 +7,12 @@ static var _ja: SystemFont = null
 static var _ja_bold: SystemFont = null
 static var _cjk_rx: RegEx = null
 
+## Button / chip style sets are shared between buttons of the same look (key = kind|accent|scheme|scale|platform):
+## 200 buttons cost a handful of StyleBoxes instead of 1200. Only UI.button / style_button / filter_chip use it;
+## UI.style() still returns a fresh object because callers edit what they get. Tests switch it off to measure.
+static var cache_enabled: bool = true
+static var _cache: Dictionary = {}
+
 ## Fonts that exist on Android, appended behind the Windows names (same look on the PC).
 const _ANDROID_FONTS := ["Roboto", "Noto Sans CJK KR", "Noto Sans KR", "Noto Sans CJK JP", "Noto Sans JP"]
 
@@ -48,7 +54,7 @@ static func has_cjk(s: String) -> bool:
 	return _cjk_rx.search(s) != null
 
 
-const _BOLD_VARIATIONS := ["H1", "H2", "H3", "Strong", "Big", "Score", "Eyebrow"]
+const _BOLD_VARIATIONS := ["H1", "H2", "H3", "Strong", "Big", "Score", "Eyebrow", "LargeTitle", "AppBarTitle", "SectionHeader"]
 
 
 ## Walks `root` and gives every label/button that contains Japanese text the Japanese font
@@ -80,6 +86,11 @@ static func clear(node: Node) -> void:
 ## Strips the markdown that appears in the curriculum text.
 static func plain(s: Variant) -> String:
 	return str(s).replace("**", "").replace("`", "")
+
+
+## A fixed text size n times the user's font size setting (Ds.fs). Every add_theme_font_size_override goes through it.
+static func fs(n: int) -> int:
+	return Ds.fs(n)
 
 
 # ---------------------------------------------------------------- containers
@@ -191,6 +202,8 @@ static func hline() -> HSeparator:
 
 ## A panel with a style variation ("Card", "BigCard", "Sunk", ...) and an inner VBox.
 static func card(variation: String = "Card", sep: int = 12) -> CardBox:
+	if variation == "Group":
+		return ListGroup.new() # rows bring their own padding and dividers: no body separation
 	var c := CardBox.new()
 	c.theme_type_variation = variation
 	c.body.add_theme_constant_override("separation", sep)
@@ -261,59 +274,150 @@ static func rich(bbcode: String, font_size: int = 16) -> RichTextLabel:
 	r.scroll_active = false
 	r.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	r.add_theme_font_size_override("normal_font_size", font_size)
+	r.add_theme_font_size_override("normal_font_size", fs(font_size))
 	r.text = bbcode
 	return r
 
 
 # ---------------------------------------------------------------- buttons
 
-## kind: "default" (theme), "primary", "soft", "outline", "flat"
+## kind: "default" (theme), "primary", "soft", "outline", "flat", "danger"; any other word keeps the theme look.
+## Height is max(min_h, Ds.btn_h()): 48 (touch target) on the phone, 40 on the PC.
 static func button(text: String, kind: String = "default", accent: Color = Pal.INK, min_h: float = 0.0) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	if min_h > 0.0:
-		b.custom_minimum_size.y = min_h
 	if Platform.is_phone():
-		PhoneLayout.touch(b, PhoneLayout.BTN_H)
+		b.custom_minimum_size.y = maxf(min_h, Ds.btn_h())
+	elif min_h > 0.0:
+		b.custom_minimum_size.y = min_h # PC: no forced height (phone_layout_test L-06); the padding keeps it >= 40
 	style_button(b, kind, accent)
 	return b
 
 
+## The colour pair of an accent: [tonal surface, text colour that reads on it]. The known accents map to the SOFT / *_ON
+## tokens (light and dark); INK maps to SUNK; an unknown colour is mixed into the surface and keeps itself as text.
+static func soft_pair(accent: Color) -> Array:
+	if accent.is_equal_approx(Pal.EN):
+		return [Pal.EN_SOFT, Pal.EN_ON]
+	if accent.is_equal_approx(Pal.JA):
+		return [Pal.JA_SOFT, Pal.JA_ON]
+	if accent.is_equal_approx(Pal.OK):
+		return [Pal.OK_SOFT, Pal.OK_ON]
+	if accent.is_equal_approx(Pal.BAD):
+		return [Pal.BAD_SOFT, Pal.BAD_ON]
+	if accent.is_equal_approx(Pal.WARN):
+		return [Pal.WARN_SOFT, Pal.WARN_ON]
+	if accent.is_equal_approx(Pal.PRIMARY):
+		return [Pal.PRIMARY_SOFT, Pal.PRIMARY]
+	if accent.is_equal_approx(Pal.INK):
+		return [Pal.SUNK, Pal.INK]
+	return [accent.lerp(Pal.SURFACE, 0.86), accent]
+
+
 static func style_button(b: Button, kind: String, accent: Color) -> void:
-	match kind:
-		"primary":
-			_apply(b, accent, accent.lightened(0.12), accent.darkened(0.15), Color.WHITE, Color(0, 0, 0, 0), 0)
-			b.add_theme_font_override("font", bold_font())
-		"soft":
-			var bg := accent.lerp(Color.WHITE, 0.86)
-			_apply(b, bg, accent.lerp(Color.WHITE, 0.78), accent.lerp(Color.WHITE, 0.68), accent, Color(0, 0, 0, 0), 0)
-			b.add_theme_font_override("font", bold_font())
-		"outline":
-			_apply(b, Color(0, 0, 0, 0), accent.lerp(Color.WHITE, 0.9), accent.lerp(Color.WHITE, 0.8), accent, accent, 2)
-			b.add_theme_font_override("font", bold_font())
-		"flat":
-			b.theme_type_variation = &"FlatButton"
-		_:
-			pass
+	if kind == "flat":
+		b.theme_type_variation = &"FlatButton"
+		_clear_button_overrides(b)
+		_pc_pad(b, "flat")
+		if not accent.is_equal_approx(Pal.INK): # the default accent keeps the theme's muted flat look
+			var fg: Color = (soft_pair(accent) as Array)[1]
+			for n in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+				b.add_theme_color_override(n, fg)
+		return
+	var st: Dictionary = _button_styles(kind, accent)
+	if st.is_empty():
+		if kind == "default":
+			_pc_pad(b, "default")
+		return # unknown kind: the theme's default Button look
+	for n in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(n, st[n])
+	var fg2: Color = st["fg"]
+	b.add_theme_color_override("font_color", fg2)
+	b.add_theme_color_override("font_hover_color", fg2)
+	b.add_theme_color_override("font_pressed_color", fg2)
+	b.add_theme_color_override("font_hover_pressed_color", fg2)
+	b.add_theme_color_override("font_focus_color", fg2)
+	b.add_theme_color_override("font_disabled_color", Color(fg2, 0.55))
+	b.add_theme_font_override("font", bold_font())
 
 
-static func _apply(b: Button, bg: Color, hover: Color, pressed: Color, fg: Color, border: Color, bw: int) -> void:
-	b.add_theme_stylebox_override("normal", style(bg, border, bw, 10, 18, 11))
-	b.add_theme_stylebox_override("hover", style(hover, border, bw, 10, 18, 11))
-	b.add_theme_stylebox_override("pressed", style(pressed, border, bw, 10, 18, 11))
-	b.add_theme_stylebox_override("hover_pressed", style(pressed, border, bw, 10, 18, 11))
-	var dis_bg := Color(bg, bg.a * 0.4)
-	b.add_theme_stylebox_override("disabled", style(dis_bg if bg.a > 0.0 else Color(0, 0, 0, 0), Color(border, border.a * 0.4), bw, 10, 18, 11))
-	b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), Color("#7C9BE8"), 2, 10, 18, 11))
-	b.add_theme_color_override("font_color", fg)
-	b.add_theme_color_override("font_hover_color", fg)
-	b.add_theme_color_override("font_pressed_color", fg)
-	b.add_theme_color_override("font_hover_pressed_color", fg)
-	b.add_theme_color_override("font_focus_color", fg)
-	b.add_theme_color_override("font_disabled_color", Color(fg, 0.55))
+## PC only: the theme's Button / FlatButton padding gives 39 / 35 px, below the 40 px minimum, and a forced
+## custom_minimum_size is not allowed (phone_layout_test L-06). So the same styles come back with 10 px top and
+## bottom padding (shared per scheme, see cache_enabled).
+static func _pc_pad(b: Button, which: String) -> void:
+	if Platform.is_phone():
+		return
+	var key := "pcpad|%s|%s" % [which, Pal.scheme()]
+	var d: Dictionary
+	if cache_enabled and _cache.has(key):
+		d = _cache[key]
+	else:
+		d = {}
+		for n in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+			var sb: StyleBox = (b.get_theme_stylebox(n) as StyleBox).duplicate()
+			sb.content_margin_top = 10.0
+			sb.content_margin_bottom = 10.0
+			d[n] = sb
+		if cache_enabled:
+			_cache[key] = d
+	for n in d.keys():
+		b.add_theme_stylebox_override(n, d[n])
+
+
+static func _clear_button_overrides(b: Button) -> void:
+	for n in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		b.remove_theme_stylebox_override(n)
+	for n in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color", "font_disabled_color"]:
+		b.remove_theme_color_override(n)
+	b.remove_theme_font_override("font")
+
+
+## The shared style set of a button look (normal / hover / pressed / hover_pressed / disabled / focus + "fg"), or {} for an
+## unknown kind. Cached; see cache_enabled.
+static func _button_styles(kind: String, accent: Color) -> Dictionary:
+	if kind != "primary" and kind != "soft" and kind != "outline" and kind != "danger":
+		return {}
+	var key := "%s|%s|%s|%s|%s" % [kind, accent.to_html(true), Pal.scheme(), Ds.font_scale, Platform.is_phone()]
+	if cache_enabled and _cache.has(key):
+		return _cache[key]
+	var bg: Color
+	var hover: Color
+	var pressed: Color
+	var fg: Color
+	var border: Color = Color(0, 0, 0, 0)
+	var bw: int = 0
+	if kind == "primary" or kind == "danger":
+		var fill: Color = Pal.BAD if kind == "danger" else accent
+		bg = fill
+		hover = fill.lightened(0.12)
+		pressed = fill.darkened(0.15)
+		fg = Pal.ON_ACCENT
+	else:
+		var pair: Array = soft_pair(accent)
+		bg = pair[0]
+		fg = pair[1]
+		hover = bg.lerp(fg, 0.08)
+		pressed = bg.lerp(fg, 0.16)
+		if kind == "outline":
+			border = fg
+			bw = 2 # outline = tonal + a 2 px border (StyleBox borders are whole px)
+	var d := {}
+	d["normal"] = _btn_style(bg, border, bw)
+	d["hover"] = _btn_style(hover, border, bw)
+	d["pressed"] = _btn_style(pressed, border, bw)
+	d["hover_pressed"] = d["pressed"]
+	d["disabled"] = _btn_style(Color(bg, bg.a * 0.4), Color(border, border.a * 0.4), bw)
+	d["focus"] = _btn_style(Color(0, 0, 0, 0), Pal.PRIMARY, 2)
+	d["fg"] = fg
+	if cache_enabled:
+		_cache[key] = d
+	return d
+
+
+static func _btn_style(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
+	return style(bg, border, bw, Ds.R_BTN, 18, 11)
 
 
 ## Left-aligned, wrapping answer button (choice / fill / listen).
@@ -326,9 +430,8 @@ static func option_row(text: String) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.add_theme_font_size_override("font_size", 17)
-	if Platform.is_phone():
-		PhoneLayout.touch(b, 52.0)
+	b.add_theme_font_size_override("font_size", fs(17))
+	b.custom_minimum_size.y = maxf(Ds.btn_h(), 52.0 if Platform.is_phone() else 0.0)
 	return b
 
 
@@ -338,7 +441,7 @@ static func paint_option(b: Button, state: String, accent: Color) -> void:
 	var border := Pal.LINE
 	match state:
 		"picked":
-			bg = accent.lerp(Color.WHITE, 0.9)
+			bg = (soft_pair(accent) as Array)[0]
 			border = accent
 		"right":
 			bg = Pal.OK_SOFT
@@ -352,7 +455,7 @@ static func paint_option(b: Button, state: String, accent: Color) -> void:
 			b.remove_theme_stylebox_override("pressed")
 			b.remove_theme_stylebox_override("disabled")
 			return
-	var s := style(bg, border, 2, 12, 16, 12)
+	var s := style(bg, border, 2, Ds.R_S, 16, 12)
 	s.border_width_bottom = 4
 	for n in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		b.add_theme_stylebox_override(n, s)
@@ -364,24 +467,27 @@ static func tile(text: String) -> Button:
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.custom_minimum_size.y = Ds.btn_h()
 	if Platform.is_phone():
-		PhoneLayout.touch(b, PhoneLayout.BTN_H, 48.0)
+		b.custom_minimum_size.x = maxf(b.custom_minimum_size.x, Ds.touch_min())
 	return b
 
 
-## Small text-only action (듣기 / 천천히 / 번역 ...).
+## Small text-only action (듣기 / 천천히 / 번역 ...). Phone: at least touch_min (48 dp) in both directions.
 static func link_button(text: String, tip: String = "") -> Button:
 	var b := Button.new()
 	b.theme_type_variation = &"FlatButton"
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_font_size_override("font_size", fs(14))
 	if tip != "" and not Platform.is_phone():
 		b.tooltip_text = tip
 	if Platform.is_phone():
-		b.add_theme_font_size_override("font_size", 15)
-		PhoneLayout.touch(b, PhoneLayout.LINK_H, PhoneLayout.LINK_H)
+		b.add_theme_font_size_override("font_size", fs(15))
+		var m: float = Ds.touch_min()
+		b.custom_minimum_size.y = maxf(b.custom_minimum_size.y, m)
+		b.custom_minimum_size.x = maxf(b.custom_minimum_size.x, m)
 	return b
 
 
@@ -408,29 +514,31 @@ static func segmented(items: Array, current: String, on_change: Callable, accent
 	var phone: bool = Platform.is_phone()
 	if phone:
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var r: int = Ds.R_BTN - 3 # the Seg panel pads its buttons by 3
 	for it in items:
 		var value: String = str(it[0])
 		var b := Button.new()
 		b.text = str(it[1])
 		b.focus_mode = Control.FOCUS_NONE
 		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		b.custom_minimum_size.y = Ds.touch_min()
 		if phone:
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			PhoneLayout.touch(b, PhoneLayout.LINK_H)
 		var sel: bool = value == current
 		var fg: Color = Pal.MUTED
 		if sel:
 			fg = accent_for.call(value) if accent_for.is_valid() else Pal.INK
-			var s := style(Pal.SURFACE, Color(0, 0, 0, 0), 0, 8, 18, 7)
-			s.shadow_color = Color(0, 0, 0, 0.12)
-			s.shadow_size = 2
-			s.shadow_offset = Vector2(0, 1)
+			var s := style(Pal.SURFACE, Color(0, 0, 0, 0), 0, r, 18, 7)
+			if not Pal.is_dark(): # dark: the lighter surface already separates the selected segment
+				s.shadow_color = Color(0, 0, 0, 0.12)
+				s.shadow_size = 2
+				s.shadow_offset = Vector2(0, 1)
 			for n in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 				b.add_theme_stylebox_override(n, s)
 			b.add_theme_font_override("font", bold_font())
 		else:
-			var f := style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 8, 18, 7)
-			var hv := style(Color(1, 1, 1, 0.55), Color(0, 0, 0, 0), 0, 8, 18, 7)
+			var f := style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, r, 18, 7)
+			var hv := style(Color(Pal.SURFACE, 0.55), Color(0, 0, 0, 0), 0, r, 18, 7)
 			b.add_theme_stylebox_override("normal", f)
 			b.add_theme_stylebox_override("hover", hv)
 			b.add_theme_stylebox_override("pressed", hv)
@@ -448,13 +556,17 @@ static func lang_segmented(current: String, on_change: Callable) -> PanelContain
 	return segmented([["en", "영어 English"], ["ja", "일본어 日本語"]], current, on_change, Pal.accent)
 
 
+## Display chip (not pressable), 28 px high. The caller picks fg / bg: use chip_kind unless the pair is already a
+## text-safe one (a *_ON colour on its SOFT surface).
 static func chip(text: String, fg: Color, bg: Color, tip: String = "") -> PanelContainer:
-	var p := tinted_panel(bg, Color(0, 0, 0, 0), 0, 99, 10, 2)
+	var p := tinted_panel(bg, Color(0, 0, 0, 0), 0, Ds.R_PILL, 10, 2)
+	p.custom_minimum_size.y = 28.0
 	var l := Label.new()
 	l.text = text
 	l.add_theme_color_override("font_color", fg)
-	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_font_size_override("font_size", fs(13))
 	l.add_theme_font_override("font", bold_font())
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(l)
 	if tip != "":
@@ -462,6 +574,89 @@ static func chip(text: String, fg: Color, bg: Color, tip: String = "") -> PanelC
 	else:
 		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return p
+
+
+## Display chip with a text-safe colour pair. kind: "ok" | "bad" | "warn" | "info" | "lang_en" | "lang_ja" | "neutral"
+## (anything else counts as "neutral").
+static func chip_kind(text: String, kind: String, tip: String = "") -> PanelContainer:
+	var fg: Color = Pal.MUTED
+	var bg: Color = Pal.SUNK
+	match kind:
+		"ok":
+			fg = Pal.OK_ON
+			bg = Pal.OK_SOFT
+		"bad":
+			fg = Pal.BAD_ON
+			bg = Pal.BAD_SOFT
+		"warn":
+			fg = Pal.WARN_ON
+			bg = Pal.WARN_SOFT
+		"info":
+			fg = Pal.PRIMARY
+			bg = Pal.PRIMARY_SOFT
+		"lang_en":
+			fg = Pal.EN_ON
+			bg = Pal.EN_SOFT
+		"lang_ja":
+			fg = Pal.JA_ON
+			bg = Pal.JA_SOFT
+		_:
+			pass
+	return chip(text, fg, bg, tip)
+
+
+## Pressable choice chip. Phone: the hit area is touch_min tall and the drawn pill 8 px shorter (the stylebox is inset
+## top and bottom); PC: 32. Selected = PRIMARY_SOFT surface + 2 px PRIMARY outline + bold text (colour, outline and weight
+## all differ, never colour alone). `on_tap` is called when the chip is pressed: with the new state (not selected) when
+## it takes one argument, else without arguments. The chip does not flip itself: the caller rebuilds it.
+static func filter_chip(text: String, selected: bool, on_tap: Callable) -> Button:
+	var b := Button.new()
+	b.theme_type_variation = &"FilterChip"
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var phone: bool = Platform.is_phone()
+	b.custom_minimum_size.y = Ds.touch_min() if phone else 32.0
+	var inset: float = 4.0 if phone else 0.0
+	var key := "chip|%s|%s|%s|%s|%s" % [selected, Pal.scheme(), Ds.font_scale, phone, inset]
+	var st: Dictionary
+	if cache_enabled and _cache.has(key):
+		st = _cache[key]
+	else:
+		st = {}
+		var n: StyleBoxFlat
+		var hv: StyleBoxFlat
+		var pr: StyleBoxFlat
+		if selected:
+			n = style(Pal.PRIMARY_SOFT, Pal.PRIMARY, 2, Ds.R_PILL, 14, 6)
+			hv = n
+			pr = n
+		else:
+			n = style(Pal.SURFACE, Pal.LINE_STRONG, 1, Ds.R_PILL, 14, 6)
+			hv = style(Pal.SUNK, Pal.LINE_STRONG, 1, Ds.R_PILL, 14, 6)
+			pr = style(Pal.PRIMARY_SOFT, Pal.PRIMARY, 2, Ds.R_PILL, 14, 6)
+		for sb in [n, hv, pr]:
+			(sb as StyleBoxFlat).expand_margin_top = -inset
+			(sb as StyleBoxFlat).expand_margin_bottom = -inset
+		st["normal"] = n
+		st["hover"] = hv
+		st["pressed"] = pr
+		if cache_enabled:
+			_cache[key] = st
+	for k in ["normal", "hover", "pressed", "hover_pressed"]:
+		b.add_theme_stylebox_override(k, st["pressed" if k == "hover_pressed" else k])
+	if selected:
+		b.add_theme_color_override("font_color", Pal.PRIMARY)
+		b.add_theme_color_override("font_hover_color", Pal.PRIMARY)
+		b.add_theme_color_override("font_pressed_color", Pal.PRIMARY)
+		b.add_theme_font_override("font", bold_font())
+	b.pressed.connect(func() -> void:
+		if on_tap.is_valid():
+			if on_tap.get_argument_count() >= 1:
+				on_tap.call(not selected)
+			else:
+				on_tap.call())
+	return b
 
 
 static func progress_bar(value: float, color: Color, height: float = 10.0) -> ProgressBar:
@@ -473,7 +668,14 @@ static func progress_bar(value: float, color: Color, height: float = 10.0) -> Pr
 	b.custom_minimum_size = Vector2(0, height)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.add_theme_stylebox_override("fill", style(color, Color(0, 0, 0, 0), 0, 99, 0, 0))
+	b.add_theme_stylebox_override("fill", style(color, Color(0, 0, 0, 0), 0, Ds.R_PILL, 0, 0))
+	return b
+
+
+## Same look for an unknown amount of work (splash, waiting for the engine).
+static func progress_indeterminate(color: Color, height: float = 10.0) -> ProgressBar:
+	var b := progress_bar(0.0, color, height)
+	b.indeterminate = true
 	return b
 
 
@@ -485,15 +687,16 @@ static func check_row(text: String, checked: bool, on_toggle: Callable, sub: Str
 	cb.focus_mode = Control.FOCUS_NONE
 	cb.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	if Platform.is_phone():
-		PhoneLayout.touch(cb, PhoneLayout.BTN_H, PhoneLayout.BTN_H)
+	var m: float = Ds.touch_min()
+	cb.custom_minimum_size = Vector2(m, m)
+	cb.accessibility_name = text
 	cb.toggled.connect(func(on: bool) -> void: on_toggle.call(on))
 	row.add_child(cb)
 	var col := vbox(1)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if Platform.is_phone():
 		col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.custom_minimum_size.y = PhoneLayout.BTN_H
+		row.custom_minimum_size.y = m
 	var l := label(text, "Strong" if sub != "" else "")
 	if checked:
 		l.add_theme_color_override("font_color", Pal.MUTED)
@@ -506,7 +709,7 @@ static func check_row(text: String, checked: bool, on_toggle: Callable, sub: Str
 	return row
 
 
-## Labeled toggle (checkbox with plain text) bound to a pref key.
+## Labeled toggle (checkbox with plain text) bound to a pref key. For an on/off setting prefer pref_switch.
 static func pref_toggle(text: String, pref_key: String) -> CheckBox:
 	var cb := CheckBox.new()
 	cb.text = text
@@ -516,8 +719,62 @@ static func pref_toggle(text: String, pref_key: String) -> CheckBox:
 	cb.toggled.connect(func(on: bool) -> void: Store.set_pref(pref_key, on))
 	if Platform.is_phone():
 		cb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		PhoneLayout.touch(cb, PhoneLayout.BTN_H)
+	cb.custom_minimum_size.y = Ds.touch_min()
 	return cb
+
+
+## A switch (CheckButton, 52x32 track) without text; the hit area is at least 56x48.
+static func switch_button(on: bool = false) -> CheckButton:
+	var cb := CheckButton.new()
+	cb.focus_mode = Control.FOCUS_NONE
+	cb.button_pressed = on
+	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	cb.custom_minimum_size = Vector2(56.0, maxf(48.0, Ds.touch_min()))
+	return cb
+
+
+## Labeled on/off setting bound to a pref key (same keys as pref_toggle): text on the left, switch on the right.
+static func pref_switch(text: String, pref_key: String) -> CheckButton:
+	var cb := CheckButton.new()
+	cb.text = text
+	cb.focus_mode = Control.FOCUS_NONE
+	cb.button_pressed = Store.pref_bool(pref_key)
+	cb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cb.custom_minimum_size.y = maxf(48.0, Ds.touch_min())
+	cb.accessibility_name = text
+	cb.toggled.connect(func(on: bool) -> void: Store.set_pref(pref_key, on))
+	return cb
+
+
+## Row with a label (+ optional smaller line) and a switch at its right end; tapping the text toggles the switch too.
+## The switch is row.get_meta("switch"). on_toggle(bool).
+static func switch_row(text: String, checked: bool, on_toggle: Callable, sub: String = "") -> HBoxContainer:
+	var row := hbox(12)
+	row.custom_minimum_size.y = ListGroup.ROW_H_SUB if sub != "" else ListGroup.ROW_H
+	var col := vbox(1)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var cb := switch_button(checked)
+	cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cb.accessibility_name = text
+	cb.toggled.connect(func(on: bool) -> void: on_toggle.call(on))
+	var flip := func() -> void: cb.button_pressed = not cb.button_pressed
+	var l := label(text, "ListMain")
+	l.mouse_filter = Control.MOUSE_FILTER_STOP
+	on_tap(l, flip)
+	col.add_child(l)
+	if sub != "":
+		var sl := label(sub, "ListSub")
+		sl.mouse_filter = Control.MOUSE_FILTER_STOP
+		on_tap(sl, flip)
+		col.add_child(sl)
+	row.add_child(col)
+	row.add_child(cb)
+	row.set_meta("switch", cb)
+	return row
 
 
 static func option_button(items: Array, selected: int) -> OptionButton:
@@ -526,8 +783,7 @@ static func option_button(items: Array, selected: int) -> OptionButton:
 	o.fit_to_longest_item = false
 	o.clip_text = true
 	o.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	if Platform.is_phone():
-		PhoneLayout.touch(o, PhoneLayout.BTN_H)
+	o.custom_minimum_size.y = maxf(o.custom_minimum_size.y, Ds.field_h())
 	for it in items:
 		o.add_item(str(it))
 	if selected >= 0 and selected < items.size():
@@ -535,11 +791,21 @@ static func option_button(items: Array, selected: int) -> OptionButton:
 	return o
 
 
+## Caption (small, muted) above an input. A single-line input (LineEdit, SpinBox, OptionButton) gets Ds.field_h() as
+## minimum height here: the theme does not size inputs (phone_layout_test measures the phone layout).
 static func field(caption: String, control: Control) -> VBoxContainer:
 	var v := vbox(4)
 	v.add_child(label(caption, "Small"))
+	if control is LineEdit or control is OptionButton or control is SpinBox:
+		control.custom_minimum_size.y = maxf(control.custom_minimum_size.y, Ds.field_h())
 	v.add_child(control)
 	return v
+
+
+## Section heading for a ListGroup / card stack (SectionHeader variation): `top` px above, 8 below, 8 at the left
+## (page margin 16 + 8 = 24 from the screen edge).
+static func section_header(text: String, top: int = Ds.S6) -> Label:
+	return ListGroup.header(text, top)
 
 
 ## Scrolls a ScrollContainer to the bottom after layout settles.

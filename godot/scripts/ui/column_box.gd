@@ -13,7 +13,7 @@ var content: VBoxContainer
 
 func _init() -> void:
 	content = VBoxContainer.new()
-	content.add_theme_constant_override("separation", 16)
+	content.add_theme_constant_override("separation", Ds.S3 if Platform.is_phone() else Ds.S4) # card gap: phone 12, PC 16
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(content)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
