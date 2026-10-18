@@ -16,7 +16,7 @@ run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 run/low_processor_mode=true
 config/icon="res://icon.svg"
-config/version="1.1.1"
+config/version="1.2.0"
 config/quit_on_go_back=false
 
 [audio]
