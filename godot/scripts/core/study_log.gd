@@ -12,7 +12,9 @@ extends RefCounted
 ##    "days": {"2026-10-16": {"en": {"sec":840, "by":{"lesson":300}, "n":{"lessons":1}, "lesson":[ok,total], "score":[count,sum]}}},
 ##    "phon": {"en": {"θ": {"h":"0110", "heard":{"s":5}}}},
 ##    "freeze": {"en": {"tokens":1, "frozen":["2026-10-14"], "awarded":0, "last":740000}},
-##    "missions": {"cafe_order": {"stars":2, "plays":3, "last":"2026-10-16", "done_goals":2}}}
+##    "missions": {"cafe_order": {"stars":2, "plays":3, "last":"2026-10-16", "done_goals":2}},
+##    "kana": {"c": {"あ": [맞힌, 틀린], "ア": [3, 1]}, "runs":4, "ok":31, "total":40, "last":"2026-10-16"}}   (가나 익히기, 처음 풀 때 생긴다)
+## "kana" 는 이 기기에만 저장된다: SyncDoc 는 days / phon / missions 만 주고받아서 기기 사이에 동기화되지 않는다.
 
 const VERSION := 1
 const KEEP_DAYS := 400
@@ -23,8 +25,9 @@ const GOAL_DEFAULT_MIN := 10
 const LANGS := ["en", "ja"]
 const KINDS := ["lessons", "talks", "missions", "reviews", "shadow", "dictation", "drill"]
 const VIEWS := ["today", "lesson", "talk", "reading", "review", "roadmap", "practice", "stats"]
-const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions"]
+const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions", "kana"]
 const MAX_MISSIONS := 200
+const MAX_KANA := 400 ## 글자 칸 수 (히라가나 104 + 가타카나 104 보다 넉넉히)
 const KEEP_BAD := 3 ## .bad, .bad.1, .bad.2
 
 static var path := "user://studylog.json"
@@ -260,6 +263,8 @@ static func _normalize(raw: Variant) -> Dictionary:
 		fz_out[l] = _norm_freeze(fin.get(l, null) if fin is Dictionary else null)
 	out["freeze"] = fz_out
 	out["missions"] = _norm_missions(src.get("missions", null))
+	if src.has("kana"):
+		out["kana"] = _norm_kana(src["kana"])
 	return out
 
 
@@ -390,6 +395,39 @@ static func _norm_missions(v: Variant) -> Dictionary:
 			"last": last_v if (last_v is String and _iso_days(last_v) >= 0) else "",
 			"done_goals": (dg as Array).size() if dg is Array else _n(dg, 0, 1000),
 		}
+	return out
+
+
+static func _blank_kana() -> Dictionary:
+	return {"c": {}, "runs": 0, "ok": 0, "total": 0, "last": ""}
+
+
+## A kana key is one of the real glyphs of the kana table (KanaData: あ, ア, きゃ, キャ ... 208 in all), so a damaged or
+## hand-made file cannot fill the MAX_KANA slots with fake keys. KanaData only holds constants (no StudyLog use): no cycle.
+static func _is_kana_key(k: Variant) -> bool:
+	return k is String and KanaData.has(k)
+
+
+static func _norm_kana(v: Variant) -> Dictionary:
+	var out: Dictionary = _blank_kana()
+	if not (v is Dictionary):
+		return out
+	var src: Dictionary = v
+	var cin: Variant = src.get("c", null)
+	if cin is Dictionary:
+		for k in (cin as Dictionary).keys():
+			if (out["c"] as Dictionary).size() >= MAX_KANA:
+				break
+			if not _is_kana_key(k):
+				continue
+			var pr: Array = _pair((cin as Dictionary)[k])
+			if int(pr[0]) + int(pr[1]) > 0:
+				(out["c"] as Dictionary)[k] = pr
+	out["runs"] = _n(src.get("runs", 0))
+	out["total"] = _n(src.get("total", 0))
+	out["ok"] = mini(_n(src.get("ok", 0)), int(out["total"]))
+	var last_v: Variant = src.get("last", "")
+	out["last"] = last_v if (last_v is String and _iso_days(last_v) >= 0) else ""
 	return out
 
 
@@ -548,6 +586,65 @@ static func mission_best(id: String) -> Dictionary:
 static func mission_ids() -> Array:
 	_ensure()
 	return (_data["missions"] as Dictionary).keys()
+
+
+# ---------------------------------------------------------------- kana (히라가나 · 가타카나 익히기)
+
+## The live "kana" dictionary, created on the first answer (a log that never played the kana quiz has no such key).
+static func _kana(create: bool) -> Dictionary:
+	_ensure()
+	if not _data.has("kana"):
+		if not create:
+			return _blank_kana()
+		_data["kana"] = _blank_kana()
+	return _data["kana"]
+
+
+## One answer for kana `ch` (あ, ア, きゃ ...). Returns false for anything that is not a kana key.
+static func add_kana(ch: String, correct: bool) -> bool:
+	if not _is_kana_key(ch):
+		return false
+	var k: Dictionary = _kana(true)
+	var cs: Dictionary = k["c"]
+	if not cs.has(ch) and cs.size() >= MAX_KANA:
+		return false
+	var pr: Array = cs.get(ch, [0, 0])
+	var idx: int = 0 if correct else 1
+	pr[idx] = mini(int(pr[idx]) + 1, MAX_COUNT)
+	cs[ch] = pr
+	_dirty = true
+	return true
+
+
+## One finished quiz: `ok` of `total` right (also remembers today's date).
+static func add_kana_run(ok: int, total: int) -> void:
+	if total <= 0 or total > 1000:
+		return
+	var k: Dictionary = _kana(true)
+	k["runs"] = mini(int(k["runs"]) + 1, MAX_COUNT)
+	k["total"] = mini(int(k["total"]) + total, MAX_COUNT)
+	k["ok"] = mini(int(k["ok"]) + clampi(ok, 0, total), int(k["total"]))
+	k["last"] = Plan.days_to_iso(today())
+	_dirty = true
+
+
+## {ok, bad} of one kana (zeros when it was never answered).
+static func kana_stat(ch: String) -> Dictionary:
+	var pr: Variant = (_kana(false)["c"] as Dictionary).get(ch, null)
+	if pr is Array and (pr as Array).size() >= 2:
+		return {"ok": int((pr as Array)[0]), "bad": int((pr as Array)[1])}
+	return {"ok": 0, "bad": 0}
+
+
+## Copy of every kana record: {ch: [ok, bad]}.
+static func kana_stats() -> Dictionary:
+	return (_kana(false)["c"] as Dictionary).duplicate(true)
+
+
+## {runs, ok, total, last} over all finished quizzes.
+static func kana_summary() -> Dictionary:
+	var k: Dictionary = _kana(false)
+	return {"runs": int(k["runs"]), "ok": int(k["ok"]), "total": int(k["total"]), "last": str(k["last"])}
 
 
 # ---------------------------------------------------------------- goal / streak
