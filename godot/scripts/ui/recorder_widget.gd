@@ -5,6 +5,14 @@ extends HBoxContainer
 ## Interaction: press = start; release after a long hold (>= 0.45 s) = stop (push-to-talk);
 ## a short click keeps recording until the next click (toggle). Optionally hold Space.
 ## Emits `recorded(result)` with result.b64 (WAV base64) and result.duration.
+##
+## Three states, told apart by text, shape and colour (never colour alone):
+##   idle      accent fill, "● <idle_text>"
+##   recording BAD fill, "■ 멈추기" (small: "■ 멈춤"), timer + level bar (OK fill on a SUNK track)
+##   busy      the widget is disabled (set_enabled(false), e.g. while the answer is scored) or the recorder is
+##             closing the file: disabled look and `busy_text`
+## Sizes: phone = a full-width 56 px button; PC = Ds.REC_BIG_PC (190x58) / Ds.REC_SMALL_PC (96x44), which
+## phone_layout_test asserts. The touch behaviour is unchanged (see _notification).
 
 signal recorded(result: Dictionary)
 signal state_changed(is_recording: bool)
@@ -15,6 +23,8 @@ var big: bool = true
 var accent: Color = Pal.EN
 var use_space: bool = false
 var idle_text: String = "녹음 시작"
+## Text of the disabled (busy) state. A screen that disables the widget for another reason sets its own.
+var busy_text: String = "채점 중…"
 ## Phone: a small widget as a full-width 56 px button (talk chat). Set before the widget enters the tree.
 var wide: bool = false
 
@@ -40,11 +50,11 @@ func _ready() -> void:
 	_btn = Button.new()
 	_btn.focus_mode = Control.FOCUS_NONE
 	_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_btn.custom_minimum_size = Vector2(190 if big else 96, 58 if big else 44)
+	_btn.custom_minimum_size = Ds.REC_BIG_PC if big else Ds.REC_SMALL_PC
 	var phone: bool = Platform.is_phone()
 	var full: bool = big or wide
 	if phone:
-		_btn.custom_minimum_size = Vector2(0.0 if full else 96.0, 56.0 if full else PhoneLayout.BTN_H)
+		_btn.custom_minimum_size = Vector2(0.0 if full else 96.0, maxf(56.0, Ds.touch_min()) if full else PhoneLayout.BTN_H)
 		_btn.size_flags_horizontal = Control.SIZE_FILL if full else Control.SIZE_SHRINK_BEGIN
 	_btn.button_down.connect(_on_down)
 	_btn.button_up.connect(_on_up)
@@ -57,6 +67,7 @@ func _ready() -> void:
 	_time_label.theme_type_variation = &"Muted"
 	col.add_child(_time_label)
 	_meter = UI.progress_bar(0.0, Pal.OK, 8.0)
+	_meter.add_theme_stylebox_override("background", UI.style(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_PILL, 0, 0))
 	_meter.custom_minimum_size = Vector2(130, 8)
 	_meter.size_flags_horizontal = Control.SIZE_FILL
 	col.add_child(_meter)
@@ -114,15 +125,28 @@ func _process(_delta: float) -> void:
 		_meter.value = 0.0
 
 
+## "recording" | "busy" | "idle" (what the button shows now).
+func state_name() -> String:
+	if is_mine_recording():
+		return "recording"
+	if not _enabled or Recorder.stopping:
+		return "busy"
+	return "idle"
+
+
 func _refresh() -> void:
 	if _btn == null:
 		return
 	var rec: bool = is_mine_recording()
+	var busy: bool = not rec and (not _enabled or Recorder.stopping)
 	if rec:
 		_btn.text = "■ 멈추기" if big else "■ 멈춤"
 		UI.style_button(_btn, "primary", Pal.BAD)
+	elif busy:
+		_btn.text = busy_text
+		UI.style_button(_btn, "primary", accent)
 	else:
-		_btn.text = ("● " + idle_text) if big else ("● " + idle_text)
+		_btn.text = "● " + idle_text
 		UI.style_button(_btn, "primary", accent)
 	_btn.disabled = not _enabled or Recorder.stopping
 	_time_label.visible = rec or big

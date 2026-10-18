@@ -11,7 +11,9 @@ const PAD_TOP := 22.0
 const PAD_BOTTOM := 22.0
 const PAD_LEFT := 30.0
 const PAD_RIGHT := 6.0
-const FONT_SIZE := 12
+const FONT_SIZE := 12 ## base text size; every drawn size goes through Ds.fs (font size setting)
+## How far the faded bars move towards the card surface (not towards white: white flashes on the dark scheme).
+const DIM_MIX := 0.55
 
 var kind: int = Kind.BARS
 var values: Array = []
@@ -45,9 +47,30 @@ static func line(vals: Array, lbls: Array, col: Color, ymax: float = 100.0) -> M
 
 
 func _init() -> void:
-	custom_minimum_size = Vector2(0, 150)
+	custom_minimum_size = Vector2(0, 150.0 + 8.0 * float(font_size() - FONT_SIZE)) # taller with a big font setting
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+## Text size of the value labels and the x labels (FONT_SIZE times the font size setting).
+static func font_size() -> int:
+	return Ds.fs(FONT_SIZE)
+
+
+## Text size of the two y-axis guide numbers.
+static func guide_font_size() -> int:
+	return Ds.fs(FONT_SIZE - 1)
+
+
+## The faded colour of the bars that are not highlighted: mixed into the card surface of the current scheme, so it
+## gets lighter on the light scheme and darker on the dark one (never white).
+static func dim_color(col: Color) -> Color:
+	return col.lerp(Pal.SURFACE, DIM_MIX)
+
+
+## Left margin of the plot: grows with the font size so the y numbers still fit.
+static func pad_left() -> float:
+	return PAD_LEFT * maxf(1.0, float(font_size()) / float(FONT_SIZE))
 
 
 func set_values(vals: Array, lbls: Array = []) -> void:
@@ -86,25 +109,27 @@ func _draw() -> void:
 		font = ThemeDB.fallback_font
 	var w: float = size.x
 	var h: float = size.y
-	if w < PAD_LEFT + PAD_RIGHT + 10.0 or h < PAD_TOP + PAD_BOTTOM + 20.0:
+	var pad_l: float = pad_left()
+	if w < pad_l + PAD_RIGHT + 10.0 or h < PAD_TOP + PAD_BOTTOM + 20.0:
 		return
-	var left: float = PAD_LEFT
+	var left: float = pad_l
 	var top: float = PAD_TOP
-	var plot_w: float = w - PAD_LEFT - PAD_RIGHT
+	var plot_w: float = w - pad_l - PAD_RIGHT
 	var plot_h: float = h - PAD_TOP - PAD_BOTTOM
 	var base_y: float = top + plot_h
 	var ymax: float = _scale_max()
-	var grid := Color(Pal.LINE, 1.0)
-	var muted := Pal.MUTED
+	var grid: Color = Pal.LINE
+	var muted: Color = Pal.MUTED
+	var gfs: int = guide_font_size()
 
 	# baseline + two guide lines with their values
-	draw_line(Vector2(left, base_y), Vector2(w - PAD_RIGHT, base_y), grid, 1.0)
+	draw_line(Vector2(left, base_y), Vector2(w - PAD_RIGHT, base_y), Pal.LINE_STRONG, 1.0)
 	for frac in [0.5, 1.0]:
 		var gy: float = base_y - plot_h * frac
-		draw_line(Vector2(left, gy), Vector2(w - PAD_RIGHT, gy), Color(grid, 0.6), 1.0)
+		draw_line(Vector2(left, gy), Vector2(w - PAD_RIGHT, gy), grid, 1.0)
 		var txt: String = "%d" % roundi(ymax * frac)
-		draw_string(font, Vector2(0, gy + 4.0), txt, HORIZONTAL_ALIGNMENT_RIGHT, PAD_LEFT - 4.0, FONT_SIZE - 1, muted)
-	draw_string(font, Vector2(0, base_y + 4.0), "0", HORIZONTAL_ALIGNMENT_RIGHT, PAD_LEFT - 4.0, FONT_SIZE - 1, muted)
+		draw_string(font, Vector2(0, gy + 4.0), txt, HORIZONTAL_ALIGNMENT_RIGHT, pad_l - 4.0, gfs, muted)
+	draw_string(font, Vector2(0, base_y + 4.0), "0", HORIZONTAL_ALIGNMENT_RIGHT, pad_l - 4.0, gfs, muted)
 
 	var n: int = values.size()
 	if n == 0:
@@ -116,7 +141,7 @@ func _draw() -> void:
 		if lb != "":
 			var cx: float = left + slot * (float(i) + 0.5)
 			var lw: float = maxf(slot, 48.0)
-			draw_string(font, Vector2(clampf(cx - lw * 0.5, 0.0, maxf(w - lw, 0.0)), h - 6.0), lb, HORIZONTAL_ALIGNMENT_CENTER, lw, FONT_SIZE, muted)
+			draw_string(font, Vector2(clampf(cx - lw * 0.5, 0.0, maxf(w - lw, 0.0)), h - 6.0), lb, HORIZONTAL_ALIGNMENT_CENTER, lw, font_size(), muted)
 
 	if kind == Kind.BARS:
 		_draw_bars(font, left, base_y, plot_h, slot, ymax)
@@ -133,9 +158,9 @@ func _draw_bars(font: Font, left: float, base_y: float, plot_h: float, slot: flo
 		var bh: float = clampf(float(v) / ymax, 0.0, 1.0) * plot_h
 		bh = maxf(bh, 2.0)
 		var x: float = left + slot * (float(i) + 0.5) - bar_w * 0.5
-		var col: Color = color if (highlight < 0 or i == highlight) else color.lerp(Color.WHITE, 0.45)
+		var col: Color = color if (highlight < 0 or i == highlight) else dim_color(color)
 		draw_rect(Rect2(x, base_y - bh, bar_w, bh), col)
-		draw_string(font, Vector2(x - 8.0, base_y - bh - 4.0), value_format % roundi(float(v)), HORIZONTAL_ALIGNMENT_CENTER, bar_w + 16.0, FONT_SIZE, Pal.INK)
+		draw_string(font, Vector2(x - 8.0, base_y - bh - 4.0), value_format % roundi(float(v)), HORIZONTAL_ALIGNMENT_CENTER, bar_w + 16.0, font_size(), Pal.INK)
 	if goal_line > 0.0:
 		var gy: float = base_y - clampf(goal_line / ymax, 0.0, 1.0) * plot_h
 		var x0: float = left
@@ -167,4 +192,4 @@ func _draw_line(font: Font, left: float, base_y: float, plot_h: float, slot: flo
 		last_val = float(v)
 		any = true
 	if any:
-		draw_string(font, Vector2(last_pt.x - 24.0, maxf(last_pt.y - 8.0, 12.0)), value_format % roundi(last_val), HORIZONTAL_ALIGNMENT_CENTER, 48.0, FONT_SIZE, Pal.INK)
+		draw_string(font, Vector2(last_pt.x - 24.0, maxf(last_pt.y - 8.0, 12.0)), value_format % roundi(last_val), HORIZONTAL_ALIGNMENT_CENTER, 48.0, font_size(), Pal.INK)

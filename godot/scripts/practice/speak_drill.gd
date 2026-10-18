@@ -14,7 +14,7 @@ signal status_changed
 const PASS_SCORE := 70
 const SILENT_TEXT := "소리가 들리지 않았어요. 마이크에 조금 더 가까이서 다시 말해 보세요."
 const ERROR_TEXT := "채점하지 못했어요. 잠시 뒤 다시 시도해 주세요."
-const TOUCH_H := 44.0
+const TOUCH_H := 44.0 ## smallest height of a pressable thing here; on the phone UI.button / fit_touch raise it to Ds.touch_min()
 
 ## 시험 전용: Callable(method: String, path: String, body: Variant) -> Dictionary (코루틴 가능).
 ## 돌려주는 값은 {ok, code, data, error} 모양의 결과이거나 ({ok} 없이) 그대로 data 로 쓸 Dictionary.
@@ -143,7 +143,9 @@ static func error_message(res: Dictionary, fallback: String) -> String:
 # ---------------------------------------------------------------- shared screen shell
 
 ## 하위 화면 공통 틀: 위 머리줄(← 연습 · 제목 · 쪽수) + 가운데 스크롤 본문 + 고정 하단 바.
-## 돌려주는 값: {root, back, title, count, head, page, footer_holder, footer_col}
+## 돌려주는 값: {root, back, title, count, head, page, footer_holder, footer_col} (키 8개는 4개 화면이 쓰므로 유지).
+## 머리줄은 폰의 앱 바가 뒤로·제목·쪽수를 대신 보여 줄 때(W4)도 `back`·`title`·`count` 노드가 남아 값이 계속 갱신된다.
+## 색·간격은 토큰(Pal, Ds)에서 읽는다: 바탕 BG 위에 머리줄, 아래 고정 바는 SURFACE 면 + 위쪽 헤어라인.
 static func build_shell(owner: Control, on_back: Callable, back_text: String = "← 연습") -> Dictionary:
 	owner.set_anchors_preset(Control.PRESET_FULL_RECT)
 	owner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -155,10 +157,10 @@ static func build_shell(owner: Control, on_back: Callable, back_text: String = "
 	owner.add_child(root)
 
 	var head_holder := MarginContainer.new()
-	head_holder.add_theme_constant_override("margin_left", 12)
-	head_holder.add_theme_constant_override("margin_right", 12)
-	head_holder.add_theme_constant_override("margin_top", 8)
-	head_holder.add_theme_constant_override("margin_bottom", 4)
+	head_holder.add_theme_constant_override("margin_left", Ds.S3)
+	head_holder.add_theme_constant_override("margin_right", Ds.S3)
+	head_holder.add_theme_constant_override("margin_top", Ds.S2)
+	head_holder.add_theme_constant_override("margin_bottom", Ds.S1)
 	root.add_child(head_holder)
 	var head := UI.hbox(8)
 	head_holder.add_child(head)
@@ -178,15 +180,15 @@ static func build_shell(owner: Control, on_back: Callable, back_text: String = "
 	root.add_child(page)
 
 	var holder := PanelContainer.new()
-	var st := UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0)
+	var st := UI.style(Pal.SURFACE, Pal.LINE, 0, 0, 0, 0)
 	st.border_width_top = 1
 	holder.add_theme_stylebox_override("panel", st)
 	holder.visible = false
 	root.add_child(holder)
 	var fcol := ColumnBox.new()
 	fcol.max_width = 720.0
-	fcol.min_pad = 12
-	fcol.set_padding(10, 12)
+	fcol.min_pad = Ds.S3
+	fcol.set_padding(Ds.S3 if Platform.is_phone() else 10, Ds.S3)
 	holder.add_child(fcol)
 	return {"root": root, "back": back, "title": title, "count": count, "head": head, "page": page, "footer_holder": holder, "footer_col": fcol}
 
@@ -218,17 +220,19 @@ static func touch_button(text: String, kind: String = "soft", accent: Color = Pa
 
 
 ## node 아래의 모든 Button(체크박스 · 구분 버튼 포함)을 눌러 쓰기 좋은 높이로.
-static func fit_touch(node: Node, min_h: float = TOUCH_H) -> void:
+## min_h 를 안 주면 폰은 터치 최소(48 dp), PC 는 TOUCH_H.
+static func fit_touch(node: Node, min_h: float = -1.0) -> void:
+	var h: float = min_h if min_h > 0.0 else maxf(TOUCH_H, Ds.touch_min() if Platform.is_phone() else 0.0)
 	for c in node.get_children():
 		if c is Button:
-			(c as Button).custom_minimum_size.y = maxf((c as Button).custom_minimum_size.y, min_h)
-		fit_touch(c, min_h)
+			(c as Button).custom_minimum_size.y = maxf((c as Button).custom_minimum_size.y, h)
+		fit_touch(c, h)
 
 
 ## 빈 상태 / 오류 안내 상자.
 static func notice(msg: String, bad: bool = true) -> PanelContainer:
-	var p := UI.tinted_panel(Pal.BAD_SOFT if bad else Pal.SUNK, Color(0, 0, 0, 0), 0, 10, 14, 10)
-	p.add_child(UI.colored(msg, Pal.BAD if bad else Pal.INK))
+	var p := UI.tinted_panel(Pal.BAD_SOFT if bad else Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_S, 14, 10)
+	p.add_child(UI.colored(msg, Pal.BAD_ON if bad else Pal.INK))
 	return p
 
 

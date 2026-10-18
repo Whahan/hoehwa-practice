@@ -13,7 +13,6 @@ const CELL_W := 36.0
 const CAP_H := 20.0
 const ROW_H := 54.0
 const LINE_GAP := 10.0
-const NATIVE_COL := Color("#7D8DA8")
 
 const KIND_KO := {
 	"heiban": "평판형",
@@ -32,6 +31,16 @@ var message: String = ""
 var show_graph: bool = true
 
 var _last_h: float = -1.0
+
+
+## Colour of the native speaker's curve and legend line: a neutral grey-blue of the scheme (not the learner accent).
+static func native_color() -> Color:
+	return Pal.LINE_STRONG
+
+
+## Text size n times the font size setting.
+static func _f(n: int) -> int:
+	return Ds.fs(n)
 
 
 func _init(l: String = "en") -> void:
@@ -133,7 +142,7 @@ func _draw() -> void:
 	if show_graph:
 		if native.is_empty():
 			var msg: String = message if message != "" else "억양 정보가 없어요."
-			draw_string(f, Vector2(0.0, y + 34.0), msg, HORIZONTAL_ALIGNMENT_CENTER, w, 15, Pal.MUTED)
+			draw_string(f, Vector2(0.0, y + 34.0), msg, HORIZONTAL_ALIGNMENT_CENTER, w, _f(15), Pal.MUTED)
 			y += 64.0
 		else:
 			_draw_graph(Rect2(AXIS_W, y, maxf(60.0, w - AXIS_W - PAD_R), GRAPH_H), f, acc)
@@ -145,32 +154,32 @@ func _draw() -> void:
 func _draw_header(w: float, f: Font, fb: Font, acc: Color) -> void:
 	var y: float = 20.0
 	var x: float = AXIS_W
-	draw_line(Vector2(x, y - 5.0), Vector2(x + 22.0, y - 5.0), NATIVE_COL, 3.0, true)
-	draw_string(f, Vector2(x + 28.0, y), "원어민", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Pal.INK)
-	x += 28.0 + f.get_string_size("원어민", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 16.0
+	draw_line(Vector2(x, y - 5.0), Vector2(x + 22.0, y - 5.0), native_color(), 3.0, true)
+	draw_string(f, Vector2(x + 28.0, y), "원어민", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(14), Pal.INK)
+	x += 28.0 + f.get_string_size("원어민", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(14)).x + 16.0
 	var has_mine: bool = not mine.is_empty()
 	var mc: Color = acc if has_mine else Color(acc, 0.3)
 	draw_line(Vector2(x, y - 5.0), Vector2(x + 22.0, y - 5.0), mc, 3.0, true)
-	draw_string(f, Vector2(x + 28.0, y), "나", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Pal.INK if has_mine else Pal.MUTED)
+	draw_string(f, Vector2(x + 28.0, y), "나", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(14), Pal.INK if has_mine else Pal.MUTED)
 	if has_mine and similarity != null:
 		var sim: int = roundi(float(similarity))
 		var col: Color = ScorePanel.score_color(float(sim))
 		var num: String = str(sim)
-		var nw: float = fb.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
-		draw_string(fb, Vector2(w - PAD_R - nw, y + 2.0), num, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, col)
+		var nw: float = fb.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(22)).x
+		draw_string(fb, Vector2(w - PAD_R - nw, y + 2.0), num, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(22), col)
 		var lbl := "억양 비슷한 정도"
-		var lw: float = f.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
-		draw_string(f, Vector2(w - PAD_R - nw - 8.0 - lw, y), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Pal.MUTED)
+		var lw: float = f.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13)).x
+		draw_string(f, Vector2(w - PAD_R - nw - 8.0 - lw, y), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13), Pal.MUTED)
 	elif not has_mine and not native.is_empty():
 		var hint := "녹음하면 내 억양이 겹쳐 보여요"
-		var hw: float = f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		var hw: float = f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13)).x
 		# narrow panel (phone): use a shorter hint, or none, instead of running into the legend
-		var legend_end: float = x + 28.0 + f.get_string_size("나", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 10.0
+		var legend_end: float = x + 28.0 + f.get_string_size("나", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(14)).x + 10.0
 		if w - PAD_R - hw < legend_end:
 			hint = "내 억양이 겹쳐 보여요"
-			hw = f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+			hw = f.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13)).x
 		if w - PAD_R - hw >= legend_end:
-			draw_string(f, Vector2(w - PAD_R - hw, y), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Pal.MUTED)
+			draw_string(f, Vector2(w - PAD_R - hw, y), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13), Pal.MUTED)
 
 
 func _y_range() -> Vector2:
@@ -195,7 +204,7 @@ func _y_range() -> Vector2:
 
 
 func _draw_graph(r: Rect2, f: Font, acc: Color) -> void:
-	draw_rect(r, Color(1, 1, 1, 1))
+	draw_rect(r, Pal.SURFACE)
 	var yr: Vector2 = _y_range()
 	var span: float = yr.y - yr.x
 	# horizontal grid every 3 semitones, labels every 6
@@ -203,21 +212,21 @@ func _draw_graph(r: Rect2, f: Font, acc: Color) -> void:
 	while g <= yr.y + 0.01:
 		var yy: float = r.end.y - (g - yr.x) / span * r.size.y
 		var is_zero: bool = absf(g) < 0.01
-		draw_line(Vector2(r.position.x, yy), Vector2(r.end.x, yy), Color("#C9D0DC") if is_zero else Color("#E8ECF2"), 1.5 if is_zero else 1.0)
+		draw_line(Vector2(r.position.x, yy), Vector2(r.end.x, yy), Color(Pal.LINE_STRONG, 0.6) if is_zero else Pal.LINE, 1.5 if is_zero else 1.0)
 		if int(roundf(g)) % 6 == 0:
 			var lab: String = "평균" if is_zero else ("%+d" % int(g))
-			draw_string(f, Vector2(r.position.x - 6.0 - f.get_string_size(lab, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x, yy + 4.0), lab, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Pal.MUTED)
+			draw_string(f, Vector2(r.position.x - 6.0 - f.get_string_size(lab, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(11)).x, yy + 4.0), lab, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(11), Pal.MUTED)
 		g += 3.0
 	for i in 5:
 		var xx: float = r.position.x + r.size.x * float(i) / 4.0
-		draw_line(Vector2(xx, r.position.y), Vector2(xx, r.end.y), Color("#EEF1F5"), 1.0)
+		draw_line(Vector2(xx, r.position.y), Vector2(xx, r.end.y), Color(Pal.LINE, 0.6), 1.0)
 	draw_rect(r, Pal.LINE, false, 1.0)
-	_draw_curve(native, r, yr, NATIVE_COL, 3.0)
+	_draw_curve(native, r, yr, native_color(), 3.0)
 	if not mine.is_empty():
 		_draw_curve(mine, r, yr, acc, 3.5)
 	# the semitone unit
-	draw_string(f, Vector2(r.position.x + 4.0, r.position.y + 13.0), "높음", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Pal.MUTED)
-	draw_string(f, Vector2(r.position.x + 4.0, r.end.y - 5.0), "낮음", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Pal.MUTED)
+	draw_string(f, Vector2(r.position.x + 4.0, r.position.y + 13.0), "높음", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(11), Pal.MUTED)
+	draw_string(f, Vector2(r.position.x + 4.0, r.end.y - 5.0), "낮음", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(11), Pal.MUTED)
 
 
 func _draw_curve(c: Dictionary, r: Rect2, yr: Vector2, col: Color, wd: float) -> void:
@@ -289,13 +298,13 @@ func _draw_accent(w: float, y0: float, acc: Color) -> void:
 					kinds.append(kind_text(a))
 			if kinds.size() == 1 and kinds[0] != "":
 				cap += " · " + kinds[0]
-			draw_string(f, Vector2(x_off, y + 14.0), cap, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Pal.MUTED)
+			draw_string(f, Vector2(x_off, y + 14.0), cap, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13), Pal.MUTED)
 		y += CAP_H
 		_draw_row(accent, null, i, j, x_off, y, fj, acc, false)
 		y += ROW_H
 		if has_mine:
 			if line_i == 0:
-				draw_string(f, Vector2(x_off, y + 8.0), "내 높낮이  (초록 = 맞음, 빨강 = 달라요, ? = 무성음)", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Pal.MUTED)
+				draw_string(f, Vector2(x_off, y + 8.0), "내 높낮이  (초록 = 맞음, 빨강 = 달라요, ? = 무성음)", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(13), Pal.MUTED)
 			y += CAP_H - 6.0
 			_draw_row(accent, mine_accent, i, j, x_off, y, fj, acc, true)
 			y += ROW_H
@@ -320,23 +329,24 @@ func _draw_row(expected: Array, learner: Variant, i0: int, i1: int, x_off: float
 		var high: Variant = bool(e.get("high", false))
 		var col: Color = acc
 		var txt: String = str(e.get("mora", ""))
+		var tcol: Color = Pal.INK ## kana text: the learner row uses the *_ON colours, the lines below use the fills
 		if is_mine:
 			var m: Dictionary = (learner as Array)[k] if k < (learner as Array).size() and (learner as Array)[k] is Dictionary else {}
 			high = m.get("high", null)
 			if high == null:
 				col = Pal.MUTED
+				tcol = Pal.MUTED
 			elif bool(high) == bool(e.get("high", false)):
 				col = Pal.OK
+				tcol = Pal.OK_ON
 			else:
 				col = Pal.BAD
+				tcol = Pal.BAD_ON
 		else:
 			col = acc
 		# kana
-		var tcol: Color = Pal.INK
-		if is_mine:
-			tcol = col if high != null else Pal.MUTED
-		var tw: float = fj.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
-		draw_string(fj, Vector2(lx + (CELL_W - tw) * 0.5, base_y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, tcol)
+		var tw: float = fj.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(17)).x
+		draw_string(fj, Vector2(lx + (CELL_W - tw) * 0.5, base_y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, _f(17), tcol)
 		# line segment
 		if not is_mine:
 			if prev_phrase != -1 and ph != prev_phrase:
@@ -355,7 +365,7 @@ func _draw_row(expected: Array, learner: Variant, i0: int, i1: int, x_off: float
 		else:
 			if high == null:
 				draw_line(Vector2(lx + 10.0, (hi_y + lo_y) * 0.5), Vector2(rx - 10.0, (hi_y + lo_y) * 0.5), Color(col, 0.7), 2.0, true)
-				draw_string(fj, Vector2(lx + CELL_W * 0.5 - 4.0, hi_y - 2.0), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Pal.MUTED)
+				draw_string(fj, Vector2(lx + CELL_W * 0.5 - 4.0, hi_y - 2.0), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, _f(11), Pal.MUTED)
 			else:
 				var ly2: float = hi_y if bool(high) else lo_y
 				draw_line(Vector2(lx + 2.0, ly2), Vector2(rx - 2.0, ly2), col, 3.5, true)
