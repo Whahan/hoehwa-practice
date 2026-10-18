@@ -3,6 +3,10 @@ extends Control
 ## Base class of the five tab screens. Subclasses build their UI in code.
 
 
+## Sent by a screen when its title, back button or actions changed (the phone app bar reads them again).
+signal bar_changed
+
+
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -36,3 +40,35 @@ func rebuild_keep_scroll(scroll: ScrollContainer, builder: Callable) -> void:
 	await get_tree().process_frame
 	if is_instance_valid(scroll):
 		scroll.scroll_vertical = sv
+
+
+# ---------------------------------------------------------------- app bar contract (docs/ui_redesign_design.md §6.3)
+# Every default does nothing, so a screen that does not override them behaves as before.
+
+## Title of the app bar; "" means main.gd uses the tab name.
+func page_title() -> String:
+	return ""
+
+
+func page_subtitle() -> String:
+	return ""
+
+
+## Action buttons of the app bar: [{"id": String, "text": String}], at most two are shown.
+func page_actions() -> Array:
+	return []
+
+
+## An app bar action was pressed.
+func on_action(_id: String) -> void:
+	pass
+
+
+## The ScrollContainer the app bar follows (title fades in as the big title scrolls away); null = title always shown.
+func scroll_host() -> ScrollContainer:
+	return null
+
+
+## The big title block inside the scroll (PageHeader.build); null = none.
+func header_block() -> Control:
+	return null
