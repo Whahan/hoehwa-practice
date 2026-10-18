@@ -2,7 +2,7 @@ class_name Progress
 extends RefCounted
 ## Progress data model (same shape as the web app's blank()/normalize()).
 
-const MAX_REVIEW := 1000
+const MAX_REVIEW := 3000
 const MAX_KNOWN := 30000 ## per language (reading mode "아는 단어")
 const FSRS_KEYS := ["due", "stability", "difficulty", "state", "step", "last_review", "reps", "lapses"]
 
@@ -154,8 +154,29 @@ static func quarantine(path: String) -> void:
 	DirAccess.rename_absolute(gp, gp + ".bad")
 
 
+## Test safety net: Store turns this on for test scenes (TEST_GUARD). While on, the real app files may not be written.
+static var test_guard: bool = false
+## File names of the user's real app files.
+const REAL_FILE_NAMES := ["prefs.json", "progress.json", "studylog.json", "remote.json", "curriculum.json"]
+
+
+## True when test_guard is on and `path` is one of the real app files (by name) outside user://test*.
+static func guard_blocks(path: String) -> bool:
+	if not test_guard or not REAL_FILE_NAMES.has(path.get_file()):
+		return false
+	if path.begins_with("user://test"):
+		return false
+	if path.begins_with("user://"):
+		return true
+	# a plain file-system path is only the real file if it is the very same place
+	return ProjectSettings.globalize_path(path) == ProjectSettings.globalize_path("user://" + path.get_file())
+
+
 ## Writes `text` to `<path>.tmp` and then renames it over `path`, so a failure while writing leaves the old file.
 static func write_text_atomic(path: String, text: String) -> bool:
+	if guard_blocks(path):
+		push_error("TEST_GUARD: refused to write the real user file " + path)
+		return false
 	var tmp: String = path + ".tmp"
 	var gt: String = ProjectSettings.globalize_path(tmp)
 	if write_hook.is_valid():

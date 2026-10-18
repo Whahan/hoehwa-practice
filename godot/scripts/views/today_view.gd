@@ -452,6 +452,7 @@ func _settings_panel() -> Control:
 		card.body.add_child(_engine_section())
 		card.body.add_child(UI.hline())
 		_mount_link_panel(card, PhoneLinkPanel.new())
+	_mount_link_panel(card, SyncPanel.new()) # 1.2 learning-record sync (hidden while there is no SyncManager)
 
 	# reset
 	var rs := UI.vbox(6)
@@ -460,9 +461,11 @@ func _settings_panel() -> Control:
 	rrow.add_child(reset)
 	_confirm_row = UI.adaptive(8)
 	_confirm_row.visible = false
-	_confirm_row.add_child(UI.label("정말 지울까요? 되돌릴 수 없어요.", "Small", false))
+	var confirm_label := UI.label("정말 지울까요? 되돌릴 수 없어요.", "Small", false)
+	_confirm_row.add_child(confirm_label)
 	var yes := UI.button("지우기", "primary", Pal.BAD)
 	yes.pressed.connect(func() -> void:
+		await SyncPanel.before_reset()
 		Store.reset_progress()
 		_settings_open = false
 		refresh())
@@ -473,6 +476,7 @@ func _settings_panel() -> Control:
 	_confirm_row.add_child(yes)
 	_confirm_row.add_child(no)
 	reset.pressed.connect(func() -> void:
+		SyncPanel.apply_reset_text(confirm_label)
 		_confirm_row.visible = true
 		reset.visible = false)
 	rrow.add_child(_confirm_row)

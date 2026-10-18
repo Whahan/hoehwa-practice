@@ -32,7 +32,7 @@ const RESUME_GRACE_MSEC := 8000
 const EXIT_GRACE_MSEC := 1500
 
 ## POST paths that are safe to send twice (no side effects on the PC). Every GET is safe as well.
-const IDEMPOTENT_POST := ["/tts", "/stt", "/score", "/prosody"]
+const IDEMPOTENT_POST := ["/tts", "/stt", "/score", "/prosody", "/sync/push"]
 const IDEMPOTENT_POST_PREFIX := ["/reading/"]
 
 ## Overridable for tests: `godot ... -- --api=http://127.0.0.1:8771`

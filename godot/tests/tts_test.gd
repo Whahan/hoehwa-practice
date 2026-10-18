@@ -37,17 +37,17 @@ func _ready() -> void:
 
 
 func _backup_prefs() -> void:
-	_had_prefs = FileAccess.file_exists(Store.PREFS_PATH)
+	_had_prefs = FileAccess.file_exists(Store.prefs_path)
 	if _had_prefs:
-		_prefs_backup = FileAccess.get_file_as_string(Store.PREFS_PATH)
+		_prefs_backup = FileAccess.get_file_as_string(Store.prefs_path)
 
 
 func _restore_prefs() -> void:
 	if _had_prefs:
-		var f := FileAccess.open(Store.PREFS_PATH, FileAccess.WRITE)
+		var f := FileAccess.open(Store.prefs_path, FileAccess.WRITE)
 		f.store_string(_prefs_backup)
 	else:
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(Store.PREFS_PATH))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Store.prefs_path))
 	Store.load_prefs()
 
 

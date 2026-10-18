@@ -149,6 +149,7 @@ func _ready() -> void:
 	_build_splash()
 	if get_tree().current_scene == self:
 		add_v11_tabs()
+		add_sync()
 
 	Toast.message.connect(_show_toast)
 	Store.navigate.connect(_on_navigate)
@@ -201,6 +202,13 @@ func add_v11_tabs() -> void:
 	add_child(StudyClock.new())
 	add_tab("practice", "연습", PracticeView.new(), "연습", "talk")
 	add_tab("stats", "기록", StatsView.new(), "기록", "review")
+
+
+## 1.2: learning-record sync (timers, app lifecycle, first-connection dialog). Like the StudyClock it is only added when this
+## scene is the running scene, so the layout tests that load main.tscn as a child never get one.
+func add_sync() -> void:
+	if SyncManager.current == null:
+		add_child(SyncManager.new())
 
 
 ## Keys of the tabs in the order of the tab bar.
@@ -663,6 +671,8 @@ func _keep_focus_visible() -> void:
 
 ## Android back button: one step back out of a sub screen, else to 오늘, else (twice within 2 s) quit.
 func handle_back() -> void:
+	if SyncManager.current != null and SyncManager.current.consume_back():
+		return # the first-connection question is open: answer it first
 	if is_connect_open():
 		_connect_dismissed = true
 		_close_connect_view()

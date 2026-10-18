@@ -1,0 +1,125 @@
+{
+ "_about": "S4 engine mutations (docs/sync_design.md 10.7). Applied one at a time to a COPY of scripts/sync/sync_engine.gd by run_sync_tests.ps1 -Mutations. find must occur exactly once. expect_fail = checks that must FAIL.",
+ "mutations": [
+  {
+   "id": "ME1",
+   "desc": "backup skipped (apply without a backup)",
+   "find": "\t\tvar bk: Dictionary = _backup(\"first\" if first_sync else \"auto\", first_sync or rejoin)",
+   "replace": "\t\tvar bk: Dictionary = {\"ok\": true, \"skipped\": true}",
+   "suite": "engine",
+   "expect_fail": [
+    "E-U1"
+   ]
+  },
+  {
+   "id": "ME2",
+   "desc": "merge check skipped (a refused result is applied)",
+   "find": "\tif not bool(r[\"ok\"]):\n\t\t_write_problem(r[\"problems\"])",
+   "replace": "\tif false:\n\t\t_write_problem(r[\"problems\"])",
+   "suite": "engine",
+   "expect_fail": [
+    "E-C2"
+   ]
+  },
+  {
+   "id": "ME3",
+   "desc": "journal skipped (pending not written before the apply)",
+   "find": "\t\t_st[\"pending\"] = pend",
+   "replace": "\t\tpass",
+   "suite": "engine",
+   "expect_fail": [
+    "E-J1"
+   ]
+  },
+  {
+   "id": "ME4",
+   "desc": "base saved as the merged view instead of the files after the apply (cap case)",
+   "find": "\t_st[\"base\"] = SyncDoc.to_base(view_after)",
+   "replace": "\t_st[\"base\"] = SyncDoc.to_base(SyncDoc.norm_view(_st[\"pending\"][\"view\"])) if _st[\"pending\"] != null else SyncDoc.to_base(view_after)",
+   "suite": "engine",
+   "expect_fail": [
+    "E-U4"
+   ]
+  },
+  {
+   "id": "ME5",
+   "desc": "seq not advanced after a push",
+   "find": "\t_st[\"seq\"] = seq",
+   "replace": "\tpass",
+   "suite": "roundtrip",
+   "expect_fail": [
+    "E-RT8"
+   ]
+  },
+  {
+   "id": "ME6",
+   "desc": "no retry after 409 stale_seq",
+   "find": "attempt == 0 and int(pr.get(\"code\", 0)) == 409",
+   "replace": "attempt == 9 and int(pr.get(\"code\", 0)) == 409",
+   "suite": "roundtrip",
+   "expect_fail": [
+    "E-RT8"
+   ]
+  },
+  {
+   "id": "ME7",
+   "desc": "local clock used instead of the hub clock",
+   "find": "\tvar hub_time: int = int(dd[\"hub_time\"])",
+   "replace": "\tvar hub_time: int = _now()",
+   "suite": "engine",
+   "expect_fail": [
+    "E-C1"
+   ]
+  },
+  {
+   "id": "ME8",
+   "desc": "rebase on switch-on ignored",
+   "find": "\tif bool(_st[\"first_done\"]) and _st[\"rebase\"] == null:",
+   "replace": "\tif false:",
+   "suite": "engine",
+   "expect_fail": [
+    "E-S4"
+   ]
+  },
+  {
+   "id": "ME9",
+   "desc": "switched-off sync still pulls and merges",
+   "find": "\tif str(_st[\"choice\"]) == \"undecided\" or not bool(_st[\"enabled\"]):",
+   "replace": "\tif str(_st[\"choice\"]) == \"undecided\":",
+   "suite": "engine",
+   "expect_fail": [
+    "E-S1"
+   ]
+  },
+  {
+   "id": "ME10",
+   "desc": "undecided state sends requests",
+   "find": "\tif str(_st[\"choice\"]) == \"undecided\" or not bool(_st[\"enabled\"]):",
+   "replace": "\tif not bool(_st[\"enabled\"]) and str(_st[\"choice\"]) != \"undecided\":",
+   "suite": "engine",
+   "expect_fail": [
+    "E-S2"
+   ]
+  },
+  {
+   "id": "ME11",
+   "desc": "new device id on every switch-on (re-join double counts)",
+   "find": "\tif str(_st[\"device_id\"]) == \"\":\n\t\t_st[\"device_id\"] = SyncState.new_device_id()\n\tif bool(_st[\"first_done\"])",
+   "replace": "\tif true:\n\t\t_st[\"device_id\"] = SyncState.new_device_id()\n\tif bool(_st[\"first_done\"])",
+   "suite": "engine",
+   "expect_fail": [
+    "E-S4"
+   ]
+  },
+  {
+   "id": "ME12",
+   "desc": "separate choice not saved (asked again)",
+   "find": "\t\t_st[\"choice\"] = \"separate\"",
+   "replace": "\t\t_st[\"choice\"] = \"undecided\"",
+   "suite": "engine",
+   "expect_fail": [
+    "E-S2"
+   ]
+  }
+ ]
+}

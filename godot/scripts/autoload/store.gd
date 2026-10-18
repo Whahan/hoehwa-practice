@@ -42,9 +42,55 @@ var time_offset: int = 0 ## seconds added to the clock for review scheduling (te
 
 
 func _ready() -> void:
+	apply_test_guard(OS.get_cmdline_args(), OS.has_feature("template"))
 	load_prefs()
 	load_progress()
 	_load_curriculum_local()
+
+
+# ---------------------------------------------------------------- test guard
+
+## Folder every default user file moves to while a test scene runs (see apply_test_guard).
+const GUARD_DIR := "user://test_guard"
+## Set by apply_test_guard(): this process is a test run and its user files live under GUARD_DIR.
+var test_guard_on: bool = false
+
+
+## True when `args` (OS.get_cmdline_args(), engine args only: nothing after `--`) start a test scene.
+## Never true for an exported app (`is_export`), the editor, or a plain run of the main scene.
+static func is_test_run(args: PackedStringArray, is_export: bool) -> bool:
+	if is_export:
+		return false
+	for a in args:
+		var n: String = String(a).replace("\\", "/")
+		if n.begins_with("res://tests/") or (n.ends_with(".tscn") and n.contains("/tests/")):
+			return true
+	return false
+
+
+## Test run -> the default paths of prefs / progress / curriculum cache / studylog / remote.json become
+## user://test_guard/<same file name>, Progress.write_text_atomic() refuses the real file names, and one line
+## `TEST_GUARD on` is printed. A test that sets its own path afterwards (Store.prefs_path = "user://test_x.json") wins.
+## `--no-test-guard` after `--` switches it off (for runs on an APPDATA that points at an empty folder).
+## Returns whether the guard is on.
+func apply_test_guard(args: PackedStringArray, is_export: bool) -> bool:
+	test_guard_on = is_test_run(args, is_export) and not ("--no-test-guard" in OS.get_cmdline_user_args())
+	Progress.test_guard = test_guard_on
+	if not test_guard_on:
+		return false
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(GUARD_DIR))
+	prefs_path = guard_path(PREFS_PATH)
+	progress_path = guard_path(PROGRESS_PATH)
+	curriculum_cache_path = guard_path(CURRICULUM_CACHE)
+	StudyLog.path = guard_path(StudyLog.path)
+	Api.remote_path = guard_path(Api.remote_path)
+	print("TEST_GUARD on")
+	return true
+
+
+## user://x.json -> user://test_guard/x.json
+static func guard_path(real: String) -> String:
+	return GUARD_DIR.path_join(real.get_file())
 
 
 # ---------------------------------------------------------------- persistence
@@ -84,6 +130,38 @@ func save_prefs() -> void:
 func set_pref(key: String, value: Variant) -> void:
 	prefs[key] = value
 	save_prefs()
+
+
+## SyncEngine: replaces the progress with `p` (normalized), saves it atomically and emits `changed`.
+## false = nothing changed (the file could not be read earlier, or the write failed: memory and file stay as they were).
+func apply_sync_progress(p: Dictionary) -> bool:
+	if progress_read_only:
+		return false
+	var fresh: Dictionary = Progress.normalize(p)
+	fresh["updatedAt"] = int(Time.get_unix_time_from_system())
+	if not Progress.save_file(progress_path, fresh):
+		return false
+	progress = fresh
+	changed.emit()
+	return true
+
+
+## SyncEngine: sets the shared settings (SyncDoc.SHARED_PREFS keys only), saves atomically, emits `prefs_changed`.
+## Nothing to change -> true. false = nothing changed (read-only prefs, or the write failed: memory is back to before).
+func apply_sync_prefs(changes: Dictionary) -> bool:
+	var old: Dictionary = prefs.duplicate(true)
+	var any := false
+	for k in changes.keys():
+		if SyncDoc.SHARED_PREFS.has(k):
+			prefs[k] = changes[k]
+			any = true
+	if not any:
+		return true
+	if prefs_read_only or not Progress.write_text_atomic(prefs_path, JSON.stringify(prefs, "\t")):
+		prefs = old
+		return false
+	prefs_changed.emit()
+	return true
 
 
 func pref_bool(key: String) -> bool:

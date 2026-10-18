@@ -123,6 +123,28 @@ static func _ensure() -> void:
 		load_from_disk()
 
 
+## SyncEngine: replaces days / phon / missions with the merged ones and writes the file right away.
+## freeze (streak protection, per device) and unknown top-level keys stay as they are. false = nothing changed
+## (read-only log, or the write failed: the old state is back in memory).
+static func apply_sync(parts: Dictionary) -> bool:
+	_ensure()
+	if _read_only:
+		return false
+	var old: Dictionary = _data
+	var cand: Dictionary = old.duplicate(true)
+	for k in ["days", "phon", "missions"]:
+		if parts.get(k, null) is Dictionary:
+			cand[k] = (parts[k] as Dictionary).duplicate(true)
+	_data = _normalize(cand)
+	_prune_for_save()
+	_data["saved"] = int(Time.get_unix_time_from_system())
+	if not _write_text(JSON.stringify(_data)):
+		_data = old
+		return false
+	_dirty = false
+	return true
+
+
 ## Moves the broken file to `<path>.bad`; older ones shift to .bad.1, .bad.2 (KEEP_BAD files at most).
 static func _quarantine() -> void:
 	var gp: String = ProjectSettings.globalize_path(path)
@@ -142,6 +164,9 @@ static func _quarantine() -> void:
 
 
 static func _write_text(text: String) -> bool:
+	if Progress.guard_blocks(path): ## test safety net (Store.apply_test_guard): never write the real user file from a test
+		push_error("TEST_GUARD: refused to write the real user file " + path)
+		return false
 	var tmp: String = path + ".tmp"
 	var f: FileAccess = FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:

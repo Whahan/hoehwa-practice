@@ -1,0 +1,14 @@
+{
+	"progress": {
+		"checks": {"en-1-w0": true},
+		"xp": {"en": 120, "ja": 0},
+		"review": [
+			{"id": "fx-pc-a", "lang": "en", "target": "A", "reading": "", "ko": "", "note": "", "due": 1760100000, "stability": 3.0, "difficulty": 5.0, "state": 2, "step": 0, "last_review": 1760000000, "reps": 2, "lapses": 0},
+			{"id": "fx-pc-b", "lang": "en", "target": "B", "reading": "", "ko": "", "note": "", "due": 1760100000, "stability": 3.0, "difficulty": 5.0, "state": 2, "step": 0, "last_review": 1760000100, "reps": 2, "lapses": 0}
+		]
+	},
+	"studylog": {
+		"days": {"2026-10-17": {"en": {"sec": 600, "by": {"lesson": 600}}}}
+	},
+	"prefs": {}
+}

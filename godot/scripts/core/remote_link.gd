@@ -192,6 +192,9 @@ static func expected_proof(token: String, nonce: String) -> String:
 # ---------------------------------------------------------------- file
 
 static func save(conn: Dictionary, path: String = PATH) -> bool:
+	if Progress.guard_blocks(path): ## test safety net (Store.apply_test_guard): never write the real user file from a test
+		push_error("TEST_GUARD: refused to write the real user file " + path)
+		return false
 	var data := {
 		"v": 1,
 		"base_url": str(conn.get("base_url", "")),
@@ -246,5 +249,8 @@ static func clear_token(path: String = PATH) -> void:
 
 ## 파일을 완전히 지운다(시험 뒤 정리용).
 static func delete_file(path: String = PATH) -> void:
+	if Progress.guard_blocks(path):
+		push_error("TEST_GUARD: refused to delete the real user file " + path)
+		return
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

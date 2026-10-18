@@ -257,7 +257,7 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 ### 구조
 - 켜면 `127.0.0.1:<port>`(위 "공통")는 그대로 두고, **추가 리스너**가 **이 PC의 Tailscale IPv4 주소(들)`:<lan.port>`(기본 8775)에만** 바인딩해 한 프로세스 안의 보조 스레드에서 같은 앱을 서비스한다. `0.0.0.0`에는 바인딩하지 않는다(같은 와이파이·LAN 주소로는 포트가 열려 있지 않다). 서버 재시작은 없다. 끄면 그 포트가 바로 닫힌다.
 - **인증은 리스너 기준이다.** 추가 리스너로 들어온 요청은 소스 IP가 127.0.0.1이어도 전부 `Authorization: Bearer hp1_…` 토큰이 필요하다. 루프백 리스너(PC 앱)는 지금처럼 토큰이 없다.
-- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`, 그리고 영어 v1.1의 `GET /practice/ping` `GET /practice/sentences` `GET /practice/phonemes` `GET /practice/phoneme` `GET /missions` `POST /missions/check` `POST /missions/judge`(모두 23개). 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
+- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`, 그리고 영어 v1.1의 `GET /practice/ping` `GET /practice/sentences` `GET /practice/phonemes` `GET /practice/phoneme` `GET /missions` `POST /missions/check` `POST /missions/judge`, 1.2 기록 동기화의 `GET /sync/pull` `POST /sync/push`(모두 25개). 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
 - **출발지 주소 필터**: 추가 리스너는 **루프백과 Tailscale 범위**(IPv4 100.64.0.0/10, IPv6 `fd7a:115c:a1e0::/48`)에서 온 연결만 받는다. 사설(10/8, 172.16/12, 192.168/16)·링크로컬·그 밖의 ULA·공인 주소에서 온 연결은 **응답 없이 바로 끊는다**(`/hello`도 안 보인다). `::ffff:100.x` 형태(IPv4-mapped)는 풀어서 비교한다.
 - **Tailscale 주소 탐지**: Windows `GetAdaptersAddresses`(ctypes, 새 의존성 없음)로 찾는다: 이름이나 설명에 `Tailscale`(대소문자 무시)이 들어가고 **켜져 있는(up) 어댑터**의 100.64/10 IPv4만, 최대 3개. 이름이 Ethernet 등인 어댑터의 100.x(통신사 CGNAT)는 Tailscale로 치지 않는다. 켤 때마다 새로 탐지하고(`GET /lan`의 표시용 값은 5초 캐시), 실패하거나 Windows가 아니면 빈 목록이다. 리스너는 IPv4 전용이라 IPv6 주소는 표시하지 않는다.
 - **Tailscale 주소가 없으면 켜지지 않는다**: `POST /lan {"enabled": true}`는 409 `no_tailscale`이고 아무것도 열지 않는다(`error`: "이 PC에서 Tailscale이 꺼져 있거나 설치되지 않았어요. tailscale.com 에서 설치하고 휴대폰과 같은 구글 계정으로 로그인한 뒤 다시 켜 주세요."; `GET /lan`의 `network_reason`도 같은 문구). 탐지한 주소에 bind 할 수 없을 때(주소가 사라짐)도 같은 409다. 시작할 때 저장된 `enabled`가 true여도 같은 판정을 하고, 주소가 없으면 꺼진 채 시작한다(`error`에 이유, 저장된 설정은 그대로).
@@ -318,6 +318,133 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 ### 알아 둘 것
 - 연결은 Tailscale 전용이다. PC와 휴대폰 모두 Tailscale 앱(tailscale.com, 개인용 무료 요금제가 있다 — 조건은 공식 사이트에서 확인)을 깔고 **같은 계정**(예: 같은 구글 계정)으로 로그인해야 한다. 같은 Tailscale 계정(테일넷)에 들어온 기기는 이 PC의 연결 포트에 닿을 수 있다(연결 코드나 토큰이 있어야 쓸 수 있다). 계정을 남과 공유하지 않고, 안 쓸 때는 끈다. 통신은 Tailscale 이 암호화한다. Windows 방화벽이 허용 창을 띄울 수 있으며, 이 프로그램은 방화벽 설정을 바꾸지 않는다.
 - 시험: `backend/lan_stub_server.py`(모델 없이 뜨는 가짜 서버, 같은 `lan.py`를 쓴다)와 `backend/test_lan.py`. 시험 훅(`HOEHWA_TEST_HOOKS=1`일 때만 읽힌다): `HOEHWA_LAN_ASSUME_TAILSCALE=127.0.0.1[,100.101.102.103…]`(환경변수가 **있으면** 빈 문자열이어도 실제 어댑터 탐지 대신 쉼표로 나눈 값 중 100.64/10 IPv4와 루프백 127.x만 쓴다. 그래서 Tailscale 이 없는 PC에서도 루프백에 바인딩해 시험할 수 있다. 빈 문자열 = Tailscale 없음), `HOEHWA_LAN_WATCH_SECONDS`(감시 간격 초), `HOEHWA_LAN_CODE_TTL`, `HOEHWA_LAN_PREAUTH_TIMEOUT`·`HOEHWA_LAN_BODY_TIMEOUT`·`HOEHWA_LAN_HEADER_TIMEOUT`.
+
+## 기록 동기화 (1.2: /sync/pull, /sync/push)
+
+PC와 폰의 학습 기록(복습 카드, 로드맵 체크, 공부한 날, 공부 시간, 음소 통계 등)을 주고받는 허브 API다. 구현은 `backend/sync_hub.py`, 설계는 `docs/sync_design.md` §5다. 아래 JSON 값은 모두 가짜 예시이고 실제 기록·토큰이 아니다.
+
+허브는 **병합하지 않는다.** 각 기기가 올린 자기 기록 문서(복제본)를 그대로 보관하고, 다른 기기의 복제본을 그대로 돌려준다. 병합은 Godot 쪽이 한다. 허브 파일은 `backend/data/sync/`에 있다(업데이트 보호·배포 제외·git 제외 경로).
+
+```
+backend/data/sync/
+  hub.json                          {"v":1, "hub_id", "rev", "created"}
+  replicas/<기기 번호>.json          {"v":1, "device_id", "name", "kind", "seq", "saved_hub", "via", "doc"}
+  replicas/<기기 번호>.json.prev     직전 세대 1개
+  replicas/*.bad                    깨진 파일 격리
+```
+
+### 엔드포인트
+
+| 메서드·경로 | 용도 | 요청 본문 |
+|---|---|---|
+| `GET /sync/pull?device_id=<기기 번호>[&rev=<정수>]` | 다른 기기의 복제본 받기 | 없음 |
+| `POST /sync/push` | 이 기기의 복제본 올리기 | JSON, 3 MiB 이하 |
+
+- 기기 번호(`device_id`): 소문자 16자리 16진수(`^[0-9a-f]{16}$`).
+- `rev`: 마지막으로 받은 허브 `rev`. 허브의 현재 `rev`와 같으면 `unchanged` 응답만 받는다(폴링용, 수백 바이트). 1~16자리 10진 정수만 허용한다.
+
+### 인증과 Host/Origin 검사
+
+- **폰(Tailscale 리스너, :8775)**: 모든 요청에 `Authorization: Bearer <연결 토큰>` 헤더가 필요하다. 토큰 확인과 허용 목록(`GET /sync/pull`, `POST /sync/push`)은 `lan.py`의 게이트가 먼저 처리한다. 허브는 게이트를 통과한 요청만 받는다. 폰 토큰으로 `kind`를 `pc`로 올리거나, PC가 올린 복제본(`kind`가 `pc`이거나 `via`가 `local`인 것)을 덮어쓰려 하면 403 `forbidden_replica`.
+- **PC 앱(127.0.0.1:8770, 토큰 없음)**: 접속 주소가 루프백이어야 한다. `Host`는 `127.0.0.1`, `localhost`, `[::1]` 중 하나(+포트)여야 한다. `Origin` 헤더가 있으면 `http://<Host>`와 같아야 한다. `POST`는 `Content-Type: application/json`이어야 한다(`GET`은 이 검사를 하지 않는다). 어기면 403 `bad_origin`. 웹 페이지가 학습 기록을 건드리는 것(CSRF, DNS 리바인딩)을 막으려는 검사이며, `/lan*` 관리 엔드포인트와 같은 수준이다. PC 앱도 이 방식(루프백)으로 허브를 쓴다.
+- 허브는 토큰, `Authorization` 헤더, 기록 값(단어·문장), 기기 이름을 로그에 남기지 않는다(기기 번호·크기·seq·결과만).
+- 시험 서버(`--port`로 띄운 것)는 `--sync-dir`를 주지 않으면 허브가 꺼져 있어서 모든 `/sync/*` 요청이 503 `sync_off`다. 실제 `backend/data/sync/`를 쓰지 못하게 막혀 있다.
+- 옛 PC(1.1.x)에는 이 경로가 없어 404가 나온다. 클라이언트는 이를 "옛 PC"로 해석한다.
+
+### GET /sync/pull
+
+요청 예시: `GET /sync/pull?device_id=0123456789abcdef&rev=43`
+
+응답 200 (허브 `rev`가 바뀌었거나 `rev`를 보내지 않았을 때):
+
+```json
+{
+  "v": 1,
+  "hub_id": "fedcba9876543210",
+  "hub_time": 1760000123,
+  "rev": 44,
+  "self": {"seq": 17},
+  "replicas": [
+    {"device_id": "a1b2c3d4e5f60718", "name": "예시 PC", "kind": "pc", "seq": 9, "saved_hub": 1760000100,
+     "doc": {"v": 1, "progress": {"xp": {"en": 120, "ja": 0}}, "studylog": {}, "prefs": {}}}
+  ],
+  "warnings": [{"device_id": "b2c3d4e5f6071829", "code": "replica_unreadable"}]
+}
+```
+
+- `replicas`: 요청한 `device_id`를 뺀 나머지 전부(최대 15개). `doc`은 올라온 문서 그대로다.
+- `self.seq`: 허브가 가진 요청 기기의 `seq`(없으면 0).
+- `hub_id`: 허브의 신원. 저장해 둔 값과 다르면 다른 허브에 붙은 것이다(설계 §4.9).
+- `warnings`: 복제본 파일이 깨져 `.prev`로도 읽지 못한 기기. 요청 자체는 200이다. 이 `code`는 HTTP 오류가 아니라 경고 값이므로 아래 오류 코드 표에 없다.
+
+응답 200 (`rev`가 허브의 현재 값과 같을 때):
+
+```json
+{"v": 1, "unchanged": true, "hub_id": "fedcba9876543210", "hub_time": 1760000123, "rev": 44, "self": {"seq": 17}}
+```
+
+`replicas`와 `warnings`는 없다.
+
+### POST /sync/push
+
+요청 (`Content-Type: application/json`, 본문 3 MiB = 3,145,728바이트 이하). 값은 예시다:
+
+```json
+{"v": 1, "device_id": "0123456789abcdef", "name": "예시 폰", "kind": "phone", "seq": 18,
+ "client_time": 1760000120, "skew": 0,
+ "doc": {"v": 1, "progress": {"xp": {"en": 120, "ja": 0}}, "studylog": {}, "prefs": {}}}
+```
+
+- `v`: 있으면 1이어야 한다.
+- `device_id`: 16자리 16진수. `name`: 제어문자를 뺀 뒤 1~40자. `kind`: `"pc"` 또는 `"phone"`.
+- `seq`: 1 이상 2^53 이하 정수. 같은 기기가 올릴 때마다 커지는 번호다.
+- `skew`(선택): 정수, |skew| ≤ 604800(7일). 형식만 검사하고 저장하지 않는다.
+- `client_time`(선택): 정수. 정보용이며 허브는 신뢰하지 않는다.
+- `doc`: 복제본 문서(설계 §4.3). 허브는 구조·형식·크기만 검사하고 값의 뜻은 보지 않는다.
+  - 최상위 키는 `v`, `progress`, `studylog`, `prefs`만 허용한다. `v`는 1.
+  - 시각 `t`는 0 이상 4102444800 이하 정수. 숫자 값은 0 이상 2^53 이하 정수이고, `stability`·`difficulty`는 유한한 실수.
+  - 개수 상한: 카드 `add`·`del`·`data` 각 3500개, 단어 언어당 `add`+`del` 합 70000개, 체크·공부한 날 표시 `add`·`del` 각 5000개, 공부한 날(`days`) 800일, 미션 200개, 음소 언어당 80개. `by`·`n`·`heard` 맵은 32개 이하, 키 24자 이하. 중첩 깊이 8 이하.
+  - 문자열: 카드 `id` 64자, 카드 `target`·`reading`·`ko`·`note` 300자, 단어 1~400자, 미션 id 64자, 음소 키 24자 이하. 음소 `h`는 0과 1만 쓴 30자 이하.
+  - 키 형식: 카드 `^(en|ja)\|.{1,300}$`, 공부한 날 표시 `^\d{4}-\d{2}-\d{2}\|(en|ja)$`, 체크 `^[a-z]{2}-\d{1,3}-[wmc]\d{1,3}$`, 날짜 `^\d{4}-\d{2}-\d{2}$`.
+  - 위반은 400 `bad_doc`이다. `detail`에는 **어느 경로가 틀렸는지**만 담고(예: `doc.progress.xp`) 값은 담지 않는다.
+
+#### seq 규칙
+
+1. 요청 `seq`가 저장된 `seq`(`stored_seq`)보다 작으면 409 `stale_seq`. 저장하지 않는다. 클라이언트는 `stored_seq + 1`로 한 번 다시 보낸다.
+2. `seq`가 저장된 값과 같으면: 이름·종류·문서가 저장된 것과 같을 때만 200 `"dup": true`(저장하지 않음. 같은 요청을 다시 보내도 결과가 같다). 내용이 다르면 409 `seq_reuse`.
+3. `seq`가 저장된 값보다 1000을 넘게 크면 400 `seq_jump`.
+4. 처음 올리는 기기는 `seq`가 2^40(1,099,511,627,776) 이하여야 한다. 넘으면 400 `seq_jump`(`stored_seq: 0`).
+5. 처음 올리는 기기인데 허브에 이미 복제본이 16개 있으면 409 `too_many_devices`.
+
+성공 응답 200 (저장함):
+
+```json
+{"ok": true, "dup": false, "rev": 45, "hub_time": 1760000124, "stored_seq": 18, "hub_id": "fedcba9876543210"}
+```
+
+- 저장할 때 이전 복제본은 `<기기 번호>.json.prev`로 한 세대 남기고, 임시 파일을 써서 교체한다. `rev`는 1 올라가고, 저장 시각 `saved_hub`는 허브 시계로 붙는다.
+- `dup: true` 응답은 아무것도 저장하지 않고 현재 `rev`를 돌려준다.
+
+### 오류 코드
+
+본문은 항상 `{"error": "<한국어 문구>", "code": "<코드>"}`이다. 필요하면 `stored_seq`(seq 관련 오류)와 `detail`(400 `bad_request`, `bad_doc`: 틀린 필드 이름이나 경로)이 붙는다. 한국어 문구는 허브 코드(`sync_hub.py`의 `MSG`)와 같다.
+
+| HTTP | code | 언제 | 문구(error) |
+|---|---|---|---|
+| 400 | `bad_request` | JSON이 아니거나 객체가 아님, 필수 필드 없음, 쿼리 형식 틀림(`detail`: 필드 이름) | 요청 형식이 올바르지 않아요. |
+| 400 | `bad_device_id` | `device_id` 형식 위반(pull에서는 쿼리에 없는 경우도 포함) | 기기 번호 형식이 올바르지 않아요. |
+| 400 | `bad_doc` | `doc`의 구조·타입·크기·키 형식·버전 위반(`detail`: 경로) | 보낸 기록의 형식이 올바르지 않아요. |
+| 400 | `seq_jump` | `seq`가 저장된 값보다 1000 넘게 큼, 또는 처음 올리는 기기의 `seq`가 2^40 초과(`stored_seq`) | 보낸 번호가 저장된 번호보다 너무 많이 앞서 있어요. |
+| 403 | `bad_origin` | PC 루프백 요청의 Host/Origin/Content-Type 검사 실패 | 허용되지 않은 요청이에요. 이 PC의 앱에서만 쓸 수 있어요. |
+| 403 | `forbidden_replica` | 폰 토큰으로 PC 쪽 복제본을 올리거나 덮어쓰려 함 | 이 기기의 기록은 이 휴대폰에서 바꿀 수 없어요. |
+| 409 | `stale_seq` | `seq`가 저장된 값보다 작음(`stored_seq`) | 더 오래된 기록이라 저장하지 않았어요. |
+| 409 | `seq_reuse` | `seq`가 저장된 값과 같은데 내용이 다름(`stored_seq`) | 같은 번호로 다른 기록을 보냈어요. |
+| 409 | `too_many_devices` | 처음 올리는 기기인데 복제본이 이미 16개 있음 | 동기화할 수 있는 기기가 가득 찼어요. |
+| 413 | `too_large` | 본문 3 MiB 초과(선언한 길이가 32 MiB를 넘으면 본문을 읽지 않고 바로 거절), 또는 허브 폴더 합계 64 MiB 초과 | 보낸 기록이 너무 커요. |
+| 500 | `store_failed` | 디스크 쓰기 실패. 저장된 복제본은 바뀌지 않는다 | PC에 기록을 저장하지 못했어요. |
+| 503 | `sync_off` | 허브 폴더를 쓸 수 없음, 또는 `--sync-dir` 없이 띄운 시험 서버 | 이 PC에서는 기록 동기화를 쓸 수 없어요. |
+
+- 폰 경로에서 게이트가 먼저 내는 응답(401 `token_missing`·`token_invalid`, 403 `lan_forbidden`, 408 `request_timeout`, 429 `rate_limited`, 본문 16 MB 초과 413 `too_large`)은 위 "휴대폰 연결" 절의 오류 코드와 같다.
 
 ## 학습 단계 기준 (stage)
 | stage | 영어 | 일본어 |

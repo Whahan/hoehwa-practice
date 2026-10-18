@@ -304,7 +304,7 @@ func _test_hooks(args: PackedStringArray) -> void:
 	ok(StudyLog.streak("en") >= 1, "C11: StudyLog.streak sees today's mark (%d)" % StudyLog.streak("en"))
 
 	# C12 / ui.gd guard
-	ok(Progress.MAX_REVIEW == 1000, "C12: MAX_REVIEW is 1000")
+	ok(Progress.MAX_REVIEW == 3000, "C12: MAX_REVIEW is 3000")
 	var sc := ScrollContainer.new()
 	add_child(sc)
 	UI.scroll_to_bottom(sc)
