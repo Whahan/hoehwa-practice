@@ -505,6 +505,10 @@ static func speak_buttons(text: String, lang: String) -> HBoxContainer:
 
 # ---------------------------------------------------------------- widgets
 
+const SEG_TIGHT_SCALE := 1.15 ## phone text scale from which a segmented control trims its padding and wraps its labels
+const SEG_TIGHT_PAD := 8 ## side padding of a segmented button then (18 otherwise)
+
+
 ## Segmented control. items = [[value, label], ...]. Calls on_change(value).
 static func segmented(items: Array, current: String, on_change: Callable, accent_for: Callable = Callable()) -> PanelContainer:
 	var p := PanelContainer.new()
@@ -515,6 +519,10 @@ static func segmented(items: Array, current: String, on_change: Callable, accent
 	if phone:
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var r: int = Ds.R_BTN - 3 # the Seg panel pads its buttons by 3
+	# Phone with enlarged text: two buttons at 18 px side padding are wider than the page. Trim the padding and let
+	# the labels wrap onto a second line (never an ellipsis), so the control always fits. 100 % is unchanged.
+	var tight: bool = phone and Ds.font_scale >= SEG_TIGHT_SCALE
+	var px: int = SEG_TIGHT_PAD if tight else 18
 	for it in items:
 		var value: String = str(it[0])
 		var b := Button.new()
@@ -524,11 +532,13 @@ static func segmented(items: Array, current: String, on_change: Callable, accent
 		b.custom_minimum_size.y = Ds.touch_min()
 		if phone:
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if tight:
+			b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var sel: bool = value == current
 		var fg: Color = Pal.MUTED
 		if sel:
 			fg = accent_for.call(value) if accent_for.is_valid() else Pal.INK
-			var s := style(Pal.SURFACE, Color(0, 0, 0, 0), 0, r, 18, 7)
+			var s := style(Pal.SURFACE, Color(0, 0, 0, 0), 0, r, px, 7)
 			if not Pal.is_dark(): # dark: the lighter surface already separates the selected segment
 				s.shadow_color = Color(0, 0, 0, 0.12)
 				s.shadow_size = 2
@@ -537,8 +547,8 @@ static func segmented(items: Array, current: String, on_change: Callable, accent
 				b.add_theme_stylebox_override(n, s)
 			b.add_theme_font_override("font", bold_font())
 		else:
-			var f := style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, r, 18, 7)
-			var hv := style(Color(Pal.SURFACE, 0.55), Color(0, 0, 0, 0), 0, r, 18, 7)
+			var f := style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, r, px, 7)
+			var hv := style(Color(Pal.SURFACE, 0.55), Color(0, 0, 0, 0), 0, r, px, 7)
 			b.add_theme_stylebox_override("normal", f)
 			b.add_theme_stylebox_override("hover", hv)
 			b.add_theme_stylebox_override("pressed", hv)

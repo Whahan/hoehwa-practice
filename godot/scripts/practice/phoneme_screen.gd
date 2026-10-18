@@ -444,6 +444,23 @@ func _ipa_button(text: String, kind: String, accent: Color) -> Button:
 	return b
 
 
+## UI.chip_kind whose text wraps inside the chip when it is longer than 280 px (a long word + "(…로 들림)" at a big
+## text size would otherwise be wider than the screen: the chip's label does not wrap by itself).
+func _wrapping_chip(txt: String, kind: String) -> PanelContainer:
+	var chip := UI.chip_kind(txt, kind)
+	var lbl := chip.get_child(0) as Label
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	chip.custom_minimum_size.x = minf(UI.text_width(txt, Ds.fs(13), true) + 28.0, 280.0)
+	return chip
+
+
+## A sound to pick from the full list: the pill look of UI.filter_chip (not selected; pressing opens the sound).
+func _ipa_chip(text: String, on_tap: Callable) -> Button:
+	var b := UI.filter_chip(text, false, on_tap)
+	b.add_theme_font_override("font", Ipa.font(true))
+	return b
+
+
 func _render() -> void:
 	var c: VBoxContainer = (_shell["page"] as PageScroll).content
 	if drill != null and is_instance_valid(drill) and drill.get_parent() != null:
@@ -457,12 +474,12 @@ func _render() -> void:
 	match stage:
 		"loading", "detail_loading":
 			c.add_child(UI.label("불러오는 중이에요…", "Muted"))
-			var cb := SpeakDrill.touch_button("취소", "outline", _acc())
+			var cb := SpeakDrill.touch_button("취소", "soft", _acc())
 			cb.pressed.connect(func() -> void: go_back())
 			c.add_child(cb)
 		"unsupported":
 			c.add_child(SpeakDrill.notice("약한 소리 연습은 영어만 지원해요. 위쪽 탭에서 영어로 바꿔 주세요.", false))
-			var ub := SpeakDrill.touch_button("연습으로", "outline", _acc())
+			var ub := SpeakDrill.touch_button("연습으로", "flat", _acc())
 			ub.pressed.connect(func() -> void: closed.emit())
 			c.add_child(ub)
 		"error":
@@ -474,7 +491,7 @@ func _render() -> void:
 				else:
 					_load_list(""))
 			c.add_child(rb)
-			var bb := SpeakDrill.touch_button("연습으로", "outline", _acc())
+			var bb := SpeakDrill.touch_button("연습으로", "flat", _acc())
 			bb.pressed.connect(func() -> void: closed.emit())
 			c.add_child(bb)
 		"list":
@@ -522,9 +539,10 @@ func _render_list(c: VBoxContainer) -> void:
 	for it in phonemes:
 		var d2: Dictionary = it
 		var p2: String = str(d2["p"])
-		var b2 := _ipa_button(str(d2["label"]), "outline", acc)
-		b2.pressed.connect(func() -> void: choose(p2))
-		fl2.add_child(b2)
+		fl2.add_child(_ipa_chip(str(d2["label"]), func() -> void: choose(p2)))
+	SpeakDrill.fit_touch(fl2) # the PC chip is 32 px high: every pressable thing here is at least 44
+	for ch in fl2.get_children():
+		(ch as Control).custom_minimum_size.x = maxf((ch as Control).custom_minimum_size.x, maxf(44.0, Ds.touch_min())) # one short symbol is still a full-size target
 	all.body.add_child(fl2)
 	c.add_child(all)
 
@@ -569,7 +587,7 @@ func _render_detail(c: VBoxContainer) -> void:
 		var fl := UI.flow(8, 8)
 		for w in words:
 			var ws: String = str(w)
-			var wb := SpeakDrill.touch_button("▶ " + ws, "outline", acc)
+			var wb := SpeakDrill.touch_button("▶ " + ws, "soft", acc)
 			wb.pressed.connect(func() -> void: Tts.speak(ws, "en", false))
 			fl.add_child(wb)
 		wc.body.add_child(fl)
@@ -591,7 +609,7 @@ func _render_top() -> void:
 	var card := UI.card("BigCard", 10)
 	card.body.add_child(UI.label("연습 %d / %d  ·  소리 %s" % [idx + 1, items.size(), label_of(cur_p)], "Eyebrow", false))
 	var big := UI.label(str(it["text"]), "")
-	big.add_theme_font_size_override("font_size", 22)
+	big.add_theme_font_size_override("font_size", Ds.fs(22))
 	big.add_theme_font_override("font", UI.bold_font())
 	card.body.add_child(big)
 	if str(it.get("ko", "")) != "":
@@ -605,7 +623,7 @@ func _render_top() -> void:
 	lr.add_child(b2)
 	card.body.add_child(lr)
 	if phoneme_off():
-		card.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN, "Small"))
+		card.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN_ON, "Small"))
 	_top_box.add_child(card)
 
 	var r: Dictionary = results[idx] if idx < results.size() else {}
@@ -618,7 +636,7 @@ func _verdict_box(r: Dictionary) -> Control:
 	var v: Dictionary = r["last"]
 	var box := UI.card("Sunk", 8)
 	if bool(v["unavailable"]) or bool(r["unavailable"]):
-		box.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN))
+		box.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN_ON))
 		return box
 	if int(v["found"]) == 0:
 		box.body.add_child(UI.label("이 문장에서 %s 소리를 찾지 못했어요. 다시 말해 보세요." % label_of(cur_p), "Muted"))
@@ -632,12 +650,12 @@ func _verdict_box(r: Dictionary) -> Control:
 		var txt: String = str(wd["t"]) + ("  O" if ok else "  X")
 		if not ok and str(wd.get("heard", "")) != "":
 			txt += " (%s로 들림)" % str(wd["heard"])
-		fl.add_child(UI.chip(txt, Pal.OK if ok else Pal.BAD, Pal.OK_SOFT if ok else Pal.BAD_SOFT))
+		fl.add_child(_wrapping_chip(txt, "ok" if ok else "bad")) # the O / X in the text is the non-colour cue
 	box.body.add_child(fl)
 	if bool(v["success"]):
-		box.body.add_child(UI.colored("성공! 이 소리가 잘 들렸어요.", Pal.OK, "Strong"))
+		box.body.add_child(UI.colored("✓ 성공! 이 소리가 잘 들렸어요.", Pal.OK_ON, "Strong"))
 	else:
-		box.body.add_child(UI.colored("다시 한 번 해 볼까요? 위의 발음 방법을 떠올려 보세요.", Pal.WARN, "Small"))
+		box.body.add_child(UI.colored("✕ 다시 한 번 해 볼까요? 위의 발음 방법을 떠올려 보세요.", Pal.WARN_ON, "Small"))
 	return box
 
 
@@ -662,10 +680,11 @@ func _render_summary(c: VBoxContainer) -> void:
 		card.body.add_child(UI.label("말해 본 문항이 없어요.", "H2"))
 	elif all_unavailable:
 		card.body.add_child(UI.label("%d문항 연습했어요" % attempts, "H2"))
-		card.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN, "Small"))
+		card.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN_ON, "Small"))
 	else:
 		var s := success_count()
-		card.body.add_child(UI.colored("%d/%d 성공" % [s, items.size()], Pal.OK if s * 2 >= items.size() else Pal.WARN, "H1", false))
+		var good: bool = s * 2 >= items.size()
+		card.body.add_child(UI.colored("%s %d/%d 성공" % ["✓" if good else "△", s, items.size()], Pal.OK_ON if good else Pal.WARN_ON, "H1", false))
 		card.body.add_child(UI.label("한 번에 안 되어도 괜찮아요. 같은 소리를 며칠 나눠서 연습하면 좋아져요.", "Muted"))
 	if xp_gained > 0:
 		card.body.add_child(UI.label("+%d XP" % xp_gained, "Muted"))
@@ -683,6 +702,6 @@ func _render_summary(c: VBoxContainer) -> void:
 		stage = "list"
 		_render())
 	c.add_child(other)
-	var out := SpeakDrill.touch_button("연습으로", "outline", acc, 48)
+	var out := SpeakDrill.touch_button("연습으로", "flat", acc, 48)
 	out.pressed.connect(func() -> void: closed.emit())
 	c.add_child(out)

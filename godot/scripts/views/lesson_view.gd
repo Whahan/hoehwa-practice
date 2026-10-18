@@ -38,6 +38,9 @@ var _score_call = null
 var _page: PageScroll
 var _footer_holder: PanelContainer
 var _footer_col: ColumnBox
+## The fixed bottom bar of the solving screens (alias of _footer_holder): hairline on top, result colour after checking.
+var footer: PanelContainer
+var _header: Control = null ## big title block of the lesson home (see header_block)
 var _loading_label: Label
 var _loading_start: int = 0
 var _record_widget: RecorderWidget = null
@@ -65,6 +68,7 @@ func _ready() -> void:
 	add_child(root)
 	root.add_child(_page)
 	_footer_holder = PanelContainer.new()
+	footer = _footer_holder
 	_footer_holder.visible = false
 	root.add_child(_footer_holder)
 	_footer_col = ColumnBox.new()
@@ -418,10 +422,12 @@ func go_back() -> bool:
 func _render() -> void:
 	if _page == null:
 		return
+	var had_header: bool = _header != null
 	_record_widget = null
 	_prosody_panel = null
 	_prosody_tips = null
 	_loading_label = null
+	_header = null
 	_footer_holder.visible = false
 	var c: VBoxContainer = _page.content
 	UI.clear(c)
@@ -437,19 +443,44 @@ func _render() -> void:
 			_render_home(c)
 	UI.fix_cjk(c)
 	UI.fix_cjk(_footer_col.content)
+	if had_header != (_header != null):
+		bar_changed.emit() # the big title came or went: the phone app bar reads scroll_host() / header_block() again
+
+
+# ---------------------------------------------------------------- app bar contract (AppView)
+# Only the lesson home has a big title block; the solving screens keep their own bar (그만 · progress · n/N).
+
+func scroll_host() -> ScrollContainer:
+	return _page if _header != null and is_instance_valid(_header) else null
+
+
+func header_block() -> Control:
+	return _header if _header != null and is_instance_valid(_header) else null
+
+
+## A row of buttons: side by side, or stacked on the phone when the text is scaled up (two long labels would no longer fit).
+func _button_row(sep: int = 8) -> BoxContainer:
+	if Platform.is_phone() and Ds.font_scale >= 1.3:
+		return UI.vbox(sep)
+	return UI.hbox(sep)
+
+
+## Text colour that reads on a SOFT / SURFACE face for the accent of the language (EN_ON / JA_ON).
+func _accent_text(acc: Color) -> Color:
+	return (UI.soft_pair(acc) as Array)[1]
 
 
 func _render_home(c: VBoxContainer) -> void:
 	var acc: Color = Pal.accent(lang)
+	_header = PageHeader.build("레슨", "%d XP · 레슨 %d회" % [Store.xp(lang), Store.stat(lang, "lessons")])
+	c.add_child(_header)
 	var top := UI.adaptive(12)
-	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
+	var lang_seg := UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		err = ""
-		_render()))
-	if not Platform.is_phone():
-		top.add_child(UI.spacer())
-	top.add_child(UI.label("%d XP · 레슨 %d회" % [Store.xp(lang), Store.stat(lang, "lessons")], "Muted", false))
+		_render())
+	top.add_child(lang_seg)
 	c.add_child(top)
 	if err != "":
 		c.add_child(_error_box(err))
@@ -471,20 +502,37 @@ func _render_home(c: VBoxContainer) -> void:
 	var weeks: Array = Store.month_data(lang, sel_n).get("weeks", [])
 	for i in weeks.size():
 		w_items.append("%s · %s" % [str((weeks[i] as Dictionary).get("w", "")), UI.plain((weeks[i] as Dictionary).get("topic", ""))])
-	var mo := UI.option_button(m_items, m_sel)
-	mo.item_selected.connect(func(i: int) -> void:
-		sel_n = int((months[i] as Dictionary)["n"])
-		sel_w = 1
-		_render())
-	var wo := UI.option_button(w_items, clampi(sel_w - 1, 0, maxi(0, w_items.size() - 1)))
-	wo.item_selected.connect(func(i: int) -> void: sel_w = i + 1)
+	var w_sel: int = clampi(sel_w - 1, 0, maxi(0, w_items.size() - 1))
 	var fields := UI.adaptive(12)
-	var f1 := UI.field("범위", mo)
-	f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var f2 := UI.field("주차", wo)
-	f2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fields.add_child(f1)
-	fields.add_child(f2)
+	if Platform.is_phone():
+		# big touch rows that open a bottom sheet instead of the small drop-down list
+		var m_pairs: Array = []
+		for i in months.size():
+			m_pairs.append([str(int((months[i] as Dictionary)["n"])), m_items[i]])
+		var w_pairs: Array = []
+		for i in w_items.size():
+			w_pairs.append([str(i + 1), w_items[i]])
+		fields.add_child(_pick_field("범위", m_items[m_sel] if m_sel < m_items.size() else "", m_pairs, str(sel_n), func(v: int) -> void:
+			sel_n = v
+			sel_w = 1
+			_render()))
+		fields.add_child(_pick_field("주차", w_items[w_sel] if w_sel < w_items.size() else "", w_pairs, str(sel_w), func(v: int) -> void:
+			sel_w = v
+			_render()))
+	else:
+		var mo := UI.option_button(m_items, m_sel)
+		mo.item_selected.connect(func(i: int) -> void:
+			sel_n = int((months[i] as Dictionary)["n"])
+			sel_w = 1
+			_render())
+		var wo := UI.option_button(w_items, w_sel)
+		wo.item_selected.connect(func(i: int) -> void: sel_w = i + 1)
+		var f1 := UI.field("범위", mo)
+		f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var f2 := UI.field("주차", wo)
+		f2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		fields.add_child(f1)
+		fields.add_child(f2)
 	card.body.add_child(fields)
 
 	var src_items: Array = [["tatoeba", "실제 예문 레슨 (빠름)"], ["ai", "AI 레슨 (느림)"]]
@@ -493,7 +541,7 @@ func _render_home(c: VBoxContainer) -> void:
 	var src_seg := UI.segmented(src_items, lesson_source(), set_lesson_source, func(_v: String) -> Color: return acc)
 	card.body.add_child(UI.field("레슨 종류", src_seg))
 
-	var go := UI.button("레슨 시작", "primary", acc, 52)
+	var go := UI.button("레슨 시작", "primary", acc, 56)
 	go.pressed.connect(start_lesson)
 	card.body.add_child(go)
 	c.add_child(card)
@@ -504,7 +552,7 @@ func _render_home(c: VBoxContainer) -> void:
 	rc.body.add_child(UI.label("틀린 문장 다시 말하기", "H3"))
 	if rv > 0:
 		rc.body.add_child(UI.label("레슨과 대화에서 틀리거나 고친 문장 %d개가 모여 있어요." % rv, "Muted"))
-		var rb := UI.button("복습하러 가기", "soft", acc, 44)
+		var rb := UI.button("복습하러 가기", "soft", acc, 48)
 		rb.pressed.connect(func() -> void: Store.navigate.emit("review", lang))
 		rc.body.add_child(rb)
 	else:
@@ -512,9 +560,51 @@ func _render_home(c: VBoxContainer) -> void:
 	c.add_child(rc)
 
 
+## Phone: caption over an input-looking row; tapping it opens a bottom sheet with `items` ([[value, label], ...]) and
+## `on_pick(int)` gets the picked value. `shown` is the label of the current choice.
+func _pick_field(caption: String, shown: String, items: Array, current: String, on_pick: Callable) -> Control:
+	var b := Button.new()
+	b.text = shown
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.clip_text = true
+	b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size.y = Ds.field_h()
+	var normal := UI.style(Pal.SURFACE, Pal.LINE_STRONG, 1, Ds.R_INPUT, 14, 10)
+	normal.content_margin_right = 44 # room for the chevron
+	var pressed := UI.style(Pal.SUNK, Pal.LINE_STRONG, 1, Ds.R_INPUT, 14, 10)
+	pressed.content_margin_right = 44
+	for n in ["normal", "focus"]:
+		b.add_theme_stylebox_override(n, normal)
+	for n in ["hover", "pressed", "hover_pressed", "disabled"]:
+		b.add_theme_stylebox_override(n, pressed)
+	for n in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(n, Pal.INK)
+	var chev := GlyphIcon.new("chevron_down", 20.0, Pal.MUTED)
+	chev.anchor_left = 1.0
+	chev.anchor_right = 1.0
+	chev.anchor_top = 0.5
+	chev.anchor_bottom = 0.5
+	chev.offset_left = -34.0
+	chev.offset_right = -14.0
+	chev.offset_top = -10.0
+	chev.offset_bottom = 10.0
+	b.add_child(chev)
+	b.accessibility_name = caption
+	b.pressed.connect(func() -> void:
+		var sh := Sheet.choice(self, caption, items, current)
+		sh.closed.connect(func(v: Variant) -> void:
+			if str(v).is_valid_int():
+				on_pick.call(int(str(v)))))
+	return UI.field(caption, b)
+
+
 func _error_box(msg: String) -> Control:
-	var p := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, 10, 14, 10)
-	p.add_child(UI.colored(msg, Pal.BAD))
+	# text + red face + a 2 px outline (a shape cue besides the colour)
+	var p := UI.tinted_panel(Pal.BAD_SOFT, Pal.BAD, 2, Ds.R_S, 14, 10)
+	p.add_child(UI.colored(msg, Pal.BAD_ON))
 	return p
 
 
@@ -524,12 +614,7 @@ func _render_loading(c: VBoxContainer) -> void:
 	card.body.add_child(UI.label("레슨을 만드는 중이에요", "H2"))
 	_loading_label = UI.label("레슨을 만드는 중…" if _req_source == "tatoeba" else "", "Muted")
 	card.body.add_child(_loading_label)
-	var bar := ProgressBar.new()
-	bar.indeterminate = true
-	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 8)
-	bar.add_theme_stylebox_override("fill", UI.style(Pal.accent(lang), Color(0, 0, 0, 0), 0, 99, 0, 0))
-	card.body.add_child(bar)
+	card.body.add_child(UI.progress_indeterminate(Pal.accent(lang), 8.0))
 	var stop := UI.button("그만두기", "outline", Pal.accent(lang))
 	stop.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	stop.pressed.connect(func() -> void:
@@ -549,23 +634,23 @@ func _render_done(c: VBoxContainer) -> void:
 	var card := UI.card("BigCard", 14)
 	card.body.add_child(UI.label("레슨 완료", "Eyebrow", false))
 	card.body.add_child(UI.label(title, "H2"))
-	var stats := UI.hbox(8)
+	var stats := _button_row(8)
 	for spec in [["%d/%d" % [ok_count, total], "맞힌 문제"], ["+%d" % (ok_count * 10), "XP"], [str(added_count), "복습에 추가"]]:
-		var p := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, 10, 14, 10)
+		var p := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_S, 12, 10)
 		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var v := UI.vbox(0)
 		var n := Label.new()
 		n.text = spec[0]
-		n.add_theme_font_size_override("font_size", 26)
+		n.add_theme_font_size_override("font_size", UI.fs(26))
 		n.add_theme_font_override("font", UI.bold_font())
-		n.add_theme_color_override("font_color", acc)
+		n.add_theme_color_override("font_color", Pal.INK)
 		v.add_child(n)
-		v.add_child(UI.label(spec[1], "Small", false))
+		v.add_child(UI.label(spec[1], "Small"))
 		p.add_child(v)
 		stats.add_child(p)
 	card.body.add_child(stats)
 	card.body.add_child(UI.label("오늘 %s 공부 완료로 기록했어요. 틀린 문장은 복습 목록에 들어갔어요." % NAME_KO[lang], "Muted"))
-	var row := UI.hbox(8)
+	var row := _button_row(8)
 	var again := UI.button("레슨 하나 더", "primary", acc, 48)
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again.pressed.connect(start_lesson)
@@ -575,19 +660,21 @@ func _render_done(c: VBoxContainer) -> void:
 	row.add_child(again)
 	row.add_child(talk)
 	card.body.add_child(row)
-	var row2 := UI.hbox(8)
+	var row2 := _button_row(8)
 	if added_count > 0:
-		var rv := UI.button("복습하러 가기", "default")
+		var rv := UI.button("복습하러 가기", "soft", acc)
+		rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rv.pressed.connect(func() -> void: Store.navigate.emit("review", lang))
 		row2.add_child(rv)
-	var home := UI.button("처음으로", "default")
+	var home := UI.button("처음으로", "flat", acc)
+	home.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	home.pressed.connect(func() -> void:
 		status = "idle"
 		_render())
 	row2.add_child(home)
 	card.body.add_child(row2)
 	if attribution != "":
-		card.body.add_child(UI.colored(attribution, Pal.MUTED, "Small"))
+		card.body.add_child(UI.label(attribution, "Small"))
 	c.add_child(card)
 
 
@@ -613,7 +700,7 @@ func _render_run(c: VBoxContainer) -> void:
 	c.add_child(bar_row)
 
 	var panel := UI.card("BigCard", 14)
-	panel.body.add_child(UI.colored(TYPE_LABEL[t], acc, "Strong", false))
+	panel.body.add_child(UI.colored(TYPE_LABEL[t], _accent_text(acc), "Strong", false))
 	c.add_child(panel)
 
 	match t:
@@ -630,9 +717,10 @@ func _render_run(c: VBoxContainer) -> void:
 			panel.body.add_child(_options(e))
 		"listen":
 			var row := UI.hbox(12)
-			var play := UI.button("▶", "primary", acc, 72)
+			var play := UI.button("▶", "soft", acc, 72)
 			play.custom_minimum_size = Vector2(88, 72)
-			play.add_theme_font_size_override("font_size", 28)
+			play.add_theme_font_size_override("font_size", UI.fs(28))
+			play.accessibility_name = "듣기"
 			play.pressed.connect(func() -> void: Tts.speak(str(e["audio"]), lang, false))
 			row.add_child(play)
 			var slow := UI.button("천천히", "soft", acc, 48)
@@ -774,7 +862,7 @@ func _load_prosody(audio_b64: String) -> void:
 
 func _big_text(s: String) -> Label:
 	var l := UI.label(s, "")
-	l.add_theme_font_size_override("font_size", 22)
+	l.add_theme_font_size_override("font_size", UI.fs(22))
 	l.add_theme_font_override("font", UI.bold_font())
 	return l
 
@@ -794,13 +882,33 @@ func _options(e: Dictionary) -> Control:
 			b.disabled = true
 		elif i == picked:
 			state = "picked"
-		UI.paint_option(b, state, acc)
+		_paint_option(b, state, acc)
 		var ii: int = i
 		b.pressed.connect(func() -> void:
 			picked = ii
 			_render())
 		box.add_child(b)
 	return box
+
+
+## Answer row look: colour + outline width (2 px at rest, 3 px once it is picked / marked) + a mark in front of the text
+## after checking (✓ the right one, ✕ the wrong pick), so the state never rests on the colour alone.
+func _paint_option(b: Button, state: String, acc: Color) -> void:
+	if state == "right":
+		b.text = "✓  " + b.text
+	elif state == "wrong":
+		b.text = "✕  " + b.text
+	UI.paint_option(b, state, acc)
+	if state == "idle":
+		return
+	b.add_theme_font_override("font", UI.bold_font())
+	var sb: StyleBox = b.get_theme_stylebox("normal")
+	if sb is StyleBoxFlat:
+		var f := sb as StyleBoxFlat
+		f.border_width_left = 3
+		f.border_width_right = 3
+		f.border_width_top = 3
+		f.border_width_bottom = 4
 
 
 func _tile_text(e: Dictionary, id: int) -> String:
@@ -826,7 +934,7 @@ func _build_area(e: Dictionary) -> Control:
 		answer_row.add_child(tb)
 	ans_col.add_child(answer_row)
 	var line := ColorRect.new()
-	line.color = Pal.LINE
+	line.color = Pal.LINE_STRONG
 	line.custom_minimum_size = Vector2(0, 2)
 	ans_col.add_child(UI.gap(8))
 	ans_col.add_child(line)
@@ -856,6 +964,7 @@ func _build_area(e: Dictionary) -> Control:
 func _render_footer(e: Dictionary, t: String) -> void:
 	var acc: Color = Pal.accent(lang)
 	var f: VBoxContainer = _footer_col.content
+	UI.clear(f)
 	_footer_holder.visible = true
 	f.add_theme_constant_override("separation", 8)
 	var n: int = exercises.size()
@@ -863,16 +972,16 @@ func _render_footer(e: Dictionary, t: String) -> void:
 
 	if t == "speak":
 		if speak_result.is_empty():
-			_footer_holder.add_theme_stylebox_override("panel", UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0))
-			var skip := UI.button("지금은 말하기 어려워요", "default")
+			_footer_holder.add_theme_stylebox_override("panel", _footer_style("plain"))
+			var skip := UI.button("지금은 말하기 어려워요", "soft")
 			skip.pressed.connect(_skip_speak)
 			f.add_child(skip)
 			return
 		var score: int = roundi(float(speak_result.get("score", 0)))
 		var good: bool = score >= PASS_SCORE
 		_style_footer(good)
-		f.add_child(UI.colored("맞았어요" if good else "한 번 더 연습해 봐요", Pal.OK if good else Pal.BAD, "H3", false))
-		var row := UI.hbox(8)
+		f.add_child(_result_line(good, "맞았어요" if good else "한 번 더 연습해 봐요"))
+		var row := _button_row(8)
 		var retry := UI.button("다시 말하기", "outline", Pal.OK if good else Pal.BAD, 50)
 		retry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		retry.pressed.connect(func() -> void:
@@ -890,9 +999,9 @@ func _render_footer(e: Dictionary, t: String) -> void:
 		return
 
 	if not checked:
-		_footer_holder.add_theme_stylebox_override("panel", UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0))
+		_footer_holder.add_theme_stylebox_override("panel", _footer_style("plain"))
 		var ready: bool = built.size() > 0 if t == "build" else picked >= 0
-		var chk := UI.button("확인", "primary", acc, 52)
+		var chk := UI.button("확인", "primary", acc, 56)
 		chk.disabled = not ready
 		chk.pressed.connect(check_answer)
 		f.add_child(chk)
@@ -900,21 +1009,28 @@ func _render_footer(e: Dictionary, t: String) -> void:
 
 	_style_footer(correct)
 	var col: Color = Pal.OK if correct else Pal.BAD
-	f.add_child(UI.colored("맞았어요" if correct else "아쉬워요", col, "H3", false))
+	f.add_child(_result_line(correct, "맞았어요" if correct else "아쉬워요"))
 	if t == "build" and not correct:
-		f.add_child(UI.label("정답", "Small", false))
-		f.add_child(UI.label(join_tokens(e["answer"], lang), "Strong"))
+		f.add_child(UI.colored("정답", Pal.INK, "Small", false))
+		f.add_child(UI.colored(join_tokens(e["answer"], lang), Pal.INK, "Strong"))
 		var rr := _reading_label(e.get("reading", ""), e.get("pron", ""))
 		if rr != null:
 			f.add_child(rr)
 	elif t == "fill":
 		var opts: Array = e["options"]
-		f.add_child(UI.label(str(e["sentence"]).replace("___", str(opts[int(e["answer"])])), "Strong"))
+		f.add_child(UI.colored(str(e["sentence"]).replace("___", str(opts[int(e["answer"])])), Pal.INK, "Strong"))
 	if str(e.get("explain", "")) != "":
-		f.add_child(UI.label(str(e["explain"]), "Muted"))
-	var nb := UI.button("결과 보기" if last else "계속", "primary", col, 52)
+		f.add_child(UI.colored(str(e["explain"]), Pal.INK, "Muted"))
+	var nb := UI.button("결과 보기" if last else "계속", "primary", col, 56)
 	nb.pressed.connect(next_exercise)
 	f.add_child(nb)
+
+
+## The result sentence of the bottom bar: "✓ " (right) or "✕ " (wrong) in front, text in the *_ON colour of the face.
+func _result_line(ok: bool, text: String) -> Label:
+	var l := UI.colored(("✓ " if ok else "✕ ") + text, Pal.OK_ON if ok else Pal.BAD_ON, "H3", false)
+	l.name = "ResultLine"
+	return l
 
 
 func _style_footer(ok: bool) -> void:
@@ -922,8 +1038,24 @@ func _style_footer(ok: bool) -> void:
 
 
 func _top_border_style(ok: bool) -> StyleBoxFlat:
-	var s := UI.style(Pal.OK_SOFT if ok else Pal.BAD_SOFT, Pal.OK if ok else Pal.BAD, 0, 0, 0, 0)
-	s.border_width_top = 2
+	return _footer_style("ok" if ok else "bad")
+
+
+## Bottom bar face: "plain" = SURFACE with a 1 px hairline on top; "ok" / "bad" = the soft result colour with a 2 px
+## top line in the result colour. Side padding 8 + the column's 16 keeps buttons 24 px from the screen edge on the phone.
+func _footer_style(kind: String) -> StyleBoxFlat:
+	var ph: int = 8 if Platform.is_phone() else 0
+	var s: StyleBoxFlat
+	match kind:
+		"ok":
+			s = UI.style(Pal.OK_SOFT, Pal.OK, 0, 0, ph, 0)
+			s.border_width_top = 2
+		"bad":
+			s = UI.style(Pal.BAD_SOFT, Pal.BAD, 0, 0, ph, 0)
+			s.border_width_top = 2
+		_:
+			s = UI.style(Pal.SURFACE, Pal.LINE, 0, 0, ph, 0)
+			s.border_width_top = 1
 	return s
 
 

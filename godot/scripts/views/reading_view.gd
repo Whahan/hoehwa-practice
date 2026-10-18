@@ -17,8 +17,16 @@ const FONT_SIZES := {"s": 17, "m": 20, "l": 24}
 const MISSING_MSG := "읽기 기능을 쓰려면 AI 엔진을 최신으로 다시 시작해 주세요"
 const LEVEL_KO := {"easy": "쉬운 단어", "mid": "보통 단어", "hard": "어려운 단어"}
 const STATUS_KO := {"new": "새 단어", "learning": "복습 중", "known": "아는 단어", "easy": "쉬운 단어"}
-const LEARN_BG := Color("#FFE6A6")
-const LEARN_FG := Color("#6B4A00")
+## Words in the review list ("복습 중") are marked with the WARN surface and WARN_ON text (tokens, so both schemes
+## keep the 4.5:1 contrast; tests/contrast_test.gd checks the pair as LEARN_FG/LEARN_BG).
+static func learn_bg() -> Color:
+	return Pal.WARN_SOFT
+
+
+static func learn_fg() -> Color:
+	return Pal.WARN_ON
+
+
 const SAMPLES := {
 	"en": {"title": "A Walk After Dinner", "text": "Most evenings, after dinner, my grandfather takes a slow walk around the neighbourhood. He claims it helps his digestion, but I suspect he simply enjoys gossiping with the neighbours.\n\nLast week he came home grinning. A stray cat had followed him for three blocks, and he had reluctantly given it half of his sandwich. Now the cat waits for him at the gate every night, as patient as a tiny, furry accountant."},
 	"ja": {"title": "朝の散歩", "text": "毎朝、私は近くの公園を散歩します。季節によって景色が少しずつ変わるので、毎日歩いても飽きません。\n\n昨日は桜のつぼみが膨らんでいるのに気づきました。来週には満開になるかもしれません。帰りにパン屋に寄って、焼きたてのパンを買いました。"},
@@ -43,6 +51,16 @@ var gloss_done: int = 0
 var examples: Dictionary = {} # "lang|key" -> /examples response, or {"error": str}
 var examples_pending: Dictionary = {}
 
+## The shell sets this on the phone when its app bar shows the reader's back button, title and the "글자 크기" action
+## (page_title / page_actions / on_action below): the reader then leaves out its own title rows.
+var bar_hosted: bool = false:
+	set(v):
+		if bar_hosted == v:
+			return
+		bar_hosted = v
+		if mode == "reader" and _head != null:
+			_render_header()
+
 var _draft_title: String = ""
 var _draft_text: String = ""
 var _confirm_delete: String = ""
@@ -53,6 +71,7 @@ var _doc_serial: int = 0
 var _narrow: bool = false
 
 var _lib_page: PageScroll
+var _lib_header: Control
 var _reader: VBoxContainer
 var _head: VBoxContainer
 var _split: BoxContainer
@@ -109,6 +128,47 @@ func go_back() -> bool:
 	return true
 
 
+# ---------------------------------------------------------------- app bar contract (AppView)
+# Library: the tab name is the title and the big "읽기" PageHeader scrolls under the bar. Reader: the bar shows the back
+# button, the text title and a "글자 크기" action (a sheet with the three sizes).
+
+func page_title() -> String:
+	return str(doc.get("title", "")) if mode == "reader" else ""
+
+
+func page_subtitle() -> String:
+	return NAME_KO[lang] if mode == "reader" else ""
+
+
+func page_actions() -> Array:
+	return [{"id": "font", "text": "글자 크기"}] if mode == "reader" else []
+
+
+func on_action(id: String) -> void:
+	if id != "font" or mode != "reader":
+		return
+	var sh := Sheet.choice(self, "글자 크기", [["s", "작게"], ["m", "보통"], ["l", "크게"]], _font_key())
+	sh.closed.connect(func(v: Variant) -> void: _set_reading_font(str(v)))
+
+
+func scroll_host() -> ScrollContainer:
+	return _lib_page if mode == "library" else _text_scroll
+
+
+func header_block() -> Control:
+	return _lib_header if mode == "library" and _lib_header != null and is_instance_valid(_lib_header) else null
+
+
+## Stores the reading text size ("s" | "m" | "l"; anything else, e.g. "dismiss", changes nothing) and redraws.
+func _set_reading_font(v: String) -> void:
+	if not FONT_SIZES.has(v):
+		return
+	Store.set_pref("reading_font", v)
+	if mode == "reader":
+		_render_header()
+		_render_text()
+
+
 # ---------------------------------------------------------------- helpers
 
 func lemma_key(lemma: String) -> String:
@@ -120,9 +180,10 @@ func _accent() -> Color:
 	return Pal.accent(lang)
 
 
-## Light accent tint behind "unknown word" candidates.
+## Tint behind "unknown word" candidates: the language SOFT surface with a little of the accent (INK text reads on it
+## in both schemes).
 func _new_bg() -> Color:
-	return _accent().lerp(Color.WHITE, 0.8)
+	return Pal.soft(lang).lerp(_accent(), 0.10)
 
 
 static func _hex(c: Color) -> String:
@@ -274,15 +335,17 @@ func _render_library() -> void:
 	var acc: Color = _accent()
 	var docs: Array = list_docs(lang)
 
+	_lib_header = PageHeader.build("읽기", "저장한 글 %d개" % docs.size())
+	c.add_child(_lib_header)
 	var top := UI.adaptive(12)
-	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
+	var seg := UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		_confirm_delete = ""
-		_render()))
+		_render())
+	top.add_child(seg)
 	if not Platform.is_phone():
 		top.add_child(UI.spacer())
-	top.add_child(UI.label("저장한 글 %d개" % docs.size(), "Muted", false))
 	c.add_child(top)
 
 	var card := UI.card("BigCard", 12)
@@ -343,14 +406,12 @@ func _render_library() -> void:
 	c.add_child(card)
 	_update_draft_state()
 
-	var list := UI.card("Card", 6)
-	list.body.add_child(UI.label("저장한 %s 글" % NAME_KO[lang], "Eyebrow", false))
+	c.add_child(UI.section_header("저장한 %s 글" % NAME_KO[lang], Ds.S2))
+	var list := UI.card("Group")
 	if docs.is_empty():
-		list.body.add_child(UI.label("아직 없어요. 위에 글을 붙여 넣고 '분석하기'를 누르면 여기에 저장돼요.", "Muted"))
-	for i in docs.size():
-		if i > 0:
-			list.body.add_child(UI.hline())
-		list.body.add_child(_doc_row(docs[i]))
+		list.add_custom(UI.label("아직 없어요. 위에 글을 붙여 넣고 '분석하기'를 누르면 여기에 저장돼요.", "Muted"))
+	for d in docs:
+		list.add_custom(_doc_row(d))
 	c.add_child(list)
 	UI.fix_cjk(c)
 
@@ -373,7 +434,7 @@ func _update_draft_state() -> void:
 		return
 	var n: int = _draft_text.strip_edges().length()
 	_count_label.text = "%s / %s자" % [_comma(n), _comma(MAX_CHARS)]
-	_count_label.add_theme_color_override("font_color", Pal.BAD if n > MAX_CHARS else Pal.MUTED)
+	_count_label.add_theme_color_override("font_color", Pal.BAD_ON if n > MAX_CHARS else Pal.MUTED)
 	_analyze_btn.disabled = n == 0 or n > MAX_CHARS
 
 
@@ -399,7 +460,7 @@ func _doc_row(d: Dictionary) -> Control:
 		acts = UI.hbox(8)
 		row.add_child(acts)
 	if _confirm_delete == id:
-		acts.add_child(UI.colored("정말 지울까요?", Pal.BAD, "Small", false))
+		acts.add_child(UI.colored("정말 지울까요?", Pal.BAD_ON, "Small", false))
 		var yes := UI.button("지우기", "primary", Pal.BAD)
 		yes.pressed.connect(func() -> void:
 			delete_doc(id)
@@ -453,6 +514,7 @@ func open_doc(d: Dictionary) -> void:
 	doc["opened"] = int(Time.get_unix_time_from_system())
 	save_doc(doc)
 	mode = "reader"
+	bar_changed.emit()
 	selected = -1
 	_confirm_bulk = ""
 	tokens = []
@@ -471,6 +533,7 @@ func open_doc(d: Dictionary) -> void:
 func back_to_library() -> void:
 	_doc_serial += 1
 	mode = "library"
+	bar_changed.emit()
 	selected = -1
 	analyzing = false
 	Tts.stop()
@@ -644,9 +707,17 @@ func _apply_layout() -> void:
 		_render_panel()
 	var st := UI.style(Pal.SURFACE, Pal.LINE, 0, 0, 0, 0)
 	if _narrow:
+		# the word panel as a bottom sheet (not modal: the text above stays tappable): a raised surface with rounded
+		# top corners, a hairline, and in the light scheme a soft shadow (dark: the lighter surface separates it)
+		st.bg_color = Pal.SURFACE_HI
+		st.corner_radius_top_left = Ds.R_SHEET
+		st.corner_radius_top_right = Ds.R_SHEET
 		st.border_width_top = 1
-		st.shadow_color = Color(0, 0, 0, 0.08)
-		st.shadow_size = 6
+		st.content_margin_top = 12.0 # the scrolling body starts below the rounded corners
+		if not Pal.is_dark():
+			st.shadow_color = Color(0, 0, 0, 0.14)
+			st.shadow_size = 8
+			st.shadow_offset = Vector2(0, -2)
 		_panel.custom_minimum_size = Vector2(0, maxf(260.0, size.y * 0.46))
 		_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_panel.size_flags_vertical = Control.SIZE_FILL
@@ -665,32 +736,8 @@ func _apply_layout() -> void:
 func _render_header() -> void:
 	UI.clear(_head)
 	var acc: Color = _accent()
-	var row1 := UI.hbox(10)
-	var back := UI.link_button("← 목록")
-	back.add_theme_font_size_override("font_size", 15)
-	back.pressed.connect(back_to_library)
-	row1.add_child(back)
-	var lchip := UI.chip(NAME_KO[lang], acc, Pal.soft(lang))
-	lchip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row1.add_child(lchip)
-	var title := UI.label(str(doc.get("title", "")), "H3", false)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.clip_text = true
-	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row1.add_child(title)
-	var size_row: BoxContainer = row1 # phone: the font size switch gets its own line
-	if Platform.is_phone():
-		size_row = UI.hbox(10)
-	size_row.add_child(UI.label("글자 크기", "Small", false))
-	(size_row.get_child(size_row.get_child_count() - 1) as Control).size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	size_row.add_child(UI.segmented([["s", "작게"], ["m", "보통"], ["l", "크게"]], _font_key(), func(v: String) -> void:
-		Store.set_pref("reading_font", v)
-		_render_header()
-		_render_text()))
-	_head.add_child(row1)
-	if Platform.is_phone():
-		_head.add_child(size_row)
+	if not (bar_hosted and Platform.is_phone()):
+		_add_title_rows()
 
 	if tokens.is_empty():
 		UI.fix_cjk(_head)
@@ -698,7 +745,7 @@ func _render_header() -> void:
 	var c: Dictionary = counts()
 	var row2 := UI.flow(14, 6)
 	row2.add_child(_legend(_new_bg(), Pal.INK, "새 단어 %d" % c["new"], false, "아직 표시하지 않은 보통·어려운 단어 (모르는 단어 후보)"))
-	row2.add_child(_legend(LEARN_BG, LEARN_FG, "복습 중 %d" % c["learning"], true, "복습 목록에 넣은 단어"))
+	row2.add_child(_legend(learn_bg(), learn_fg(), "복습 중 %d" % c["learning"], true, "복습 목록에 넣은 단어"))
 	row2.add_child(_legend(Color(0, 0, 0, 0), Pal.INK, "아는 단어 %d" % c["known"], false, "'아는 단어'로 표시한 단어"))
 	var easy_note := UI.colored("· 쉬운 단어 %d개는 색 없이 보여요" % c["easy"], Pal.MUTED, "Small", false)
 	row2.add_child(easy_note)
@@ -742,6 +789,11 @@ func _render_header() -> void:
 		b2.pressed.connect(func() -> void:
 			_confirm_bulk = "all"
 			_render_header())
+		if phone: # one link per line, the whole width: a long label wraps instead of sticking out at 150% text size
+			row3 = UI.vbox(2)
+			for b in [b1, b2]:
+				b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row3.add_child(b1)
 		row3.add_child(b2)
 	if not phone:
@@ -754,21 +806,48 @@ func _render_header() -> void:
 	UI.fix_cjk(_head)
 
 
+## Back link, language chip, title and the font size switch. The phone app bar replaces them when `bar_hosted`.
+func _add_title_rows() -> void:
+	var row1 := UI.hbox(10)
+	var back := UI.link_button("← 목록")
+	back.add_theme_font_size_override("font_size", UI.fs(15))
+	back.pressed.connect(back_to_library)
+	row1.add_child(back)
+	var lchip := UI.chip_kind(NAME_KO[lang], "lang_ja" if lang == "ja" else "lang_en")
+	lchip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row1.add_child(lchip)
+	var title := UI.label(str(doc.get("title", "")), "H3", false)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.clip_text = true
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row1.add_child(title)
+	var size_row: BoxContainer = row1 # phone: the font size switch gets its own line
+	if Platform.is_phone():
+		size_row = UI.hbox(10)
+	size_row.add_child(UI.label("글자 크기", "Small", false))
+	(size_row.get_child(size_row.get_child_count() - 1) as Control).size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	size_row.add_child(UI.segmented([["s", "작게"], ["m", "보통"], ["l", "크게"]], _font_key(), func(v: String) -> void: _set_reading_font(v)))
+	_head.add_child(row1)
+	if Platform.is_phone():
+		_head.add_child(size_row)
+
+
 func _legend(bg: Color, fg: Color, text: String, underline: bool, tip: String) -> Control:
 	var h := UI.hbox(6)
 	h.tooltip_text = tip
 	var sw := PanelContainer.new()
-	var st := UI.style(bg, Pal.LINE if bg.a == 0.0 else Color(0, 0, 0, 0), 1 if bg.a == 0.0 else 0, 4, 0, 0)
+	var st := UI.style(bg, Pal.LINE_STRONG if bg.a == 0.0 else Color(0, 0, 0, 0), 1 if bg.a == 0.0 else 0, 4, 0, 0)
 	if underline:
-		st.border_color = LEARN_FG
+		st.border_color = learn_fg()
 		st.border_width_bottom = 2
 	sw.add_theme_stylebox_override("panel", st)
-	sw.custom_minimum_size = Vector2(26, 18)
+	sw.custom_minimum_size = Vector2(26, 18) # a swatch of the text style, not a control (the label next to it names the state)
 	sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ab := Label.new()
 	ab.text = "Ab" if lang == "en" else "語"
-	ab.add_theme_font_size_override("font_size", 12)
+	ab.add_theme_font_size_override("font_size", UI.fs(12))
 	ab.add_theme_color_override("font_color", fg)
 	ab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ab.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -822,12 +901,13 @@ func build_bbcode() -> String:
 	var acc: Color = _accent()
 	var new_bg: String = _hex(_new_bg())
 	var sel_bg: String = _hex(acc)
-	var learn_bg: String = _hex(LEARN_BG)
-	var learn_fg: String = _hex(LEARN_FG)
+	var learn_bg_hex: String = _hex(learn_bg())
+	var learn_fg_hex: String = _hex(learn_fg())
+	var on_acc: String = _hex(Pal.ON_ACCENT)
 	# Japanese has no spaces: two tinted words in a row alternate between two shades so
 	# they do not melt into one block (朝 + ごはん).
-	var new_bg2: String = _hex(acc.lerp(Color.WHITE, 0.7))
-	var learn_bg2: String = _hex(LEARN_BG.darkened(0.08))
+	var new_bg2: String = _hex(Pal.soft(lang).lerp(acc, 0.20))
+	var learn_bg2_hex: String = _hex(learn_bg().lerp(Pal.WARN, 0.16))
 	var parts := PackedStringArray()
 	var prev_tint: String = "" # tint of the directly preceding token ("" if none)
 	for i in tokens.size():
@@ -841,7 +921,7 @@ func build_bbcode() -> String:
 		var inner: String = t
 		var tint: String = ""
 		if i == selected:
-			inner = "[bgcolor=%s][color=#ffffff]%s[/color][/bgcolor]" % [sel_bg, t]
+			inner = "[bgcolor=%s][color=%s]%s[/color][/bgcolor]" % [sel_bg, on_acc, t]
 			tint = sel_bg
 		else:
 			match word_status(key):
@@ -849,8 +929,8 @@ func build_bbcode() -> String:
 					tint = new_bg2 if prev_tint == new_bg else new_bg
 					inner = "[bgcolor=%s]%s[/bgcolor]" % [tint, t]
 				"learning":
-					tint = learn_bg2 if prev_tint == learn_bg else learn_bg
-					inner = "[bgcolor=%s][color=%s][u]%s[/u][/color][/bgcolor]" % [tint, learn_fg, t]
+					tint = learn_bg2_hex if prev_tint == learn_bg_hex else learn_bg_hex
+					inner = "[bgcolor=%s][color=%s][u]%s[/u][/color][/bgcolor]" % [tint, learn_fg_hex, t]
 		prev_tint = tint
 		parts.append("[url=%d]%s[/url]" % [i, inner])
 	return "".join(parts)
@@ -863,17 +943,12 @@ func _render_text() -> void:
 		var box := UI.card("Card", 10)
 		box.body.add_child(UI.label("글을 분석하는 중…", "Strong"))
 		box.body.add_child(UI.label("단어마다 원형과 난이도를 찾고 있어요. 긴 글은 몇 초 걸릴 수 있어요.", "Muted"))
-		var bar := ProgressBar.new()
-		bar.indeterminate = true
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(0, 6)
-		bar.add_theme_stylebox_override("fill", UI.style(_accent(), Color(0, 0, 0, 0), 0, 99, 0, 0))
-		box.body.add_child(bar)
+		box.body.add_child(UI.progress_indeterminate(_accent()))
 		_text_state.add_child(box)
 	elif analyze_error != "" and tokens.is_empty():
-		var p := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, 10, 16, 14)
+		var p := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, Ds.R_S, 16, 14)
 		var v := UI.vbox(10)
-		v.add_child(UI.colored(analyze_error, Pal.BAD))
+		v.add_child(UI.colored(analyze_error, Pal.BAD_ON))
 		var row := UI.hbox(8)
 		var retry := UI.button("다시 시도", "primary", _accent())
 		retry.pressed.connect(_run_analyze)
@@ -893,7 +968,7 @@ func _render_text() -> void:
 	if tokens.is_empty():
 		_rtl.text = ""
 		return
-	var fs: int = int(FONT_SIZES[_font_key()])
+	var fs: int = UI.fs(int(FONT_SIZES[_font_key()])) # the reading size choice, times the app-wide text size setting
 	_rtl.add_theme_font_size_override("normal_font_size", fs)
 	_rtl.add_theme_font_size_override("bold_font_size", fs)
 	if lang == "ja":
@@ -991,7 +1066,7 @@ func _render_panel_empty() -> void:
 		return
 	_panel_body.add_child(UI.label("글에서 단어를 눌러 보세요", "H3"))
 	_panel_body.add_child(UI.label("뜻·발음·예문이 여기에 나와요. 모르는 단어는 '복습에 추가', 이미 아는 단어는 '아는 단어'로 표시하면 다음 글부터 색이 바뀌어요.", "Muted"))
-	var tip := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, 10, 14, 10)
+	var tip := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_S, 14, 10)
 	tip.add_child(UI.label("색이 칠해진 단어는 자주 쓰이지 않는 단어(모르는 단어 후보)예요. 색이 없는 쉬운 단어도 눌러서 뜻을 볼 수 있어요.", "Small"))
 	_panel_body.add_child(tip)
 
@@ -1005,7 +1080,7 @@ func _render_panel_word() -> void:
 
 	var top := UI.hbox(8)
 	var lem := UI.label(str(w["lemma"]), "", true)
-	lem.add_theme_font_size_override("font_size", 28)
+	lem.add_theme_font_size_override("font_size", UI.fs(28))
 	lem.add_theme_font_override("font", UI.bold_font())
 	top.add_child(lem)
 	var close := UI.link_button("✕", "닫기")
@@ -1017,13 +1092,18 @@ func _render_panel_word() -> void:
 	if lemma_key(str(w["surface"])) != key:
 		_panel_body.add_child(UI.colored("본문에서는 %s" % str(w["surface"]), Pal.MUTED, "Small"))
 	var chips := UI.flow(6, 6)
-	var st_bg: Color = _new_bg() if st == "new" else (LEARN_BG if st == "learning" else (Pal.OK_SOFT if st == "known" else Pal.SUNK))
-	var st_fg: Color = acc if st == "new" else (LEARN_FG if st == "learning" else (Pal.OK if st == "known" else Pal.MUTED))
-	chips.add_child(UI.chip(STATUS_KO[st], st_fg, st_bg))
+	var st_kind: String = "lang_ja" if lang == "ja" else "lang_en" # "새 단어"
+	if st == "learning":
+		st_kind = "warn"
+	elif st == "known":
+		st_kind = "ok"
+	elif st == "easy":
+		st_kind = "neutral"
+	chips.add_child(UI.chip_kind(STATUS_KO[st], st_kind)) # the state is in the chip's words, not in its colour alone
 	if st != "easy":
-		chips.add_child(UI.chip(LEVEL_KO.get(str(w["level"]), "단어"), Pal.MUTED, Pal.SUNK))
+		chips.add_child(UI.chip_kind(LEVEL_KO.get(str(w["level"]), "단어"), "neutral"))
 	if str(gl.get("pos", "")) != "":
-		chips.add_child(UI.chip(str(gl["pos"]), Pal.MUTED, Pal.SUNK))
+		chips.add_child(UI.chip_kind(str(gl["pos"]), "neutral"))
 	_panel_body.add_child(chips)
 	var sp := UI.flow(2, 0)
 	var ipa: String = str(gl.get("ipa", ""))
@@ -1031,7 +1111,7 @@ func _render_panel_word() -> void:
 		ipa = "/%s/" % ipa
 	if ipa != "" and lang != "ja": # Japanese: the reading goes under the buttons in the ReadingLine style (below)
 		var il := UI.label(ipa, "", false)
-		il.add_theme_font_size_override("font_size", 17)
+		il.add_theme_font_size_override("font_size", UI.fs(17))
 		il.add_theme_color_override("font_color", Pal.MUTED)
 		il.add_theme_font_override("font", UI.ja_font() if lang == "ja" else Ipa.font())
 		il.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -1053,12 +1133,12 @@ func _render_panel_word() -> void:
 		ReadingLine.add(_panel_body, ipa, lang, true, 0.0, str(gl.get("pron", ""))) # hiragana + Hangul sound spelling
 
 	# meaning
-	var mean := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, 10, 14, 12)
+	var mean := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, Ds.R_S, 14, 12)
 	var mv := UI.vbox(4)
 	mean.add_child(mv)
 	if str(gl.get("ko", "")) != "":
 		var ko := UI.label(str(gl["ko"]), "")
-		ko.add_theme_font_size_override("font_size", 20)
+		ko.add_theme_font_size_override("font_size", UI.fs(20))
 		ko.add_theme_font_override("font", UI.bold_font())
 		mv.add_child(ko)
 		if str(gl.get("note", "")) != "":
@@ -1076,8 +1156,9 @@ func _render_panel_word() -> void:
 	# actions (side by side in the bottom sheet so they stay above the fold)
 	var act: BoxContainer = UI.hbox(8) if _narrow else UI.vbox(6)
 	if st == "learning":
-		var inrv := UI.button("✓ 복습 목록에 있어요", "soft", LEARN_FG, 44)
+		var inrv := UI.button("✓ 복습 목록에 있어요", "soft", Pal.WARN, 44)
 		inrv.disabled = true
+		inrv.add_theme_color_override("font_disabled_color", learn_fg()) # a done state, not an unavailable one: keep the text readable
 		act.add_child(inrv)
 	else:
 		var add := UI.button("복습에 추가", "primary", acc, 44)
@@ -1127,7 +1208,7 @@ func _sentence_bbcode(s: int) -> String:
 			started = true
 		t = UI.bb_escape(t.replace("\n", " "))
 		if i == selected:
-			parts.append("[b][color=%s]%s[/color][/b]" % [_hex(_accent()), t])
+			parts.append("[b][color=%s]%s[/color][/b]" % [_hex(Pal.on(lang)), t])
 		else:
 			parts.append(t)
 	return "".join(parts).strip_edges()
@@ -1147,7 +1228,7 @@ func _examples_box(w: Dictionary) -> Control:
 		return box
 	var data: Dictionary = examples[ek]
 	if data.has("error"):
-		box.add_child(UI.colored(str(data["error"]), Pal.BAD, "Small"))
+		box.add_child(UI.colored(str(data["error"]), Pal.BAD_ON, "Small"))
 		var retry := UI.link_button("다시 찾기")
 		retry.pressed.connect(func() -> void:
 			examples.erase(ek)
@@ -1191,14 +1272,14 @@ func _examples_box(w: Dictionary) -> Control:
 	if attr == "":
 		attr = "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
 	var al := UI.colored(attr, Pal.MUTED, "Small")
-	al.add_theme_font_size_override("font_size", 12)
+	al.add_theme_font_size_override("font_size", UI.fs(12))
 	box.add_child(al)
 	return box
 
 
 ## Escapes `text` for BBCode and bolds the forms of the selected word in it.
 func _highlight(text: String, w: Dictionary) -> String:
-	var acc: String = _hex(_accent())
+	var acc: String = _hex(Pal.on(lang))
 	var rx := RegEx.new()
 	if lang == "en":
 		var stem: String = str(w["lemma"])

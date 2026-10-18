@@ -24,10 +24,11 @@ var lang: String = "en"
 var _scroll: PageScroll
 var _grid: GridContainer
 var _built: bool = false
+var _header: Control = null ## big title block (see header_block)
 
 
 func _ready() -> void:
-	_scroll = PageScroll.new(960.0)
+	_scroll = PageScroll.new(880.0)
 	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_scroll)
 	lang = Store.lang()
@@ -44,6 +45,16 @@ func refresh() -> void:
 
 func on_hide() -> void:
 	StudyLog.flush()
+
+
+# ---------------------------------------------------------------- app bar contract (AppView)
+
+func scroll_host() -> ScrollContainer:
+	return _scroll
+
+
+func header_block() -> Control:
+	return _header if _header != null and is_instance_valid(_header) else null
 
 
 func _notification(what: int) -> void:
@@ -70,10 +81,9 @@ func _build() -> void:
 	var c: VBoxContainer = _scroll.content
 	UI.clear(c)
 	_grid = null
+	_header = PageHeader.build("기록")
+	c.add_child(_header)
 	var top := UI.flow(12, 8)
-	var title := UI.label("기록", "H2", false)
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(title)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void: set_lang(v)))
 	c.add_child(top)
 
@@ -84,8 +94,8 @@ func _build() -> void:
 	c.add_child(_week_card())
 	_grid = GridContainer.new()
 	_grid.columns = _columns()
-	_grid.add_theme_constant_override("h_separation", 16)
-	_grid.add_theme_constant_override("v_separation", 16)
+	_grid.add_theme_constant_override("h_separation", Ds.S4)
+	_grid.add_theme_constant_override("v_separation", Ds.S4)
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.add_child(_lesson_card())
 	_grid.add_child(_score_card())
@@ -98,6 +108,7 @@ func _build() -> void:
 	_touch(c)
 	UI.fix_cjk(c)
 	_built = true
+	bar_changed.emit() # the big title block was rebuilt
 
 
 # ---------------------------------------------------------------- cards
@@ -132,6 +143,7 @@ func _week_card() -> Control:
 		_empty(card)
 	else:
 		var goal: int = StudyLog.goal_minutes()
+		card.body.add_child(UI.label("%d분" % (total / 60), "Big", false))
 		var ch := MiniChart.bars(vals, WD_KO, acc, n_days - 1, float(goal) if goal > 0 else -1.0)
 		card.body.add_child(ch)
 		card.body.add_child(UI.label("이번 주 합계 %d분" % (total / 60), "Small"))
@@ -159,6 +171,7 @@ func _lesson_card() -> Control:
 	if not any:
 		_empty(card)
 	else:
+		card.body.add_child(UI.label("%d%%" % roundi(100.0 * float(ok_sum) / float(n_sum)), "Big", false))
 		var ch := MiniChart.line(vals, lbls, Pal.OK, 100.0)
 		ch.value_format = "%d%%"
 		card.body.add_child(ch)
@@ -187,6 +200,7 @@ func _score_card() -> Control:
 	if not any:
 		_empty(card)
 	else:
+		card.body.add_child(UI.label("%d점" % roundi(float(sum) / float(cnt)), "Big", false))
 		var ch := MiniChart.line(vals, lbls, Pal.accent(lang), 100.0)
 		card.body.add_child(ch)
 		card.body.add_child(UI.label("기간 평균 %d점 (%d번 채점)" % [roundi(float(sum) / float(cnt)), cnt], "Small"))
@@ -207,7 +221,7 @@ func _weak_card() -> Control:
 			if int(w["heard"][hk]) > best_c:
 				best_c = int(w["heard"][hk])
 				heard_txt = " · %s로 들림" % str(hk)
-		chips.add_child(UI.chip("/%s/ %d%%%s" % [str(w["p"]), roundi(float(w["rate"]) * 100.0), heard_txt], Pal.BAD, Pal.BAD_SOFT))
+		chips.add_child(UI.chip_kind("/%s/ %d%%%s" % [str(w["p"]), roundi(float(w["rate"]) * 100.0), heard_txt], "bad"))
 	card.body.add_child(chips)
 	var first_p: String = str(weak[0]["p"])
 	var b := UI.button("집중 연습", "soft", Pal.accent("en"), 48.0)
@@ -230,7 +244,7 @@ func _mission_card() -> Control:
 			continue
 		played += 1
 		var stars: int = clampi(int(best.get("stars", 0)), 0, 3)
-		chips.add_child(UI.chip("%s %s%s" % [MISSION_NAME.get(id, str(id)), "★".repeat(stars), "☆".repeat(3 - stars)], Pal.WARN, Pal.WARN_SOFT, "%d번 도전" % int(best.get("plays", 0))))
+		chips.add_child(UI.chip_kind("%s %s%s" % [MISSION_NAME.get(id, str(id)), "★".repeat(stars), "☆".repeat(3 - stars)], "warn", "%d번 도전" % int(best.get("plays", 0))))
 	if played == 0:
 		_empty(card, "아직 한 미션이 없어요")
 	else:
@@ -239,7 +253,6 @@ func _mission_card() -> Control:
 
 
 # ---------------------------------------------------------------- helpers
-
 func _date_label(iso: String) -> String:
 	var p: PackedStringArray = iso.split("-")
 	if p.size() != 3:
@@ -247,11 +260,11 @@ func _date_label(iso: String) -> String:
 	return "%d/%d" % [int(p[1]), int(p[2])]
 
 
-## Every button on this page is at least 44 px tall (touch target) unless it has meta "touch_exempt".
+## Every button on this page is at least 44 px tall (48 on the phone, the touch target) unless it has meta "touch_exempt".
 func _touch(node: Node) -> void:
 	for ch in node.get_children():
 		if ch is Button and not bool((ch as Button).get_meta("touch_exempt", false)):
-			(ch as Button).custom_minimum_size.y = maxf((ch as Button).custom_minimum_size.y, TOUCH_MIN)
+			(ch as Button).custom_minimum_size.y = maxf((ch as Button).custom_minimum_size.y, maxf(TOUCH_MIN, Ds.touch_min()))
 		_touch(ch)
 
 

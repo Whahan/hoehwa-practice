@@ -83,6 +83,7 @@ var _input: LineEdit
 var _send: Button
 var _mic: RecorderWidget
 var _status_label: Label
+var _opts: BoxContainer ## the two option switches: stacked next to the mic on the narrow layout, side by side on the wide one
 
 
 # ---------------------------------------------------------------- 계약 (8.3)
@@ -143,7 +144,7 @@ func _ready() -> void:
 	_title = UI.label("롤플레이 미션", "Strong", true)
 	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hrow.add_child(_title)
-	_end_btn = UI.button("끝내기", "outline", Pal.EN, 44)
+	_end_btn = UI.button("끝내기", "soft", Pal.EN, 44)
 	_end_btn.pressed.connect(_on_end_pressed)
 	hrow.add_child(_end_btn)
 	_head.content.add_child(hrow)
@@ -194,7 +195,9 @@ func _build_chat_root() -> void:
 
 	# 폰: 목표 패널은 접힌 한 줄
 	_goal_bar = PanelContainer.new()
-	_goal_bar.add_theme_stylebox_override("panel", UI.style(Pal.SURFACE, Pal.LINE, 0, 0, 12, 4))
+	var gst := UI.style(Pal.SURFACE, Pal.LINE, 0, 0, Ds.S3, Ds.S1)
+	gst.border_width_bottom = 1
+	_goal_bar.add_theme_stylebox_override("panel", gst)
 	_goal_bar_box = UI.vbox(6)
 	_goal_bar.add_child(_goal_bar_box)
 	_chat_root.add_child(_goal_bar)
@@ -216,7 +219,7 @@ func _build_chat_root() -> void:
 	_side_wrap.add_theme_constant_override("margin_top", 12)
 	_side_wrap.add_theme_constant_override("margin_bottom", 12)
 	var side_panel := PanelContainer.new()
-	side_panel.add_theme_stylebox_override("panel", UI.style(Pal.SURFACE, Pal.LINE, 1, 12, 12, 12))
+	side_panel.add_theme_stylebox_override("panel", UI.style(Pal.SURFACE, Pal.LINE, 1, Ds.R_CARD, Ds.S4, Ds.S4))
 	var side_scroll := ScrollContainer.new()
 	side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_side_box = UI.vbox(8)
@@ -228,7 +231,9 @@ func _build_chat_root() -> void:
 
 	# 아래 고정 바
 	var bottom := PanelContainer.new()
-	bottom.add_theme_stylebox_override("panel", UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0))
+	var bst := UI.style(Pal.SURFACE, Pal.LINE, 0, 0, 0, 0)
+	bst.border_width_top = 1 # same fixed bottom bar as SpeakDrill.build_shell: SURFACE + a hairline on top
+	bottom.add_theme_stylebox_override("panel", bst)
 	_chat_root.add_child(bottom)
 	var bcol := ColumnBox.new()
 	bcol.max_width = 820.0
@@ -256,15 +261,20 @@ func _build_chat_root() -> void:
 	_mic.idle_text = "말하기"
 	_mic.recorded.connect(_on_recorded)
 	_mic_row.add_child(_mic)
+	# right of the mic (narrow) / alone in the row (wide): the status line and the two option switches
+	var side := UI.vbox(0)
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status_label = UI.label("", "Small", true)
-	_mic_row.add_child(_status_label)
-	b.add_child(_mic_row)
-	var tg := UI.flow(14, 0)
+	_status_label.visible = false
+	side.add_child(_status_label)
+	_opts = BoxContainer.new()
+	_opts.vertical = true
+	_opts.add_theme_constant_override("separation", Ds.S2)
 	for spec in [["AI 말 자동 읽기", "auto_speak"], ["말하면 바로 보내기", "auto_send"]]:
-		var t := UI.pref_toggle(spec[0], spec[1])
-		t.custom_minimum_size.y = 44
-		tg.add_child(t)
-	b.add_child(tg)
+		_opts.add_child(UI.pref_switch(spec[0], spec[1]))
+	side.add_child(_opts)
+	_mic_row.add_child(side)
+	b.add_child(_mic_row)
 
 
 # ---------------------------------------------------------------- 요청
@@ -301,6 +311,11 @@ func _llm_down() -> bool:
 	if llm_override >= 0:
 		return llm_override == 1
 	return Backend.llm_missing()
+
+
+## Height of a pressable thing: 44 on the PC, at least 48 dp on the phone.
+func _tap_h() -> float:
+	return maxf(44.0, Ds.touch_min())
 
 
 func _is_phone() -> bool:
@@ -504,11 +519,11 @@ func _render_list() -> void:
 	if status == "loading":
 		c.add_child(UI.label("미션을 불러오는 중…", "Muted"))
 	if list_note != "":
-		var p := UI.tinted_panel(Pal.BAD_SOFT if list_error else Pal.SUNK, Color(0, 0, 0, 0), 0, 10, 14, 10)
+		var p := UI.tinted_panel(Pal.BAD_SOFT if list_error else Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_S, 14, 10)
 		var v := UI.vbox(8)
-		v.add_child(UI.colored(list_note, Pal.BAD if list_error else Pal.INK))
+		v.add_child(UI.colored(("✕ " if list_error else "") + list_note, Pal.BAD_ON if list_error else Pal.INK))
 		if list_error:
-			var retry := UI.button("다시 시도", "outline", Pal.BAD, 44)
+			var retry := UI.button("다시 시도", "soft", Pal.BAD, 44)
 			retry.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			retry.pressed.connect(func() -> void: _load_list())
 			v.add_child(retry)
@@ -527,7 +542,7 @@ func _mission_card(m: Dictionary, acc: Color) -> Control:
 	var top := UI.hbox(8)
 	var title := UI.label(str(m["title_ko"]), "Strong")
 	top.add_child(title)
-	top.add_child(UI.colored(MissionLogic.star_text(st), acc if st > 0 else Pal.MUTED, "", false))
+	top.add_child(UI.colored(MissionLogic.star_text(st), Pal.on(lang) if st > 0 else Pal.MUTED, "", false))
 	card.body.add_child(top)
 	card.body.add_child(UI.label(str(m["situation_ko"]), "Muted"))
 	var meta := "%d단계 · 목표 %d개" % [int(m["min_stage"]), (m["goals"] as Array).size()]
@@ -569,14 +584,14 @@ func _render_brief() -> void:
 	card.body.add_child(UI.label("목표 %d개" % _goals().size(), "Eyebrow", false))
 	for g in _goals():
 		card.body.add_child(UI.label("• " + str((g as Dictionary)["label_ko"])))
-	var hb := UI.button("힌트 숨기기" if hints_open else "힌트 보기", "outline", acc, 44)
+	var hb := UI.button("힌트 숨기기" if hints_open else "힌트 보기", "soft", acc, 44)
 	hb.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	hb.pressed.connect(func() -> void:
 		hints_open = not hints_open
 		_render_brief())
 	card.body.add_child(hb)
 	if hints_open:
-		var hp := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, 10, 12, 10)
+		var hp := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_S, 12, 10)
 		var hv := UI.vbox(4)
 		for g in _goals():
 			var gd: Dictionary = g
@@ -586,13 +601,13 @@ func _render_brief() -> void:
 	card.body.add_child(UI.label("말하는 횟수는 %d번까지예요. 상대의 첫 마디는 바로 나와요." % int(mission["max_turns"]), "Small"))
 	var down: bool = _llm_down()
 	if down:
-		var np := UI.tinted_panel(Pal.WARN_SOFT, Color(0, 0, 0, 0), 0, 10, 12, 10)
-		np.add_child(UI.colored("지금은 AI를 쓸 수 없어요. 대본 모드로 연습할 수 있어요. 상대 대사가 미리 정해져 있고 AI 호출이 없어요.", Pal.WARN))
+		var np := UI.tinted_panel(Pal.WARN_SOFT, Color(0, 0, 0, 0), 0, Ds.R_S, 12, 10)
+		np.add_child(UI.colored("지금은 AI를 쓸 수 없어요. 대본 모드로 연습할 수 있어요. 상대 대사가 미리 정해져 있고 AI 호출이 없어요.", Pal.WARN_ON))
 		card.body.add_child(np)
 	var has_script: bool = not _script().is_empty()
-	var go := UI.button("미션 시작", "primary", acc, 52)
+	var go := UI.button("미션 시작", "soft" if down else "primary", acc, 52)
 	go.pressed.connect(func() -> void: _start("ai"))
-	var sc_btn := UI.button("대본 모드로 연습", "primary" if down else "outline", acc, 52)
+	var sc_btn := UI.button("대본 모드로 연습", "primary" if down else "soft", acc, 52)
 	sc_btn.disabled = not has_script
 	sc_btn.pressed.connect(func() -> void: _start("script"))
 	if down:
@@ -847,13 +862,27 @@ func _update_composer() -> void:
 	var talk: bool = status == "talk"
 	_input.editable = talk and not stt_busy
 	_send.disabled = not talk or stt_busy
+	# The record button is disabled for three different reasons; "채점 중…" (its default) is only true for scoring, which
+	# this screen never does: waiting for the AI / the rule check, or turning the recording into text.
+	_mic.busy_text = busy_text_for_mic()
 	_mic.set_enabled(talk and not stt_busy)
 	if talk:
 		_input.placeholder_text = "영어로 말하거나 입력하기"
 	else:
 		_input.placeholder_text = "답을 기다리는 중…"
 	_status_label.text = "말한 내용을 글자로 바꾸는 중…" if stt_busy else ""
+	_status_label.visible = _status_label.text != ""
 	_end_btn.disabled = status != "talk" or _me_count() == 0
+
+
+## Text of the disabled record button now (kept short: the small button is 96 px wide).
+## waiting for the answer -> "대기 중…" (script mode: "확인 중…"); speech to text, or the file closing right after a stop -> "인식 중…".
+func busy_text_for_mic() -> String:
+	if stt_busy or status == "talk":
+		return "인식 중…"
+	if status == "wait" and mode == "script":
+		return "확인 중…"
+	return "대기 중…"
 
 
 func _apply_layout(force: bool) -> void:
@@ -875,7 +904,9 @@ func _apply_layout(force: bool) -> void:
 		else:
 			host.move_child(_mic, 0)
 	_mic_row.visible = true
+	_opts.vertical = not wide
 	_mic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_mic.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	if status == "talk" or status == "wait":
 		_render_msgs()
 		_render_goals()
@@ -904,8 +935,8 @@ func _render_msgs() -> void:
 			"ai":
 				c.add_child(_ai_row(m, i, max_w))
 			"model":
-				var p := UI.tinted_panel(Pal.OK_SOFT, Color(0, 0, 0, 0), 0, 10, 12, 8)
-				p.add_child(UI.colored(str(m["text"]), Pal.OK))
+				var p := UI.tinted_panel(Pal.OK_SOFT, Color(0, 0, 0, 0), 0, Ds.R_S, 12, 8)
+				p.add_child(UI.colored(str(m["text"]), Pal.OK_ON))
 				c.add_child(p)
 			_:
 				c.add_child(UI.label(str(m.get("text", "")), "Muted"))
@@ -914,16 +945,16 @@ func _render_msgs() -> void:
 		row.add_child(UI.label("%s 입력 중…" % _who() if mode == "ai" else "확인하는 중…", "Muted", false))
 		if mode == "ai":
 			var cancel := UI.link_button("취소")
-			cancel.custom_minimum_size.y = 44
+			cancel.custom_minimum_size.y = _tap_h()
 			cancel.pressed.connect(_cancel_chat)
 			row.add_child(cancel)
 		c.add_child(row)
 	if chat_failed and err != "":
-		var p2 := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, 10, 14, 10)
+		var p2 := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, Ds.R_S, 14, 10)
 		var v := UI.vbox(8)
-		v.add_child(UI.colored(err, Pal.BAD))
+		v.add_child(UI.colored("✕ " + err, Pal.BAD_ON))
 		var acts := UI.flow(8, 8)
-		var retry := UI.button("다시 보내기", "outline", Pal.BAD, 44)
+		var retry := UI.button("다시 보내기", "soft", Pal.BAD, 44)
 		retry.pressed.connect(_resend)
 		acts.add_child(retry)
 		var has_script: bool = not _script().is_empty()
@@ -940,16 +971,17 @@ func _render_msgs() -> void:
 
 func _bubble(text: String, bg: Color, border: Color, fg: Color, max_w: float, rl: int, rr: int) -> PanelContainer:
 	var p := PanelContainer.new()
-	var st := UI.style(bg, border, 1 if border.a > 0.0 else 0, 16, 14, 10)
+	var st := UI.style(bg, border, 1 if border.a > 0.0 else 0, Ds.R_BTN, 14, 10)
 	st.corner_radius_bottom_left = rl
 	st.corner_radius_bottom_right = rr
 	p.add_theme_stylebox_override("panel", st)
 	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var l := UI.label(text, "")
-	l.add_theme_font_size_override("font_size", 17)
+	var fsz: int = Ds.fs(17)
+	l.add_theme_font_size_override("font_size", fsz)
 	l.add_theme_color_override("font_color", fg)
 	l.size_flags_horizontal = Control.SIZE_FILL
-	l.custom_minimum_size = Vector2(minf(UI.text_width(text, 17) + 6.0, max_w), 0)
+	l.custom_minimum_size = Vector2(minf(UI.text_width(text, fsz) + 6.0, max_w), 0)
 	p.add_child(l)
 	return p
 
@@ -959,24 +991,24 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 	var col := UI.vbox(4)
 	col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	col.add_child(UI.label(_who(), "Small", false))
-	col.add_child(_bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, 16))
+	col.add_child(_bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, Ds.R_BTN))
 	var ko: String = str(m.get("ko", ""))
 	var always_ko: bool = Store.pref_bool("show_ko")
 	var show_ko: bool = ko != "" and (always_ko or bool(ko_open.get(i, false)))
 	if show_ko:
 		var kl := UI.label(ko, "Muted")
-		kl.custom_minimum_size = Vector2(minf(UI.text_width(ko, 15) + 6.0, max_w), 0)
+		kl.custom_minimum_size = Vector2(minf(UI.text_width(ko, Ds.fs(Ds.type_size("Muted"))) + 6.0, max_w), 0)
 		kl.size_flags_horizontal = Control.SIZE_FILL
 		col.add_child(kl)
 	var acts := UI.hbox(2)
 	var listen := UI.link_button("▶ 듣기")
-	listen.custom_minimum_size.y = 44
+	listen.custom_minimum_size.y = _tap_h()
 	var said: String = str(m["reply"])
 	listen.pressed.connect(func() -> void: Tts.speak(said, lang))
 	acts.add_child(listen)
 	if ko != "" and not always_ko:
 		var tb := UI.link_button("번역 숨기기" if show_ko else "번역")
-		tb.custom_minimum_size.y = 44
+		tb.custom_minimum_size.y = _tap_h()
 		tb.pressed.connect(func() -> void:
 			ko_open[i] = not bool(ko_open.get(i, false))
 			_render_msgs())
@@ -989,7 +1021,7 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 func _me_row(m: Dictionary, max_w: float) -> Control:
 	var row := UI.hbox(0)
 	row.add_child(UI.spacer())
-	var bub := _bubble(str(m["text"]), Pal.accent(lang), Color(0, 0, 0, 0), Color.WHITE, max_w, 16, 4)
+	var bub := _bubble(str(m["text"]), Pal.accent(lang), Color(0, 0, 0, 0), Pal.ON_ACCENT, max_w, Ds.R_BTN, 4)
 	bub.size_flags_horizontal = Control.SIZE_SHRINK_END
 	row.add_child(bub)
 	return row
@@ -1000,11 +1032,11 @@ func _render_aux() -> void:
 	UI.clear(_aux)
 	if not leave_confirm or (status != "talk" and status != "wait"):
 		return
-	var p := UI.tinted_panel(Pal.WARN_SOFT, Color(0, 0, 0, 0), 0, 10, 12, 8)
+	var p := UI.tinted_panel(Pal.WARN_SOFT, Color(0, 0, 0, 0), 0, Ds.R_S, 12, 8)
 	var v := UI.vbox(6)
-	v.add_child(UI.colored("대화를 그만하고 목록으로 갈까요? 지금까지의 기록은 저장되지 않아요.", Pal.WARN))
+	v.add_child(UI.colored("대화를 그만하고 목록으로 갈까요? 지금까지의 기록은 저장되지 않아요.", Pal.WARN_ON))
 	var acts := UI.flow(8, 8)
-	var stop := UI.button("그만두기", "outline", Pal.BAD, 44)
+	var stop := UI.button("그만두기", "soft", Pal.BAD, 44)
 	stop.pressed.connect(_abandon)
 	var keep := UI.button("계속하기", "soft", Pal.EN, 44)
 	keep.pressed.connect(func() -> void:
@@ -1050,7 +1082,7 @@ func _fill_goals(box: VBoxContainer, compact: bool) -> void:
 		box.add_child(UI.label("목표  %d / %d" % [n, total], "Strong", false))
 	for g in _goals():
 		box.add_child(_goal_row(g))
-	var hb := UI.button("힌트 숨기기" if hints_open else "힌트 보기", "outline", Pal.EN, 44)
+	var hb := UI.button("힌트 숨기기" if hints_open else "힌트 보기", "soft", Pal.EN, 44)
 	hb.pressed.connect(func() -> void:
 		hints_open = not hints_open
 		_render_goals())
@@ -1074,7 +1106,7 @@ func _goal_row(g: Dictionary) -> Button:
 		mark = "✓"
 		tag = {"rule": "  (자동)", "manual": "  (직접)", "ai": "  (AI 판정)"}.get(by, "")
 	var b := UI.option_row("%s  %s%s" % [mark, g["label_ko"], tag])
-	b.custom_minimum_size.y = 44
+	b.custom_minimum_size.y = _tap_h()
 	UI.paint_option(b, "right" if by != "" else "idle", Pal.EN)
 	b.pressed.connect(func() -> void: _toggle_goal(id))
 	return b
@@ -1280,8 +1312,8 @@ func _render_result() -> void:
 	var cur: Dictionary = _calc_award()
 	var card := UI.card("BigCard", 12)
 	card.body.add_child(UI.label("미션 결과 · %s" % str(mission.get("title_ko", "")), "Eyebrow", false))
-	var stars_l := UI.colored(MissionLogic.star_text(int(cur["stars"])), acc, "Big", false)
-	stars_l.add_theme_font_size_override("font_size", 44)
+	var stars_l := UI.colored(MissionLogic.star_text(int(cur["stars"])), Pal.on(lang), "Big", false)
+	stars_l.add_theme_font_size_override("font_size", Ds.fs(44))
 	card.body.add_child(stars_l)
 	var xp_text := "목표 %d / %d 달성" % [int(cur["done"]), _goals().size()]
 	if not _awarded.get("none", false) and not _awarded.is_empty():
@@ -1334,7 +1366,7 @@ func _render_result() -> void:
 	again.pressed.connect(func() -> void: _start("script" if mode == "script" else "ai"))
 	var to_list := UI.button("미션 목록", "soft", acc, 50)
 	to_list.pressed.connect(_abandon)
-	var to_hub := UI.button("연습으로", "outline", acc, 50)
+	var to_hub := UI.button("연습으로", "flat", acc, 50)
 	to_hub.pressed.connect(func() -> void: closed.emit())
 	row.add_child(again)
 	row.add_child(to_list)
@@ -1358,15 +1390,15 @@ func _script_summary_card(cur: Dictionary) -> Control:
 	return sc
 
 
-func _score_tile(value: int, caption: String, acc: Color) -> Control:
-	var p := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, 10, 12, 10)
+func _score_tile(value: int, caption: String, _acc: Color) -> Control:
+	var p := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, Ds.R_S, 12, 10)
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var v := UI.vbox(0)
 	var n := Label.new()
 	n.text = "%d/5" % value
-	n.add_theme_font_size_override("font_size", 24)
+	n.add_theme_font_size_override("font_size", Ds.fs(24))
 	n.add_theme_font_override("font", UI.bold_font())
-	n.add_theme_color_override("font_color", acc)
+	n.add_theme_color_override("font_color", Pal.on(lang)) # text on the SOFT tile: the *_ON twin of the accent
 	v.add_child(n)
 	v.add_child(UI.label(caption, "Small", false))
 	p.add_child(v)
@@ -1386,7 +1418,7 @@ func _add_feedback(c: VBoxContainer, acc: Color) -> void:
 		bar.custom_minimum_size = Vector2(0, 8)
 		bar.add_theme_stylebox_override("fill", UI.style(acc, Color(0, 0, 0, 0), 0, 99, 0, 0))
 		w.body.add_child(bar)
-		var stop := UI.button("그만 기다리기", "outline", acc, 44)
+		var stop := UI.button("그만 기다리기", "soft", acc, 44)
 		stop.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		stop.pressed.connect(_stop_feedback)
 		w.body.add_child(stop)
@@ -1395,10 +1427,10 @@ func _add_feedback(c: VBoxContainer, acc: Color) -> void:
 	if fb_state == "fail":
 		var f := UI.card("BigCard", 10)
 		f.body.add_child(UI.label("피드백", "Eyebrow", false))
-		f.body.add_child(UI.colored("피드백을 불러오지 못했어요. 별점과 목표 결과는 위에 그대로 있어요.", Pal.BAD))
+		f.body.add_child(UI.colored("✕ 피드백을 불러오지 못했어요. 별점과 목표 결과는 위에 그대로 있어요.", Pal.BAD_ON))
 		if fb_error != "":
 			f.body.add_child(UI.label(fb_error, "Small"))
-		var rt := UI.button("다시 시도", "outline", Pal.BAD, 44)
+		var rt := UI.button("다시 시도", "soft", Pal.BAD, 44)
 		rt.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		rt.pressed.connect(func() -> void:
 			_request_feedback()
@@ -1430,17 +1462,18 @@ func _add_feedback(c: VBoxContainer, acc: Color) -> void:
 		cb.body.add_child(UI.label("고쳐 말하기 · 복습 목록에 추가됨", "Eyebrow", false))
 		for cc in corrs:
 			var d: Dictionary = cc
-			var item := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, 10, 12, 10)
+			var item := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, Ds.R_S, 12, 10)
 			var iv := UI.vbox(3)
 			if str(d.get("you", "")) != "":
-				iv.add_child(UI.rich("[s][color=#B83A3A]%s[/color][/s]" % UI.bb_escape(str(d["you"])), 16))
-			iv.add_child(UI.colored(str(d["better"]), Pal.OK, "Strong"))
+				# struck through (shape) and in the error colour; the corrected sentence below starts with a check mark
+				iv.add_child(UI.rich("[s][color=#%s]%s[/color][/s]" % [Pal.BAD_ON.to_html(false), UI.bb_escape(str(d["you"]))], 16))
+			iv.add_child(UI.colored("✓ " + str(d["better"]), Pal.OK_ON, "Strong"))
 			if str(d.get("ko", "")) != "":
 				iv.add_child(UI.label(str(d["ko"]), "Muted"))
 			if str(d.get("why", "")) != "":
 				iv.add_child(UI.label(str(d["why"]), "Small"))
 			var lb := UI.link_button("▶ 듣기")
-			lb.custom_minimum_size.y = 44
+			lb.custom_minimum_size.y = _tap_h()
 			var target: String = str(d["better"])
 			lb.pressed.connect(func() -> void: Tts.speak(target, lang))
 			iv.add_child(lb)
@@ -1457,7 +1490,7 @@ func _add_feedback(c: VBoxContainer, acc: Color) -> void:
 		pb.body.add_child(UI.label("이 상황에서 쓸 만한 표현", "Eyebrow", false))
 		for pp in phrases:
 			var d2: Dictionary = pp
-			var item2 := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, 10, 12, 10)
+			var item2 := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, Ds.R_S, 12, 10)
 			var iv2 := UI.vbox(3)
 			iv2.add_child(UI.label(str(d2["phrase"]), "Strong"))
 			if str(d2.get("ko", "")) != "":

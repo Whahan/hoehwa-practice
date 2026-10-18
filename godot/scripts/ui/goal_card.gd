@@ -54,11 +54,11 @@ func _build() -> void:
 	var tk: int = int(info["tokens"])
 
 	if is_compact:
-		var panel := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, 12, 14, 10)
+		var panel := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, Ds.R_S, Ds.S4, 10)
 		var v := UI.vbox(6)
 		var goal_txt: String = ("오늘 %s / %d분" % [minutes_text(sec), goal]) if goal > 0 else ("오늘 %s (목표 꺼짐)" % minutes_text(sec))
 		var streak_txt: String = ("연속 %d일" % st) if st > 0 else "오늘부터 시작"
-		v.add_child(UI.colored("%s · %s · 보호권 %d개" % [goal_txt, streak_txt, tk], acc, "Strong"))
+		v.add_child(UI.colored("%s · %s · 보호권 %d개" % [goal_txt, streak_txt, tk], Pal.on(lang), "Strong"))
 		if goal > 0:
 			v.add_child(UI.progress_bar(frac, _bar_color(acc, reached), 8.0))
 		panel.add_child(v)
@@ -72,15 +72,15 @@ func _build() -> void:
 	if goal > 0:
 		head.add_child(UI.label("%s / %d분" % [minutes_text(sec), goal], "H2", false))
 		if reached:
-			head.add_child(UI.chip("달성!", Pal.OK, Pal.OK_SOFT))
+			head.add_child(UI.chip_kind("달성!", "ok"))
 	else:
 		head.add_child(UI.label("목표 꺼짐 · 오늘 %s" % minutes_text(sec), "H3", false))
 	card.body.add_child(head)
 	if goal > 0:
 		card.body.add_child(UI.progress_bar(frac, _bar_color(acc, reached), 12.0))
 	var chips := UI.flow(8, 6)
-	chips.add_child(UI.chip(("연속 %d일" % st) if st > 0 else "연속 기록 없음", acc, Pal.soft(lang)))
-	chips.add_child(UI.chip("보호권 %d개" % tk, Pal.WARN, Pal.WARN_SOFT))
+	chips.add_child(UI.chip_kind(("연속 %d일" % st) if st > 0 else "연속 기록 없음", "lang_" + lang))
+	chips.add_child(UI.chip_kind("보호권 %d개" % tk, "warn"))
 	card.body.add_child(chips)
 	card.body.add_child(UI.label("하루를 놓쳐도 보호권이 있으면 연속 기록이 이어져요. 7일 연속할 때마다 1개를 받고, 최대 2개까지 모아요. 보호권 개수보다 많은 날을 놓치면(1개일 때 2일 이상) 연속 기록이 이어지지 않고 보호권은 그대로 남아요.", "Small"))
 	card.body.add_child(UI.label("하루 목표", "Small", false))

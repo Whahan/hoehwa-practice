@@ -21,7 +21,7 @@ const TEXT_PAIRS := [
 	"EN/SURFACE", "EN_ON/EN_SOFT", "JA/SURFACE", "JA_ON/JA_SOFT", "JA_ON/BG", "OK_ON/OK_SOFT", "OK_ON/BG",
 	"OK_ON/SURFACE", "WARN_ON/WARN_SOFT", "WARN_ON/BG", "WARN_ON/SURFACE", "BAD_ON/BAD_SOFT", "BAD_ON/SURFACE",
 	"BAD_ON/BG", "ON_ACCENT/PRIMARY", "ON_ACCENT/EN", "ON_ACCENT/JA", "ON_ACCENT/OK", "ON_ACCENT/BAD",
-	"TOAST_FG/TOAST_BG", "TOAST_FG/TOAST_OK", "TOAST_FG/TOAST_ERR",
+	"TOAST_FG/TOAST_BG", "TOAST_FG/TOAST_OK", "TOAST_FG/TOAST_ERR", "LEARN_FG/LEARN_BG",
 ]
 ## Non-text pairs (dots, progress bars, borders, switch tracks): contrast >= 3.0.
 const NONTEXT_PAIRS := [
@@ -95,6 +95,8 @@ static func tok(n: String) -> Color:
 		"TOAST_FG": return Pal.TOAST_FG
 		"TOAST_OK": return Pal.TOAST_OK
 		"TOAST_ERR": return Pal.TOAST_ERR
+		"LEARN_BG": return ReadingView.learn_bg() # 읽기: the "복습 중" word highlight (W9)
+		"LEARN_FG": return ReadingView.learn_fg()
 	push_error("contrast_test: unknown token " + n)
 	return Color(1, 0, 1)
 

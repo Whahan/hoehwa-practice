@@ -4,6 +4,7 @@ extends AppView
 
 const NAME_KO := {"en": "영어", "ja": "일본어"}
 const SESSION_MAX := 20
+const CTA_H := 56.0 ## height of the one big call-to-action button of a screen
 const RATING_NAME := {1: "다시", 2: "어려움", 3: "좋음", 4: "쉬움"}
 
 var lang: String = "en"
@@ -22,6 +23,9 @@ var scoring: bool = false
 var typed_text: String = ""
 
 var _page: PageScroll
+var _footer_holder: PanelContainer ## fixed bar under the page: the four FSRS rating buttons (or "next" in practice)
+var _footer_col: ColumnBox
+var _header: Control = null ## big title block of the review home (see header_block)
 var _score_call = null
 var _record_widget: RecorderWidget = null
 var _serial: int = 0
@@ -30,9 +34,23 @@ var _stale: bool = false ## on_hide() cancelled the scoring request: redraw when
 
 
 func _ready() -> void:
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 0)
+	add_child(root)
 	_page = PageScroll.new(720.0)
-	_page.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(_page)
+	root.add_child(_page)
+	_footer_holder = PanelContainer.new()
+	var fst := UI.style(Pal.SURFACE, Pal.LINE, 0, 0, 0, 0)
+	fst.border_width_top = 1
+	_footer_holder.add_theme_stylebox_override("panel", fst)
+	_footer_holder.visible = false
+	root.add_child(_footer_holder)
+	_footer_col = ColumnBox.new()
+	_footer_col.max_width = 720.0
+	_footer_col.min_pad = Ds.S3
+	_footer_col.set_padding(Ds.S3, Ds.S3)
+	_footer_holder.add_child(_footer_col)
 	lang = Store.lang()
 	Store.changed.connect(func() -> void:
 		if status == "idle" and is_visible_in_tree():
@@ -168,10 +186,24 @@ func _advance() -> void:
 	_render()
 
 
+# ---------------------------------------------------------------- app bar contract (AppView)
+# The review has no title of its own for the bar (main uses the tab name); only the home page has a big title block.
+
+func scroll_host() -> ScrollContainer:
+	return _page
+
+
+func header_block() -> Control:
+	return _header if status == "idle" and _header != null and is_instance_valid(_header) else null
+
+
 func _render() -> void:
 	if _page == null:
 		return
 	_record_widget = null
+	_header = null
+	UI.clear(_footer_col.content)
+	_footer_holder.visible = false
 	var c: VBoxContainer = _page.content
 	UI.clear(c)
 	match status:
@@ -182,10 +214,14 @@ func _render() -> void:
 		_:
 			_render_home(c)
 	UI.fix_cjk(c)
+	UI.fix_cjk(_footer_col.content)
+	bar_changed.emit()
 
 
 func _render_home(c: VBoxContainer) -> void:
 	var acc: Color = Pal.accent(lang)
+	_header = PageHeader.build("복습")
+	c.add_child(_header)
 	var top := UI.hbox(12)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
@@ -193,7 +229,6 @@ func _render_home(c: VBoxContainer) -> void:
 		_render()))
 	c.add_child(top)
 	var card := UI.card("BigCard", 14)
-	card.body.add_child(UI.label("복습", "Eyebrow", false))
 	card.body.add_child(UI.label("틀린 문장 다시 말하기", "H2"))
 	var rv: int = Store.review_for(lang).size()
 	var due_n: int = Store.due_count(lang)
@@ -204,7 +239,7 @@ func _render_home(c: VBoxContainer) -> void:
 				new_n += 1
 		card.body.add_child(UI.label("오늘 복습 %d개 · 새 문장 %d개" % [mini(due_n, SESSION_MAX), new_n], "Strong"))
 		card.body.add_child(UI.label("레슨과 대화에서 틀리거나 고친 %s 문장이에요. 한국어 뜻을 보고 직접 말해 보세요. 얼마나 잘 기억했는지에 따라 다음 복습 시기가 정해져요." % NAME_KO[lang], "Muted"))
-		var go := UI.button("복습 시작" if due_n <= SESSION_MAX else "복습 시작 (%d개씩)" % SESSION_MAX, "primary", acc, 52)
+		var go := UI.button("복습 시작" if due_n <= SESSION_MAX else "복습 시작 (%d개씩)" % SESSION_MAX, "primary", acc, CTA_H)
 		go.pressed.connect(_start)
 		card.body.add_child(go)
 	elif rv > 0:
@@ -212,19 +247,19 @@ func _render_home(c: VBoxContainer) -> void:
 		var nd: int = Store.next_due(lang)
 		if nd > 0:
 			card.body.add_child(UI.label("다음 복습: %s" % due_text(nd, Store.now()), "Muted"))
-		var pr := UI.button("미리 연습하기", "soft", acc, 46)
+		var pr := UI.button("미리 연습하기", "soft", acc, 48)
 		pr.pressed.connect(_start_practice)
 		card.body.add_child(pr)
 		card.body.add_child(UI.label("미리 연습해도 복습 일정은 바뀌지 않아요.", "Small"))
 	else:
 		card.body.add_child(UI.label("아직 복습할 %s 문장이 없어요. 레슨에서 틀린 문장과 대화에서 교정받은 문장이 여기에 쌓여요." % NAME_KO[lang], "Muted"))
-		var to_lesson := UI.button("레슨 하러 가기", "soft", acc, 46)
+		var to_lesson := UI.button("레슨 하러 가기", "soft", acc, 48)
 		to_lesson.pressed.connect(func() -> void: Store.navigate.emit("lesson", lang))
 		card.body.add_child(to_lesson)
 	c.add_child(card)
 	if rv > 0:
-		var list := UI.card("Card", 8)
-		list.body.add_child(UI.label("모인 문장 (최근순) · 전체 %d개" % rv, "Eyebrow", false))
+		c.add_child(UI.section_header("모인 문장 (최근순) · 전체 %d개" % rv, Ds.S3))
+		var list := ListGroup.new()
 		var all: Array = Store.review_for(lang)
 		var shown := 0
 		for i in range(all.size() - 1, -1, -1):
@@ -232,17 +267,18 @@ func _render_home(c: VBoxContainer) -> void:
 			var row := UI.hbox(8)
 			var col := UI.vbox(0)
 			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			col.add_child(UI.label(str(it["target"]), "Strong"))
 			if str(it["ko"]) != "":
 				col.add_child(UI.label(str(it["ko"]), "Small"))
 			row.add_child(col)
 			row.add_child(UI.speak_buttons(str(it["target"]), lang))
-			list.body.add_child(row)
+			list.add_custom(row)
 			shown += 1
 			if shown >= 8:
 				break
 		if all.size() > shown:
-			list.body.add_child(UI.label("… 외 %d개" % (all.size() - shown), "Small"))
+			list.add_custom(UI.label("… 외 %d개" % (all.size() - shown), "Small"))
 		c.add_child(list)
 
 
@@ -260,7 +296,7 @@ func _render_done(c: VBoxContainer) -> void:
 			card.body.add_child(UI.label("복습할 문장이 아직 %d개 남았어요." % Store.due_count(lang), "Muted"))
 		elif nd > 0:
 			card.body.add_child(UI.label("다음 복습: %s" % due_text(nd, Store.now()), "Muted"))
-	var row := UI.hbox(8)
+	var row := UI.adaptive(8) # phone: one under the other (two side by side do not fit at the big font sizes)
 	var again := UI.button("미리 연습하기" if practice else "남은 문장 복습", "primary", acc, 48)
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again.disabled = Store.upcoming_for(lang, 1).is_empty() if practice else Store.due_count(lang) == 0
@@ -284,18 +320,15 @@ func _render_run(c: VBoxContainer) -> void:
 	var quit := UI.link_button("그만")
 	quit.pressed.connect(quit_session)
 	bar_row.add_child(quit)
-	bar_row.add_child(UI.progress_bar(float(idx) / float(n), acc, 12.0))
+	bar_row.add_child(UI.progress_bar(float(idx) / float(n), acc, 10.0))
 	bar_row.add_child(UI.label("%d/%d" % [idx + 1, n], "Muted", false))
 	c.add_child(bar_row)
 	var head_txt: String = "미리 연습 · 복습 일정은 바뀌지 않아요" if practice else "오늘 복습 %d개 · 새 문장 %d개" % [n, session_new]
-	c.add_child(UI.label(head_txt, "Small", false))
+	c.add_child(UI.label(head_txt, "Small"))
 
 	var card := UI.card("BigCard", 14)
-	card.body.add_child(UI.colored("한국어 뜻을 보고 %s로 말하기" % NAME_KO[lang], acc, "Strong", false))
-	var meaning := UI.label(str(it["ko"]) if str(it["ko"]) != "" else "(뜻 없음)", "")
-	meaning.add_theme_font_size_override("font_size", 22)
-	meaning.add_theme_font_override("font", UI.bold_font())
-	card.body.add_child(meaning)
+	card.body.add_child(UI.colored("한국어 뜻을 보고 %s로 말하기" % NAME_KO[lang], Pal.on(lang), "Strong"))
+	card.body.add_child(UI.label(str(it["ko"]) if str(it["ko"]) != "" else "(뜻 없음)", "H2"))
 
 	if not checked:
 		_record_widget = RecorderWidget.new(true, acc, true)
@@ -308,6 +341,7 @@ func _render_run(c: VBoxContainer) -> void:
 		var row := UI.hbox(8)
 		var le := LineEdit.new()
 		UI.touch(le)
+		le.custom_minimum_size.y = maxf(le.custom_minimum_size.y, Ds.field_h())
 		le.placeholder_text = "%s로 입력" % NAME_KO[lang]
 		le.text = typed_text
 		if lang == "ja":
@@ -320,7 +354,7 @@ func _render_run(c: VBoxContainer) -> void:
 		ok.pressed.connect(_check_typed)
 		row.add_child(ok)
 		card.body.add_child(row)
-		var show := UI.button("정답 보기", "default")
+		var show := UI.button("정답 보기", "flat", acc)
 		show.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		show.pressed.connect(func() -> void:
 			shown_only = true
@@ -340,66 +374,67 @@ func _render_run(c: VBoxContainer) -> void:
 
 	var ans := UI.card("Card", 8)
 	ans.body.add_child(UI.label("정답", "Eyebrow", false))
-	var target := UI.label(str(it["target"]), "")
-	target.add_theme_font_size_override("font_size", 21)
-	target.add_theme_font_override("font", UI.bold_font())
-	ans.body.add_child(target)
+	ans.body.add_child(UI.label(str(it["target"]), "H2"))
 	if lang == "ja" and str(it["reading"]) != "":
 		ReadingLine.add(ans.body, str(it["reading"]), lang) # no pron is stored with a review card: the heuristic spelling
 	ans.body.add_child(UI.speak_buttons(str(it["target"]), lang))
 	if str(it["note"]) != "":
 		ans.body.add_child(UI.label(str(it["note"]), "Muted"))
 	c.add_child(ans)
-	c.add_child(_rating_card(it))
+	_add_rating(c, it)
 
 
-## Rating step: four FSRS buttons with the resulting interval, the one matching the score is highlighted.
-func _rating_card(it: Dictionary) -> Control:
+## Rating step. The page gets the hint and the "remove" link; the four FSRS buttons (with the resulting interval, the one
+## matching the score filled) sit in the fixed bar under the page. Practice mode has a "next" button there instead.
+func _add_rating(c: VBoxContainer, it: Dictionary) -> void:
 	var acc: Color = Pal.accent(lang)
-	var box := UI.card("Card", 8)
 	var score: float = -1.0
 	if not score_result.is_empty():
 		score = float(score_result.get("score", 0))
 	elif not typed_sim.is_empty():
 		score = float(typed_sim["score"])
+	var note := UI.vbox(Ds.S2)
+	var fcol: VBoxContainer = _footer_col.content
 	if practice:
-		box.body.add_child(UI.label("미리 연습 중이라 복습 일정은 바뀌지 않아요.", "Small"))
-		var nxt := UI.button("다음 문장" if idx + 1 < items.size() else "연습 끝내기", "primary", acc, 50)
+		note.add_child(UI.label("미리 연습 중이라 복습 일정은 바뀌지 않아요.", "Small"))
+		var nxt := UI.button("다음 문장" if idx + 1 < items.size() else "연습 끝내기", "primary", acc, CTA_H)
 		nxt.pressed.connect(_advance)
-		box.body.add_child(nxt)
-		box.body.add_child(_remove_button(it))
-		return box
-	var pre: int = rating_for_score(score) if score >= 0.0 else FSRS.Rating.AGAIN
-	var hint: String = "점수 %d점에 맞춰 '%s'를 골라 뒀어요." % [roundi(score), RATING_NAME[pre]] if score >= 0.0 else "정답을 확인했으니 '%s'를 골라 뒀어요." % RATING_NAME[pre]
-	box.body.add_child(UI.label("얼마나 잘 기억했나요? " + hint + " 다르게 느꼈다면 직접 눌러 주세요.", "Small"))
-	var now: int = Store.now()
-	var pv: Dictionary = FSRS.preview(it, now)
-	var colors := {1: Pal.BAD, 2: Pal.WARN, 3: Pal.OK, 4: acc}
-	var row: Container = UI.hbox(8)
-	if Platform.is_phone(): # four buttons do not fit side by side: two by two
-		var g := GridContainer.new()
-		g.columns = 2
-		g.add_theme_constant_override("h_separation", 8)
-		g.add_theme_constant_override("v_separation", 8)
-		g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row = g
-	for r in [1, 2, 3, 4]:
-		var wait: int = int((pv[r] as Dictionary)["due"]) - now
-		var b := UI.button("%s\n%s" % [RATING_NAME[r], FSRS.format_interval(wait)], "primary" if r == pre else "outline", colors[r], 64)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.pressed.connect(func() -> void:
-			Store.rate_review(str(it["id"]), r)
-			done_count += 1
-			Store.save_progress()
-			_advance())
-		row.add_child(b)
-	box.body.add_child(row)
-	box.body.add_child(_remove_button(it))
-	return box
+		fcol.add_child(nxt)
+	else:
+		var pre: int = rating_for_score(score) if score >= 0.0 else FSRS.Rating.AGAIN
+		var hint: String = "점수 %d점에 맞춰 '%s'를 골라 뒀어요." % [roundi(score), RATING_NAME[pre]] if score >= 0.0 else "정답을 확인했으니 '%s'를 골라 뒀어요." % RATING_NAME[pre]
+		note.add_child(UI.label("얼마나 잘 기억했나요? " + hint + " 다르게 느꼈다면 직접 눌러 주세요.", "Small"))
+		var now: int = Store.now()
+		var pv: Dictionary = FSRS.preview(it, now)
+		# the button look maps each accent to its *_ON text colour; the suggested rating is the filled one
+		var colors := {1: Pal.BAD, 2: Pal.WARN, 3: Pal.OK, 4: acc}
+		var row: Container = UI.hbox(8)
+		if Platform.is_phone(): # four buttons do not fit side by side: two by two
+			var g := GridContainer.new()
+			g.columns = 2
+			g.add_theme_constant_override("h_separation", 8)
+			g.add_theme_constant_override("v_separation", 8)
+			g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row = g
+		for r in [1, 2, 3, 4]:
+			var wait: int = int((pv[r] as Dictionary)["due"]) - now
+			var b := UI.button("%s\n%s" % [RATING_NAME[r], FSRS.format_interval(wait)], "primary" if r == pre else "outline", colors[r], 64)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.pressed.connect(func() -> void:
+				Store.rate_review(str(it["id"]), r)
+				done_count += 1
+				Store.save_progress()
+				_advance())
+			row.add_child(b)
+		fcol.add_child(row)
+	note.add_child(_remove_button(it))
+	c.add_child(note)
+	_footer_holder.visible = true
 
 
 func _remove_button(it: Dictionary) -> Control:
 	var rm := UI.link_button("목록에서 빼기", "이 문장을 복습 목록에서 완전히 지워요")
+	rm.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	rm.pressed.connect(func() -> void:
 		Store.remove_review(str(it["id"]))
 		Store.save_progress()
@@ -410,25 +445,23 @@ func _remove_button(it: Dictionary) -> Control:
 func _typed_result() -> Control:
 	var box := UI.vbox(8)
 	var score: int = int(typed_sim["score"])
-	var col: Color = ScorePanel.score_color(score)
 	var row := UI.hbox(12)
 	var big := Label.new()
 	big.theme_type_variation = &"Score"
 	big.text = str(score)
-	big.add_theme_color_override("font_color", col)
+	big.add_theme_color_override("font_color", ScorePanel.score_color(score)) # 40 px: a fill-like colour is enough
 	row.add_child(big)
-	row.add_child(UI.colored(ScorePanel.verdict(score), col, "Strong"))
+	row.add_child(UI.colored(ScorePanel.verdict(score), ScorePanel.score_text_color(score), "Strong"))
 	box.add_child(row)
-	var fl := UI.flow(0 if lang == "ja" else 6, 4)
+	# one chip per word: said right = soft green, no outline; missed = soft red, bold, 2 px outline (shape, not only colour)
+	var fl := UI.flow(4, 6)
 	var toks: PackedStringArray = typed_sim["toks"]
 	var hit: Array = typed_sim["hit"]
 	for i in toks.size():
-		var ok: bool = bool(hit[i])
-		var l := Label.new()
-		l.text = toks[i]
-		l.add_theme_font_size_override("font_size", 18)
-		l.add_theme_color_override("font_color", Pal.OK if ok else Pal.BAD)
-		fl.add_child(l)
+		var look: Dictionary = ScorePanel.unit_look(bool(hit[i]), false)
+		var ch := UI.chip(toks[i], look["fg"], look["bg"])
+		ch.add_theme_stylebox_override("panel", UI.style(look["bg"], look["border"], int(look["bw"]), Ds.R_PILL, 12, 4))
+		fl.add_child(ch)
 	box.add_child(fl)
 	return box
 

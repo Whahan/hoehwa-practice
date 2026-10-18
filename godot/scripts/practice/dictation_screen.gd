@@ -287,6 +287,14 @@ func _acc() -> Color:
 	return Pal.EN
 
 
+## Text colour of a score shown beside a pass mark: passed = OK_ON, not passed = WARN_ON (>= 60) or BAD_ON (< 60),
+## so a green number never carries a cross (ScorePanel.score_color has its own 80 / 60 steps).
+static func score_ink(score: float) -> Color:
+	if score >= float(PASS_SCORE):
+		return Pal.OK_ON
+	return Pal.WARN_ON if score >= 60.0 else Pal.BAD_ON
+
+
 func _render() -> void:
 	var c: VBoxContainer = (_shell["page"] as PageScroll).content
 	UI.clear(c)
@@ -300,12 +308,12 @@ func _render() -> void:
 	match stage:
 		"loading":
 			c.add_child(UI.label("문장을 불러오는 중이에요…", "Muted"))
-			var cb := SpeakDrill.touch_button("취소", "outline", _acc())
+			var cb := SpeakDrill.touch_button("취소", "soft", _acc())
 			cb.pressed.connect(func() -> void: closed.emit())
 			c.add_child(cb)
 		"unsupported":
 			c.add_child(SpeakDrill.notice("받아쓰기는 영어만 지원해요. 위쪽 탭에서 영어로 바꿔 주세요.", false))
-			var ub := SpeakDrill.touch_button("연습으로", "outline", _acc())
+			var ub := SpeakDrill.touch_button("연습으로", "flat", _acc())
 			ub.pressed.connect(func() -> void: closed.emit())
 			c.add_child(ub)
 		"error":
@@ -315,7 +323,7 @@ func _render() -> void:
 			c.add_child(rb)
 		"empty":
 			c.add_child(SpeakDrill.notice(err_text if err_text != "" else "문장이 없어요.", false))
-			var bb := SpeakDrill.touch_button("연습으로", "outline", _acc())
+			var bb := SpeakDrill.touch_button("연습으로", "flat", _acc())
 			bb.pressed.connect(func() -> void: closed.emit())
 			c.add_child(bb)
 		"run":
@@ -348,7 +356,7 @@ func _render_page() -> void:
 	var card := UI.card("BigCard", 10)
 	card.body.add_child(UI.label("들리는 대로 영어로 써 보세요", "H3"))
 	var lr := UI.flow(8, 8)
-	var b1 := SpeakDrill.touch_button("▶ 듣기", "primary", acc)
+	var b1 := SpeakDrill.touch_button("▶ 듣기", "soft", acc)
 	b1.pressed.connect(func() -> void: listen(false))
 	lr.add_child(b1)
 	var b2 := SpeakDrill.touch_button("천천히", "soft", acc)
@@ -362,10 +370,10 @@ func _render_page() -> void:
 	card.body.add_child(UI.label("단어 %d개" % wc, "Strong"))
 	if not is_checked():
 		var hr := UI.flow(8, 8)
-		var hb := SpeakDrill.touch_button("첫 글자 힌트", "outline", acc)
+		var hb := SpeakDrill.touch_button("첫 글자 힌트", "soft", acc)
 		hb.pressed.connect(toggle_hint)
 		hr.add_child(hb)
-		var gb := SpeakDrill.touch_button("모르겠어요", "outline", Pal.MUTED)
+		var gb := SpeakDrill.touch_button("모르겠어요", "flat", Pal.MUTED)
 		gb.pressed.connect(func() -> void: check(true))
 		hr.add_child(gb)
 		card.body.add_child(hr)
@@ -384,34 +392,36 @@ func _result_card(s: Dictionary, r: Dictionary) -> Control:
 	var card := UI.card("Card", 10)
 	var sc: int = int(r["score"])
 	var passed: bool = bool(r["passed"])
-	card.body.add_child(UI.colored("%d점" % sc, ScorePanel.score_color(float(sc)), "H1", false))
+	card.body.add_child(UI.colored("%d점" % sc, score_ink(float(sc)), "H1", false))
 	if bool(r["gave_up"]):
 		card.body.add_child(UI.label("정답을 확인했어요. 다음에 또 해 봐요.", "Muted"))
 	else:
-		card.body.add_child(UI.colored("통과!" if passed else "통과 기준은 %d점이에요." % PASS_SCORE, Pal.OK if passed else Pal.WARN, "Strong"))
+		card.body.add_child(UI.colored("✓ 통과!" if passed else "✕ 통과 기준은 %d점이에요." % PASS_SCORE, Pal.OK_ON if passed else Pal.WARN_ON, "Strong"))
 		card.body.add_child(UI.label("내가 쓴 것:  " + str(r["said"]), "Muted"))
 	var chips := UI.flow(6, 6)
 	for w in d.get("words", []):
 		var wd: Dictionary = w
 		var kind: String = str(wd.get("kind", "missing"))
-		var txt: String = str(wd["w"])
-		var fg: Color = Pal.OK
-		var bg: Color = Pal.OK_SOFT
+		var txt: String = "✓ " + str(wd["w"]) # right: a check mark; wrong: a cross mark and the reason in words
+		var ck := "ok"
 		if kind == "missing":
-			txt += "  · 빠짐"
-			fg = Pal.BAD
-			bg = Pal.BAD_SOFT
+			txt = "✕ " + str(wd["w"]) + "  · 빠짐"
+			ck = "bad"
 		elif kind == "typo":
-			txt += "  · 철자 틀림 (%s)" % str(wd.get("said", ""))
-			fg = Pal.BAD
-			bg = Pal.BAD_SOFT
-		var chip := UI.chip(txt, fg, bg)
-		(chip.get_child(0) as Label).add_theme_font_size_override("font_size", 16)
+			txt = "✕ " + str(wd["w"]) + "  · 철자 틀림 (%s)" % str(wd.get("said", ""))
+			ck = "bad"
+		var chip := UI.chip_kind(txt, ck)
+		var fsz: int = Ds.fs(16)
+		var lbl := chip.get_child(0) as Label
+		lbl.add_theme_font_size_override("font_size", fsz)
+		# a long word + its reason can be wider than the screen at a big text size: wrap inside the chip
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		chip.custom_minimum_size.x = minf(UI.text_width(txt, fsz, true) + 28.0, 280.0)
 		chips.add_child(chip)
 	card.body.add_child(chips)
 	var extra: Array = d.get("extra", [])
 	if not extra.is_empty():
-		card.body.add_child(UI.colored("정답에 없는 단어:  " + ", ".join(PackedStringArray(extra)), Pal.WARN, "Small"))
+		card.body.add_child(UI.colored("정답에 없는 단어:  " + ", ".join(PackedStringArray(extra)), Pal.WARN_ON, "Small"))
 	card.body.add_child(UI.hline())
 	card.body.add_child(UI.label("정답", "Eyebrow", false))
 	var tr := UI.hbox(8)
@@ -463,7 +473,7 @@ func _render_summary(c: VBoxContainer) -> void:
 	if int(sm["tried"]) == 0:
 		card.body.add_child(UI.label("써 본 문장이 없어요.", "H2"))
 	else:
-		card.body.add_child(UI.colored("평균 %d점" % int(sm["avg"]), ScorePanel.score_color(float(sm["avg"])), "H1", false))
+		card.body.add_child(UI.colored("평균 %d점" % int(sm["avg"]), score_ink(float(sm["avg"])), "H1", false))
 		card.body.add_child(UI.label("통과 %d개 / 시도 %d개 (통과 기준 %d점)" % [int(sm["passed"]), int(sm["tried"]), PASS_SCORE], "Strong"))
 	if xp_gained > 0:
 		card.body.add_child(UI.label("+%d XP" % xp_gained, "Muted"))
@@ -474,10 +484,11 @@ func _render_summary(c: VBoxContainer) -> void:
 	for i in sentences.size():
 		var r: Dictionary = results[i]
 		var row := UI.hbox(10)
-		var tag := "-" if int(r["tries"]) == 0 else str(int(r["score"]))
-		var col: Color = Pal.MUTED if int(r["tries"]) == 0 else ScorePanel.score_color(float(r["score"]))
+		# the mark (✓ passed / ✕ not passed) is the shape cue next to the coloured score
+		var tag := "-" if int(r["tries"]) == 0 else "%s %d" % ["✓" if bool(r["passed"]) else "✕", int(r["score"])]
+		var col: Color = Pal.MUTED if int(r["tries"]) == 0 else score_ink(float(r["score"]))
 		var sl := UI.colored(tag, col, "Strong", false)
-		sl.custom_minimum_size.x = 36
+		sl.custom_minimum_size.x = Ds.fs(60)
 		row.add_child(sl)
 		row.add_child(UI.label(str((sentences[i] as Dictionary)["text"]), ""))
 		list.body.add_child(row)
@@ -487,6 +498,6 @@ func _render_summary(c: VBoxContainer) -> void:
 	var again := SpeakDrill.touch_button("다시 하기", "primary", acc, 48)
 	again.pressed.connect(func() -> void: open("en"))
 	c.add_child(again)
-	var out := SpeakDrill.touch_button("연습으로", "outline", acc, 48)
+	var out := SpeakDrill.touch_button("연습으로", "flat", acc, 48)
 	out.pressed.connect(func() -> void: closed.emit())
 	c.add_child(out)

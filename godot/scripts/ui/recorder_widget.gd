@@ -84,6 +84,9 @@ func _ready() -> void:
 		vb.add_child(col)
 		add_child(vb)
 	else:
+		# PC: the hint may wrap inside the column (an unbreakable line at a large text size was wider than the page)
+		_time_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		add_child(col)
 	Recorder.finished.connect(_on_finished)
 	_refresh()

@@ -26,6 +26,10 @@ const SCENES := {
 		{"id": "opinion", "t": "경험과 의견 말하기", "who": "なかむら", "role": "a friendly office worker in Fukuoka", "scene": "Ask about the learner's experiences in Japan or Korea and their opinions.", "min": 3},
 	],
 }
+## Text of the record button while it is disabled (RecorderWidget.busy_text): the record button is greyed out
+## while my sentence is turned into text and while the AI answers, not while anything is "scored" here.
+const MIC_BUSY_STT := "글자로 바꾸는 중…"
+const MIC_BUSY_WAIT := "답을 기다리는 중…"
 const GENERIC := [
 	{"id": "month", "t": "이번 달 주제로", "who": "", "role": "", "scene": "", "min": 1},
 	{"id": "free", "t": "자유 대화", "who": "", "role": "a friendly native speaker who is curious about the learner's life in Korea", "scene": "Casual conversation about anything.", "min": 1},
@@ -67,6 +71,8 @@ var _tg: Container          ## phone: the four option toggles (folded behind "�
 var _opts_btn: Button
 var _opts_open: bool = false
 var _leave_msec: int = -100000
+var _header: Control = null     ## big title block of the setup page (PageHeader)
+var _bar_key: String = ""       ## last (status|title) the app bar was told about
 
 
 func _ready() -> void:
@@ -74,7 +80,7 @@ func _ready() -> void:
 	stack.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(stack)
 
-	_setup_page = PageScroll.new(820.0)
+	_setup_page = PageScroll.new(880.0)
 	_setup_page.set_anchors_preset(Control.PRESET_FULL_RECT)
 	stack.add_child(_setup_page)
 	_fb_page = PageScroll.new(720.0)
@@ -180,6 +186,47 @@ func _update_visibility() -> void:
 	_setup_page.visible = status == "setup"
 	_fb_page.visible = status == "fb" or status == "fbwait"
 	_chat_root.visible = status == "talk" or status == "wait"
+	var key := "%s|%s" % [status, str(sc.get("t", ""))]
+	if key != _bar_key:
+		_bar_key = key
+		bar_changed.emit()
+
+
+# ---------------------------------------------------------------- app bar contract (AppView)
+# The setup page and the feedback page use the tab name; the chat gives the scenario as the title (the phone app bar
+# shows it with a back button). The chat keeps its own header row too, so the screen is complete without an app bar.
+
+func page_title() -> String:
+	return str(sc.get("t", "")) if status == "talk" or status == "wait" else ""
+
+
+func page_subtitle() -> String:
+	return "%s · %d단계 수준" % [_who(), stage] if status == "talk" or status == "wait" else ""
+
+
+func page_actions() -> Array:
+	if status == "talk" or status == "wait":
+		return [{"id": "end", "text": "끝내기"}]
+	return []
+
+
+func on_action(id: String) -> void:
+	if id == "end":
+		_end_chat()
+
+
+func scroll_host() -> ScrollContainer:
+	if status == "setup":
+		return _setup_page
+	if status == "fb" or status == "fbwait":
+		return _fb_page
+	return null
+
+
+func header_block() -> Control:
+	if status == "setup" and _header != null and is_instance_valid(_header):
+		return _header
+	return null
 
 
 # ---------------------------------------------------------------- setup screen
@@ -189,44 +236,40 @@ func _render_setup() -> void:
 	var c: VBoxContainer = _setup_page.content
 	UI.clear(c)
 	var acc: Color = Pal.accent(lang)
+	var phone: bool = Platform.is_phone()
+
+	_header = PageHeader.build("원어민 대화", "원어민 AI와 대화")
+	c.add_child(_header)
 
 	var top := UI.adaptive(12)
-	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
+	var seg := UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		_reset_selection()
 		err = ""
-		_render_setup()))
-	if not Platform.is_phone():
+		_render_setup())
+	top.add_child(seg)
+	if not phone:
 		top.add_child(UI.spacer())
 	top.add_child(UI.label("대화 %d회" % Store.stat(lang, "talks"), "Muted", false))
 	c.add_child(top)
 	if err != "":
-		var p := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, 10, 14, 10)
-		p.add_child(UI.colored(err, Pal.BAD))
-		c.add_child(p)
+		c.add_child(_error_box(err))
 
-	var card := UI.card("BigCard", 16)
-	card.body.add_child(UI.label("원어민 AI와 대화", "Eyebrow", false))
-	card.body.add_child(UI.label("어떤 상황에서 말해 볼까요?", "H2"))
-
+	c.add_child(UI.section_header("어떤 상황에서 말해 볼까요?", Ds.S2))
 	var grid := GridContainer.new()
 	grid.columns = 3 if size.x >= 900.0 else 2
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("h_separation", Ds.S3)
+	grid.add_theme_constant_override("v_separation", Ds.S3)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for s in scenes_for(lang):
 		grid.add_child(_scenario_card(s))
-	card.body.add_child(grid)
+	c.add_child(grid)
 
 	var stage_names: Array = []
 	var level_tags: Array = (["", "A2", "B1", "B1+", "B2"] if lang == "en" else ["", "N5", "N5~N4", "N4", "N3"])
 	for s in [1, 2, 3, 4]:
 		stage_names.append("%d단계 · %s" % [s, level_tags[s]])
-	var so := UI.option_button(stage_names, int(sel["stage"]) - 1)
-	so.item_selected.connect(func(i: int) -> void:
-		sel["stage"] = i + 1
-		_render_setup())
 	var months: Array = Store.months(lang)
 	var m_items: Array = []
 	var m_sel := 0
@@ -234,53 +277,106 @@ func _render_setup() -> void:
 		m_items.append("%d개월차 · %s" % [int((months[i] as Dictionary)["n"]), UI.plain((months[i] as Dictionary)["title"])])
 		if int((months[i] as Dictionary)["n"]) == int(sel["n"]):
 			m_sel = i
-	var mo := UI.option_button(m_items, m_sel)
-	mo.item_selected.connect(func(i: int) -> void:
-		sel["n"] = int((months[i] as Dictionary)["n"])
-		sel["w"] = 1
-		sel["stage"] = Plan.stage_of(int(sel["n"]))
-		_render_setup())
-	var fields := UI.adaptive(12)
-	var f1 := UI.field("말하기 수준", so)
-	f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var f2 := UI.field("이번 달 주제 기준", mo)
-	f2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fields.add_child(f1)
-	fields.add_child(f2)
-	card.body.add_child(fields)
 
-	var opts := UI.vbox(4)
-	opts.add_child(UI.pref_toggle("AI 말을 자동으로 소리 내어 읽기", "auto_speak"))
-	opts.add_child(UI.pref_toggle("대화 중에 고친 문장 바로 보기", "show_fix"))
+	var group := ListGroup.new()
+	if phone:
+		# the phone picks a level / a month from a bottom sheet instead of a drop-down
+		group.add_row("말하기 수준", str(stage_names[int(sel["stage"]) - 1]), _chevron(), func() -> void:
+			var items: Array = []
+			for i in stage_names.size():
+				items.append([i + 1, stage_names[i]])
+			var sh := Sheet.choice(self, "말하기 수준", items, str(int(sel["stage"])))
+			sh.closed.connect(func(v: Variant) -> void:
+				if typeof(v) == TYPE_INT:
+					sel["stage"] = int(v)
+					_render_setup()))
+		group.add_row("이번 달 주제 기준", str(m_items[m_sel]) if m_sel < m_items.size() else "", _chevron(), func() -> void:
+			var items2: Array = []
+			for i in months.size():
+				items2.append([int((months[i] as Dictionary)["n"]), m_items[i]])
+			var sh2 := Sheet.choice(self, "이번 달 주제 기준", items2, str(int(sel["n"])))
+			sh2.closed.connect(func(v: Variant) -> void:
+				if typeof(v) == TYPE_INT:
+					sel["n"] = int(v)
+					sel["w"] = 1
+					sel["stage"] = Plan.stage_of(int(sel["n"]))
+					_render_setup()))
+	else:
+		var so := UI.option_button(stage_names, int(sel["stage"]) - 1)
+		so.item_selected.connect(func(i: int) -> void:
+			sel["stage"] = i + 1
+			_render_setup())
+		var mo := UI.option_button(m_items, m_sel)
+		mo.item_selected.connect(func(i: int) -> void:
+			sel["n"] = int((months[i] as Dictionary)["n"])
+			sel["w"] = 1
+			sel["stage"] = Plan.stage_of(int(sel["n"]))
+			_render_setup())
+		var fields := UI.adaptive(12)
+		var f1 := UI.field("말하기 수준", so)
+		f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var f2 := UI.field("이번 달 주제 기준", mo)
+		f2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		fields.add_child(f1)
+		fields.add_child(f2)
+		group.add_custom(fields)
+	group.add_custom(UI.pref_switch("AI 말을 자동으로 소리 내어 읽기", "auto_speak"))
+	group.add_custom(UI.pref_switch("대화 중에 고친 문장 바로 보기", "show_fix"))
 	if lang == "ja":
-		opts.add_child(UI.pref_toggle("히라가나 읽기 표시", "show_reading"))
-	opts.add_child(UI.pref_toggle("말하면 바로 보내기 (끄면 인식된 글자를 고친 뒤 직접 보내요)", "auto_send"))
-	card.body.add_child(opts)
+		group.add_custom(UI.pref_switch("히라가나 읽기 표시", "show_reading"))
+	group.add_custom(UI.pref_switch("말하면 바로 보내기 (끄면 인식된 글자를 고친 뒤 직접 보내요)", "auto_send"))
+	c.add_child(group)
 
-	var go := UI.button("대화 시작", "primary", acc, 52)
+	var go := UI.button("대화 시작", "primary", acc, 56)
 	go.pressed.connect(_start_chat)
-	card.body.add_child(go)
-	c.add_child(card)
+	c.add_child(go)
 
-	var tip := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, 10, 14, 12)
+	var tip := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_CARD, 16, 14)
 	tip.add_child(UI.label("말로 대화하는 법: 대화 화면의 마이크 버튼을 누른 채 말하거나(떼면 끝), 한 번 눌러 시작하고 다시 눌러 끝내요. 말한 내용이 글자로 바뀌어 AI에게 전달되고, AI의 답은 소리로 읽어 줘요. 처음에는 로컬 AI가 깨어나느라 답이 늦을 수 있어요.", "Muted"))
 	c.add_child(tip)
 	UI.fix_cjk(c)
 
 
+func _chevron() -> Control:
+	return GlyphIcon.new("chevron_right", 20.0, Pal.MUTED)
+
+
+## An error notice: a BAD_SOFT card with a 2 px BAD outline and a "✕" mark beside the text (never colour alone).
+func _error_box(text: String, retry_cb: Callable = Callable()) -> Control:
+	var p := UI.tinted_panel(Pal.BAD_SOFT, Pal.BAD, 2, Ds.R_S, 14, 10)
+	var h := UI.hbox(10)
+	var mark := UI.colored("✕", Pal.BAD_ON, "Strong", false)
+	mark.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	h.add_child(mark)
+	h.add_child(UI.colored(text, Pal.BAD_ON))
+	if retry_cb.is_valid():
+		var retry := UI.button("다시 보내기", "outline", Pal.BAD)
+		retry.pressed.connect(retry_cb)
+		h.add_child(retry)
+	p.add_child(h)
+	return p
+
+
+## A situation card. Selected = PRIMARY_SOFT surface + 2 px PRIMARY outline + bold title + a check mark (colour,
+## outline, weight and shape all differ from the unselected card).
 func _scenario_card(s: Dictionary) -> Control:
-	var acc: Color = Pal.accent(lang)
 	var selected: bool = str(sel["scen"]) == str(s["id"])
 	var p := PanelContainer.new()
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var normal := UI.style(acc.lerp(Color.WHITE, 0.92) if selected else Pal.SURFACE, acc if selected else Pal.LINE, 2 if selected else 1, 12, 14, 12)
+	var normal := UI.style(Pal.PRIMARY_SOFT if selected else Pal.SURFACE, Pal.PRIMARY if selected else Pal.LINE_STRONG, 2 if selected else 1, Ds.R_INPUT, 14, 12)
 	p.add_theme_stylebox_override("panel", normal)
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	p.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	p.accessibility_name = str(s["t"])
 	if Platform.is_phone():
 		PhoneLayout.touch(p, 64.0)
+	var h := UI.hbox(6)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var v := UI.vbox(2)
-	var t := UI.label(str(s["t"]), "Strong")
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var t := UI.label(str(s["t"]), "Strong" if selected else "ListMain")
+	if selected:
+		t.add_theme_color_override("font_color", Pal.PRIMARY)
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(t)
 	var sub := ""
@@ -296,7 +392,12 @@ func _scenario_card(s: Dictionary) -> Control:
 	sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(sl)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(v)
+	h.add_child(v)
+	if selected:
+		var chk := GlyphIcon.new("check", 22.0, Pal.PRIMARY)
+		chk.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		h.add_child(chk)
+	p.add_child(h)
 	var sid: String = str(s["id"])
 	UI.on_tap(p, func() -> void:
 		sel["scen"] = sid
@@ -314,7 +415,7 @@ func _build_chat_root(parent: Control) -> void:
 
 	# header
 	var head_col := ColumnBox.new()
-	head_col.max_width = 820.0
+	head_col.max_width = 720.0
 	head_col.set_padding(14, 8)
 	var hrow := UI.hbox(12)
 	var av := PanelContainer.new()
@@ -337,23 +438,26 @@ func _build_chat_root(parent: Control) -> void:
 	hc.add_child(_head_title)
 	hc.add_child(_head_sub)
 	hrow.add_child(hc)
-	_end_btn = UI.button("끝내기" if Platform.is_phone() else "대화 끝내고 피드백", "default")
+	_end_btn = UI.button("끝내기" if Platform.is_phone() else "대화 끝내고 피드백", "soft", Pal.EN)
 	_end_btn.pressed.connect(_end_chat)
 	hrow.add_child(_end_btn)
 	head_col.content.add_child(hrow)
 	_chat_root.add_child(head_col)
 
 	# messages
-	_msg_scroll = PageScroll.new(820.0)
+	_msg_scroll = PageScroll.new(720.0)
 	_msg_scroll.content.add_theme_constant_override("separation", 14)
 	_chat_root.add_child(_msg_scroll)
 
 	# bottom area
 	var bottom_panel := PanelContainer.new()
-	bottom_panel.add_theme_stylebox_override("panel", UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0))
+	# the composer bar: its own surface with a hairline on top
+	var bar_st := UI.style(Pal.SURFACE, Pal.LINE, 0, 0, 0, 0)
+	bar_st.border_width_top = 1
+	bottom_panel.add_theme_stylebox_override("panel", bar_st)
 	_chat_root.add_child(bottom_panel)
 	var bcol := ColumnBox.new()
-	bcol.max_width = 820.0
+	bcol.max_width = 720.0
 	bcol.set_padding(10, 12)
 	bottom_panel.add_child(bcol)
 	var b: VBoxContainer = bcol.content
@@ -366,17 +470,18 @@ func _build_chat_root(parent: Control) -> void:
 	_input = LineEdit.new()
 	_input.placeholder_text = "말하거나 입력하기"
 	_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_input.custom_minimum_size = Vector2(0, 48)
+	_input.custom_minimum_size = Vector2(0, maxf(48.0, Ds.field_h()))
 	_input.text_submitted.connect(func(_t: String) -> void: _send_message())
 	comp.add_child(_input)
 	_mic = RecorderWidget.new(false, Pal.EN, false)
 	_mic.idle_text = "말하기"
+	_mic.busy_text = MIC_BUSY_STT
 	_mic.recorded.connect(_on_recorded)
 	if Platform.is_phone():
 		_mic.wide = true # the phone's main input: a full-width button on its own line
 	else:
 		comp.add_child(_mic)
-	_send = UI.button("보내기", "primary", Pal.EN, 48)
+	_send = UI.button("보내기", "soft", Pal.EN, 48)
 	_send.pressed.connect(_send_message)
 	comp.add_child(_send)
 	b.add_child(comp)
@@ -386,11 +491,15 @@ func _build_chat_root(parent: Control) -> void:
 	_status_label = UI.label("", "Small", false)
 	b.add_child(_status_label)
 
-	var tg := UI.flow(16, 2)
-	tg.add_child(UI.pref_toggle("자동 읽기", "auto_speak"))
-	tg.add_child(UI.pref_toggle("번역 항상", "show_ko"))
-	tg.add_child(UI.pref_toggle("교정 바로 보기", "show_fix"))
-	tg.add_child(UI.pref_toggle("말하면 바로 보내기", "auto_send"))
+	var tg := UI.flow(16, 0)
+	tg.add_child(UI.pref_switch("자동 읽기", "auto_speak"))
+	tg.add_child(UI.pref_switch("번역 항상", "show_ko"))
+	tg.add_child(UI.pref_switch("교정 바로 보기", "show_fix"))
+	tg.add_child(UI.pref_switch("말하면 바로 보내기", "auto_send"))
+	for sw in tg.get_children():
+		# short captions on one line each; the flow wraps whole switches onto the next line
+		(sw as CheckButton).autowrap_mode = TextServer.AUTOWRAP_OFF
+		(sw as CheckButton).size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_tg = tg
 	if Platform.is_phone():
 		_opts_btn = UI.link_button("옵션 ▾")
@@ -414,10 +523,11 @@ func _update_header() -> void:
 	_head_title.text = str(sc.get("t", ""))
 	_head_sub.text = "%s · %d단계 수준" % [_who(), stage]
 	_avatar_label.text = _who().left(1)
-	_avatar_label.add_theme_color_override("font_color", acc)
+	_avatar_label.add_theme_color_override("font_color", Pal.on(lang))
 	var av := _avatar_label.get_parent() as PanelContainer
 	av.add_theme_stylebox_override("panel", UI.style(Pal.soft(lang), Color(0, 0, 0, 0), 0, 21, 0, 0))
-	UI.style_button(_send, "primary", acc)
+	UI.style_button(_send, "soft", acc)
+	UI.style_button(_end_btn, "soft", acc)
 	_mic.accent = acc
 	_mic._refresh()
 
@@ -576,6 +686,7 @@ func _update_composer() -> void:
 	var talk: bool = status == "talk"
 	_input.editable = talk and not stt_busy
 	_send.disabled = not talk or stt_busy
+	_mic.busy_text = MIC_BUSY_WAIT if status == "wait" else MIC_BUSY_STT
 	_mic.set_enabled(talk and not stt_busy)
 	_input.placeholder_text = ("%s로 말하거나 입력하기" % NAME_KO[lang]) if talk else "답을 기다리는 중…"
 	var has_me := false
@@ -643,15 +754,8 @@ func _render_msgs() -> void:
 		row.add_child(cancel)
 		c.add_child(row)
 	if err != "":
-		var p := UI.tinted_panel(Pal.BAD_SOFT, Color(0, 0, 0, 0), 0, 10, 14, 10)
-		var h := UI.hbox(10)
-		h.add_child(UI.colored(err, Pal.BAD))
-		if not msgs.is_empty() and msgs[msgs.size() - 1]["role"] == "me":
-			var retry := UI.button("다시 보내기", "outline", Pal.BAD)
-			retry.pressed.connect(_call_chat)
-			h.add_child(retry)
-		p.add_child(h)
-		c.add_child(p)
+		var can_retry: bool = not msgs.is_empty() and msgs[msgs.size() - 1]["role"] == "me"
+		c.add_child(_error_box(err, _call_chat if can_retry else Callable()))
 	_render_suggestions()
 	UI.fix_cjk(c)
 	UI.scroll_to_bottom(_msg_scroll)
@@ -672,18 +776,24 @@ func _cancel_chat() -> void:
 	_update_composer()
 
 
+## Pixel width of `text` at the size of a theme variation ("" = body text), including the user's font scale.
+func _tw(text: String, variation: String) -> float:
+	return UI.text_width(text, Ds.fs(Ds.type_size(variation)))
+
+
 func _bubble(text: String, bg: Color, border: Color, fg: Color, max_w: float, radius_left_bottom: int, radius_right_bottom: int) -> PanelContainer:
 	var p := PanelContainer.new()
-	var st := UI.style(bg, border, 1 if border.a > 0.0 else 0, 16, 14, 10)
+	var st := UI.style(bg, border, 1 if border.a > 0.0 else 0, Ds.R_BTN, 14, 10)
 	st.corner_radius_bottom_left = radius_left_bottom
 	st.corner_radius_bottom_right = radius_right_bottom
 	p.add_theme_stylebox_override("panel", st)
 	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var l := UI.label(text, "")
-	l.add_theme_font_size_override("font_size", 17)
+	var fsz: int = Ds.fs(17)
+	l.add_theme_font_size_override("font_size", fsz)
 	l.add_theme_color_override("font_color", fg)
 	l.size_flags_horizontal = Control.SIZE_FILL
-	l.custom_minimum_size = Vector2(minf(UI.text_width(text, 17) + 6.0, max_w), 0)
+	l.custom_minimum_size = Vector2(minf(UI.text_width(text, fsz) + 6.0, max_w), 0)
 	p.add_child(l)
 	return p
 
@@ -692,7 +802,7 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 	var row := UI.hbox(0)
 	var col := UI.vbox(4)
 	col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var bub := _bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, 16)
+	var bub := _bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, Ds.R_BTN)
 	var rd := ReadingLine.make(str(m.get("reading", "")), lang, Store.pref_bool("show_reading"), max_w, str(m.get("pron", "")))
 	if rd != null:
 		var inner := bub.get_child(0) as Label
@@ -706,7 +816,7 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 	var show_ko: bool = always_ko or bool(ko_open.get(i, false))
 	if show_ko and str(m["ko"]) != "":
 		var kl := UI.label(str(m["ko"]), "Muted")
-		kl.custom_minimum_size = Vector2(minf(UI.text_width(str(m["ko"]), 15) + 6.0, max_w), 0)
+		kl.custom_minimum_size = Vector2(minf(_tw(str(m["ko"]), "Muted") + 6.0, max_w), 0)
 		kl.size_flags_horizontal = Control.SIZE_FILL
 		col.add_child(kl)
 	var acts: Container = UI.flow(2, 0) if Platform.is_phone() else UI.hbox(2)
@@ -728,23 +838,31 @@ func _me_row(m: Dictionary, max_w: float) -> Control:
 	row.add_child(UI.spacer())
 	var col := UI.vbox(6)
 	col.size_flags_horizontal = Control.SIZE_SHRINK_END
-	var bub := _bubble(str(m["text"]), acc, Color(0, 0, 0, 0), Color.WHITE, max_w, 16, 4)
+	var bub := _bubble(str(m["text"]), acc, Color(0, 0, 0, 0), Pal.ON_ACCENT, max_w, Ds.R_BTN, 4)
 	bub.size_flags_horizontal = Control.SIZE_SHRINK_END
 	col.add_child(bub)
 	if str(m.get("fix", "")) != "" and Store.pref_bool("show_fix"):
-		var fx := UI.tinted_panel(Pal.OK_SOFT, Color(0, 0, 0, 0), 0, 10, 12, 8)
+		# a correction: OK_SOFT surface, a 4 px OK bar at the left, a check mark and a bold heading
+		var fx := PanelContainer.new()
+		var fxs := UI.style(Pal.OK_SOFT, Pal.OK, 0, Ds.R_S, 12, 8)
+		fxs.border_width_left = 4
+		fx.add_theme_stylebox_override("panel", fxs)
 		fx.size_flags_horizontal = Control.SIZE_SHRINK_END
 		var v := UI.vbox(2)
-		var w: float = minf(maxf(UI.text_width(str(m["fix"]), 15), UI.text_width("더 자연스럽게 " + str(m["fix"]), 15)) + 6.0, max_w)
-		var head := UI.colored("더 자연스럽게", Pal.OK, "Strong", false)
-		v.add_child(head)
-		var fl := UI.label(str(m["fix"]), "")
+		var w: float = minf(maxf(_tw(str(m["fix"]), ""), _tw("더 자연스럽게 " + str(m["fix"]), "")) + 6.0, max_w)
+		var hh := UI.hbox(6)
+		var chk := GlyphIcon.new("check", 18.0, Pal.OK_ON)
+		chk.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hh.add_child(chk)
+		hh.add_child(UI.colored("더 자연스럽게", Pal.OK_ON, "Strong", false))
+		v.add_child(hh)
+		var fl := UI.colored(str(m["fix"]), Pal.OK_ON)
 		fl.custom_minimum_size = Vector2(w, 0)
 		fl.size_flags_horizontal = Control.SIZE_FILL
 		v.add_child(fl)
 		if str(m.get("fix_ko", "")) != "":
 			var kl := UI.label(str(m["fix_ko"]), "Small")
-			kl.custom_minimum_size = Vector2(minf(UI.text_width(str(m["fix_ko"]), 13) + 6.0, max_w), 0)
+			kl.custom_minimum_size = Vector2(minf(_tw(str(m["fix_ko"]), "Small") + 6.0, max_w), 0)
 			kl.size_flags_horizontal = Control.SIZE_FILL
 			v.add_child(kl)
 		var sp := UI.speak_buttons(str(m["fix"]), lang)
@@ -762,17 +880,15 @@ func _render_suggestions() -> void:
 	var last: Dictionary = msgs[msgs.size() - 1]
 	if last["role"] != "ai" or (last["suggest"] as Array).is_empty():
 		return
-	var acc: Color = Pal.accent(lang)
 	_aux.add_child(UI.label("이렇게 말해 볼 수 있어요", "Eyebrow", false))
 	var fl := UI.flow(6, 6)
 	for s in last["suggest"]:
-		var b := UI.button(str(s), "outline", acc)
-		b.add_theme_font_size_override("font_size", 15)
 		var txt: String = str(s)
-		b.pressed.connect(func() -> void:
+		var b := UI.filter_chip(txt, false, func() -> void:
 			_input.text = txt
 			_input.grab_focus()
 			_input.caret_column = txt.length())
+		b.add_theme_font_size_override("font_size", Ds.fs(15))
 		fl.add_child(b)
 	_aux.add_child(fl)
 	UI.fix_cjk(_aux)
@@ -826,14 +942,14 @@ func _end_chat() -> void:
 
 
 func _score_tile(value: int, caption: String) -> Control:
-	var p := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, 10, 14, 10)
+	var p := UI.tinted_panel(Pal.soft(lang), Color(0, 0, 0, 0), 0, Ds.R_INPUT, 14, 10)
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var v := UI.vbox(0)
 	var n := Label.new()
 	n.text = "%d/5" % value
-	n.add_theme_font_size_override("font_size", 26)
+	n.add_theme_font_size_override("font_size", Ds.fs(26))
 	n.add_theme_font_override("font", UI.bold_font())
-	n.add_theme_color_override("font_color", Pal.accent(lang))
+	n.add_theme_color_override("font_color", Pal.on(lang))
 	v.add_child(n)
 	v.add_child(UI.label(caption, "Small", false))
 	p.add_child(v)
@@ -849,13 +965,8 @@ func _render_fb() -> void:
 		card.body.add_child(UI.label("피드백", "Eyebrow", false))
 		card.body.add_child(UI.label("대화를 돌아보는 중이에요", "H2"))
 		card.body.add_child(UI.label("고칠 문장과 쓸 만한 표현을 정리하고 있어요. 보통 10~60초 걸려요.", "Muted"))
-		var bar := ProgressBar.new()
-		bar.indeterminate = true
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(0, 8)
-		bar.add_theme_stylebox_override("fill", UI.style(acc, Color(0, 0, 0, 0), 0, 99, 0, 0))
-		card.body.add_child(bar)
-		var stop := UI.button("그만두기", "outline", acc)
+		card.body.add_child(UI.progress_indeterminate(acc, 8.0))
+		var stop := UI.button("그만두기", "soft", acc)
 		stop.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		stop.pressed.connect(func() -> void:
 			_serial += 1
@@ -892,11 +1003,17 @@ func _render_fb() -> void:
 		cb.body.add_child(UI.label("고쳐 말하기 · 복습 목록에 추가됨", "Eyebrow", false))
 		for cd in shown_corr:
 			var d: Dictionary = cd
-			var item := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, 10, 12, 10)
+			var item := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_INPUT, 14, 12)
 			var iv := UI.vbox(3)
 			if str(d.get("you", "")) != "":
-				iv.add_child(UI.rich("[s][color=#B83A3A]%s[/color][/s]" % UI.bb_escape(str(d["you"])), 16))
-			iv.add_child(UI.colored(str(d["better"]), Pal.OK, "Strong"))
+				# struck through as well as red, so the wrong sentence is told apart without the colour
+				iv.add_child(UI.rich("[s][color=#%s]%s[/color][/s]" % [Pal.BAD_ON.to_html(false), UI.bb_escape(str(d["you"]))], 16))
+			var good := UI.hbox(6)
+			var gchk := GlyphIcon.new("check", 20.0, Pal.OK_ON)
+			gchk.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			good.add_child(gchk)
+			good.add_child(UI.colored(str(d["better"]), Pal.OK_ON, "Strong"))
+			iv.add_child(good)
 			if lang == "ja" and str(d.get("reading", "")) != "":
 				ReadingLine.add(iv, str(d["reading"]), lang, true, 0.0, str(d.get("pron", "")))
 			if str(d.get("ko", "")) != "":
@@ -918,7 +1035,7 @@ func _render_fb() -> void:
 		pb.body.add_child(UI.label("이 상황에서 쓸 만한 표현", "Eyebrow", false))
 		for pd in shown_ph:
 			var d2: Dictionary = pd
-			var item2 := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, 10, 12, 10)
+			var item2 := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_INPUT, 14, 12)
 			var iv2 := UI.vbox(3)
 			iv2.add_child(UI.label(str(d2["phrase"]), "Strong"))
 			if lang == "ja" and str(d2.get("reading", "")) != "":
@@ -931,14 +1048,14 @@ func _render_fb() -> void:
 		c.add_child(pb)
 
 	var row := UI.hbox(8)
-	var nw := UI.button("새 대화", "primary", acc, 50)
+	var nw := UI.button("새 대화", "primary", acc, 56)
 	nw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nw.pressed.connect(func() -> void:
 		status = "setup"
 		msgs = []
 		_reset_selection()
 		_render_setup())
-	var rv := UI.button("복습하러 가기", "soft", acc, 50)
+	var rv := UI.button("복습하러 가기", "soft", acc, 56)
 	rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rv.pressed.connect(func() -> void:
 		Store.navigate.emit("review", lang))
