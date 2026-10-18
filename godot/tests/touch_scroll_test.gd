@@ -106,6 +106,7 @@ func _ready() -> void:
 	main_node.call("add_tab", "stats", "기록", StatsView.new(), "기록", "review")
 	await _frames(6)
 
+	await _shell_drag_test() # first: the later scenarios silence the buttons' own handlers
 	await _nested_test()
 	await _gesture_fixture_test()
 	await _reader_regression()
@@ -120,6 +121,68 @@ func _ready() -> void:
 	_cleanup()
 	print("== touch scroll: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+## W4-6 (docs §8.4): the app bar, the bottom tabs and an open sheet sit OUTSIDE the page's ScrollContainer. A 300 px drag that
+## starts on one of them leaves the page where it is (delta 0) and opens nothing; the same drag on the page itself moves it
+## (the control case that shows the measurement can tell the two apart).
+func _shell_drag_test() -> void:
+	print("[shell: drags that start on the app bar / bottom tabs / a sheet leave the page alone]")
+	main_node.show_view("roadmap")
+	Store.prefs["open_months"] = {"en1": true, "en2": true}
+	(main_node.views["roadmap"] as RoadmapView).refresh()
+	await _frames(12)
+	var pages: Array = _visible_scrollers()
+	ok(pages.size() >= 1, "shell drag setup: the roadmap page scrolls")
+	if pages.is_empty():
+		return
+	var page: ScrollContainer = pages[0]
+	ok(_max_scroll(page) > 600, "shell drag setup: the page is long enough (%d px)" % _max_scroll(page))
+	var bar: AppBar = main_node._app_bar
+	var tabs: BottomTabs = main_node._bottom_tabs
+	ok(not bar.is_ancestor_of(page) and not tabs.is_ancestor_of(page) and not page.is_ancestor_of(bar), "the app bar and the bottom tabs are outside the ScrollContainer")
+	var jobs: Array = [
+		["app bar title", bar.title_label().get_global_rect().get_center(), Vector2(0, DRAG_PX)],
+		["app bar chip", main_node._conn_chip.get_global_rect().get_center(), Vector2(0, DRAG_PX)],
+		["bottom tab", (tabs.cell_buttons()[1] as Control).get_global_rect().get_center(), Vector2(0, -DRAG_PX)],
+	]
+	for j in jobs:
+		page.scroll_vertical = 300
+		await _frames(3)
+		var before: int = page.scroll_vertical
+		var cur: String = main_node.current
+		var end: Vector2 = await _swipe(j[1], j[2])
+		_touch(end, false)
+		await _frames(3)
+		await _settle(page)
+		var delta: int = page.scroll_vertical - before
+		ok(delta == 0 and main_node.current == cur, "shell drag: a 300 px drag from the %s: page moved %d px (must be 0), screen %s -> %s" % [j[0], delta, cur, main_node.current])
+	# an open sheet: the dim covers the page and takes the drag
+	page.scroll_vertical = 300
+	await _frames(3)
+	var sh: Sheet = Sheet.choice(main_node, "시험", [["a", "가"], ["b", "나"]], "a")
+	await _frames(30)
+	var b4: int = page.scroll_vertical
+	var e2: Vector2 = await _swipe(Vector2(206.0, 200.0), Vector2(0, DRAG_PX))
+	_touch(e2, false)
+	await _frames(3)
+	await _settle(page)
+	ok(page.scroll_vertical == b4 and not sh.is_closed(), "shell drag: a 300 px drag on a sheet's dim: page moved %d px (must be 0), the sheet stays open" % (page.scroll_vertical - b4))
+	Sheet.close_top()
+	await _frames(40) # the closing slide takes 0.2 s: until it is over the dim still takes the finger
+	ok(not Sheet.is_open(), "shell drag setup: the sheet is closed again")
+	# control case: the same drag on the page itself scrolls it
+	page.scroll_vertical = 300
+	await _frames(3)
+	var b5: int = page.scroll_vertical
+	var e3: Vector2 = await _swipe(Vector2(206.0, 600.0), Vector2(0, -DRAG_PX))
+	_touch(e3, false)
+	await _frames(3)
+	await _settle(page)
+	ok(page.scroll_vertical - b5 >= 200, "shell drag (control): the same drag on the page moves it %d px (>= 200)" % (page.scroll_vertical - b5))
+	Store.prefs.erase("open_months")
+	main_node.show_view("today")
+	await _frames(5)
 
 
 func _cleanup() -> void:
@@ -163,11 +226,8 @@ func _scenarios() -> Array:
 		var v: TodayView = views["today"]
 		v._settings_open = false
 		v.refresh()})
-	list.append({"name": "today_settings", "setup": func() -> void:
-		main_node.show_view("today")
-		var v: TodayView = views["today"]
-		v._settings_open = true
-		v.refresh()})
+	list.append({"name": "settings", "setup": func() -> void: # the settings are a screen of their own (W4 shell)
+		main_node.show_view("settings")})
 	list.append({"name": "lesson_home", "setup": func() -> void:
 		main_node.show_view("lesson")})
 	list.append({"name": "lesson_choice", "setup": func() -> void:
@@ -689,6 +749,7 @@ func _pc_unchanged_test() -> void:
 	Store.progress = Progress.blank()
 	Backend._starting = true
 	Backend.set_process(false)
+	Api.base_url = "http://127.0.0.1:9" # a closed port: the PC run must never reach the user's engine (8770)
 	var m: Control = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	add_child(m)
 	await _frames(20)
@@ -702,7 +763,7 @@ func _pc_unchanged_test() -> void:
 	_all_scrollers(m, all)
 	var sc: ScrollContainer = null
 	for a in all:
-		if (a as Control).size.y > 100.0 and sc == null:
+		if (a as Control).size.y > 100.0 and sc == null and a is PageScroll: # not the SideNav's own list
 			sc = a
 	ok(sc != null, "pc: a scroll page is visible")
 	if sc == null:
@@ -727,7 +788,10 @@ func _pc_unchanged_test() -> void:
 	await _frames(12)
 	var rall: Array = []
 	_all_scrollers(m, rall)
-	var rsc: ScrollContainer = rall[0]
+	var rsc: ScrollContainer = null
+	for ra in rall:
+		if rsc == null and ra is PageScroll: # not the SideNav's own list
+			rsc = ra
 	var before: int = rsc.scroll_vertical
 	var wheel := InputEventMouseButton.new()
 	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN

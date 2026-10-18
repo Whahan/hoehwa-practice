@@ -52,6 +52,8 @@ func _ready() -> void:
 	Toast.message.connect(func(t: String, k: String) -> void: _toasts.append([t, k]))
 	Backend._starting = true # nothing may start an engine
 	Backend.set_process(false)
+	if not _phone:
+		Api.base_url = "http://127.0.0.1:9" # a closed port: the PC run must never reach the user's engine (8770)
 	Sheet.animate = false
 	await _size_window(Vector2i(412, 915) if _phone else Vector2i(1280, 800))
 	UiBoot.apply(get_window(), "light", 1.0)
@@ -264,7 +266,7 @@ func _test_display_ui() -> void:
 	sv._pick_font()
 	await _frames(2)
 	sh = _open_sheet()
-	ok(sh != null and sh.buttons.size() == 4, "글자 크기 opens a choice sheet with four entries")
+	ok(sh != null and sh.buttons.size() == 5, "글자 크기 opens a choice sheet with five entries (90 / 100 / 115 / 130 / 150 %)")
 	if sh != null:
 		(sh.buttons["1.5"] as Button).pressed.emit()
 	await _frames(2)

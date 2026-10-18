@@ -1,15 +1,17 @@
 extends Control
-## Main scene: tab bar (top on the PC, bottom on the phone), the views, toast, backend splash and banner.
+## Main scene: the shell of the app (docs/ui_redesign_design.md §4, §6.3-6.7). On the phone a fixed app bar on top and
+## the bottom tab bar (4 tabs + "더보기"); on the PC a navigation list on the left (SideNav). Both show the views,
+## the toast host, the backend splash and the banner.
 ##
-## Phone behaviour (Platform.is_phone(), docs/android_remote_design.md §5) is added next to the PC code;
-## with `not Platform.is_phone()` every node and number is the same as before.
+## Phone behaviour (Platform.is_phone(), docs/android_remote_design.md §5) is added next to the PC code.
 ##
 ## Adding a tab (English v1.1: "연습", "기록"): `add_tab(key, label, view, short_label, after_key)` after _ready.
 ## `add_v11_tabs()` adds those two (and the StudyClock); _ready calls it only when this scene is the running scene
-## of the app, so the layout tests that load main.tscn as a child still see the six original tabs.
-## The PC top bar moves tabs that do not fit into a "더보기" menu, the phone bottom bar shows 6 cells and
-## moves the rest into its "더보기" sheet (ui/bottom_tabs.gd). A view that has sub screens overrides
-## AppView.go_back() so the Android back button can step out of them.
+## of the app, so the layout tests that load main.tscn as a child still see the original tabs.
+## "설정" is the last tab of the list: on the phone it sits in the "더보기" sheet, on the PC it is the item at the
+## bottom of the SideNav. A tab added without `after_key` goes in front of it.
+## A view that has sub screens overrides AppView.go_back() so the Android back button can step out of them.
+## The colour scheme and the text size are applied once at start (UiBoot): changing them in the settings needs a restart.
 
 signal exit_requested
 
@@ -17,17 +19,25 @@ const TABS := [
 	["today", "오늘"],
 	["lesson", "레슨"],
 	["talk", "원어민 대화"],
-	["reading", "읽기"],
 	["review", "복습"],
+	["reading", "읽기"],
 	["roadmap", "로드맵"],
+	["settings", "설정"],
 ]
 ## Shorter label of a tab in the phone bottom bar.
 const TAB_SHORT := {"talk": "대화"}
+const SETTINGS_KEY := "settings"
 const BACK_EXIT_MSEC := 2000
-const MORE_TEXT := "더보기 ▾"
+## Phone bottom bar: 4 tabs + "더보기" (the rest goes into the sheet).
+const PHONE_MAX_DIRECT := 5
+## PC SideNav: the order of the items in the two sections (a tab that is in neither list goes to the end of "기록").
+const NAV_LEARN := ["today", "lesson", "talk", "practice", "reading", "review"]
+const NAV_RECORD := ["stats", "roadmap"]
+## Views that draw their own title / back / action row while a sub screen is open (the chat, a practice screen): the
+## phone app bar then shows only its tab name and the connection chip, so nothing appears twice.
+const OWN_HEADER := ["talk", "practice"]
 
 var views: Dictionary = {}
-var tab_buttons: Dictionary = {}
 var current: String = ""
 var quit_on_exit: bool = true ## tests switch the real quit off
 
@@ -35,30 +45,28 @@ var _tabs: Array = TABS.duplicate(true)
 var _tab_short: Dictionary = TAB_SHORT.duplicate()
 var _phone: bool = false
 
-var _root: VBoxContainer
-var _top_row: HBoxContainer
-var _top_more: Button
-var _top_more_menu: PopupMenu
-var _top_hidden: Array = []
-var _top_pad: Control
-var _bottom_tabs: BottomTabs
+var _root: BoxContainer
+var _app_bar: AppBar            ## phone
+var _bottom_tabs: BottomTabs    ## phone
+var _side_nav: SideNav          ## PC
 var _content: Control
 var _banner: PanelContainer
 var _banner_label: Label
 var _banner_btn: Button
-var _status_dot: PanelContainer
+var _conn_chip: ConnChip        ## engine / PC connection (phone: in the app bar, PC: at the bottom of the SideNav)
+var _link_chip: ConnChip        ## PC: "폰 연결 켜짐"
+var _status_dot: Panel          ## the dot and the text of _conn_chip (kept as handles for tests / tools)
 var _status_text: Label
-var _link_dot: PanelContainer
+var _link_dot: Panel
 var _link_text: Label
 var _link_shown: bool = false
 var _link_prev: bool = false
 var _lan_probed: bool = false
 var _lan_probe_on: bool = false
 
-var _toast_box: PanelContainer
-var _toast_label: Label
-var _toast_gap: Control
-var _toast_tween: Tween
+var _toast_host: ToastHost
+var _toast_box: PanelContainer  ## = _toast_host.box (shots / tests set .visible)
+var _toast_label: Label         ## = _toast_host.label
 
 var _splash_layer: CanvasLayer
 var _splash_card: CardBox
@@ -97,10 +105,22 @@ func _setup_window() -> void:
 		win.min_size = Vector2i(900, 600)
 
 
+## Colour scheme and text size from the saved settings, applied before anything is built (code-built UI copies the
+## colours when it is made). A test or tool that applied its own scheme first (Window.theme is set) is left alone.
+## A broken saved value ("purple", "abc", 9.0) falls back inside UiBoot / Ds: light, or the closest size.
+func _boot_ui() -> void:
+	var win := get_window()
+	if win.theme != null:
+		return
+	var raw: Variant = Store.prefs.get("font_scale", 1.0)
+	var scale: float = float(raw) if (typeof(raw) == TYPE_FLOAT or typeof(raw) == TYPE_INT) else 1.0
+	UiBoot.apply(win, str(Store.prefs.get("scheme", "system")), scale)
+
+
 func _ready() -> void:
 	_phone = Platform.is_phone()
+	_boot_ui()
 	if _phone:
-		PhoneLayout.apply_theme(ThemeDB.get_project_theme())
 		PhoneLayout.install_touch_scroll(get_tree()) # a drag that starts on a card / button scrolls the page
 	_setup_window()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -111,23 +131,44 @@ func _ready() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
-	_root = VBoxContainer.new()
+	# the box that holds the banner, the views (and on the phone the bottom tabs)
+	var page_box: BoxContainer
+	if _phone:
+		_root = VBoxContainer.new()
+		page_box = _root
+	else:
+		_root = HBoxContainer.new()
+		page_box = VBoxContainer.new()
+		page_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		page_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		page_box.add_theme_constant_override("separation", 0)
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_theme_constant_override("separation", 0)
 	add_child(_root)
 
-	_root.add_child(_build_phone_top_bar() if _phone else _build_top_bar())
+	_conn_chip = ConnChip.new()
+	_status_dot = _conn_chip.dot
+	_status_text = _conn_chip.label
+	if _phone:
+		_build_app_bar()
+		_root.add_child(_app_bar)
+	else:
+		_build_side_nav()
+		_root.add_child(_side_nav)
+		_root.add_child(page_box)
+
 	_banner = _build_banner()
-	_root.add_child(_banner)
+	page_box.add_child(_banner)
 
 	_content = Control.new()
 	_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.clip_contents = true
-	_root.add_child(_content)
+	page_box.add_child(_content)
 
 	if _phone:
 		_bottom_tabs = BottomTabs.new()
+		_bottom_tabs.max_direct = PHONE_MAX_DIRECT
 		_bottom_tabs.set_tabs(_tabs, _tab_short)
 		_bottom_tabs.tab_selected.connect(show_view)
 		_root.add_child(_bottom_tabs)
@@ -140,31 +181,47 @@ func _ready() -> void:
 		"review": ReviewView.new(),
 		"roadmap": RoadmapView.new(),
 	}
+	(views["today"] as TodayView).embed_settings = false # the settings are a screen of their own (views["settings"])
+	if _phone:
+		(views["reading"] as ReadingView).bar_hosted = true # the app bar shows the reader's back button, title and action
 	for k in views.keys():
-		var v: AppView = views[k]
-		v.visible = false
-		_content.add_child(v)
+		_register_view(views[k] as AppView)
 
-	_build_toast()
+	_toast_host = ToastHost.new()
+	add_child(_toast_host)
+	_toast_host.bind_toast_bus()
+	_toast_box = _toast_host.box
+	_toast_label = _toast_host.label
 	_build_splash()
 	if get_tree().current_scene == self:
 		add_v11_tabs()
 		add_sync()
+	# The settings screen is built after add_sync(): its SyncPanel looks for the SyncManager once, when it is made.
+	views[SETTINGS_KEY] = SettingsView.new()
+	_register_view(views[SETTINGS_KEY] as AppView)
 
-	Toast.message.connect(_show_toast)
 	Store.navigate.connect(_on_navigate)
 	Backend.status_changed.connect(_on_backend_status)
+	(views[SETTINGS_KEY] as SettingsView).connect_requested.connect(_open_connect_view)
 	if _phone:
 		(views["today"] as TodayView).connect_requested.connect(_open_connect_view)
 		get_viewport().gui_focus_changed.connect(_on_focus_changed)
 		_update_phone_chrome()
+	else:
+		_rebuild_nav()
 
 	show_view("today")
 	_on_backend_status()
 	Backend.start()
 
 
-## Adds a tab behind the existing ones, or right after the tab `after_key` when that one exists.
+func _register_view(v: AppView) -> void:
+	v.visible = false
+	v.bar_changed.connect(_on_view_bar_changed.bind(v))
+	_content.add_child(v)
+
+
+## Adds a tab behind the existing ones (in front of "설정"), or right after the tab `after_key` when that one exists.
 ## `short_label` is the phone bottom-bar text.
 func add_tab(key: String, label: String, view: AppView, short_label: String = "", after_key: String = "") -> void:
 	if views.has(key) or view == null:
@@ -175,33 +232,28 @@ func add_tab(key: String, label: String, view: AppView, short_label: String = ""
 			if str((_tabs[i] as Array)[0]) == after_key:
 				at = i + 1
 	if at < 0:
-		_tabs.append([key, label])
-	else:
-		_tabs.insert(at, [key, label])
+		at = _tabs.size()
+		if at > 0 and str((_tabs[at - 1] as Array)[0]) == SETTINGS_KEY:
+			at -= 1
+	_tabs.insert(at, [key, label])
 	if short_label != "":
 		_tab_short[key] = short_label
 	views[key] = view
-	view.visible = false
-	_content.add_child(view)
+	_register_view(view)
 	if _phone:
 		_bottom_tabs.set_tabs(_tabs, _tab_short)
 		_bottom_tabs.set_current(current)
 	else:
-		var idx: int = _top_more.get_index()
-		if at >= 0 and tab_buttons.has(after_key):
-			idx = (tab_buttons[after_key] as Button).get_index() + 1
-		_add_top_button(key, label, idx)
-		_style_tabs()
-		_layout_top_tabs()
+		_rebuild_nav()
 
 
-## English v1.1: 연습 after 대화, 기록 after 복습, and the study clock (StudyLog writer).
+## English v1.1: 연습 after 복습, 기록 after 읽기, and the study clock (StudyLog writer).
 func add_v11_tabs() -> void:
 	if views.has("practice"):
 		return
 	add_child(StudyClock.new())
-	add_tab("practice", "연습", PracticeView.new(), "연습", "talk")
-	add_tab("stats", "기록", StatsView.new(), "기록", "review")
+	add_tab("practice", "연습", PracticeView.new(), "연습", "review")
+	add_tab("stats", "기록", StatsView.new(), "기록", "reading")
 
 
 ## 1.2: learning-record sync (timers, app lifecycle, first-connection dialog). Like the StudyClock it is only added when this
@@ -211,187 +263,12 @@ func add_sync() -> void:
 		add_child(SyncManager.new())
 
 
-## Keys of the tabs in the order of the tab bar.
+## Keys of the tabs in the order of the tab list ("설정" last).
 func tab_keys() -> Array:
 	var out: Array = []
 	for t in _tabs:
 		out.append(str((t as Array)[0]))
 	return out
-
-
-# ---------------------------------------------------------------- top bar (PC)
-
-func _build_top_bar() -> Control:
-	var bar := PanelContainer.new()
-	bar.add_theme_stylebox_override("panel", UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0))
-	var line_box := VBoxContainer.new()
-	line_box.add_theme_constant_override("separation", 0)
-	bar.add_child(line_box)
-	var m := MarginContainer.new()
-	m.add_theme_constant_override("margin_left", 20)
-	m.add_theme_constant_override("margin_right", 20)
-	m.add_theme_constant_override("margin_top", 8)
-	m.add_theme_constant_override("margin_bottom", 0)
-	line_box.add_child(m)
-	var row := UI.hbox(4)
-	_top_row = row
-	row.resized.connect(_layout_top_tabs)
-	m.add_child(row)
-
-	var title := Label.new()
-	title.text = "회화 연습"
-	title.theme_type_variation = &"H3"
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(title)
-	row.add_child(UI.gap(0))
-	var sp := Control.new()
-	sp.custom_minimum_size = Vector2(18, 0)
-	row.add_child(sp)
-
-	for t in _tabs:
-		_add_top_button(str(t[0]), str(t[1]), -1)
-
-	# overflow menu for 7+ tabs: hidden (and out of the layout) while every tab fits
-	_top_more = Button.new()
-	_top_more.text = MORE_TEXT
-	_top_more.focus_mode = Control.FOCUS_NONE
-	_top_more.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_top_more.visible = false
-	_top_more.pressed.connect(_open_top_more)
-	row.add_child(_top_more)
-	_top_more_menu = PopupMenu.new()
-	_top_more_menu.id_pressed.connect(func(id: int) -> void:
-		if id >= 0 and id < _top_hidden.size():
-			show_view(str(_top_hidden[id])))
-	add_child(_top_more_menu)
-
-	row.add_child(UI.spacer())
-	# "폰 연결 켜짐" (the PC lets a phone in): hidden unless the settings card or /lan says so
-	_link_dot = UI.tinted_panel(Pal.OK, Color(0, 0, 0, 0), 0, 99, 0, 0)
-	_link_dot.custom_minimum_size = Vector2(9, 9)
-	_link_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_link_dot.visible = false
-	row.add_child(_link_dot)
-	_link_text = UI.label("폰 연결 켜짐", "Small", false)
-	_link_text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_link_text.visible = false
-	row.add_child(_link_text)
-	var lgap := Control.new()
-	lgap.custom_minimum_size = Vector2(10, 0)
-	lgap.visible = false
-	lgap.name = "LinkGap"
-	row.add_child(lgap)
-	_status_dot = UI.tinted_panel(Pal.MUTED, Color(0, 0, 0, 0), 0, 99, 0, 0)
-	_status_dot.custom_minimum_size = Vector2(9, 9)
-	_status_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_status_dot)
-	_status_text = UI.label("", "Small", false)
-	_status_text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_status_text)
-
-	var line := ColorRect.new()
-	line.color = Pal.LINE
-	line.custom_minimum_size = Vector2(0, 1)
-	line_box.add_child(line)
-	return bar
-
-
-func _add_top_button(key: String, label: String, index: int) -> void:
-	var b := Button.new()
-	b.text = label
-	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.pressed.connect(func() -> void: show_view(key))
-	tab_buttons[key] = b
-	_top_row.add_child(b)
-	if index >= 0:
-		_top_row.move_child(b, index)
-
-
-func _style_top_button(b: Button, sel: bool) -> void:
-	var sn := UI.style(Color(0, 0, 0, 0), Pal.INK if sel else Color(0, 0, 0, 0), 0, 0, 14, 10)
-	sn.border_width_bottom = 3
-	sn.content_margin_bottom = 9
-	var sh := UI.style(Pal.SUNK if not sel else Color(0, 0, 0, 0), Pal.INK if sel else Color(0, 0, 0, 0), 0, 0, 14, 10)
-	sh.border_width_bottom = 3
-	sh.content_margin_bottom = 9
-	for n in ["normal", "pressed", "focus", "disabled"]:
-		b.add_theme_stylebox_override(n, sn)
-	b.add_theme_stylebox_override("hover", sh)
-	b.add_theme_stylebox_override("hover_pressed", sh)
-	var col: Color = Pal.INK if sel else Pal.MUTED
-	for n in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
-		b.add_theme_color_override(n, col)
-	if sel:
-		b.add_theme_font_override("font", UI.bold_font())
-	else:
-		b.remove_theme_font_override("font")
-
-
-func _style_tabs() -> void:
-	if _phone:
-		_bottom_tabs.set_current(current)
-		return
-	for k in tab_buttons.keys():
-		_style_top_button(tab_buttons[k] as Button, k == current)
-	if _top_more != null:
-		_style_top_button(_top_more, _top_hidden.has(current))
-
-
-## Hides the tabs that do not fit into the top row and offers them in the "더보기" menu.
-func _layout_top_tabs() -> void:
-	if _phone or _top_row == null or _top_more == null:
-		return
-	var avail: float = size.x - 40.0 # window width minus the bar's 20 px margins (the row itself grows with its content)
-	if avail <= 40.0:
-		return
-	var sep: float = float(_top_row.get_theme_constant("separation"))
-	var fixed := 0.0
-	var fixed_n := 0
-	for c in _top_row.get_children():
-		var ctl := c as Control
-		if ctl == null or tab_buttons.values().has(ctl) or ctl == _top_more:
-			continue
-		if ctl.visible:
-			fixed_n += 1
-			if not (ctl.size_flags_horizontal & Control.SIZE_EXPAND):
-				fixed += ctl.get_combined_minimum_size().x
-	var keys: Array = tab_keys()
-	var widths: Array = []
-	for k in keys:
-		widths.append((tab_buttons[k] as Button).get_combined_minimum_size().x)
-	var more_w: float = _top_more.get_combined_minimum_size().x
-	var shown: int = keys.size()
-	while shown > 1:
-		var n: int = fixed_n + shown + (1 if shown < keys.size() else 0)
-		var need: float = fixed + sep * float(n - 1)
-		for i in shown:
-			need += float(widths[i])
-		if shown < keys.size():
-			need += more_w
-		if need <= avail:
-			break
-		shown -= 1
-	_top_hidden = []
-	for i in keys.size():
-		var b: Button = tab_buttons[keys[i]]
-		var show: bool = i < shown
-		if b.visible != show:
-			b.visible = show
-		if not show:
-			_top_hidden.append(keys[i])
-	var more_vis: bool = shown < keys.size()
-	if _top_more.visible != more_vis:
-		_top_more.visible = more_vis
-	_style_tabs()
-
-
-func _open_top_more() -> void:
-	_top_more_menu.clear()
-	for i in _top_hidden.size():
-		_top_more_menu.add_item(_tab_label(str(_top_hidden[i])), i)
-	var r := Rect2i(Vector2i(_top_more.global_position) + Vector2i(0, int(_top_more.size.y)), Vector2i(int(_top_more.size.x), 0))
-	_top_more_menu.popup_on_parent(r)
 
 
 func _tab_label(key: String) -> String:
@@ -401,55 +278,103 @@ func _tab_label(key: String) -> String:
 	return key
 
 
-# ---------------------------------------------------------------- top strip (phone)
+# ---------------------------------------------------------------- PC: side navigation
 
-func _build_phone_top_bar() -> Control:
-	var bar := PanelContainer.new()
-	bar.add_theme_stylebox_override("panel", UI.style(Pal.BG, Pal.LINE, 0, 0, 0, 0))
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 0)
-	bar.add_child(col)
-	_top_pad = UI.gap(0) # status bar / notch inset
-	col.add_child(_top_pad)
-	var m := MarginContainer.new()
-	m.add_theme_constant_override("margin_left", PhoneLayout.PAD)
-	m.add_theme_constant_override("margin_right", PhoneLayout.PAD)
-	m.add_theme_constant_override("margin_top", 0)
-	m.add_theme_constant_override("margin_bottom", 0)
-	m.custom_minimum_size = Vector2(0, PhoneLayout.TOP_H)
-	m.mouse_filter = Control.MOUSE_FILTER_STOP
-	m.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			_open_settings())
-	col.add_child(m)
-	var row := UI.hbox(8)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	m.add_child(row)
-	var title := Label.new()
-	title.text = "회화 연습"
-	title.theme_type_variation = &"H3"
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(title)
-	row.add_child(UI.spacer())
-	_status_dot = UI.tinted_panel(Pal.MUTED, Color(0, 0, 0, 0), 0, 99, 0, 0)
-	_status_dot.custom_minimum_size = Vector2(10, 10)
-	_status_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_status_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(_status_dot)
-	_status_text = UI.label("", "Small", false)
-	_status_text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_status_text)
-	var line := ColorRect.new()
-	line.color = Pal.LINE
-	line.custom_minimum_size = Vector2(0, 1)
-	col.add_child(line)
-	return bar
+func _build_side_nav() -> void:
+	_side_nav = SideNav.new()
+	_side_nav.item_selected.connect(show_view)
+	_side_nav.set_settings_visible(true)
+	_conn_chip.tapped.connect(_open_settings)
+	_link_chip = ConnChip.new()
+	_link_chip.set_state("ok", "폰 연결 켜짐")
+	_link_chip.visible = false # hidden unless the settings card or /lan says the PC lets a phone in
+	_link_chip.tapped.connect(_open_settings)
+	_link_dot = _link_chip.dot
+	_link_text = _link_chip.label
+	var foot := VBoxContainer.new()
+	foot.add_theme_constant_override("separation", 4)
+	foot.add_child(_link_chip)
+	foot.add_child(_conn_chip)
+	_side_nav.set_footer(foot)
 
 
-## Tapping the strip opens the settings (connection card) on the 오늘 tab.
+## The SideNav items from the tab list: "학습" (오늘 ... 복습) and "기록" (기록, 로드맵); "설정" is its footer item.
+func _rebuild_nav() -> void:
+	if _side_nav == null:
+		return
+	var learn: Array = []
+	var record: Array = []
+	for k in NAV_LEARN:
+		if tab_keys().has(k):
+			learn.append([k, _tab_label(k)])
+	for k in NAV_RECORD:
+		if tab_keys().has(k):
+			record.append([k, _tab_label(k)])
+	for k in tab_keys():
+		if k != SETTINGS_KEY and not NAV_LEARN.has(k) and not NAV_RECORD.has(k):
+			record.append([k, _tab_label(k)])
+	_side_nav.set_items([{"title": "학습", "items": learn}, {"title": "기록", "items": record}])
+	_side_nav.set_current(current)
+
+
+# ---------------------------------------------------------------- phone: app bar
+
+func _build_app_bar() -> void:
+	_app_bar = AppBar.new()
+	_app_bar.back_pressed.connect(_on_bar_back)
+	_app_bar.action_pressed.connect(_on_bar_action)
+	_app_bar.chip_pressed.connect(_open_settings)
+	_app_bar.set_chip(_conn_chip)
+
+
+## Title, back button, actions and scroll link of the app bar from the current view (AppView contract, §6.3).
+## A sub screen (page_title differs from the tab name) gets the back button; 오늘 gets the "설정" action.
+func _refresh_bar() -> void:
+	if _app_bar == null or not views.has(current):
+		return
+	var v: AppView = views[current]
+	var title: String = _tab_label(current)
+	var back := false
+	var actions: Array = []
+	var t: String = v.page_title()
+	if t != "" and t != title:
+		if OWN_HEADER.has(current):
+			title = "" # the screen draws its own title / back / action row: nothing twice
+		else:
+			title = t
+			back = true
+			actions = v.page_actions()
+	elif current == "today":
+		actions = [{"id": SETTINGS_KEY, "text": "설정"}]
+	else:
+		actions = v.page_actions()
+	_app_bar.set_page(title, back, actions)
+	_app_bar.bind_scroll(v.scroll_host(), v.header_block())
+
+
+func _on_view_bar_changed(v: AppView) -> void:
+	if views.get(current, null) == v:
+		_refresh_bar()
+
+
+func _on_bar_back() -> void:
+	if views.has(current) and (views[current] as AppView).go_back():
+		return
+	if current != "today":
+		show_view("today")
+
+
+func _on_bar_action(id: String) -> void:
+	if id == SETTINGS_KEY and current == "today":
+		_open_settings()
+		return
+	if views.has(current):
+		(views[current] as AppView).on_action(id)
+
+
+## The connection chip / the settings action: the settings screen (its first section is the connection).
 func _open_settings() -> void:
-	show_view("today")
-	(views["today"] as TodayView).open_settings()
+	show_view(SETTINGS_KEY)
 
 
 func show_view(name: String) -> void:
@@ -465,6 +390,14 @@ func show_view(name: String) -> void:
 	v.visible = true
 	v.refresh()
 	_style_tabs()
+	_refresh_bar()
+
+
+func _style_tabs() -> void:
+	if _bottom_tabs != null:
+		_bottom_tabs.set_current(current)
+	if _side_nav != null:
+		_side_nav.set_current(current)
 
 
 func _on_navigate(view: String, lang: String) -> void:
@@ -477,10 +410,19 @@ func _on_navigate(view: String, lang: String) -> void:
 
 func _build_banner() -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.style(Pal.WARN_SOFT, Color("#E8D49A"), 0, 0, 16 if _phone else 20, 10 if _phone else 8))
+	p.add_theme_stylebox_override("panel", UI.style(Pal.WARN_SOFT, Color(0, 0, 0, 0), 0, 0, 16 if _phone else 20, 10 if _phone else 8))
 	var row := UI.adaptive(12)
-	_banner_label = UI.colored("", Pal.WARN, "")
-	row.add_child(_banner_label)
+	# the bold "! " in front says "warning" without the colour
+	var msg := UI.hbox(6)
+	msg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var mark := UI.label("! ", "Strong", false)
+	mark.add_theme_color_override("font_color", Pal.WARN_ON)
+	mark.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	msg.add_child(mark)
+	_banner_label = UI.colored("", Pal.WARN_ON, "")
+	_banner_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	msg.add_child(_banner_label)
+	row.add_child(msg)
 	_banner_btn = UI.button("다시 확인", "outline", Pal.WARN)
 	_banner_btn.pressed.connect(func() -> void:
 		if Backend.status == Backend.Status.READY:
@@ -515,8 +457,7 @@ func _on_backend_status() -> void:
 		_:
 			dot = Pal.WARN
 			text = "PC 연결 중…" if _phone else "AI 엔진 준비 중…"
-	_status_dot.add_theme_stylebox_override("panel", UI.style(dot, Color(0, 0, 0, 0), 0, 99, 0, 0))
-	_status_text.text = text
+	_conn_chip.set_state(_chip_kind(dot), text)
 
 	# banner
 	var down_text: String = "PC에 연결되어 있지 않아요. " if _phone else "AI 엔진에 연결되어 있지 않아요. "
@@ -555,6 +496,17 @@ func _on_backend_status() -> void:
 	elif st == Backend.Status.READY and not _lan_probed:
 		_lan_probed = true
 		_probe_lan()
+
+
+## The ConnChip state for the colour the status block above chose (the chip shows a dot AND the text).
+func _chip_kind(c: Color) -> String:
+	if c.is_equal_approx(Pal.OK):
+		return "ok"
+	if c.is_equal_approx(Pal.WARN):
+		return "warn"
+	if c.is_equal_approx(Pal.BAD):
+		return "bad"
+	return "idle"
 
 
 # ---------------------------------------------------------------- phone: connect screen
@@ -640,12 +592,12 @@ func _update_phone_chrome() -> void:
 	_root.offset_left = float(ins["left"])
 	_root.offset_right = -float(ins["right"])
 	_root.offset_bottom = -kb
-	_top_pad.custom_minimum_size.y = float(ins["top"])
+	_app_bar.set_top_inset(float(ins["top"])) # status bar / notch
 	_bottom_tabs.visible = not typing # the keyboard covers the bar: keep the page above it
 	_bottom_tabs.set_bottom_inset(float(ins["bottom"]))
 	_bottom_tabs.set_side_inset(0.0, 0.0)
 	var tab_h: float = 0.0 if typing else PhoneLayout.TAB_H + float(ins["bottom"])
-	_toast_gap.custom_minimum_size.y = 12.0 + (kb if typing else tab_h)
+	_toast_host.set_bottom_gap(12.0 + (kb if typing else tab_h))
 	if _connect_pad != null and is_instance_valid(_connect_pad):
 		_connect_pad.add_theme_constant_override("margin_top", int(ins["top"]))
 		_connect_pad.add_theme_constant_override("margin_left", int(ins["left"]))
@@ -669,10 +621,13 @@ func _keep_focus_visible() -> void:
 		PhoneLayout.ensure_visible(fo)
 
 
-## Android back button: one step back out of a sub screen, else to 오늘, else (twice within 2 s) quit.
+## Android back button: the first-connection question, then an open sheet / dialog, then one step back out of a sub
+## screen, else to 오늘, else (twice within 2 s) quit.
 func handle_back() -> void:
 	if SyncManager.current != null and SyncManager.current.consume_back():
 		return # the first-connection question is open: answer it first
+	if Sheet.handle_back():
+		return # a sheet (choice, confirm, 더보기) is open: it is closed (or answered) first, the screen behind stays
 	if is_connect_open():
 		_connect_dismissed = true
 		_close_connect_view()
@@ -709,14 +664,11 @@ func _update_link_indicator() -> void:
 	if on == _link_shown:
 		return
 	_link_shown = on
-	_link_dot.visible = on
-	_link_text.visible = on
-	_top_row.get_node("LinkGap").visible = on
-	_layout_top_tabs()
+	_link_chip.visible = on
 
 
 ## One look at /lan when the engine first answers: a PC app that restarts with the phone link left on
-## still shows the dot before the settings card has been opened. Older engines answer 404: ignored.
+## still shows the chip before the settings card has been opened. Older engines answer 404: ignored.
 func _probe_lan() -> void:
 	var req = Api.get_json("/lan", 5.0, false)
 	var res: Dictionary = await req.wait()
@@ -751,21 +703,17 @@ func _build_splash() -> void:
 	card.body.add_child(_splash_title)
 	_splash_msg = UI.label("", "Muted")
 	card.body.add_child(_splash_msg)
-	_splash_bar = ProgressBar.new()
-	_splash_bar.indeterminate = true
-	_splash_bar.show_percentage = false
-	_splash_bar.custom_minimum_size = Vector2(0, 8)
-	_splash_bar.add_theme_stylebox_override("fill", UI.style(Pal.EN, Color(0, 0, 0, 0), 0, 99, 0, 0))
+	_splash_bar = UI.progress_indeterminate(Pal.PRIMARY, 8.0)
 	card.body.add_child(_splash_bar)
 	var row := UI.adaptive(8)
-	_splash_retry = UI.button("다시 시도", "primary", Pal.EN, 46)
+	_splash_retry = UI.button("다시 시도", "primary", Pal.PRIMARY, 46)
 	_splash_retry.pressed.connect(func() -> void: Backend.start())
 	row.add_child(_splash_retry)
 	if _phone:
-		_splash_find = UI.button("다시 연결", "default", Pal.INK, 46)
+		_splash_find = UI.button("다시 연결", "soft", Pal.PRIMARY, 46)
 		_splash_find.pressed.connect(_open_connect_view)
 		row.add_child(_splash_find)
-	var skip := UI.button("연결 없이 계속" if _phone else "엔진 없이 계속", "default", Pal.INK, 46)
+	var skip := UI.button("연결 없이 계속" if _phone else "엔진 없이 계속", "soft", Pal.INK, 46)
 	skip.pressed.connect(func() -> void:
 		_splash_dismissed = true
 		_on_backend_status())
@@ -778,66 +726,6 @@ func _build_splash() -> void:
 	card.body.add_child(_splash_note)
 
 
-# ---------------------------------------------------------------- toast
-
-func _build_toast() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 30
-	add_child(layer)
-	var root := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(root)
-	var v := VBoxContainer.new()
-	v.set_anchors_preset(Control.PRESET_FULL_RECT)
-	v.alignment = BoxContainer.ALIGNMENT_END
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(v)
-	var h := HBoxContainer.new()
-	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(h)
-	_toast_gap = UI.gap(28)
-	v.add_child(_toast_gap)
-	_toast_box = PanelContainer.new()
-	_toast_box.theme_type_variation = &"Toast"
-	_toast_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toast_box.visible = false
-	_toast_label = Label.new()
-	_toast_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_toast_label.custom_minimum_size = Vector2(420, 0)
-	if _phone:
-		_toast_label.custom_minimum_size = Vector2(_toast_label_width(), 0)
-	_toast_label.add_theme_color_override("font_color", Color.WHITE)
-	_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toast_box.add_child(_toast_label)
-	h.add_child(_toast_box)
-
-
-## Phone: the toast is as wide as the screen minus a 16 px margin (and at most 420 px).
-func _toast_label_width() -> float:
-	return clampf(get_viewport_rect().size.x - 32.0 - 36.0, 200.0, 420.0)
-
-
-func _show_toast(text: String, kind: String) -> void:
-	_toast_label.text = text
-	var bg: Color = Color("#222A38")
-	if kind == "error":
-		bg = Color("#8F2D2D")
-	elif kind == "ok":
-		bg = Color("#1D6B49")
-	_toast_box.add_theme_stylebox_override("panel", UI.style(bg, Color(0, 0, 0, 0), 0, 10, 18, 12))
-	_toast_box.visible = true
-	_toast_box.modulate = Color(1, 1, 1, 0)
-	if _toast_tween != null and _toast_tween.is_valid():
-		_toast_tween.kill()
-	_toast_tween = create_tween()
-	_toast_tween.tween_property(_toast_box, "modulate:a", 1.0, 0.15)
-	_toast_tween.tween_interval(6.0 if kind == "error" else 3.5)
-	_toast_tween.tween_property(_toast_box, "modulate:a", 0.0, 0.4)
-	_toast_tween.tween_callback(func() -> void: _toast_box.visible = false)
-
-
 # ---------------------------------------------------------------- quit
 
 func _notification(what: int) -> void:
@@ -846,8 +734,5 @@ func _notification(what: int) -> void:
 		get_tree().quit()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST and _phone:
 		handle_back()
-	elif what == NOTIFICATION_RESIZED and _phone and _toast_label != null and _splash_card != null:
-		_toast_label.custom_minimum_size.x = _toast_label_width()
+	elif what == NOTIFICATION_RESIZED and _phone and _splash_card != null:
 		_splash_card.custom_minimum_size.x = maxf(240.0, get_viewport_rect().size.x - 32.0)
-	elif what == NOTIFICATION_RESIZED and not _phone:
-		_layout_top_tabs()

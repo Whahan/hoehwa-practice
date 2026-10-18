@@ -34,6 +34,8 @@ func _ready() -> void:
 	if out_dir == "":
 		out_dir = args[0] if args.size() > 0 and not args[0].begins_with("--") else "user://shots_phone"
 	_phone = Platform.is_phone()
+	if not _phone:
+		Api.base_url = "http://127.0.0.1:9" # a closed port: a PC run must never reach the user's engine (8770)
 	var scheme := "light"
 	var scale_given := false
 	var scale := 1.0
@@ -163,21 +165,18 @@ func _run() -> void:
 	# ---------------------------------------------------------------- today
 	main_node.show_view("today")
 	await _shot("today")
-	var tdv: TodayView = views["today"]
-	tdv._settings_open = true
-	tdv.refresh()
-	await _shot("today_settings")
-	var sb: Variant = tdv.get("_settings_btn") # the settings toggle (only the phone-aware build has it)
-	if _phone and sb is Control and is_instance_valid(sb):
-		tdv._scroll.scroll_vertical = int(maxf(0.0, (sb as Control).global_position.y - tdv._scroll.content.global_position.y - 8.0))
-	else:
-		tdv._scroll.scroll_vertical = 650 if not _phone else 1250
-	await _shot("today_settings_top")
-	tdv._scroll.scroll_vertical = 100000
-	await _shot("today_settings_bottom")
-	tdv._settings_open = false
-	tdv.refresh()
-	tdv._scroll.scroll_vertical = 0
+	# the settings are a screen of their own (shell: 더보기 / the 설정 action / the connection chip)
+	main_node.show_view("settings")
+	await _shot("settings")
+	var ssc: ScrollContainer = (views["settings"] as SettingsView).scroll_host()
+	if ssc != null:
+		ssc.scroll_vertical = int(ssc.get_v_scroll_bar().max_value * 0.5)
+	await _shot("settings_mid")
+	if ssc != null:
+		ssc.scroll_vertical = 100000
+	await _shot("settings_bottom")
+	if ssc != null:
+		ssc.scroll_vertical = 0
 
 	# ---------------------------------------------------------------- lesson
 	main_node.show_view("lesson")
@@ -394,11 +393,11 @@ func _run_phone_extras(views: Dictionary) -> void:
 	Backend._set_status(Backend.Status.NEEDS_PAIRING, "연결이 필요해요")
 	await _shot("needs_pairing")
 	Backend._set_status(Backend.Status.READY)
-	# 8 tabs (English v1.1 adds 연습 and 기록): 5 cells + 더보기
-	main_node.call("add_tab", "practice", "연습", AppView.new(), "연습")
-	main_node.call("add_tab", "log", "기록", AppView.new(), "기록")
+	# the whole tab list (English v1.1 adds 연습 and 기록): 4 cells + 더보기 with 연습, 읽기, 기록, 로드맵, 설정
+	main_node.call("add_tab", "practice", "연습", AppView.new(), "연습", "review")
+	main_node.call("add_tab", "stats", "기록", AppView.new(), "기록", "reading")
 	main_node.call("show_view", "today")
-	await _shot("tabs8_bar")
+	await _shot("tabs_bar")
 	main_node._bottom_tabs.open_more()
-	await _shot("tabs8_more_sheet")
+	await _shot("tabs_more_sheet")
 	main_node._bottom_tabs.close_more()

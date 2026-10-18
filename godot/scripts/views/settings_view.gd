@@ -29,7 +29,7 @@ const SECTIONS := [
 	["danger", "기록"],
 ]
 const SCHEMES := [["system", "시스템"], ["light", "라이트"], ["dark", "다크"]]
-const FONT_CHOICES := [[1.0, "보통 (100%)"], [1.15, "조금 크게 (115%)"], [1.3, "크게 (130%)"], [1.5, "아주 크게 (150%)"]]
+const FONT_CHOICES := [[0.9, "작게 (90%)"], [1.0, "보통 (100%)"], [1.15, "조금 크게 (115%)"], [1.3, "크게 (130%)"], [1.5, "아주 크게 (150%)"]]
 const VOICE_SAMPLE := {
 	"en": "Really? That sounds amazing! Where did you go?",
 	"ja": "えっ、本当？すごいね！どこに行ったの？",
@@ -321,11 +321,11 @@ func _speed_block() -> Control:
 	var phone: bool = Platform.is_phone()
 	var sp := UI.vbox(6)
 	sp.add_child(UI.label("읽어주는 속도", "ListMain"))
-	var srow: BoxContainer = UI.adaptive(12) # phone: slider line, then the two listen buttons
-	var sline: BoxContainer = srow
-	if phone:
-		sline = UI.hbox(12)
-		srow.add_child(sline)
+	var srow: Container = UI.adaptive(12) # phone: slider line, then the two listen buttons
+	if not phone:
+		srow = UI.flow(12, 8) # PC: one line while it fits, the listen buttons drop to a second line in a narrow window
+	var sline: Container = UI.hbox(12) # the slider and its value stay together
+	srow.add_child(sline)
 	var slider := HSlider.new()
 	slider.min_value = 0.6
 	slider.max_value = 1.3
@@ -381,8 +381,8 @@ func _voice_block() -> Control:
 ## One row of the voice settings: dropdown of the voices installed for `l` + a preview button.
 static func voice_row(l: String) -> Control:
 	var phone: bool = Platform.is_phone()
-	var row: BoxContainer = UI.vbox(6) if phone else UI.hbox(12)
-	var line: BoxContainer = row # phone: the dropdown and the preview button share a second line
+	var row: Container = UI.vbox(6) if phone else UI.flow(12, 8) # PC: wraps in a narrow window
+	var line: Container = row # phone: the dropdown and the preview button share a second line
 	var cap := UI.label("영어" if l == "en" else "일본어", "Muted", false)
 	if not phone:
 		cap.custom_minimum_size = Vector2(60, 0)
@@ -652,7 +652,7 @@ func _engine_section() -> Control:
 	var box := UI.vbox(6)
 	box.add_child(UI.label("AI 엔진", "ListMain"))
 	box.add_child(UI.label("레슨 만들기, 원어민 대화, 교정에 쓰는 AI예요. 음성 인식·발음 채점·목소리·문법 검사는 어느 쪽이든 이 PC에서 무료로 돌아가요.", "Small"))
-	var row := UI.hbox(12)
+	var row := UI.flow(12, 8) # the test button drops to a second line in a narrow window
 	_engine_ob = UI.option_button(["불러오는 중…"], 0)
 	_engine_ob.custom_minimum_size = Vector2(320, 0)
 	_engine_ob.disabled = true

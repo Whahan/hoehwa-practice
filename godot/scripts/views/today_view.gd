@@ -1,7 +1,8 @@
 class_name TodayView
 extends AppView
-## 오늘: progress overview, two language cards, settings (docs/ui_redesign_design.md §7.1). The settings are a
-## SettingsView (views/settings_view.gd) that this screen opens under its cards; W4 gives them a screen of their own.
+## 오늘: progress overview, two language cards (docs/ui_redesign_design.md §7.1). The settings are a SettingsView
+## (views/settings_view.gd). The app shell (main.gd) shows them as a screen of its own and sets `embed_settings = false`;
+## a TodayView built on its own (tests) still opens them under its cards through the "설정" toggle.
 
 ## The phone's connection card asked for the connect screen (main.gd opens it).
 signal connect_requested
@@ -12,6 +13,8 @@ const NAME_KO := {"en": "영어", "ja": "일본어"}
 
 var _scroll: PageScroll
 var _grid: GridContainer
+## true: the "설정 ▾" toggle and the settings under the cards (stand-alone use); false: no settings here (main.gd).
+var embed_settings: bool = true
 var _settings_open: bool = false
 var _built: bool = false
 var _settings_btn: Button
@@ -52,8 +55,11 @@ func header_block() -> Control:
 	return _header if _header != null and is_instance_valid(_header) else null
 
 
-## Phone: the status strip opens the settings card at the top of the page.
+## Shows the settings: with `embed_settings` under the cards, otherwise as the settings screen of the shell.
 func open_settings() -> void:
+	if not embed_settings:
+		Store.navigate.emit("settings", "")
+		return
 	_settings_open = true
 	refresh()
 	if is_inside_tree():
@@ -106,7 +112,11 @@ func _build() -> void:
 		_grid.add_child(_lang_card(l, pos))
 	if Platform.is_phone():
 		c.add_child(_shortcuts())
-	c.add_child(_settings_panel())
+	if embed_settings:
+		c.add_child(_settings_panel())
+	else:
+		_settings_btn = null
+		_sv = null
 	UI.fix_cjk(c)
 	_built = true
 	bar_changed.emit() # the big title block was rebuilt

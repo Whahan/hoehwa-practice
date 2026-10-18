@@ -69,6 +69,8 @@ func _ready() -> void:
 	# never launch or poll the real engine
 	Backend._starting = true
 	Backend.set_process(false)
+	if not _phone and Api.cli_base_url == "":
+		Api.base_url = "http://127.0.0.1:9" # a closed port: the PC run must never reach the user's engine (8770)
 
 	# run main.tscn as THE current scene (that is what the app does, and what turns the v1.1 tabs on)
 	get_tree().current_scene = null
@@ -105,12 +107,14 @@ func _finish() -> void:
 func _test_tabs() -> void:
 	var keys: Array = _main.tab_keys()
 	print("  tabs: ", keys)
-	ok(keys == ["today", "lesson", "talk", "practice", "reading", "review", "stats", "roadmap"], "tab order: 연습 right after 대화, 기록 right after 복습")
+	ok(keys == ["today", "lesson", "talk", "review", "practice", "reading", "stats", "roadmap", "settings"], "tab order: 오늘, 레슨, 대화, 복습, then 연습, 읽기, 기록, 로드맵, 설정 (W4 shell)")
 	ok(_main.views["practice"] is PracticeView and _main.views["stats"] is StatsView, "views: PracticeView and StatsView")
 	var labels := {}
 	for t in _main._tabs:
 		labels[str(t[0])] = str(t[1])
 	ok(labels.get("practice", "") == "연습" and labels.get("stats", "") == "기록", "tab labels are 연습 and 기록")
+	var sps: Array = (_main.views["settings"] as Control).find_children("*", "SyncPanel", true, false)
+	ok(SyncManager.current != null and sps.size() == 1 and (sps[0] as Control).get_child_count() > 0, "settings screen: its SyncPanel has content (the SyncManager exists when the screen is built)")
 	var clocks := 0
 	for c in _main.get_children():
 		if c is StudyClock:
@@ -118,17 +122,17 @@ func _test_tabs() -> void:
 	ok(clocks == 1, "exactly one StudyClock under main (%d)" % clocks)
 	if _phone:
 		var bt: BottomTabs = _main._bottom_tabs
-		ok(bt.direct_keys().size() == 5 and bt.overflow_keys().size() == 3, "phone: 5 cells + 더보기 with 3 tabs (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
-		ok(bt.cell_buttons().size() == 6, "phone: bar has 6 cells (5 tabs + 더보기)")
+		ok(bt.direct_keys() == ["today", "lesson", "talk", "review"] and bt.overflow_keys() == ["practice", "reading", "stats", "roadmap", "settings"], "phone: 4 cells + 더보기 with 연습, 읽기, 기록, 로드맵, 설정 (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
+		ok(bt.cell_buttons().size() == 5, "phone: bar has 5 cells (4 tabs + 더보기)")
 	else:
-		ok(_main.tab_buttons.size() == 8, "PC: 8 top buttons")
+		ok(_main._bottom_tabs == null and _main._side_nav.item_buttons().size() == 9, "PC: 9 side-nav items (8 tabs + 설정), no bottom bar")
 
 
 func _test_navigation() -> void:
 	# every tab can be shown; no script error may appear in the output (the runner counts "SCRIPT ERROR")
 	for k in _main.tab_keys():
-		if not _phone and (_main.tab_buttons[k] as Button).visible:
-			(_main.tab_buttons[k] as Button).pressed.emit() # a real click on the top button
+		if not _phone and (_main._side_nav.item_buttons()[k] as Button).is_visible_in_tree():
+			(_main._side_nav.item_buttons()[k] as Button).pressed.emit() # a real click on the side-nav item
 		else:
 			_main.show_view(k)
 		await _frames(3)
@@ -162,40 +166,27 @@ func _test_layout() -> void:
 		ok(right <= 412.5 and min_w >= 48.0, "phone: bottom cells inside 412 px and >= 48 px (right %.0f, min %.0f)" % [right, min_w])
 		return
 	for w in [1280, 900, 640]:
-		get_window().min_size = Vector2i.ZERO # main.gd keeps the real window at >= 900; 640 only exercises the overflow menu
+		get_window().min_size = Vector2i.ZERO # main.gd keeps the real window at >= 900; 640 only exercises a very narrow page
 		get_window().size = Vector2i(w, 800 if w == 1280 else 600)
 		await _frames(6)
+		var nav: SideNav = _main._side_nav
 		var vis: Array = []
 		var right := 0.0
 		for k in _main.tab_keys():
-			var b: Button = _main.tab_buttons[k]
-			if b.visible:
+			var b: Button = nav.item_buttons()[k]
+			if b.is_visible_in_tree():
 				vis.append(k)
 				right = maxf(right, b.get_global_rect().end.x)
-		var more_vis: bool = _main._top_more.visible
-		if more_vis:
-			right = maxf(right, _main._top_more.get_global_rect().end.x)
-		var hidden: Array = _main._top_hidden
-		print("  width %d: visible %d, hidden %s, 더보기 %s, right edge %.0f, status right %.0f" % [w, vis.size(), hidden, str(more_vis), right, _main._status_text.get_global_rect().end.x])
-		ok(vis.size() + hidden.size() == 8 and (hidden.is_empty() or more_vis), "width %d: every tab is a button or in 더보기" % w)
-		ok(right <= float(w) + 0.5 and _main._status_text.get_global_rect().end.x <= float(w) + 0.5, "width %d: nothing is cut off at the right edge" % w)
-		if w == 1280:
-			ok(vis.size() == 8 and not more_vis, "width 1280: all 8 tabs visible, no 더보기")
-		elif w == 640:
-			ok(more_vis and not hidden.is_empty() and vis.size() < 8, "width 640: the last tabs move into 더보기 (%d hidden)" % hidden.size())
-			for i in hidden.size():
-				_main._open_top_more()
-				_main._top_more_menu.id_pressed.emit(i)
-				await _frames(2)
-				ok(_main.current == str(hidden[i]), "width 640: 더보기 entry %d opens '%s'" % [i, hidden[i]])
-			_main.show_view("today")
-		else:
-			# the hidden ones are reachable through the menu entries
-			for k in hidden:
-				_main.show_view(str(k))
-				await _frames(2)
-				ok(_main.current == str(k), "width 900: hidden tab '%s' opens through 더보기" % k)
-			_main.show_view("today")
+		var status_right: float = _main._status_text.get_global_rect().end.x
+		print("  width %d: visible nav items %d, right edge %.0f, status right %.0f, nav width %.0f" % [w, vis.size(), right, status_right, nav.size.x])
+		ok(vis.size() == 9, "width %d: every tab and 설정 is a visible side-nav item (no 더보기 menu, %d)" % [w, vis.size()])
+		ok(right <= float(w) + 0.5 and status_right <= float(w) + 0.5, "width %d: nothing is cut off at the right edge" % w)
+		ok(nav.size.x >= 223.0 and nav.size.x <= 225.0 and nav.get_global_rect().end.x <= _main._content.get_global_rect().position.x + 0.5, "width %d: the 224 px side nav does not overlap the page" % w)
+		for k in _main.tab_keys(): # the items work at every width
+			_main.show_view(str(k))
+			await _frames(2)
+			ok(_main.current == str(k), "width %d: tab '%s' opens" % [w, k])
+		_main.show_view("today")
 	get_window().size = Vector2i(1280, 800)
 	await _frames(4)
 
