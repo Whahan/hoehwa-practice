@@ -52,13 +52,12 @@ func _init() -> void:
 
 func _ready() -> void:
 	var head := UI.hbox(10)
-	head.add_child(UI.label("휴대폰 연결", "Strong", false))
+	head.add_child(UI.label("휴대폰 연결", "ListMain", false))
 	head.add_child(UI.spacer())
 	state_label = UI.label("꺼짐", "Muted", false)
 	head.add_child(state_label)
-	toggle = CheckButton.new()
-	toggle.focus_mode = Control.FOCUS_NONE
-	toggle.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	toggle = UI.switch_button()
+	toggle.accessibility_name = "휴대폰 연결"
 	toggle.toggled.connect(_on_toggled)
 	head.add_child(toggle)
 	add_child(head)
@@ -67,7 +66,7 @@ func _ready() -> void:
 	read_first_button = UI.link_button("▸ 켜기 전에 읽어 주세요")
 	read_first_button.pressed.connect(func() -> void: _show_warning(not warn_box.visible))
 	add_child(read_first_button)
-	warn_box = UI.tinted_panel(Pal.WARN_SOFT, Pal.WARN, 1, 10, 12, 10)
+	warn_box = UI.tinted_panel(Pal.WARN_SOFT, Pal.WARN, 1, Ds.R_S, 12, 10)
 	var wcol := UI.vbox(6)
 	wcol.add_child(UI.label("Tailscale로 연결하는 법", "Strong"))
 	wcol.add_child(UI.label(HOWTO_TEXT, "Small"))
@@ -78,7 +77,7 @@ func _ready() -> void:
 	warn_box.visible = false
 	add_child(warn_box)
 
-	error_label = UI.colored("", Pal.BAD, "Small")
+	error_label = UI.colored("", Pal.BAD_ON, "Small")
 	error_label.visible = false
 	add_child(error_label)
 
@@ -95,7 +94,7 @@ func _ready() -> void:
 	timer_label = UI.label("", "Small", false)
 	trow.add_child(timer_label)
 	trow.add_child(UI.spacer())
-	new_code_button = UI.button("새 코드 만들기", "soft", Pal.EN)
+	new_code_button = UI.button("새 코드 만들기", "soft", Pal.PRIMARY)
 	new_code_button.pressed.connect(func() -> void: new_code())
 	trow.add_child(new_code_button)
 	details.add_child(trow)
@@ -104,7 +103,7 @@ func _ready() -> void:
 	details.add_child(devices_title)
 	devices_box = UI.vbox(6)
 	details.add_child(devices_box)
-	revoke_all_button = UI.button("모두 해제", "outline", Pal.BAD)
+	revoke_all_button = UI.button("모두 해제", "soft", Pal.BAD)
 	revoke_all_button.pressed.connect(func() -> void: revoke_all())
 	details.add_child(revoke_all_button)
 	add_child(details)
@@ -120,7 +119,7 @@ func _ready() -> void:
 	port_edit.custom_minimum_size = Vector2(100, 0)
 	prow.add_child(UI.label("연결 포트", "Small", false))
 	prow.add_child(port_edit)
-	var pbtn := UI.button("적용", "default")
+	var pbtn := UI.button("적용", "soft", Pal.PRIMARY)
 	pbtn.pressed.connect(func() -> void: apply_port())
 	prow.add_child(pbtn)
 	advanced_box.add_child(prow)
@@ -130,7 +129,7 @@ func _ready() -> void:
 	name_edit.custom_minimum_size = Vector2(220, 0)
 	nrow.add_child(UI.label("표시 이름", "Small", false))
 	nrow.add_child(name_edit)
-	var nbtn := UI.button("적용", "default")
+	var nbtn := UI.button("적용", "soft", Pal.PRIMARY)
 	nbtn.pressed.connect(func() -> void: update_settings({"name": name_edit.text.strip_edges()}))
 	nrow.add_child(nbtn)
 	advanced_box.add_child(nrow)
@@ -449,7 +448,7 @@ func _fill_devices(devs: Array) -> void:
 		if str(dd.get("last_ip", "")) != "":
 			parts.append(str(dd["last_ip"]))
 		row.add_child(UI.label(" · ".join(parts), "", true))
-		var b := UI.button("연결 해제", "outline", Pal.BAD)
+		var b := UI.button("연결 해제", "soft", Pal.BAD)
 		var id: String = str(dd.get("id", ""))
 		b.pressed.connect(func() -> void: revoke_device(id))
 		row.add_child(b)

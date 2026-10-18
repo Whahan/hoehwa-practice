@@ -191,7 +191,13 @@ func _state_checks(state: String, main: Control) -> void:
 			ok(tv0.find_children("*", "PhoneLinkPanel", true, false).is_empty(), "settings: no PhoneLinkPanel on the phone")
 			ok(tv0._engine_ob == null, "settings: the AI engine section is hidden on the phone")
 			var rl: Node = tv0.find_children("*", "RemoteLinkPanel", true, false)[0]
-			ok(rl.get_parent().get_child(0) == rl, "settings: RemoteLinkPanel is the first entry of the settings card")
+			var sv0: SettingsView = tv0._sv
+			var first_sec := ""
+			for sid in sv0.section_ids():
+				if first_sec == "" and sv0.section_visible(sid):
+					first_sec = sid
+			ok(first_sec == "connection" and sv0.section_of(rl) == "connection", "settings: the first section on the screen is 'connection' and RemoteLinkPanel sits in it")
+			ok(rl.get_parent().get_index() == 0, "settings: RemoteLinkPanel is the first entry of that section")
 		"talk_chat_en":
 			var tv2: TalkView = main.views["talk"]
 			ok(tv2._input.get_parent() != tv2._mic.get_parent(), "talk: the microphone has its own line under the input")
@@ -246,8 +252,10 @@ func _pc_state_checks(state: String, main: Control) -> void:
 			ok(tv0.find_children("*", "RemoteLinkPanel", true, false).is_empty(), "L-06: no RemoteLinkPanel on the PC")
 			ok(tv0._engine_ob != null, "L-06: the AI engine section is still in the PC settings")
 			var pl: Control = tv0.find_children("*", "PhoneLinkPanel", true, false)[0]
-			var eng: Node = tv0._engine_ob.get_parent().get_parent().get_parent()
-			ok(pl.get_index() > eng.get_index(), "L-06: PhoneLinkPanel sits below the AI engine section")
+			var sv1: SettingsView = tv0._sv
+			var ids: Array = sv1.section_ids()
+			ok(sv1.section_of(pl) == "connection" and sv1.section_of(tv0._engine_ob) == "engine", "L-06: PhoneLinkPanel is in the 'connection' section and the AI engine dropdown in the 'engine' section")
+			ok(ids.find("connection") < ids.find("engine") and sv1.section_visible("connection") and sv1.section_visible("engine"), "L-06: both sections show, the phone link above the AI engine")
 		"today":
 			var tv: TodayView = main.views["today"]
 			ok(tv._grid.columns == 2, "L-06: today cards are two columns at 1280")
@@ -317,16 +325,20 @@ func _test_layout_helpers(main: Control) -> void:
 	ok(float(ins2["top"]) == 10.0 and float(ins2["bottom"]) == 20.0 and float(ins2["left"]) == 0.0, "PhoneLayout.test_insets overrides the OS value")
 	PhoneLayout.test_insets = null
 	# connection panel mount: hidden while empty, shown (with its divider) as soon as it has a child
-	var card := CardBox.new()
+	var card := SettingsView.new()
+	card.auto_panels = false
+	card.embedded = true
 	add_child(card)
 	var panel := VBoxContainer.new()
-	var td: TodayView = main.views["today"]
-	td.call("_mount_link_panel", card, panel)
+	var other := VBoxContainer.new() # a second panel: its divider needs a visible row above it
+	card.mount("sync", panel) # 'sync' holds nothing else, so the section itself shows only with a panel that has content
+	card.mount("sync", other)
 	ok(not panel.visible, "mount: an empty connection panel stays hidden")
-	var sep: Control = card.body.get_child(card.body.get_child_count() - 1)
-	ok(not sep.visible, "mount: and so does its divider")
+	var sep: Control = other.get_parent().get_parent().get_child(other.get_parent().get_index() - 1)
+	ok(not sep.visible and not card.section_visible("sync"), "mount: so do its divider and the section (nothing in it shows)")
 	panel.add_child(Label.new())
-	ok(panel.visible and sep.visible, "mount: the panel and its divider show up when the panel gets content")
+	other.add_child(Label.new())
+	ok(panel.visible and other.visible and sep.visible and card.section_visible("sync"), "mount: the panels, the divider and the section show up when a panel gets content")
 	card.queue_free()
 
 

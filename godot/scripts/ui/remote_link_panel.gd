@@ -23,7 +23,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	add_child(UI.label("PC 연결", "Strong", false))
+	add_child(UI.label("PC 연결", "ListMain", false))
 	var row := UI.hbox(8)
 	dot = UI.tinted_panel(Pal.MUTED, Color(0, 0, 0, 0), 0, 99, 0, 0)
 	dot.custom_minimum_size = Vector2(10, 10)
@@ -35,17 +35,17 @@ func _ready() -> void:
 	pc_label = UI.label("", "Small")
 	add_child(pc_label)
 	var brow := UI.flow(8, 8)
-	change_button = UI.button("연결 변경", "default", Pal.INK, 48.0)
+	change_button = UI.button("연결 변경", "soft", Pal.PRIMARY, 48.0)
 	change_button.pressed.connect(func() -> void: change_requested.emit())
 	brow.add_child(change_button)
-	disconnect_button = UI.button("연결 끊기", "outline", Pal.BAD, 48.0)
+	disconnect_button = UI.button("연결 끊기", "soft", Pal.BAD, 48.0)
 	disconnect_button.pressed.connect(func() -> void: disconnect_pc())
 	brow.add_child(disconnect_button)
 	add_child(brow)
 	add_child(UI.hline())
-	mic_label = UI.label("", "Strong")
+	mic_label = UI.label("", "ListMain")
 	add_child(mic_label)
-	mic_hint = UI.colored("", Pal.WARN, "Small")
+	mic_hint = UI.colored("", Pal.WARN_ON, "Small")
 	add_child(mic_hint)
 	Backend.status_changed.connect(refresh)
 	visibility_changed.connect(func() -> void:
