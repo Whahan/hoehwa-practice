@@ -1,11 +1,7 @@
 class_name TodayView
 extends AppView
 ## 오늘: progress overview, two language cards (docs/ui_redesign_design.md §7.1). The settings are a SettingsView
-## (views/settings_view.gd). The app shell (main.gd) shows them as a screen of its own and sets `embed_settings = false`;
-## a TodayView built on its own (tests) still opens them under its cards through the "설정" toggle.
-
-## The phone's connection card asked for the connect screen (main.gd opens it).
-signal connect_requested
+## (views/settings_view.gd), a screen of its own (views["settings"] in main.gd): this screen carries no settings.
 
 const WD := ["일", "월", "화", "수", "목", "금", "토"]
 const NATIVE := {"en": "English", "ja": "日本語"}
@@ -13,17 +9,8 @@ const NAME_KO := {"en": "영어", "ja": "일본어"}
 
 var _scroll: PageScroll
 var _grid: GridContainer
-## true: the "설정 ▾" toggle and the settings under the cards (stand-alone use); false: no settings here (main.gd).
-var embed_settings: bool = true
-var _settings_open: bool = false
 var _built: bool = false
-var _settings_btn: Button
 var _header: Control = null ## big title block (see header_block)
-var _sv: SettingsView = null ## the open settings, null while they are closed
-## The AI engine dropdown of the PC settings (null on the phone and while the settings are closed).
-var _engine_ob: OptionButton:
-	get:
-		return _sv._engine_ob if _sv != null and is_instance_valid(_sv) else null
 
 
 func _ready() -> void:
@@ -44,8 +31,8 @@ func refresh() -> void:
 
 # ---------------------------------------------------------------- app bar contract (AppView)
 
-# (page_title / page_actions stay at their defaults: the tab name "오늘" is the title, and the shell (W4) adds the
-# 설정 action of the app bar itself and calls open_settings() / its own settings screen.)
+# (page_title / page_actions stay at their defaults: the tab name "오늘" is the title, and the shell adds the
+# 설정 action of the app bar itself and opens its own settings screen.)
 
 func scroll_host() -> ScrollContainer:
 	return _scroll
@@ -53,35 +40,6 @@ func scroll_host() -> ScrollContainer:
 
 func header_block() -> Control:
 	return _header if _header != null and is_instance_valid(_header) else null
-
-
-## Shows the settings: with `embed_settings` under the cards, otherwise as the settings screen of the shell.
-func open_settings() -> void:
-	if not embed_settings:
-		Store.navigate.emit("settings", "")
-		return
-	_settings_open = true
-	refresh()
-	if is_inside_tree():
-		await get_tree().process_frame
-		await get_tree().process_frame
-		if _scroll != null and is_instance_valid(_scroll):
-			_scroll.scroll_vertical = int(_settings_toggle_y())
-
-
-func _settings_toggle_y() -> float:
-	if _settings_btn == null or not is_instance_valid(_settings_btn):
-		return 0.0
-	return maxf(0.0, _settings_btn.global_position.y - _scroll.content.global_position.y - 8.0)
-
-
-## Android back button: close the settings first.
-func go_back() -> bool:
-	if _settings_open:
-		_settings_open = false
-		refresh()
-		return true
-	return false
 
 
 func _notification(what: int) -> void:
@@ -112,11 +70,6 @@ func _build() -> void:
 		_grid.add_child(_lang_card(l, pos))
 	if Platform.is_phone():
 		c.add_child(_shortcuts())
-	if embed_settings:
-		c.add_child(_settings_panel())
-	else:
-		_settings_btn = null
-		_sv = null
 	UI.fix_cjk(c)
 	_built = true
 	bar_changed.emit() # the big title block was rebuilt
@@ -310,43 +263,3 @@ func _week_dots(l: String) -> Control:
 		col.add_child(wl)
 		row.add_child(col)
 	return row
-
-
-# ---------------------------------------------------------------- settings (SettingsView under the cards)
-
-func _settings_panel() -> Control:
-	_sv = null
-	var wrap := UI.vbox(10)
-	var toggle := UI.button(("설정  ▴" if _settings_open else "설정  ▾"), "soft", Pal.INK)
-	toggle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_settings_btn = toggle
-	toggle.pressed.connect(func() -> void:
-		_settings_open = not _settings_open
-		refresh())
-	wrap.add_child(toggle)
-	if not _settings_open:
-		return wrap
-
-	var card := SettingsView.new()
-	card.embedded = true
-	card.auto_panels = false # this screen mounts the panels itself
-	card.start_changed.connect(refresh)
-	card.records_reset.connect(func() -> void:
-		_settings_open = false
-		refresh())
-	_sv = card
-	wrap.add_child(card)
-	if Platform.is_phone():
-		var rl := RemoteLinkPanel.new() # phone: the connection to the PC comes first
-		rl.change_requested.connect(func() -> void: connect_requested.emit())
-		_mount_link_panel(card, rl)
-	else:
-		_mount_link_panel(card, PhoneLinkPanel.new())
-	_mount_link_panel(card, SyncPanel.new()) # 1.2 learning-record sync (hidden while there is no SyncManager)
-	return wrap
-
-
-## Puts a panel into the settings screen (`card`): the link panels into "connection", the SyncPanel into "sync".
-## A panel without content stays hidden together with its divider.
-func _mount_link_panel(card: SettingsView, panel: Control) -> void:
-	card.mount("sync" if panel is SyncPanel else "connection", panel)

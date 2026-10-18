@@ -905,6 +905,14 @@ func _apply_layout(force: bool) -> void:
 			host.move_child(_mic, 0)
 	_mic_row.visible = true
 	_opts.vertical = not wide
+	# wide: each switch is only as wide as its label (the switch sits right next to it), a gap between the two;
+	# narrow: the label fills the width and the switch is at the right end
+	_opts.add_theme_constant_override("separation", Ds.S6 if wide else Ds.S2)
+	for o in _opts.get_children():
+		var sw := o as CheckButton
+		if sw != null:
+			sw.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if wide else Control.SIZE_EXPAND_FILL
+			sw.autowrap_mode = TextServer.AUTOWRAP_OFF if wide else TextServer.AUTOWRAP_WORD_SMART
 	_mic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_mic.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	if status == "talk" or status == "wait":

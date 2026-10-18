@@ -14,6 +14,9 @@ signal cancelled
 ## 시험·W3 용: [연결] 시도가 끝났다(성공 true / 실패 false). 화면에는 이미 결과가 반영돼 있다.
 signal attempt_finished(ok: bool)
 
+## 가운데 열의 최대 폭(폰은 화면 폭을 그대로 쓴다).
+const COLUMN_W := 480.0
+
 ## 설정에서 "연결 변경"으로 열었으면 true (취소 버튼이 보인다). add_child 전에 정한다.
 var allow_cancel: bool = false
 
@@ -29,6 +32,7 @@ var notice_label: Label
 
 var _busy: bool = false
 var _scroll: ScrollContainer
+var _busy_bar: ProgressBar
 var _flow: Flow ## the running attempt (its signals are cut when this screen leaves the tree)
 
 ## 진행 중인 Flow 는 화면이 사라져도 끝까지 돌아야 하므로 여기서 붙잡아 둔다.
@@ -82,65 +86,67 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
-	_scroll = ScrollContainer.new()
-	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(_scroll)
-	var outer := MarginContainer.new()
-	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for side in ["left", "right"]:
-		outer.add_theme_constant_override("margin_" + side, 16)
-	outer.add_theme_constant_override("margin_top", 24)
-	outer.add_theme_constant_override("margin_bottom", 32)
-	_scroll.add_child(outer)
-	var col := UI.vbox(12)
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	outer.add_child(col)
+	# one centred column: the phone's width minus 16 each side, a narrow column on a wide window
+	var page := PageScroll.new(COLUMN_W)
+	page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	page.column.set_padding(8, 32)
+	add_child(page)
+	_scroll = page
+	var col: VBoxContainer = page.content
 
-	col.add_child(UI.label("내 PC에 연결", "H1", false))
-	col.add_child(UI.label("① 휴대폰에 Tailscale을 설치하고 PC와 같은 구글 계정으로 로그인해 켜 주세요.", "Muted"))
-	col.add_child(UI.label("② PC의 회화 연습 > 설정 > 휴대폰 연결에 나오는 주소(100.x.y.z)와 6자리 코드를 입력하세요.", "Muted"))
-	notice_label = UI.colored("", Pal.WARN, "")
+	col.add_child(PageHeader.build("내 PC에 연결"))
+	previous_label = UI.label("", "Small")
+	previous_label.add_theme_stylebox_override("normal", _side_margin(Ds.S2))
+	previous_label.visible = false
+	col.add_child(previous_label)
+
+	# the two steps (what to do before typing anything)
+	var steps := UI.card("Card", 12)
+	steps.add(UI.label("① 휴대폰에 Tailscale을 설치하고 PC와 같은 구글 계정으로 로그인해 켜 주세요."))
+	steps.add(UI.label("② PC의 회화 연습 > 설정 > 휴대폰 연결에 나오는 주소(100.x.y.z)와 6자리 코드를 입력하세요."))
+	col.add_child(steps)
+	notice_label = _alert_label(Pal.WARN_SOFT, Pal.WARN, Pal.WARN_ON, 1)
 	notice_label.visible = false
 	col.add_child(notice_label)
 
-	previous_label = UI.label("", "Small")
-	col.add_child(previous_label)
-
-	col.add_child(UI.label("PC 주소 (Tailscale)", "Strong", false))
-	address_edit = _line_edit("100.101.102.103:8775", 48.0)
+	# the three fields
+	var form := UI.card("Card", 16)
+	address_edit = _line_edit("100.101.102.103:8775")
 	address_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_URL
 	address_edit.text_submitted.connect(func(_t: String) -> void: code_edit.grab_focus())
-	col.add_child(address_edit)
-	col.add_child(UI.label("포트를 안 적으면 8775를 써요.", "Small"))
-
-	col.add_child(UI.label("연결 코드 (PC 화면의 6자리)", "Strong", false))
-	code_edit = _line_edit("482 913", 48.0)
+	form.add(_field_block("PC 주소 (Tailscale)", address_edit, "포트를 안 적으면 8775를 써요."))
+	code_edit = _line_edit("482 913")
 	code_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
 	code_edit.max_length = 8
 	code_edit.text_submitted.connect(func(_t: String) -> void: submit())
-	col.add_child(code_edit)
-
-	col.add_child(UI.label("이 휴대폰 이름", "Strong", false))
-	name_edit = _line_edit("", 48.0)
+	form.add(_field_block("연결 코드 (PC 화면의 6자리)", code_edit))
+	name_edit = _line_edit("")
 	name_edit.max_length = 40
 	name_edit.text = default_device_name()
-	col.add_child(name_edit)
+	form.add(_field_block("이 휴대폰 이름", name_edit))
+	col.add_child(form)
 
-	connect_button = UI.button("연결", "primary", Pal.EN, 52.0)
+	# progress and the error sit right above the buttons: that is where the eyes are after pressing [연결]
+	_busy_bar = UI.progress_indeterminate(Pal.PRIMARY)
+	_busy_bar.visible = false
+	col.add_child(_busy_bar)
+	progress_label = UI.label("", "Muted")
+	progress_label.add_theme_stylebox_override("normal", _side_margin(Ds.S2))
+	progress_label.visible = false
+	col.add_child(progress_label)
+	error_label = _alert_label(Pal.BAD_SOFT, Pal.BAD, Pal.BAD_ON, 2)
+	error_label.visible = false
+	col.add_child(error_label)
+
+	connect_button = UI.button("연결", "primary", Pal.PRIMARY, 56.0)
 	connect_button.pressed.connect(func() -> void: submit())
 	col.add_child(connect_button)
 	if allow_cancel:
-		cancel_button = UI.button("취소", "default", Pal.INK, 48.0)
+		cancel_button = UI.button("취소", "soft", Pal.INK, 48.0)
 		cancel_button.pressed.connect(func() -> void:
 			cancelled.emit()
 			queue_free())
 		col.add_child(cancel_button)
-	progress_label = UI.label("", "Muted")
-	col.add_child(progress_label)
-	error_label = UI.colored("", Pal.BAD, "")
-	error_label.visible = false
-	col.add_child(error_label)
 
 	_prefill()
 	if Backend.status == Backend.Status.NEEDS_PAIRING and Backend.message != "":
@@ -159,14 +165,40 @@ func _exit_tree() -> void:
 		_flow = null
 
 
-func _line_edit(placeholder: String, min_h: float) -> LineEdit:
+func _line_edit(placeholder: String) -> LineEdit:
 	var le := LineEdit.new()
 	le.placeholder_text = placeholder
-	le.custom_minimum_size = Vector2(0, min_h)
+	le.custom_minimum_size = Vector2(0, Ds.field_h())
 	le.focus_entered.connect(func() -> void:
 		if _scroll != null:
 			_scroll.ensure_control_visible.call_deferred(le))
 	return le
+
+
+## Title (Strong) over the field, an optional hint (Small) under it.
+func _field_block(title: String, edit: LineEdit, hint: String = "") -> VBoxContainer:
+	var b := UI.vbox(6)
+	b.add_child(UI.label(title, "Strong"))
+	edit.accessibility_name = title
+	b.add_child(edit)
+	if hint != "":
+		b.add_child(UI.label(hint, "Small"))
+	return b
+
+
+## A Label that carries its own tinted box (the Label's "normal" style): text and `visible` stay on the one node.
+func _alert_label(bg: Color, border: Color, fg: Color, border_w: int) -> Label:
+	var l := UI.label("")
+	l.add_theme_color_override("font_color", fg)
+	l.add_theme_stylebox_override("normal", UI.style(bg, border, border_w, Ds.R_S, 14, 10))
+	return l
+
+
+static func _side_margin(px: int) -> StyleBoxEmpty:
+	var sb := StyleBoxEmpty.new()
+	sb.content_margin_left = float(px)
+	sb.content_margin_right = float(px)
+	return sb
 
 
 static func default_device_name() -> String:
@@ -186,12 +218,14 @@ func _prefill() -> void:
 	var nm: String = str(conn.get("server_name", ""))
 	if nm != "":
 		previous_label.text = "이전에 연결한 PC: " + nm
+		previous_label.visible = true
 
 
 func _set_busy(on: bool, msg: String = "") -> void:
 	_busy = on
 	connect_button.disabled = on
-	progress_label.text = msg
+	_busy_bar.visible = on
+	_show_progress(msg)
 
 
 func show_error(msg: String) -> void:
@@ -223,7 +257,12 @@ func submit() -> void:
 
 
 func _on_progress(text: String) -> void:
+	_show_progress(text)
+
+
+func _show_progress(text: String) -> void:
 	progress_label.text = text
+	progress_label.visible = text != ""
 
 
 func _on_connect_done(res: Dictionary) -> void:

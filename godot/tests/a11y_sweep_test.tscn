@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/a11y_sweep_test.gd" id="1_a11y"]
+
+[node name="A11ySweepTest" type="Node"]
+script = ExtResource("1_a11y")

@@ -492,6 +492,13 @@ func _mk_real(eng: SyncEngine) -> SyncManager:
 
 # ---------------------------------------------------------------- settings card
 
+## The settings screen (SettingsView mounts the link panel and the SyncPanel itself), staged like the shell does.
+func _settings_screen() -> SettingsView:
+	var sv := SettingsView.new()
+	add_child(sv)
+	return sv
+
+
 func _t_today_view() -> void:
 	print("[settings card: mount + reset text]")
 	var old_pp: String = Store.progress_path
@@ -499,26 +506,20 @@ func _t_today_view() -> void:
 	Store.progress_path = DIR.path_join("progress.json")
 	StudyLog.path = DIR.path_join("studylog.json")
 	# without a manager: the panel is empty, so the card hides it
-	var tv0 := TodayView.new()
-	add_child(tv0)
-	tv0._settings_open = true
-	tv0.refresh()
+	var tv0 := _settings_screen()
 	await _frames()
 	var empty_found := false
 	for n in _all(tv0):
 		if n is SyncPanel:
 			empty_found = true
 			ok((n as SyncPanel).get_child_count() == 0 and not (n as SyncPanel).visible, "no manager: SyncPanel is mounted but empty and hidden")
-	ok(empty_found, "TodayView mounts a SyncPanel in the settings card")
+	ok(empty_found, "the settings screen mounts a SyncPanel")
 	tv0.queue_free()
 	await _frames()
 	# with a manager
 	var e = MT.FakeEngine.new()
 	var m := _mk("phone", e)
-	var tv := TodayView.new()
-	add_child(tv)
-	tv._settings_open = true
-	tv.refresh()
+	var tv := _settings_screen()
 	await _frames()
 	var sp: SyncPanel = null
 	for n in _all(tv):
@@ -542,10 +543,7 @@ func _t_today_view() -> void:
 	await _frames()
 	# sync off: the old sentence only
 	e.enabled = false
-	var tv2 := TodayView.new()
-	add_child(tv2)
-	tv2._settings_open = true
-	tv2.refresh()
+	var tv2 := _settings_screen()
 	await _frames()
 	_button(tv2, "모든 기록 지우기").pressed.emit()
 	var j2 := "\n".join(_texts(tv2))
@@ -621,10 +619,7 @@ func _t_reset_waits_ui() -> void:
 	StudyLog.path = DIR.path_join("studylog2.json")
 	var e = MT.FakeEngine.new()
 	var m := _mk("phone", e)
-	var tv := TodayView.new()
-	add_child(tv)
-	tv._settings_open = true
-	tv.refresh()
+	var tv := _settings_screen()
 	await _frames()
 	Store.progress["checks"]["en-9-w9"] = true
 	e.hold = true
@@ -711,8 +706,10 @@ func _t_source_rules() -> void:
 			if (pair[1] as String).contains(pat):
 				bad.append("%s: %s" % [pair[0], pat])
 	ok(bad.is_empty(), "no direct colours / font sizes / raw gui_input in the three sync UI files (%s)" % str(bad))
+	var settings_src: String = _read("res://scripts/views/settings_view.gd")
+	ok(settings_src.contains("mount(\"sync\", SyncPanel.new())"), "settings_view.gd mounts the panel with one line")
 	var today_src: String = _read("res://scripts/views/today_view.gd")
-	ok(today_src.contains("_mount_link_panel(card, SyncPanel.new())"), "today_view.gd mounts the panel with one line")
+	ok(not today_src.contains("SyncPanel") and not today_src.contains("open_settings"), "today_view.gd carries no settings code any more")
 	var main_src: String = _read("res://scripts/main.gd")
 	ok(main_src.contains("func add_sync()") and main_src.contains("\t\tadd_sync()"), "main.gd: add_sync() next to add_v11_tabs()")
 	# the checker must be able to fail: a phrase that is not there (or one letter off) is reported

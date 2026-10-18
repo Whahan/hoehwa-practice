@@ -224,7 +224,6 @@ func _scenarios() -> Array:
 	list.append({"name": "today", "setup": func() -> void:
 		main_node.show_view("today")
 		var v: TodayView = views["today"]
-		v._settings_open = false
 		v.refresh()})
 	list.append({"name": "settings", "setup": func() -> void: # the settings are a screen of their own (W4 shell)
 		main_node.show_view("settings")})

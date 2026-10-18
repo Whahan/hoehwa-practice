@@ -19,12 +19,23 @@ const LEVEL_KO := {"easy": "쉬운 단어", "mid": "보통 단어", "hard": "어
 const STATUS_KO := {"new": "새 단어", "learning": "복습 중", "known": "아는 단어", "easy": "쉬운 단어"}
 ## Words in the review list ("복습 중") are marked with the WARN surface and WARN_ON text (tokens, so both schemes
 ## keep the 4.5:1 contrast; tests/contrast_test.gd checks the pair as LEARN_FG/LEARN_BG).
+## Light: WARN_SOFT alone is only 1.10:1 against a white card, so the highlight is mixed a little toward WARN (1.41:1) and
+## the text a little toward INK (the pair stays above 4.5:1, also on learn_bg_alt()). Dark keeps the tokens as they are.
 static func learn_bg() -> Color:
+	if Pal.scheme() == "light":
+		return Pal.WARN_SOFT.lerp(Pal.WARN, 0.20)
 	return Pal.WARN_SOFT
 
 
 static func learn_fg() -> Color:
+	if Pal.scheme() == "light":
+		return Pal.WARN_ON.lerp(Pal.INK, 0.30)
 	return Pal.WARN_ON
+
+
+## The second tint, so two highlighted words in a row can be told apart.
+static func learn_bg_alt() -> Color:
+	return learn_bg().lerp(Pal.WARN, 0.10 if Pal.scheme() == "light" else 0.16)
 
 
 const SAMPLES := {
@@ -349,7 +360,6 @@ func _render_library() -> void:
 	c.add_child(top)
 
 	var card := UI.card("BigCard", 12)
-	card.body.add_child(UI.label("읽기", "Eyebrow", false))
 	card.body.add_child(UI.label("읽고 싶은 %s 글을 붙여 넣으세요" % NAME_KO[lang], "H2"))
 	card.body.add_child(UI.label("기사·소설·가사 무엇이든 좋아요. 분석하면 처음 보는 어려운 단어가 색으로 표시되고, 단어를 누르면 뜻·발음·예문을 보고 복습 목록에 넣을 수 있어요.", "Muted"))
 	var title_le := LineEdit.new()
@@ -907,7 +917,7 @@ func build_bbcode() -> String:
 	# Japanese has no spaces: two tinted words in a row alternate between two shades so
 	# they do not melt into one block (朝 + ごはん).
 	var new_bg2: String = _hex(Pal.soft(lang).lerp(acc, 0.20))
-	var learn_bg2_hex: String = _hex(learn_bg().lerp(Pal.WARN, 0.16))
+	var learn_bg2_hex: String = _hex(learn_bg_alt())
 	var parts := PackedStringArray()
 	var prev_tint: String = "" # tint of the directly preceding token ("" if none)
 	for i in tokens.size():

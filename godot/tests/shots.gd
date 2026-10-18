@@ -63,12 +63,12 @@ func _run() -> void:
 	var views: Dictionary = main_node.views
 	main_node.show_view("today")
 	await _shot("01_today")
-	(views["today"] as TodayView)._settings_open = true
-	(views["today"] as TodayView).refresh()
+	# the settings are a screen of their own (SettingsView), not a part of 오늘
+	main_node.show_view("settings")
 	await _frames(6)
-	await _shot("02_today_settings")
-	(views["today"] as TodayView)._scroll.scroll_vertical = 5000
-	await _shot("02b_today_settings_bottom")
+	await _shot("02_settings")
+	(views["settings"] as SettingsView).scroll_host().scroll_vertical = 5000
+	await _shot("02b_settings_bottom")
 
 	main_node.show_view("lesson")
 	await _shot("03_lesson_home")

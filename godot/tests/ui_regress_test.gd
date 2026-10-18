@@ -7,6 +7,8 @@ extends Node
 ## apply its margins more than a few times per frame, and must not grow without end.
 ## Phone 412 px: at 150 % text the language switch fits inside the page (right edge <= 412 - 16) on the bare widget
 ## and on the lesson / talk / review / roadmap / stats / reading screens. At 100 % the buttons keep their old height and padding.
+## At 100 % (both modes): a ColumnBox is exactly max_width wide on the PC (the phone ignores max_width) and the shell's two
+## back paths (Main.handle_back asks the SyncManager first; the app bar's back button) do what they say (W13).
 ## Reads and writes only user://test_ui_regress_* files. Last line: "== ui_regress: N passed, M failed ==".
 
 const PREFS := "user://test_ui_regress_prefs.json"
@@ -27,9 +29,20 @@ class ErrCounter extends Logger:
 			first = "%s:%d %s %s" % [file.get_file(), line, code, rationale]
 
 
+## A SyncManager that is not in the tree: it only records that main.handle_back asked it, and answers as told.
+class FakeSync extends SyncManager:
+	var consume: bool = false
+	var calls: int = 0
+
+	func consume_back() -> bool:
+		calls += 1
+		return consume
+
+
 var passed: int = 0
 var failed: int = 0
 var _phone: bool = false
+var _exits: int = 0
 var _errs := ErrCounter.new()
 var _old_paths: Array = []
 
@@ -63,12 +76,16 @@ func _ready() -> void:
 	Store.progress = Progress.blank()
 	StudyLog.path = LOG_PATH
 	print("[mode: %s]" % ("phone" if _phone else "pc"))
+	if not _phone:
+		Api.base_url = "http://127.0.0.1:9" # a closed port: a PC run never reaches the user's engine (8770)
 	if _phone:
 		PhoneLayout.install_touch_scroll(get_tree())
 
 	# the 100 % look first (UiBoot at 1.0), then everything at 150 %
 	UiBoot.apply(get_tree().root, "light", 1.0)
 	await _unit_look_100()
+	await _unit_column_box_100()
+	await _main_back_paths()
 	UiBoot.apply(get_tree().root, "light", 1.5)
 	if _phone:
 		await _phone_segmented()
@@ -133,6 +150,139 @@ func _unit_look_100() -> void:
 	ok(bs.size() == 2 and (bs[0] as Button).text == "영어 English" and (bs[1] as Button).text == "일본어 日本語", "100 %: labels unchanged")
 	h.queue_free()
 	await _frames(1)
+
+
+## 100 % text: the column of a ColumnBox is exactly max_width wide on the PC, whatever the page width (as long as the
+## page leaves min_pad on both sides). The phone ignores max_width: the column is the page minus the two side paddings.
+func _unit_column_box_100() -> void:
+	ok(is_equal_approx(Ds.font_scale, 1.0), "100%%: the text scale is 1.0 for the ColumnBox check (%s)" % Ds.font_scale)
+	var holder := _holder(Vector2(PhoneLayout.W if _phone else 1280.0, 800))
+	var cb := ColumnBox.new()
+	cb.max_width = 720.0
+	holder.add_child(cb)
+	cb.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	var l := Label.new()
+	l.text = "a column"
+	cb.content.add_child(l)
+	await _frames(4)
+	if _phone:
+		var want: float = PhoneLayout.W - 2.0 * PhoneLayout.PAD
+		ok(absf(cb.content.size.x - want) < 1.0, "100%% phone: the column is the page minus 2 x %d, max_width is ignored [%.1f, want %.1f]" % [PhoneLayout.PAD, cb.content.size.x, want])
+	else:
+		for w in [1280.0, 1000.0, 900.0, 760.0]:
+			holder.size = Vector2(w, 800)
+			await _frames(4)
+			ok(absf(cb.content.size.x - 720.0) < 1.0, "100%% PC: ColumnBox content is max_width (720) wide in a %.0f px page [%.1f]" % [w, cb.content.size.x])
+		holder.size = Vector2(600, 800)
+		await _frames(4)
+		ok(absf(cb.content.size.x - (600.0 - 2.0 * cb.min_pad)) < 1.0, "100%% PC: a page narrower than max_width + 2 x min_pad leaves min_pad (%d) at each side [%.1f]" % [cb.min_pad, cb.content.size.x])
+		cb.max_width = 500.0
+		holder.size = Vector2(1280, 800)
+		await _frames(4)
+		ok(absf(cb.content.size.x - 500.0) < 1.0, "100%% PC: max_width 500 gives a 500 px column [%.1f]" % cb.content.size.x)
+	holder.queue_free()
+	await _frames(1)
+
+
+# ---------------------------------------------------------------- the shell's back paths (Main)
+
+func _new_main() -> Control:
+	var m: Control = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	m.set("quit_on_exit", false)
+	_exits = 0
+	m.connect("exit_requested", func() -> void: _exits += 1)
+	add_child(m)
+	return m
+
+
+## The reader of 읽기 is a sub screen whose title and back button the phone's app bar shows.
+func _open_reader(m: Control) -> ReadingView:
+	m.call("show_view", "reading")
+	var rv: ReadingView = m.get("views")["reading"]
+	rv.storage_dir = READING_DIR
+	rv.auto_fetch = false
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/sample_reading_analyze.json"))
+	var text := ""
+	for t in data["tokens"]:
+		text += str(t["t"])
+	var d: Dictionary = rv.new_doc("Back test", "en", text)
+	d["id"] = "backtest"
+	rv.save_doc(d)
+	rv.open_doc(d)
+	rv.set_analysis(data, false)
+	return rv
+
+
+func _main_back_paths() -> void:
+	var m := _new_main()
+	await _frames(6)
+	# main.handle_back asks the SyncManager first: while the first-connection question is open it eats the press and the
+	# sheet behind stays; when the manager does not eat it, the press goes on to the sheet
+	var prev: SyncManager = SyncManager.current
+	var fake := FakeSync.new()
+	SyncManager.current = fake
+	var sh: Sheet = Sheet.confirm(m, "시험", "열려 있는 동안 뒤로 가면 시트만 닫혀요.")
+	await _frames(3)
+	ok(Sheet.is_open(), "handle_back setup: a sheet is open")
+	fake.consume = true
+	m.call("handle_back")
+	await _frames(2)
+	ok(fake.calls == 1, "handle_back asks SyncManager.consume_back [%d call(s)]" % fake.calls)
+	ok(Sheet.is_open(), "handle_back: when consume_back answers true the press stops there (the sheet is still open)")
+	fake.consume = false
+	m.call("handle_back")
+	await _frames(3)
+	ok(fake.calls == 2, "handle_back asks again on the next press [%d]" % fake.calls)
+	ok(not Sheet.is_open(), "handle_back: when consume_back answers false the press reaches the sheet (closed)")
+	if is_instance_valid(sh) and Sheet.is_open():
+		Sheet.close_top()
+	SyncManager.current = prev
+	fake.free()
+	# the app bar's back button (phone) / the same handler (PC): one step back out of a sub screen, then to 오늘
+	var press := func() -> void:
+		var bar: Variant = m.get("_app_bar")
+		if _phone and bar != null:
+			(bar as AppBar).back_button().pressed.emit()
+		else:
+			m.call("_on_bar_back")
+	var rv := _open_reader(m)
+	await _frames(3)
+	ok(rv.mode == "reader", "bar back setup: the reader is open")
+	if _phone:
+		ok((m.get("_app_bar") as AppBar).back_button().visible, "bar back setup: the app bar shows its back button in the reader")
+	press.call()
+	await _frames(2)
+	ok(rv.mode == "library" and m.get("current") == "reading", "bar back: one step out of the reader, still on 읽기 [%s / %s]" % [rv.mode, m.get("current")])
+	press.call()
+	await _frames(2)
+	ok(m.get("current") == "today", "bar back: from the top of a tab it goes to 오늘 [%s]" % m.get("current"))
+	press.call()
+	await _frames(2)
+	ok(m.get("current") == "today" and _exits == 0, "bar back: on 오늘 it does nothing (no exit) [%s, exits %d]" % [m.get("current"), _exits])
+	m.call("show_view", "review")
+	await _frames(2)
+	press.call()
+	await _frames(2)
+	ok(m.get("current") == "today", "bar back: from another tab it goes to 오늘 [%s]" % m.get("current"))
+	if _phone:
+		# settings -> [연결 변경] opens the connect screen (the settings screen's own connect_requested, wired by main)
+		if m.call("is_connect_open"): # a test run has no PC to talk to: the app opened the connect screen itself
+			m.call("_close_connect_view")
+			await _frames(3)
+		m.call("show_view", "settings")
+		await _frames(3)
+		var change: Button = null
+		for b in (m.get("views")["settings"] as Control).find_children("*", "Button", true, false):
+			if (b as Button).text == "연결 변경" and (b as Button).is_visible_in_tree():
+				change = b
+		ok(change != null, "connect: the settings screen shows a '연결 변경' button on the phone")
+		if change != null:
+			ok(not m.call("is_connect_open"), "connect setup: the connect screen is closed")
+			change.pressed.emit()
+			await _frames(3)
+			ok(m.call("is_connect_open"), "connect: 설정 -> '연결 변경' opens the connect screen")
+	m.queue_free()
+	await _frames(3)
 
 
 # ---------------------------------------------------------------- PC: ColumnBox + RecorderWidget

@@ -6,11 +6,8 @@ extends AppView
 ## `mount(section, control)` puts any panel into a section; a panel without children stays hidden (together with its
 ## divider, and the whole section when nothing in it shows).
 ##
-## Two ways to use it:
-##  - standalone (an AppView of its own: PageScroll + big "설정" title): `SettingsView.new()`; it mounts the link panels
-##    and the SyncPanel itself (`auto_panels`, on by default).
-##  - embedded (`embedded = true`): the sections are laid out in the parent's scroll (TodayView puts it under the 설정
-##    button, W5; W4 turns it into a screen of its own). The host mounts the panels (`auto_panels = false`).
+## An AppView of its own (PageScroll + big "설정" title): `SettingsView.new()`; it mounts the link panels and the
+## SyncPanel itself (`auto_panels`, on by default).
 
 ## RemoteLinkPanel's [연결 변경] was pressed (main.gd opens the connect screen).
 signal connect_requested
@@ -42,8 +39,6 @@ const TXT_FONT_SAMPLE := "가나다라 ABC abc 123"
 
 ## Standalone: set to false before add_child() when the host mounts the panels itself.
 var auto_panels: bool = true
-## Embedded in the host's scroll: no PageScroll / title of its own, the height follows the sections.
-var embedded: bool = false
 
 var _body: VBoxContainer
 var _secs: Dictionary = {} ## id -> {header, group, entries: [{wrap, div, panel}]}
@@ -84,20 +79,12 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	if embedded:
-		clip_contents = false
-		size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		_body.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		_body.minimum_size_changed.connect(update_minimum_size)
-		add_child(_body)
-		update_minimum_size()
-	else:
-		_scroll = PageScroll.new(720.0)
-		_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-		add_child(_scroll)
-		_header = PageHeader.build("설정")
-		_scroll.content.add_child(_header)
-		_scroll.content.add_child(_body)
+	_scroll = PageScroll.new(720.0)
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_scroll)
+	_header = PageHeader.build("설정")
+	_scroll.content.add_child(_header)
+	_scroll.content.add_child(_body)
 	_test_player = AudioStreamPlayer.new()
 	add_child(_test_player)
 	Backend.status_changed.connect(_update_status)
@@ -107,14 +94,7 @@ func _ready() -> void:
 	_relayout()
 	UI.fix_cjk(_body)
 	_update_status()
-	if not embedded:
-		bar_changed.emit()
-
-
-func _get_minimum_size() -> Vector2:
-	if embedded and _body != null:
-		return Vector2(0.0, _body.get_combined_minimum_size().y)
-	return Vector2.ZERO
+	bar_changed.emit()
 
 
 # ---------------------------------------------------------------- app bar contract (standalone)

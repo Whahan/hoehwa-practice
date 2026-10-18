@@ -22,7 +22,7 @@ func _init() -> void:
 	body.add_theme_constant_override("separation", 0)
 
 
-## A row: `main` (one line, trimmed with an ellipsis) over an optional `sub` line, `trailing` at the right end.
+## A row: `main` (up to two lines, then an ellipsis) over an optional `sub` line, `trailing` at the right end.
 ## `on_tap` (valid Callable) makes the whole row pressable. `danger` colours the main text BAD_ON.
 ## An empty `main` adds nothing and returns null (with a warning).
 func add_row(main: String, sub: String = "", trailing: Control = null, on_tap: Callable = Callable(), danger: bool = false) -> Control:
@@ -43,9 +43,9 @@ func add_row(main: String, sub: String = "", trailing: Control = null, on_tap: C
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ml := UI.label(main, "ListMain", false)
+	var ml := UI.label(main, "ListMain") # wraps; a long title takes a second line (the row grows), a third is trimmed
+	ml.max_lines_visible = 2
 	ml.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	ml.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ml.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if danger:
 		ml.add_theme_color_override("font_color", Pal.BAD_ON)

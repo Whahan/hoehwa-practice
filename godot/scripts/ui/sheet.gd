@@ -99,7 +99,8 @@ static func choice(host: Node, title: String, items: Array, current: String = ""
 		b.text = label
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.focus_mode = Control.FOCUS_NONE
-		b.clip_text = true
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART # a long item (a month title) takes more lines instead of being cut off
+		b.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		b.custom_minimum_size.y = row_h
 		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var picked: bool = str(value) == current and current != ""
@@ -120,6 +121,11 @@ static func choice(host: Node, title: String, items: Array, current: String = ""
 			b.add_child(chk)
 		b.pressed.connect(func() -> void: s.close(value))
 		col.add_child(b)
+		if picked: # in the tree now, so the styleboxes are the theme's: keep the (wrapped) text clear of the check mark
+			for n in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+				var sbx: StyleBox = b.get_theme_stylebox(n).duplicate()
+				sbx.content_margin_right = 44.0
+				b.add_theme_stylebox_override(n, sbx)
 		s.buttons[str(value)] = b
 	return s
 

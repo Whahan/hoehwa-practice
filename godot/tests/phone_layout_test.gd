@@ -8,7 +8,7 @@ extends Node
 ## and no text mentions Ctrl or the space bar. Without --phone: the PC shell (SideNav, no top tabs, content column)
 ## is checked (docs/ui_redesign_design.md §8.4 W4).
 ## Options after `--` (docs §8.4 W4 (9)):
-##   --touch-min=<f>     smallest touch target in px (default 43.5; the 48 dp target of the redesign is 47.5)
+##   --touch-min=<f>     smallest touch target in px (default 47.5 = the 48 dp target of the redesign; W13 raised it from 43.5)
 ##   --only=<prefix>     scan only the states whose name starts with <prefix> (the walk itself is unchanged; the run
 ##                       fails when no state matches). Also: --dark, --font-scale=<f> go to the walk (shots_phone.gd).
 ## Last line: "== phone layout: N passed, 0 failed ==", exit code 1 on any failure.
@@ -17,6 +17,8 @@ const SCREEN_W := 412.0
 const SCREEN_H := 915.0
 ## Overflow exceptions (at most 3, each with its reason). Path part -> why.
 const ALLOWED_OVERFLOW := {}
+## Smallest touch target (48 dp at the 412 px reference screen). An unusable --touch-min falls back to it.
+const DEFAULT_TOUCH_MIN := 47.5
 
 var passed: int = 0
 var failed: int = 0
@@ -28,7 +30,7 @@ var _bad_text: Array[String] = []
 var _states: Array[String] = []
 var _exit_count: int = 0
 var _scanned: int = 0
-var _touch_min: float = 43.5
+var _touch_min: float = DEFAULT_TOUCH_MIN
 var _only: String = ""
 var _dark: bool = false
 var _font_scale_arg: String = ""
@@ -50,7 +52,7 @@ func _ready() -> void:
 		Api.base_url = "http://127.0.0.1:9" # a closed port: the PC run must never reach the user's engine (8770)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--touch-min="):
-			_touch_min = a.substr(12).to_float() if a.substr(12).is_valid_float() else 43.5
+			_touch_min = a.substr(12).to_float() if a.substr(12).is_valid_float() else DEFAULT_TOUCH_MIN
 		elif a.begins_with("--only="):
 			_only = a.substr(7)
 		elif a == "--dark":
@@ -415,7 +417,6 @@ func _test_layout_helpers(main: Control) -> void:
 	# connection panel mount: hidden while empty, shown (with its divider) as soon as it has a child
 	var card := SettingsView.new()
 	card.auto_panels = false
-	card.embedded = true
 	add_child(card)
 	var panel := VBoxContainer.new()
 	var other := VBoxContainer.new() # a second panel: its divider needs a visible row above it
@@ -728,6 +729,12 @@ func _test_pc_narrow(main: Control) -> void:
 ## project theme the controls read; otherwise light). The two theme files differ, so the check can tell them apart.
 func _test_scheme(main: Control) -> void:
 	var win: Window = get_window()
+	# W13: the --font-scale given to this run really is the text scale of the app (and of the theme it uses), not just a
+	# string that was handed on
+	var want_scale: float = Ds.sanitize_scale(_font_scale_arg.to_float()) if _font_scale_arg.is_valid_float() else 1.0
+	ok(is_equal_approx(Ds.font_scale, want_scale), "W13: --font-scale='%s' reached Ds.font_scale (%s, want %s)" % [_font_scale_arg, Ds.font_scale, want_scale])
+	ok(Ds.fs(20) == int(roundf(20.0 * want_scale)), "W13: Ds.fs(20) follows the scale (%d, want %d)" % [Ds.fs(20), int(roundf(20.0 * want_scale))])
+	ok(win.theme != null and win.theme.get_font_size("font_size", "H1") == Ds.fs(Ds.type_size_for("H1", _phone)), "W13: the window theme's H1 size follows the scale (%d, want %d)" % [win.theme.get_font_size("font_size", "H1") if win.theme != null else -1, Ds.fs(Ds.type_size_for("H1", _phone))])
 	ok(Pal.is_dark() == _dark, "W4-3: Pal.is_dark() is %s with%s --dark" % [Pal.is_dark(), "" if _dark else "out"])
 	var light: Theme = ResourceLoader.load(UiBoot.LIGHT_THEME, "Theme", ResourceLoader.CACHE_MODE_IGNORE) as Theme
 	var dark: Theme = ResourceLoader.load(UiBoot.DARK_THEME, "Theme", ResourceLoader.CACHE_MODE_IGNORE) as Theme

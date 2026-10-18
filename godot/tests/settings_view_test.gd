@@ -161,21 +161,18 @@ func _test_mount() -> void:
 	ok(sv.section_of(odd) == "danger" and odd.visible, "unknown section id goes to the last section ('danger')")
 	sv.mount("danger", null) # a null panel is ignored
 	ok(true, "mount(null) does not crash")
-	# TodayView's helper routes by panel type
-	var tv := TodayView.new()
-	add_child(tv)
+	# the settings screen takes a panel into the section it is mounted in (TodayView's helper is gone)
 	var sv3 := SettingsView.new()
 	sv3.auto_panels = false
 	_stage(sv3)
 	var sp := SyncPanel.new()
 	var other := _panel_with("연결")
-	tv._mount_link_panel(sv3, sp)
-	tv._mount_link_panel(sv3, other)
-	ok(sv3.section_of(sp) == "sync" and sv3.section_of(other) == "connection", "TodayView._mount_link_panel: SyncPanel -> sync, any other panel -> connection")
+	sv3.mount("sync", sp)
+	sv3.mount("connection", other)
+	ok(sv3.section_of(sp) == "sync" and sv3.section_of(other) == "connection", "SettingsView.mount: the SyncPanel goes to 'sync', any other panel to 'connection'")
 	sv.queue_free()
 	sv2.queue_free()
 	sv3.queue_free()
-	tv.queue_free()
 	await _frames(2)
 
 
@@ -409,33 +406,36 @@ func _test_today_cards() -> void:
 
 
 func _test_today_settings() -> void:
-	print("[오늘: settings embedded]")
+	print("[설정 screen: panels, start date; 오늘 carries no settings]")
+	# 오늘 has no settings of its own any more: no toggle button, no SettingsView under its cards
 	var tv := TodayView.new()
 	_stage(tv)
 	await _frames(3)
-	ok(tv._settings_btn != null and tv._engine_ob == null and not tv._settings_open, "closed: the 설정 button, no engine dropdown")
-	tv.open_settings()
-	await _frames(4)
-	ok(tv._settings_open and tv._sv != null and is_instance_valid(tv._sv), "open_settings(): the SettingsView is under the cards")
-	ok((tv._engine_ob != null) == (not _phone), "_engine_ob: set on the PC, null on the phone")
-	var link_cls := "RemoteLinkPanel" if _phone else "PhoneLinkPanel"
-	ok(tv.find_children("*", link_cls, true, false).size() == 1, "the %s is mounted once" % link_cls)
-	ok(tv.find_children("*", "SyncPanel", true, false).size() == 1, "the SyncPanel is mounted once (by TodayView)")
-	ok(tv._sv.section_of(tv.find_children("*", "SyncPanel", true, false)[0]) == "sync", "...in the 'sync' section")
-	ok(tv.go_back() and not tv._settings_open, "go_back() closes the settings")
-	ok(not tv.go_back(), "and returns false when they are closed")
-	# a changed start date refreshes the screen
-	tv.open_settings()
-	await _frames(3)
-	var refreshed := {"n": 0}
-	tv._sv.start_changed.connect(func() -> void: refreshed["n"] += 1)
-	tv._sv._start_edit.text = "2026-01-05"
-	tv._sv._apply_start()
-	ok(refreshed["n"] == 1, "a valid start date emits start_changed")
-	tv._sv._start_edit.text = "not a date"
-	tv._sv._apply_start()
-	ok(refreshed["n"] == 1 and tv._sv._start_msg.text != "", "a broken date shows the message and changes nothing")
+	ok(tv.find_children("*", "SettingsView", true, false).is_empty() and _find_button(tv, "설정  ▾") == null and _find_button(tv, "설정  ▴") == null, "오늘: no 설정 toggle button, no SettingsView under the cards")
+	ok(not tv.go_back(), "오늘 has no sub screen to step back out of")
 	tv.queue_free()
+	await _frames(2)
+	# the settings screen on its own
+	var sv := SettingsView.new()
+	_stage(sv)
+	await _frames(4)
+	ok((sv._engine_ob != null) == (not _phone), "_engine_ob: set on the PC, null on the phone")
+	var link_cls := "RemoteLinkPanel" if _phone else "PhoneLinkPanel"
+	ok(sv.find_children("*", link_cls, true, false).size() == 1, "the %s is mounted once" % link_cls)
+	ok(sv.find_children("*", "SyncPanel", true, false).size() == 1, "the SyncPanel is mounted once (by the settings screen)")
+	ok(sv.section_of(sv.find_children("*", "SyncPanel", true, false)[0]) == "sync", "...in the 'sync' section")
+	ok(not sv.go_back(), "the settings screen has nothing to step back out of: go_back() is false")
+	ok(sv.auto_panels and sv.page_title() == "설정", "the settings screen is a screen of its own (title 설정) and mounts its own panels")
+	# a changed start date is announced
+	var refreshed := {"n": 0}
+	sv.start_changed.connect(func() -> void: refreshed["n"] += 1)
+	sv._start_edit.text = "2026-01-05"
+	sv._apply_start()
+	ok(refreshed["n"] == 1, "a valid start date emits start_changed")
+	sv._start_edit.text = "not a date"
+	sv._apply_start()
+	ok(refreshed["n"] == 1 and sv._start_msg.text != "", "a broken date shows the message and changes nothing")
+	sv.queue_free()
 	await _frames(2)
 
 

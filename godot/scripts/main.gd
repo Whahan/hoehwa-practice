@@ -181,7 +181,6 @@ func _ready() -> void:
 		"review": ReviewView.new(),
 		"roadmap": RoadmapView.new(),
 	}
-	(views["today"] as TodayView).embed_settings = false # the settings are a screen of their own (views["settings"])
 	if _phone:
 		(views["reading"] as ReadingView).bar_hosted = true # the app bar shows the reader's back button, title and action
 	for k in views.keys():
@@ -204,7 +203,6 @@ func _ready() -> void:
 	Backend.status_changed.connect(_on_backend_status)
 	(views[SETTINGS_KEY] as SettingsView).connect_requested.connect(_open_connect_view)
 	if _phone:
-		(views["today"] as TodayView).connect_requested.connect(_open_connect_view)
 		get_viewport().gui_focus_changed.connect(_on_focus_changed)
 		_update_phone_chrome()
 	else:
