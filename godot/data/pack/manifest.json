@@ -1,0 +1,25 @@
+{
+ "v": 1,
+ "built": "2026-10-24T08:55:42+09:00",
+ "files": [
+  {
+   "path": "missions.json",
+   "bytes": 77626,
+   "sha256": "6f6be80f56f2fee5f609ece27a1b649fb77b47752eb132fec8ecb434f29b1c44",
+   "records": 8
+  },
+  {
+   "path": "phoneme_drills.json",
+   "bytes": 13529,
+   "sha256": "bc86a010bd397a6ec5f444c6e2471179a396277cfd4f4860b7d782ea18824121",
+   "records": 15
+  }
+ ],
+ "sources": [
+  {
+   "id": "hoehwa-content",
+   "license": "MIT",
+   "url": "https://github.com/Whahan/hoehwa-practice"
+  }
+ ]
+}

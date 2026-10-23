@@ -32,6 +32,8 @@ Api="*res://scripts/autoload/api.gd"
 Backend="*res://scripts/autoload/backend.gd"
 Tts="*res://scripts/autoload/tts.gd"
 Recorder="*res://scripts/autoload/recorder.gd"
+Route="*res://scripts/autoload/route.gd"
+LocalApi="*res://scripts/autoload/local_api.gd"
 
 [debug]
 
