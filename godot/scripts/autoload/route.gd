@@ -31,7 +31,8 @@ const CAP_KEYS := ["lesson", "lesson_ai", "practice", "missions", "missions_judg
 ## `POST /lesson` with body.source == "ai" is routed like the "lesson_ai" entry below (see `policy_for`).
 const POLICY := {
 	"GET /health": {"pc": true, "phone": "health", "prefer": "pc", "cap": ""},
-	"GET /curriculum": {"pc": true, "phone": "curriculum", "prefer": "phone", "cap": ""},
+	# prefer pc: a connected phone keeps getting the PC's (possibly newer) curriculum; without a ready PC the bundled copy.
+	"GET /curriculum": {"pc": true, "phone": "curriculum", "prefer": "pc", "cap": ""},
 	"POST /tts": {"pc": true, "phone": "", "prefer": "pc", "cap": "tts"},          # Tts autoload picks the engine itself
 	"GET /tts/voices": {"pc": true, "phone": "", "prefer": "pc", "cap": "tts"},
 	"POST /stt": {"pc": true, "phone": "stt", "prefer": "pc", "cap": "stt"},

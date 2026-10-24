@@ -13,7 +13,7 @@ const REQ_TIMEOUT := 0.5
 ## Expected policy (independent copy of design 4.3): key -> [prefer, phone handler key].
 const SPEC := {
 	"GET /health": ["pc", "health"],
-	"GET /curriculum": ["phone", "curriculum"],
+	"GET /curriculum": ["pc", "curriculum"],
 	"POST /tts": ["pc", ""],
 	"GET /tts/voices": ["pc", ""],
 	"POST /stt": ["pc", "stt"],
@@ -124,6 +124,7 @@ func _ready() -> void:
 	await _test_auth_401()
 	await _test_pc_mode_unchanged()
 	await _test_pc_platform_requests()
+	await _test_phone_curriculum()
 	_test_err_texts()
 
 	LocalApi.handler_override.clear()
@@ -716,4 +717,45 @@ func _test_err_texts() -> void:
 				break
 		hangul = hangul and has
 	ok(hangul, "every ERR_TEXT entry is Korean")
+
+
+func _test_phone_curriculum() -> void:
+	print("[phone app: a phone-side /curriculum answer is not cached as a PC answer]")
+	_is_phone = true
+	Route.mode = "auto"
+	Route.clear_flaky()
+	_avail(true)
+	var cache := "user://test_a1_curriculum_cache2.json"
+	var old_path: String = Store.curriculum_cache_path
+	var old_cur: Dictionary = Store.curriculum.duplicate(true)
+	var old_flag: bool = Store.curriculum_from_backend
+	Store.curriculum_cache_path = cache
+	Store.curriculum_from_backend = false
+	if FileAccess.file_exists(cache):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(cache))
+	# no PC ready -> the bundled copy (phone handler)
+	Route.pc_ready_hook = func() -> bool: return false
+	Api.base_url = DEAD_PC
+	ok(Route.decide("GET", "/curriculum") == "phone", "phone auto, PC not ready: GET /curriculum -> phone")
+	var s0: int = Api.sent_count
+	var n0: int = LocalApi.served_count
+	await Store.refresh_curriculum()
+	ok(LocalApi.served_count == n0 + 1 and Api.sent_count == s0, "refresh_curriculum was served by the phone, nothing sent")
+	ok(not FileAccess.file_exists(cache), "no curriculum cache file was written for a phone answer")
+	ok(not Store.curriculum_from_backend, "curriculum_from_backend stays false")
+	ok(not Store.curriculum.has("via") and not Store.curriculum.has("degraded") and Store.curriculum == old_cur, "Store.curriculum has no via/degraded keys and is still valid / unchanged")
+	ok(Store._valid_curriculum(Store.curriculum), "Store.curriculum is still a valid curriculum")
+	# PC ready -> the PC's curriculum (prefer pc); a dead PC falls back to the phone copy
+	Route.pc_ready_hook = func() -> bool: return true
+	ok(Route.decide("GET", "/curriculum") == "pc", "phone auto, PC ready: GET /curriculum -> pc")
+	var s1: int = Api.sent_count
+	var r: Dictionary = await _req("GET", "/curriculum")
+	ok(Api.sent_count > s1, "the request was sent to the PC")
+	ok(r["ok"] and r["data"]["via"] == "phone" and Route.pc_flaky(), "PC dead -> same request answered by the phone copy, PC marked flaky")
+	Route.clear_flaky()
+	ok(not FileAccess.file_exists(cache), "still no cache file")
+	Store.curriculum_cache_path = old_path
+	Store.curriculum = old_cur
+	Store.curriculum_from_backend = old_flag
+	Route.mode = "auto"
 
