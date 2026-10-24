@@ -379,8 +379,14 @@ func _on_scored(res: Dictionary, _tgt: String) -> void:
 	var r: Dictionary = results[idx]
 	r["tries"] = int(r["tries"]) + 1
 	attempts += 1
-	var v := judge(res, cur_p)
-	r["unavailable"] = bool(v["unavailable"]) or phoneme_off()
+	var v: Dictionary
+	if SelfRatePanel.is_self_rated(res):
+		# 채점할 곳이 없어 스스로 "잘했어요"로 평가했다: 소리별 분석은 없고, 사용자의 평가를 성공으로 센다
+		v = {"has_ph": false, "found": 0, "good": 0, "success": true, "unavailable": false, "words": [], "self": true}
+		r["unavailable"] = false
+	else:
+		v = judge(res, cur_p)
+		r["unavailable"] = bool(v["unavailable"]) or phoneme_off()
 	r["last"] = v
 	if bool(v["success"]) and not bool(r["unavailable"]):
 		r["success"] = true
@@ -635,6 +641,10 @@ func _render_top() -> void:
 func _verdict_box(r: Dictionary) -> Control:
 	var v: Dictionary = r["last"]
 	var box := UI.card("Sunk", 8)
+	if bool(v.get("self", false)):
+		box.body.add_child(UI.colored("✓ 스스로 '잘했어요'로 평가했어요.", Pal.OK_ON, "Strong"))
+		box.body.add_child(UI.label("소리별 분석은 PC에 연결하면 볼 수 있어요.", "Small"))
+		return box
 	if bool(v["unavailable"]) or bool(r["unavailable"]):
 		box.body.add_child(UI.colored(NO_PH_TEXT, Pal.WARN_ON))
 		return box
@@ -673,9 +683,12 @@ func _render_summary(c: VBoxContainer) -> void:
 	var card := UI.card("BigCard", 10)
 	card.body.add_child(UI.label("약한 소리 연습 결과  ·  " + label_of(cur_p), "Eyebrow", false))
 	var all_unavailable := true
+	var any_self := false
 	for r in results:
 		if int((r as Dictionary)["tries"]) > 0 and not bool((r as Dictionary)["unavailable"]):
 			all_unavailable = false
+		if int((r as Dictionary)["tries"]) > 0 and bool(((r as Dictionary).get("last", {}) as Dictionary).get("self", false)):
+			any_self = true
 	if attempts == 0:
 		card.body.add_child(UI.label("말해 본 문항이 없어요.", "H2"))
 	elif all_unavailable:
@@ -684,7 +697,7 @@ func _render_summary(c: VBoxContainer) -> void:
 	else:
 		var s := success_count()
 		var good: bool = s * 2 >= items.size()
-		card.body.add_child(UI.colored("%s %d/%d 성공" % ["✓" if good else "△", s, items.size()], Pal.OK_ON if good else Pal.WARN_ON, "H1", false))
+		card.body.add_child(UI.colored("%s %d/%d %s" % ["✓" if good else "△", s, items.size(), "잘했어요 (스스로 평가)" if any_self else "성공"], Pal.OK_ON if good else Pal.WARN_ON, "H1", false))
 		card.body.add_child(UI.label("한 번에 안 되어도 괜찮아요. 같은 소리를 며칠 나눠서 연습하면 좋아져요.", "Muted"))
 	if xp_gained > 0:
 		card.body.add_child(UI.label("+%d XP" % xp_gained, "Muted"))

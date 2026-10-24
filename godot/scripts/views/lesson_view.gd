@@ -31,6 +31,8 @@ var built: Array = [] # tile ids in answer order
 var checked: bool = false
 var correct: bool = false
 var speak_result: Dictionary = {}
+## 채점할 곳이 없을 때(Route: /score = none) 자가 평가를 기다리는 녹음 (Recorder result). 비어 있으면 평가 중이 아니다.
+var speak_self_rec: Dictionary = {}
 var scoring: bool = false
 
 var _call = null # Api.ApiCall
@@ -274,6 +276,7 @@ func _reset_answer() -> void:
 	checked = false
 	correct = false
 	speak_result = {}
+	speak_self_rec = {}
 	scoring = false
 	if _score_call != null:
 		_score_call.cancel()
@@ -752,7 +755,11 @@ func _render_run(c: VBoxContainer) -> void:
 			panel.body.add_child(UI.speak_buttons(str(e["text"]), lang))
 			panel.body.add_child(UI.hline())
 			if lang == "en": # intonation graph: English only for now
-				panel.body.add_child(_prosody_section())
+				if SelfRatePanel.needed() and SelfRatePanel.prosody_off():
+					# nowhere to score and no PC: not hidden, a disabled card with the reason (docs/phone_standalone_design.md 4.6)
+					panel.body.add_child(SelfRatePanel.disabled_feature("억양", "억양 비교", SelfRatePanel.PROSODY_REASON))
+				else:
+					panel.body.add_child(_prosody_section())
 				panel.body.add_child(UI.hline())
 			_record_widget = RecorderWidget.new(true, acc, true)
 			_record_widget.recorded.connect(_on_recorded)
@@ -762,7 +769,15 @@ func _render_run(c: VBoxContainer) -> void:
 				panel.body.add_child(UI.label("발음을 채점하는 중이에요…", "Muted"))
 			elif not speak_result.is_empty():
 				panel.body.add_child(UI.hline())
-				panel.body.add_child(ScorePanel.build(speak_result, lang))
+				if SelfRatePanel.is_self_rated(speak_result):
+					panel.body.add_child(UI.colored("✓ 스스로 '잘했어요'로 평가했어요. 기록에 남겼어요.", Pal.OK_ON, "Strong"))
+				else:
+					panel.body.add_child(ScorePanel.build(speak_result, lang))
+			elif not speak_self_rec.is_empty():
+				panel.body.add_child(UI.hline())
+				var sp := SelfRatePanel.new(lang, str(e["text"]), speak_self_rec, acc)
+				sp.rated.connect(_on_self_rated)
+				panel.body.add_child(sp)
 	if attribution != "":
 		panel.body.add_child(_attribution_label(e))
 	_render_footer(e, t)
@@ -1067,8 +1082,25 @@ func _skip_speak() -> void:
 
 # ---------------------------------------------------------------- scoring
 
+## 자가 평가 결과: "잘했어요"는 채점 통과와 같은 길(speak_result -> 푼 결과, StudyLog.add_score)로, "다시"는 아무것도 기록하지 않는다.
+func _on_self_rated(good: bool) -> void:
+	if status != "run" or speak_self_rec.is_empty():
+		return
+	speak_self_rec = {}
+	if good:
+		speak_result = SelfRatePanel.good_result(lang, str(cur()["text"]))
+		StudyLog.add_score(lang, speak_result, "lesson")
+	_render()
+
+
 func _on_recorded(result: Dictionary) -> void:
 	if scoring:
+		return
+	if SelfRatePanel.needed():
+		# no place to score (no PC, no phone model): no /score request, rate by ear instead
+		speak_self_rec = result
+		speak_result = {}
+		_render()
 		return
 	var e: Dictionary = cur()
 	scoring = true
