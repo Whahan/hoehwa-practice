@@ -34,6 +34,9 @@ FILES = {"en": "gloss_en.json", "ja": "gloss_ja.json"}
 KEYS = {"pos", "ko", "ipa"}
 # written independently of build_gloss_pack.valid_ko, so that a bug in the tool's check does not hide itself
 HANGUL = re.compile(r"[가-힣ㄱ-ㆎ]")
+# written independently of build_gloss_pack.KO_ALLOWED: Hangul, digits, spaces, and . , · ~ ( ) / - ' ! ?
+KO_CHARS = re.compile(r"[가-힣ㄱ-ㆎ0-9\s.,·~()/\-'!?]+")
+POS_TYPOS = {"부사사"}
 
 passed = 0
 failed = 0
@@ -83,6 +86,10 @@ def check_file(path, lang):
         p = ko_problems(v["ko"])
         if not p and re.search(r"[A-Za-z]", v["ko"]):
             p = "ko 에 라틴 문자 섞임 %r" % v["ko"]
+        if not p and not KO_CHARS.fullmatch(v["ko"]):
+            p = "ko 에 한글·숫자·공백·일반 구두점 밖의 문자 %r" % v["ko"]
+        if not p and v["pos"] in POS_TYPOS:
+            p = "품사 오타 %r" % v["pos"]
         if not p and B.is_blocked(lang, w):
             p = "사전 차단 목록의 lemma (욕설·비하어)"
         if p:
@@ -139,6 +146,15 @@ def part1(pack_dir):
         dict_bad = ["읽기 실패"]
     check("사전에 war·death·die 가 남아 있음 (일반 단어는 거르지 않음)", not gone, "빠짐: %r" % gone)
     check("팩에 사전 차단 목록 lemma 없음 (en)", not dict_bad, "있음: %r" % dict_bad[:10])
+    try:
+        with open(os.path.join(pack_dir, FILES["en"]), "r", encoding="utf-8") as f:
+            en_d = json.load(f)
+        fix_bad = [(w, en_d[w]["ko"], ko) for w, ko in B.MANUAL_FIX["en"].items() if w in en_d and en_d[w]["ko"] != ko]
+        dropped_fix = [w for w in B.MANUAL_FIX["en"] if w not in en_d]
+    except Exception as e:
+        fix_bad = [("읽기 실패", str(e), "")]
+        dropped_fix = []
+    check("교정표 반영: 팩의 ko 가 MANUAL_FIX 와 같음 (팩에 있는 lemma 기준)", not fix_bad, "어긋남: %r" % fix_bad[:5])
 
 
 def part2():
@@ -164,6 +180,10 @@ def part2():
         check("변조 2: 61자 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
         p = variant("latin.json", lambda dd: dd[keys[11]].__setitem__("ko", "아rlington"))
         check("변조 5: 라틴 문자가 섞인 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
+        p = variant("kana.json", lambda dd: dd[keys[13]].__setitem__("ko", "사ム"))
+        check("변조 7: 가나가 섞인 ko(\"사ム\")를 넣으면 실패", bool(p), "검사기가 통과시킴")
+        p = variant("pos_typo.json", lambda dd: dd[keys[15]].__setitem__("pos", "부사사"))
+        check("변조 8: 품사 오타(\"부사사\")를 넣으면 실패", bool(p), "검사기가 통과시킴")
         blocked_key = "fuck"
         check("변조 6 준비: 'fuck' 은 사전 차단 목록에 있음", B.is_blocked("en", blocked_key))
         p = variant("blocked.json", lambda dd: dd.__setitem__(blocked_key, {"pos": "동사", "ko": "씨발", "ipa": ""}))
@@ -260,6 +280,48 @@ def part3():
     finally:
         B.call_gloss = real_call
         shutil.rmtree(tmp2, ignore_errors=True)
+
+    # rules of the output step
+    check("품사 정규화: 부사사 -> 부사, 나머지는 그대로",
+          B.normalize_pos({"a": {"pos": "부사사", "ko": "가", "ipa": ""}, "b": {"pos": "명사", "ko": "가", "ipa": ""}})[0]
+          == {"a": {"pos": "부사", "ko": "가", "ipa": ""}, "b": {"pos": "명사", "ko": "가", "ipa": ""}})
+    fixed, applied, absent = B.apply_manual_fix("en", {"calf": {"pos": "명사", "ko": "소년", "ipa": "kælf"},
+                                                        "run": {"pos": "동사", "ko": "달리다", "ipa": ""}})
+    check("교정표: calf -> 송아지 적용, 목록에 없는 lemma 는 absent 로 보고",
+          fixed["calf"]["ko"] == "송아지" and fixed["calf"]["ipa"] == "kælf" and applied == 1 and "nothin" in absent)
+    kept, counts, dropped = B.filter_entries("en", {
+        "bt": {"pos": "명사", "ko": "브라", "ipa": ""},
+        "sam": {"pos": "명사", "ko": "사ム", "ipa": ""},
+        "fuckin": {"pos": "동사", "ko": "씨발", "ipa": ""},
+        "war": {"pos": "명사", "ko": "전쟁", "ipa": ""},
+        "rugby": {"pos": "명사", "ko": "rugby 경기", "ipa": ""},
+        "percent": {"pos": "명사", "ko": "100%", "ipa": ""},
+    })
+    check("거르기 규칙: junk·other_char·blocked·latin 각 1, 일반 단어 war 는 남음",
+          list(kept) == ["war"] and counts == {"junk": 1, "latin_in_ko": 1, "other_char_in_ko": 2, "blocked_word": 1},
+          "kept=%r counts=%r" % (list(kept), counts))
+    check("거르기 목록: 'fuckin', 'goddamn', 'negro' 가 사전 차단 목록에 있음",
+          all(B.is_blocked("en", w) for w in ("fuckin", "goddamn", "negro")) and "bt" in B.DICT_DROP_EN)
+    check("ko 허용 문자: 한글·숫자·공백·일반 구두점 통과, %·가나·한자·@ 는 거름",
+          bool(B.KO_ALLOWED.fullmatch("가다 (동사) ~!?·10")) and not B.KO_ALLOWED.fullmatch("100%")
+          and not B.KO_ALLOWED.fullmatch("사ム") and not B.KO_ALLOWED.fullmatch("漢字") and not B.KO_ALLOWED.fullmatch("a@b"))
+    tmp3 = tempfile.mkdtemp(prefix="gloss_test_offline_")
+    try:
+        vocab3 = os.path.join(tmp3, "vocab")
+        os.makedirs(vocab3)
+        with open(os.path.join(vocab3, "vocab_en.txt"), "w", encoding="utf-8") as f:
+            f.write("run\ncat\n")
+        with open(os.path.join(vocab3, "vocab_ja.txt"), "w", encoding="utf-8") as f:
+            f.write("猫\n")
+        out3 = os.path.join(tmp3, "out")
+        os.makedirs(out3)
+        r = subprocess.run([sys.executable, "-I", os.path.join(TOOLS, "build_gloss_pack.py"), "--vocab-dir", vocab3,
+                            "--cache", os.path.join(tmp3, "cache"), "--out", out3, "--offline"],
+                           capture_output=True, timeout=300)
+        check("오프라인: 캐시에 없는 단어가 있으면 exit 1, 파일 미생성", r.returncode == 1
+              and not os.path.exists(os.path.join(out3, "gloss_en.json")))
+    finally:
+        shutil.rmtree(tmp3, ignore_errors=True)
 
     pool = [("en", "w%03d" % i, "뜻%d" % i) for i in range(500)]
     s1 = B.make_sample(pool)

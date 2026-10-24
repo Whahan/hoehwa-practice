@@ -15,6 +15,8 @@ vocabulary lists, and writes the answers into the pack.
     --max-hours H     when the estimate for the rest of the run is longer than H hours, stop (exit 4) (default 4)
     --no-limit        run even when the estimate is longer than --max-hours
     --sample FILE     write the fixed-seed 100-word review list (word / ko / empty check column) from the built files
+    --retry-missing   ask again only the blank words (2 passes), cached answers stay
+    --offline         no backend call: build the files from the cache only (exit 1 if a word was never asked)
 
 Flow: the first 100 words computed in this run are timed, the estimate is printed, and the run goes on only when the estimate
 fits --max-hours. Every call is appended to the cache at once. The gloss files and the manifest are written only when every
@@ -331,14 +333,44 @@ LATIN = re.compile(r"[A-Za-z]")
 # kill, blood, cancer, god ...) are NOT here, so they stay in the dictionary. Lemmas are compared in lower case (English)
 # or as they are (Japanese). Kept short on purpose: 30-80 entries.
 DICT_BLOCK_EN = frozenset("""
-fuck fucks fucked fucker fucking motherfucker
+fuck fucks fucked fucker fucking fuckin motherfucker goddamn
 shit shitty bullshit
 bitch
 slut whore cunt
 dick pussy cock prick twat wanker asshole
 porn porno
-nigger nigga faggot fag dyke tranny retard spic kike chink gook coon wetback
+nigger nigga negro faggot fag dyke tranny retard spic kike chink gook coon wetback
 """.split())
+
+# Junk entries with no usable meaning: dropped (rule junk).
+DICT_DROP_EN = frozenset({"bt"})
+
+# Korean meanings allowed in the pack: Hangul syllables and jamo, digits, spaces, and the plain punctuation . , · ~ ( ) / - ' ! ?
+# Anything else (kana, Han characters, % @ # ...) makes the meaning unusable.
+KO_ALLOWED = re.compile(r"[가-힣ㄱ-ㆎ0-9\s.,·~()/\-'!?]+")
+
+# Manual corrections of clear mistranslations: lemma -> Korean meaning (the model's pos and ipa are kept).
+MANUAL_FIX = {
+    "en": {
+        "kidnap": "납치하다",
+        "penis": "음경",
+        "wrist": "손목",
+        "calf": "송아지",
+        "idiot": "바보",
+        "moron": "바보",
+        "hooker": "매춘부",
+        "capitol": "국회 의사당",
+        "glacier": "빙하",
+        "correspondent": "특파원",
+        "cruelty": "잔인함",
+        "wendy": "웬디",
+        "nothin": "아무것도",
+    },
+    "ja": {},
+}
+
+# Part-of-speech typos: the wrong value -> the right one. Other values are kept as the model wrote them.
+POS_FIX = {"부사사": "부사"}
 
 DICT_BLOCK_JA = frozenset("""
 クソ くそ 糞
@@ -358,23 +390,56 @@ def is_blocked(lang, lemma):
     return lemma in DICT_BLOCK_JA
 
 
+def apply_manual_fix(lang, obj):
+    """MANUAL_FIX: sets the Korean meaning of the listed lemmas that are in obj. returns (new dict, applied, absent lemmas)"""
+    out = dict(obj)
+    applied = 0
+    absent = []
+    for w, ko in MANUAL_FIX.get(lang, {}).items():
+        if w in out:
+            out[w] = dict(out[w], ko=ko)
+            applied += 1
+        else:
+            absent.append(w)
+    return out, applied, absent
+
+
+def normalize_pos(obj):
+    """POS_FIX on the part of speech. returns (new dict, number of changed values)"""
+    out = {}
+    changed = 0
+    for w, v in obj.items():
+        p = POS_FIX.get(v["pos"], v["pos"])
+        if p != v["pos"]:
+            changed += 1
+            v = dict(v, pos=p)
+        out[w] = v
+    return out, changed
+
+
 def filter_entries(lang, obj):
     """drops the entries that break the output rules; the cache is not changed.
-    rule latin_in_ko: the Korean meaning has a Latin letter (e.g. a leaked romanized name);
+    rule junk: a junk lemma (DICT_DROP_EN); rule latin_in_ko: the Korean meaning has a Latin letter (e.g. a leaked romanized
+    name); rule other_char_in_ko: the Korean meaning has a character outside KO_ALLOWED (kana, Han, % @ # ...);
     rule blocked_word: the lemma is on the dictionary block list (DICT_BLOCK_EN / DICT_BLOCK_JA).
     returns (kept dict, counts per rule, [(word, rule)] of the dropped entries)"""
     kept = {}
-    counts = {"latin_in_ko": 0, "blocked_word": 0}
+    counts = {"junk": 0, "latin_in_ko": 0, "other_char_in_ko": 0, "blocked_word": 0}
     dropped = []
     for w, v in obj.items():
-        if LATIN.search(v["ko"]):
-            counts["latin_in_ko"] += 1
-            dropped.append((w, "latin_in_ko"))
+        if lang == "en" and w in DICT_DROP_EN:
+            rule = "junk"
+        elif LATIN.search(v["ko"]):
+            rule = "latin_in_ko"
+        elif not KO_ALLOWED.fullmatch(v["ko"]):
+            rule = "other_char_in_ko"
         elif is_blocked(lang, w):
-            counts["blocked_word"] += 1
-            dropped.append((w, "blocked_word"))
+            rule = "blocked_word"
         else:
             kept[w] = v
+            continue
+        counts[rule] += 1
+        dropped.append((w, rule))
     return kept, counts, dropped
 
 
@@ -413,7 +478,12 @@ def main(argv=None):
     ap.add_argument("--sample", default=None)
     ap.add_argument("--retry-missing", action="store_true",
                     help="ask again only the blank words (asked before, no accepted answer); cached answers stay; 2 passes")
+    ap.add_argument("--offline", action="store_true",
+                    help="no backend call: build the files from the cache only (exit 1 if a word was never asked)")
     args = ap.parse_args(argv)
+    if args.offline and args.retry_missing:
+        say("[오류] --offline 과 --retry-missing 은 함께 쓸 수 없다")
+        return 2
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
@@ -450,31 +520,39 @@ def main(argv=None):
         for lang in langs:
             say("[%s] 어휘 %d, 이미 처리 %d, 남음 %d (캐시 깨진 줄 %d)" % (
                 lang, len(vocab[lang]), len(caches[lang].asked), len(todo[lang]), caches[lang].bad_lines))
-        run = Run(args.url, args.max_hours, args.no_limit)
-        run.total_todo = sum(len(todo[lang]) for lang in langs)
-        try:
-            if args.retry_missing:
-                run.estimated = True  # the retry is short: no timing estimate
-                for lang in langs:
-                    retry_missing(run, lang, vocab[lang], caches[lang])
+        if args.offline:
+            # no backend call: every word must already be in the cache
             for lang in langs:
                 if todo[lang]:
-                    run_lang(run, lang, todo[lang], caches[lang], len(vocab[lang]))
-            if not run.estimated and run.total_todo:
-                say("[측정] 이번 실행에서 %d단어 미만만 처리해 속도를 재지 못함" % run.done_words)
-        except BackendDown as e:
-            say("[실패] %s" % e)
-            return 3
-        except OverLimit as e:
-            say("[중단] %s" % e)
-            return 4
-        if args.retry_missing and run.failed_batches:
-            # a retry pass may fail again: those words stay blank (reported), the files are still written
-            say("[재요청] 실패한 묶음 %d개의 단어는 빈칸으로 둠" % run.failed_batches)
-            run.failed_batches = 0
-        if run.failed_batches:
-            say("[실패] %d개 묶음이 끝내 실패함. 파일은 쓰지 않음. 같은 명령으로 다시 실행하면 이어서 처리" % run.failed_batches)
-            return 1
+                    say("[실패] 오프라인: %s 아직 요청하지 않은 단어 %d개 (서버 없이는 만들 수 없음)" % (lang, len(todo[lang])))
+                    return 1
+            say("[오프라인] 서버를 호출하지 않고 캐시만으로 파일을 만든다")
+        else:
+            run = Run(args.url, args.max_hours, args.no_limit)
+            run.total_todo = sum(len(todo[lang]) for lang in langs)
+            try:
+                if args.retry_missing:
+                    run.estimated = True  # the retry is short: no timing estimate
+                    for lang in langs:
+                        retry_missing(run, lang, vocab[lang], caches[lang])
+                for lang in langs:
+                    if todo[lang]:
+                        run_lang(run, lang, todo[lang], caches[lang], len(vocab[lang]))
+                if not run.estimated and run.total_todo:
+                    say("[측정] 이번 실행에서 %d단어 미만만 처리해 속도를 재지 못함" % run.done_words)
+            except BackendDown as e:
+                say("[실패] %s" % e)
+                return 3
+            except OverLimit as e:
+                say("[중단] %s" % e)
+                return 4
+            if args.retry_missing and run.failed_batches:
+                # a retry pass may fail again: those words stay blank (reported), the files are still written
+                say("[재요청] 실패한 묶음 %d개의 단어는 빈칸으로 둠" % run.failed_batches)
+                run.failed_batches = 0
+            if run.failed_batches:
+                say("[실패] %d개 묶음이 끝내 실패함. 파일은 쓰지 않음. 같은 명령으로 다시 실행하면 이어서 처리" % run.failed_batches)
+                return 1
         for lang in langs:
             c = caches[lang]
             missing_words = [w for w in vocab[lang] if w not in c.asked]
@@ -485,7 +563,10 @@ def main(argv=None):
         for lang in langs:
             c = caches[lang]
             got_obj = {w: c.got[w] for w in vocab[lang] if w in c.got}   # every accepted answer
-            out_obj, counts, dropped = filter_entries(lang, got_obj)
+            fixed, applied, absent = apply_manual_fix(lang, got_obj)
+            fixed, pos_changed = normalize_pos(fixed)
+            empty_pos = sum(1 for v in fixed.values() if not v["pos"])
+            out_obj, counts, dropped = filter_entries(lang, fixed)
             fp = os.path.join(args.out, PACK_FILE[lang])
             write_json_atomic(fp, out_obj)
             entries[PACK_FILE[lang]] = {"bytes": os.path.getsize(fp), "sha256": sha256_file(fp), "records": len(out_obj)}
@@ -493,10 +574,14 @@ def main(argv=None):
             drop_path = os.path.join(args.cache, "gloss_dropped_%s.tsv" % lang)
             with open(drop_path, "w", encoding="utf-8", newline="\n") as f:
                 for w, rule in dropped:
-                    f.write("%s\t%s\t%s\n" % (w, rule, got_obj[w]["ko"]))
+                    f.write("%s\t%s\t%s\n" % (w, rule, fixed[w]["ko"]))
             blank = len(vocab[lang]) - len(got_obj)  # words of the list with no accepted answer
-            say("[결과] %s: 어휘 %d, 응답 뜻 %d, 거른 규칙별 latin_in_ko %d / blocked_word %d, 저장 %d, 빈칸 %d (%s)" % (
-                lang, len(vocab[lang]), len(got_obj), counts["latin_in_ko"], counts["blocked_word"], len(out_obj), blank, fp))
+            say("[결과] %s: 어휘 %d, 응답 뜻 %d, 빈칸 %d" % (lang, len(vocab[lang]), len(got_obj), blank))
+            say("[결과] %s 교정표 적용 %d (대상 중 목록에 없음: %s), 품사 정규화 %d, 빈 품사 %d" % (
+                lang, applied, ", ".join(absent) or "없음", pos_changed, empty_pos))
+            say("[결과] %s 거른 규칙별: junk %d, latin_in_ko %d, other_char_in_ko %d, blocked_word %d -> 저장 %d (%s)" % (
+                lang, counts["junk"], counts["latin_in_ko"], counts["other_char_in_ko"], counts["blocked_word"],
+                len(out_obj), fp))
             say("[결과] %s 제거 목록: %s" % (lang, drop_path))
         update_manifest(args.out, entries)
         say("[결과] manifest.json 항목 추가: %s" % ", ".join(sorted(entries)))

@@ -16,15 +16,15 @@
   },
   {
    "path": "gloss_en.json",
-   "bytes": 662999,
-   "sha256": "9a4f9022aac1264aad170bfb39426e09131b922d5fe6ad21be023782318b1cb9",
-   "records": 10281
+   "bytes": 661978,
+   "sha256": "17b028ff20dc58fc42e63817a3fa3fdceb5b96d2f87f0a59ca2eade7e713e663",
+   "records": 10265
   },
   {
    "path": "gloss_ja.json",
-   "bytes": 308707,
-   "sha256": "e0e4fa0c7817890eecd3549b89f877644d0f7137bb4abdb711e893ac0113cef8",
-   "records": 5085
+   "bytes": 307967,
+   "sha256": "f7aed4e6832ad43749d8f1f3f797f7870f43e2381ce976c5879028ae81e6f488",
+   "records": 5074
   },
   {
    "path": "ipa_en.json",
