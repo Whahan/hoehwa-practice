@@ -15,6 +15,18 @@
    "records": 2129
   },
   {
+   "path": "gloss_en.json",
+   "bytes": 639875,
+   "sha256": "13fefec4136054cb6deb412ed9081067b4202c35049c26a5ab4a960563a294b7",
+   "records": 9934
+  },
+  {
+   "path": "gloss_ja.json",
+   "bytes": 302910,
+   "sha256": "59a9d873dd26395af2d0f3aba25b2b3e906b3013c536706ed448291443360623",
+   "records": 4992
+  },
+  {
    "path": "ipa_en.json",
    "bytes": 521048,
    "sha256": "26a119ee8f912dffb090895ea00ed74ad0d7bc54e6230da1a4614d8e4512ff97",
