@@ -532,6 +532,10 @@ func _test_retry() -> void:
 		skip("R-10 automatic retry needs fault injection of the in-process fake")
 		Api.clear_remote()
 		return
+	# R-10 is about the PC retry rules, so the phone handlers stay out of it (mode "pc"); the auto-mode
+	# fallback to the phone is checked right after.
+	var mode_before: String = Route.mode
+	Route.mode = "pc"
 	fake.reset_log()
 	fake.drop["/stt"] = 1
 	var r: Dictionary = await Api.post_json("/stt", {"lang": "en", "audio_b64": "AAAA"}, 10.0, false).wait()
@@ -566,6 +570,18 @@ func _test_retry() -> void:
 	var rc: Dictionary = await c.wait()
 	await _frames(40)
 	ok(bool(rc.get("cancelled", false)) and Api.active_count == 0, "cancelling a request that is waiting for its retry is clean")
+	# auto mode (the phone default): /lesson is never sent to the PC twice and the phone answers (whether the PC is
+	# tried first depends on Backend being READY, which this section does not set up)
+	Route.mode = "auto"
+	Route.clear_flaky()
+	fake.reset_log()
+	fake.drop["/lesson"] = 1
+	r = await Api.post_json("/lesson", {"lang": "en", "month": 3, "week": 2}, 10.0, false).wait()
+	var d: Variant = r.get("data")
+	ok(fake.count("/lesson") <= 1 and r["ok"] and d is Dictionary and str((d as Dictionary).get("via", "")) == "phone",
+		"auto: /lesson -> at most one PC request, the phone answers (PC requests: %d)" % fake.count("/lesson"))
+	Route.clear_flaky()
+	Route.mode = mode_before
 	Api.clear_remote()
 
 
