@@ -332,8 +332,8 @@ static func is_fallback_safe(method: int, path: String) -> bool:
 
 
 func _can_fall_back(req_call: ApiCall) -> bool:
-	if not req_call.routable or Route.normalize_mode(Route.mode) != "auto":
-		return false
+	if not req_call.routable or not Route.is_phone() or Route.normalize_mode(Route.mode) != "auto":
+		return false ## the PC app never falls back to the phone
 	var m: String = "GET" if req_call.method == HTTPClient.METHOD_GET else "POST"
 	var p: String = req_call.path.split("?")[0]
 	if m == "GET" and p == "/health":

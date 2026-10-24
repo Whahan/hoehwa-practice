@@ -7,6 +7,8 @@ extends Node
 ##
 ## Modes (prefs.route_mode): "auto" (PC first, phone when the PC is unreachable), "phone" (never talk to the
 ## PC), "pc" (old behaviour, phone handlers never used). Any other value is treated as "auto".
+## Standalone mode belongs to the phone: on the PC app (Platform.is_phone() == false) every path is "pc",
+## whatever the mode or the policy says.
 
 const MODES := ["auto", "phone", "pc"]
 const DEFAULT_MODE := "auto"
@@ -79,6 +81,8 @@ const ERR_TEXT := {
 	"no_permission": "마이크 권한이 없어요. 휴대폰 설정에서 이 앱의 마이크 권한을 켜 주세요.",
 	"ja_reading_pc": "일본어 글 분석은 아직 PC에서만 돼요.",
 	"not_connected": "PC에 연결되지 않았어요.",
+	"bad_request": "요청이 올바르지 않아요.",
+	"not_found": "찾는 항목이 없어요.",
 }
 
 ## HTTP status a phone-side failure carries (§5.2; never 0, never triggers Api.auth_failed).
@@ -86,6 +90,7 @@ const ERR_HTTP := {
 	"not_on_phone": 503, "needs_pc": 503, "pack_missing": 503, "pack_corrupt": 503, "model_missing": 503,
 	"model_corrupt": 503, "engine_missing": 503, "no_ai": 503, "ai_auth": 401, "ai_limit": 429, "ai_overload": 502,
 	"bad_format": 502, "no_voice": 503, "no_permission": 403, "ja_reading_pc": 503, "not_connected": 503,
+	"bad_request": 400, "not_found": 404,
 }
 
 ## `degraded` values a phone result may carry (§5.2).
@@ -102,6 +107,8 @@ var mode: String = DEFAULT_MODE
 var clock: Callable = Callable()
 ## Tests may replace the PC readiness probe (default: Backend.is_ready()).
 var pc_ready_hook: Callable = Callable()
+## Tests may replace the platform probe: returns true for "this is the phone app" (default: Platform.is_phone()).
+var phone_hook: Callable = Callable()
 
 var _flaky_until: float = -1.0
 var _last_fallback_toast: float = -1.0e9
@@ -142,6 +149,13 @@ func now_sec() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
+## True on the phone app (Android or desktop `-- --phone`); the PC app never uses phone handlers.
+func is_phone() -> bool:
+	if phone_hook.is_valid():
+		return bool(phone_hook.call())
+	return Platform.is_phone()
+
+
 func pc_ready() -> bool:
 	if pc_ready_hook.is_valid():
 		return bool(pc_ready_hook.call())
@@ -163,15 +177,18 @@ func clear_flaky() -> void:
 
 
 ## Where `method path` goes right now: "pc" | "phone" | "none" (§4.2, as fixed in the A1 task):
-##   - no policy entry (/mic, /llm, /lan, /sync, ...) -> "pc" (old behaviour)
+##   - PC app (not is_phone()) -> always "pc"
+##   - no policy entry (/mic, /llm, /lan, /sync, ...) -> "pc" in auto/pc mode, "none" in phone mode (never the PC)
 ##   - GET /health probes the PC: auto/pc -> "pc", phone -> "none" (never the synthetic phone /health)
 ##   - mode pc -> "pc"; mode phone -> "phone" if a handler can serve it else "none"
 ##   - mode auto -> by `prefer`, a PC that is ready (and not flaky) first, else the phone, else try the PC
 func decide(method: String, path: String, body: Dictionary = {}) -> String:
-	var entry: Dictionary = policy_for(method, path, body)
-	if entry.is_empty():
+	if not is_phone():
 		return "pc"
+	var entry: Dictionary = policy_for(method, path, body)
 	var md: String = normalize_mode(mode)
+	if entry.is_empty():
+		return "none" if md == "phone" else "pc"
 	if method.to_upper() == "GET" and path.split("?")[0] == "/health":
 		return "none" if md == "phone" else "pc"
 	var phone_ok: bool = str(entry.get("phone", "")) != "" and LocalApi.available(method, path, body)

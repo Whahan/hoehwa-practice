@@ -6,6 +6,9 @@ extends Node
 ## fakes injected through LocalApi.handler_override; their state lives in Engine meta (a1_*).
 
 const DEAD_PC := "http://127.0.0.1:9"
+## Connection time limit of the test requests. A connect to the closed port 9 does not fail fast on Windows (the SYN is
+## retried for ~2 s), so every dead-PC request used to wait its whole 5 s; 0.5 s ends it as a transport error.
+const REQ_TIMEOUT := 0.5
 
 ## Expected policy (independent copy of design 4.3): key -> [prefer, phone handler key].
 const SPEC := {
@@ -33,18 +36,24 @@ const SPEC := {
 	"POST /feedback": ["pc", "ai"],
 }
 
+## Paths without a policy entry (PC only in stage 1: lan.py /lan, /sync, /mic, /llm). On the phone they go to the PC in
+## auto/pc mode and nowhere ("none") in phone mode.
+const NOPOLICY := ["POST /sync/push", "GET /lan/info", "POST /mic/start", "GET /llm/status"]
+
 ## Expected decisions, index = ready*4 + phone_ok*2 + pc_possible (hand written, not derived from decide()).
 const EXPECT_AUTO_PC := ["none", "pc", "phone", "phone", "none", "pc", "phone", "pc"]
 const EXPECT_AUTO_PHONE := ["none", "pc", "phone", "phone", "none", "pc", "phone", "phone"]
 const EXPECT_PHONE_MODE := ["none", "none", "phone", "phone", "none", "none", "phone", "phone"]
 const EXPECT_PC_MODE := ["pc", "pc", "pc", "pc", "pc", "pc", "pc", "pc"]
 
+var _start_msec: int = Time.get_ticks_msec()
 var passed: int = 0
 var failed: int = 0
 var _t: float = 1000.0
 var _fell_back: Array = []
 var _auth_failed: int = 0
 var _modes_seen: Array = []
+var _is_phone: bool = true   ## what Route.is_phone() answers (the test injects it; the test scene runs on the desktop)
 
 
 ## Fake phone handler (static functions, like Local*.gd). State: Engine meta a1_avail / a1_delay / a1_fail / a1_last.
@@ -95,10 +104,13 @@ func _ready() -> void:
 	_install_fakes()
 	Api.base_url = DEAD_PC
 	Route.pc_ready_hook = func() -> bool: return true
+	Route.phone_hook = func() -> bool: return _is_phone
 
 	_test_policy_constants()
 	_test_decide_table()
 	_test_checker_self_test()
+	_test_pc_platform_table()
+	_test_no_policy_paths()
 	_test_health_rule()
 	_test_why_none()
 	_test_caps()
@@ -111,10 +123,14 @@ func _ready() -> void:
 	await _test_no_fallback_cases()
 	await _test_auth_401()
 	await _test_pc_mode_unchanged()
+	await _test_pc_platform_requests()
+	_test_err_texts()
 
 	LocalApi.handler_override.clear()
+	Route.phone_hook = Callable()
 	Route.pc_ready_hook = Callable()
 	Route.clock = Callable()
+	print("(route_test ran %.1f s)" % ((Time.get_ticks_msec() - _start_msec) / 1000.0))
 	print("== route_test result: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -166,7 +182,11 @@ func _test_policy_constants() -> void:
 	ok(Route.policy_for("POST", "/sync/push", {}).is_empty(), "/sync/push has no policy entry")
 
 
-func _expected(mode: String, prefer: String, phone_key: String, key: String, ready: bool, avail: bool, possible: bool) -> String:
+func _expected(mode: String, prefer: String, phone_key: String, key: String, ready: bool, avail: bool, possible: bool, phone_app: bool = true) -> String:
+	if not phone_app:
+		return "pc"   # the PC app never uses phone handlers, whatever mode / policy / readiness
+	if key in NOPOLICY:
+		return "none" if mode == "phone" else "pc"
 	if key == "GET /health":
 		return "none" if mode == "phone" else "pc"
 	var phone_ok: bool = phone_key != "" and (phone_key == "health" or phone_key == "curriculum" or avail)
@@ -179,7 +199,9 @@ func _expected(mode: String, prefer: String, phone_key: String, key: String, rea
 
 
 ## Runs every combination; returns [combos, mismatches]. `sabotage` flips one expected cell (checker self test).
-func _run_table(sabotage: bool) -> Array:
+## `phone_app` = what Route.is_phone() answers during the run.
+func _run_table(sabotage: bool, phone_app: bool = true) -> Array:
+	_is_phone = phone_app
 	var combos := 0
 	var mismatches: Array = []
 	for mode in Route.MODES:
@@ -194,10 +216,11 @@ func _run_table(sabotage: bool) -> Array:
 					if variant == "flaky":
 						Route.mark_pc_flaky()
 					var possible: bool = variant == "possible"
-					for key in SPEC.keys():
+					for key in _all_keys():
 						var sp: Array = _split_key(key)
 						var got: String = Route.decide(sp[0], sp[1], sp[2])
-						var want: String = _expected(mode, SPEC[key][0], SPEC[key][1], key, ready, avail, possible)
+						var spec: Array = SPEC.get(key, ["pc", ""])
+						var want: String = _expected(mode, spec[0], spec[1], key, ready, avail, possible, phone_app)
 						if sabotage and combos == 0:
 							want = "phone" if want != "phone" else "none"
 						combos += 1
@@ -208,7 +231,12 @@ func _run_table(sabotage: bool) -> Array:
 	Api.base_url = DEAD_PC
 	Route.pc_ready_hook = func() -> bool: return true
 	_avail(true)
+	_is_phone = true
 	return [combos, mismatches]
+
+
+func _all_keys() -> Array:
+	return SPEC.keys() + NOPOLICY
 
 
 func _test_decide_table() -> void:
@@ -216,16 +244,54 @@ func _test_decide_table() -> void:
 	var r: Array = _run_table(false)
 	for m in (r[1] as Array).slice(0, 10):
 		print("    ", m)
-	print("    table: %d combinations (22 rows x 3 modes x ready 2 x phone 2 x pc 3 variants)" % r[0])
-	ok(r[0] == 22 * 3 * 2 * 2 * 3, "table covers 792 combinations (got %d)" % r[0])
-	ok((r[1] as Array).is_empty(), "decide() matches the expected table in all combinations (%d mismatches)" % (r[1] as Array).size())
+	print("    table: %d combinations (22 policy rows + 4 no-policy paths, x 3 modes x ready 2 x phone 2 x pc 3 variants)" % r[0])
+	ok(r[0] == 26 * 3 * 2 * 2 * 3, "phone app table covers 936 combinations (got %d)" % r[0])
+	ok((r[1] as Array).is_empty(), "phone app: decide() matches the expected table in all combinations (%d mismatches)" % (r[1] as Array).size())
 
 
 func _test_checker_self_test() -> void:
 	print("[A1-9 the table check really fails on a wrong cell]")
 	var r: Array = _run_table(true)
 	ok((r[1] as Array).size() == 1, "one deliberately wrong expected cell is reported as exactly 1 mismatch (got %d)" % (r[1] as Array).size())
+	var r2: Array = _run_table(true, false)
+	ok((r2[1] as Array).size() == 1, "the same for the PC platform table (got %d)" % (r2[1] as Array).size())
+	# A decide() that ignored the platform would be caught: the phone expectations are not the PC expectations.
+	var differs := 0
+	for key in _all_keys():
+		var spec: Array = SPEC.get(key, ["pc", ""])
+		if _expected("phone", spec[0], spec[1], key, true, true, true, true) != _expected("phone", spec[0], spec[1], key, true, true, true, false):
+			differs += 1
+	ok(differs > 0, "expectations differ between phone app and PC app in phone mode (%d keys), so the table can tell them apart" % differs)
 
+
+func _test_pc_platform_table() -> void:
+	print("[PC app: every path goes to the PC, whatever the mode or the policy]")
+	var r: Array = _run_table(false, false)
+	for m in (r[1] as Array).slice(0, 10):
+		print("    ", m)
+	ok(r[0] == 26 * 3 * 2 * 2 * 3, "PC app table covers 936 combinations (got %d)" % r[0])
+	ok((r[1] as Array).is_empty(), "PC app: decide() is 'pc' in every combination (%d mismatches)" % (r[1] as Array).size())
+	_is_phone = false
+	Route.mode = "phone"
+	ok(Route.decide("GET", "/curriculum") == "pc" and Route.decide("POST", "/chat") == "pc" and Route.decide("GET", "/health") == "pc", "PC app + phone mode in prefs: still pc")
+	Route.mode = "auto"
+	_is_phone = true
+
+
+func _test_no_policy_paths() -> void:
+	print("[no-policy paths on the phone: auto/pc -> pc, phone mode -> none]")
+	_is_phone = true
+	for key in NOPOLICY:
+		var sp: Array = _split_key(key)
+		Route.mode = "auto"
+		ok(Route.decide(sp[0], sp[1]) == "pc", key + ": auto -> pc")
+		Route.mode = "pc"
+		ok(Route.decide(sp[0], sp[1]) == "pc", key + ": pc mode -> pc")
+		Route.mode = "phone"
+		ok(Route.decide(sp[0], sp[1]) == "none", key + ": phone mode -> none")
+		var w: Dictionary = Route.why_none(sp[0], sp[1])
+		ok(w["err_code"] == "not_on_phone" and w["text_ko"] != "", key + ": why_none -> not_on_phone with Korean text")
+	Route.mode = "auto"
 
 func _test_health_rule() -> void:
 	print("[A1-7 GET /health probes the PC only]")
@@ -364,9 +430,9 @@ func _test_dispatch() -> void:
 func _req(method: String, path: String, body: Dictionary = {}, report: bool = false) -> Dictionary:
 	var c: Object
 	if method == "GET":
-		c = Api.get_json(path, 5.0, report)
+		c = Api.get_json(path, REQ_TIMEOUT, report)
 	else:
-		c = Api.post_json(path, body, 5.0, report)
+		c = Api.post_json(path, body, REQ_TIMEOUT, report)
 	return await c.wait()
 
 
@@ -406,6 +472,10 @@ func _test_api_none_and_explicit() -> void:
 	ok(not res["ok"] and res["err_code"] == "not_on_phone" and res["code"] == 503 and res["error"] != "" and not res["cancelled"], "phone mode, no handler -> not_on_phone 503")
 	ok(res["err_body"] is Dictionary and res["err_body"]["via"] == "phone" and res["err_body"]["code"] == "not_on_phone" and res["err_body"]["error"] == res["error"], "err_body {error, code, via:'phone'}")
 	ok(Api.sent_count == s0 and Api.active_count == a0, "none: nothing sent, active_count back")
+	var sy: Dictionary = await _req("POST", "/sync/push", {})
+	ok(not sy["ok"] and sy["err_code"] == "not_on_phone" and sy["code"] == 503 and Api.sent_count == s0, "phone mode: POST /sync/push (no policy) fails at once as not_on_phone, nothing sent")
+	var lan: Dictionary = await _req("GET", "/lan/info")
+	ok(not lan["ok"] and lan["err_code"] == "not_on_phone" and Api.sent_count == s0, "phone mode: GET /lan/info fails at once, nothing sent")
 	var hz: Dictionary = await _req("GET", "/health")
 	ok(not hz["ok"] and hz["err_code"] != "" and Api.sent_count == s0, "phone mode: GET /health fails at once, nothing sent")
 	_avail(false)
@@ -414,9 +484,9 @@ func _test_api_none_and_explicit() -> void:
 	_avail(true)
 	var s1: int = Api.sent_count
 	var n0: int = LocalApi.served_count
-	var e: Dictionary = await Api.get_json_to(DEAD_PC, "/lesson", 3.0, false).wait()
+	var e: Dictionary = await Api.get_json_to(DEAD_PC, "/lesson", REQ_TIMEOUT, false).wait()
 	ok(Api.sent_count == s1 + 1 and not e["ok"] and e["err_code"] == "transport", "A1-7: get_json_to goes to the network (sent +1, transport error), not to the phone")
-	var e2: Dictionary = await Api.post_json_to(DEAD_PC, "/lesson", {}, 3.0, false).wait()
+	var e2: Dictionary = await Api.post_json_to(DEAD_PC, "/lesson", {}, REQ_TIMEOUT, false).wait()
 	ok(Api.sent_count == s1 + 2 and e2["err_code"] == "transport", "post_json_to is not routed either")
 	ok(LocalApi.served_count == n0, "no phone handler ran for explicit-address requests")
 	Route.mode = "auto"
@@ -494,7 +564,7 @@ func _test_fallback() -> void:
 	ok(Route.take_fallback_toast(), "allowed again after FALLBACK_TOAST_SEC")
 	Route.clear_flaky()
 	Engine.set_meta("a1_delay", 4)
-	var c: Object = Api.post_json("/reading/gloss", {}, 5.0, false)
+	var c: Object = Api.post_json("/reading/gloss", {}, REQ_TIMEOUT, false)
 	await _wait_until(func() -> bool: return Route.pc_flaky(), 15.0)
 	ok(Route.pc_flaky() and not c.done, "fallback started (flaky) and the call is still running")
 	c.cancel()
@@ -577,3 +647,73 @@ func _test_pc_mode_unchanged() -> void:
 	ok(not nc["ok"] and nc["err_code"] == "not_connected" and Api.sent_count == s0 + 1, "pc mode, no address: old not_connected failure, nothing sent")
 	Api.base_url = DEAD_PC
 	Route.mode = "auto"
+
+
+func _test_pc_platform_requests() -> void:
+	print("[PC app regression: GET /curriculum goes to the PC; no via/degraded keys reach the curriculum cache]")
+	_is_phone = false
+	Route.mode = "auto"
+	Route.clear_flaky()
+	Api.base_url = DEAD_PC
+	_avail(true)
+	for md in Route.MODES:
+		Route.mode = md
+		ok(Route.decide("GET", "/curriculum") == "pc", "PC app, mode %s: GET /curriculum -> pc (not the bundled copy)" % md)
+	Route.mode = "auto"
+	var cache := "user://test_a1_curriculum_cache.json"
+	var old_path: String = Store.curriculum_cache_path
+	var old_cur: Dictionary = Store.curriculum.duplicate(true)
+	var old_flag: bool = Store.curriculum_from_backend
+	Store.curriculum_cache_path = cache
+	Store.curriculum_from_backend = false
+	if FileAccess.file_exists(cache):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(cache))
+	# Store.refresh_curriculum uses Api's own 60 s timeout, so the PC address is empty here: Api answers "not_connected" at
+	# once. The PC branch was taken if no phone handler ran and no bundled curriculum reached the cache.
+	Api.base_url = ""
+	var s0: int = Api.sent_count
+	var n0: int = LocalApi.served_count
+	await Store.refresh_curriculum()
+	Api.base_url = DEAD_PC
+	ok(LocalApi.served_count == n0, "Store.refresh_curriculum on the PC app: no phone handler served the request")
+	ok(Api.sent_count == s0, "nothing sent (no PC address), and the failure is the PC one")
+	ok(not Store.curriculum_from_backend, "the failed PC request does not mark the curriculum as 'from backend'")
+	ok(not FileAccess.file_exists(cache), "no curriculum cache file was written")
+	ok(not Store.curriculum.has("via") and not Store.curriculum.has("degraded"), "Store.curriculum has no via/degraded keys")
+	ok(Store.curriculum == old_cur, "Store.curriculum unchanged")
+	s0 = Api.sent_count
+	var g: Dictionary = await _req("GET", "/curriculum")
+	ok(not g["ok"] and g["err_code"] == "transport" and Api.sent_count > s0, "GET /curriculum on the PC app: sent to the PC, transport error (not a phone answer)")
+	var fb0: int = _fell_back.size()
+	var gl: Dictionary = await _req("POST", "/reading/gloss", {"text": "hi"})
+	ok(not gl["ok"] and gl["err_code"] == "transport" and not Route.pc_flaky() and _fell_back.size() == fb0, "PC app: a transport error never falls back to the phone, no flaky mark")
+	var n1: int = LocalApi.served_count
+	ok(n1 == n0, "still no phone handler ran on the PC app")
+	Store.curriculum_cache_path = old_path
+	Store.curriculum = old_cur
+	Store.curriculum_from_backend = old_flag
+	_is_phone = true
+	Route.mode = "auto"
+
+
+func _test_err_texts() -> void:
+	print("[ERR_TEXT / ERR_HTTP for bad_request and not_found]")
+	for ec in ["bad_request", "not_found"]:
+		ok(Route.ERR_TEXT.has(ec) and Route.ERR_TEXT[ec] != "" and Route.ERR_TEXT[ec] != Route.ERR_TEXT["needs_pc"], ec + ": own Korean text")
+		ok(Route.text_for(ec) == Route.ERR_TEXT[ec], ec + ": text_for")
+	ok(Route.http_for("bad_request") == 400 and Route.http_for("not_found") == 404, "bad_request -> 400, not_found -> 404")
+	var f: Dictionary = LocalApi.fail("not_found")
+	ok(not f["ok"] and f["code"] == 404 and f["err_code"] == "not_found" and f["error"] == Route.text_for("not_found") and f["err_body"]["code"] == "not_found", "LocalApi.fail('not_found') -> 404 with the Korean text")
+	var f2: Dictionary = LocalApi.fail("bad_request")
+	ok(f2["code"] == 400 and f2["error"] == Route.text_for("bad_request"), "LocalApi.fail('bad_request') -> 400")
+	# every Korean text really contains Hangul
+	var hangul := true
+	for k in Route.ERR_TEXT.keys():
+		var has := false
+		for ch in str(Route.ERR_TEXT[k]):
+			if ch.unicode_at(0) >= 0xAC00 and ch.unicode_at(0) <= 0xD7A3:
+				has = true
+				break
+		hangul = hangul and has
+	ok(hangul, "every ERR_TEXT entry is Korean")
+
