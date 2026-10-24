@@ -28,13 +28,14 @@ var target: String = ""
 var score_target: String = "" ## /score 에 보낼 글자 (구간 연습이면 구간 글자)
 var reading: String = ""
 var ko: String = ""
-var status: String = "idle" ## idle | scoring | ok | silent | error
+var status: String = "idle" ## idle | scoring | ok | silent | error | self (자가 평가 중) | self_ok (잘했어요로 평가함)
 var result: Dictionary = {}
 var prosody: Dictionary = {}
 var error_text: String = ""
 var show_prosody: bool = true
 var auto_record: bool = false ## 듣기가 끝나면 자동으로 녹음 시작 (shadow_auto_rec)
 var recorder: RecorderWidget = null
+var self_rec: Dictionary = {} ## 자가 평가 중인 녹음 (Recorder result)
 
 var _serial: int = 0
 var _score_call = null
@@ -301,7 +302,8 @@ func stop_all() -> void:
 	Tts.stop()
 	_serial += 1
 	_cancel_calls()
-	if status == "scoring":
+	if status == "scoring" or status == "self":
+		self_rec = {}
 		status = "idle"
 		_render()
 		status_changed.emit()
@@ -321,12 +323,50 @@ func _cancel_calls() -> void:
 func _on_recorded(rec: Dictionary) -> void:
 	if status == "scoring":
 		return
+	if SelfRatePanel.needed():
+		_begin_self_rate(rec) # 채점할 곳이 없다: /score 를 보내지 않고 자가 평가
+		return
 	var b64: String = str(rec.get("b64", ""))
 	if b64 == "":
 		_set_silent()
 		return
 	_last_audio = b64
 	_submit(b64)
+
+
+## 채점 대신 자가 평가 (폰 단독 A7): 녹음을 들고 있다가 "잘했어요" 면 채점 통과와 같은 길(StudyLog.add_score, scored 신호)로 기록한다.
+func _begin_self_rate(rec: Dictionary) -> void:
+	_serial += 1
+	_cancel_calls()
+	_last_audio = ""
+	self_rec = rec
+	result = {}
+	prosody = {}
+	error_text = ""
+	status = "self"
+	_render()
+	status_changed.emit()
+
+
+func _on_self_rated(good: bool) -> void:
+	if status != "self":
+		return
+	var tgt: String = score_target if score_target != "" else target
+	self_rec = {}
+	if not good:
+		status = "idle" # 다시: 기록하지 않는다
+		_render()
+		status_changed.emit()
+		return
+	var d: Dictionary = SelfRatePanel.good_result(lang, tgt)
+	result = d
+	status = "self_ok"
+	var counted: bool = StudyLog.add_score(lang, d, source)
+	if score_hook.is_valid():
+		score_hook.call(lang, d, source, counted)
+	_render()
+	status_changed.emit()
+	scored.emit(d, tgt)
 
 
 func retry_score() -> void:
@@ -449,6 +489,14 @@ func _render() -> void:
 				var rb := touch_button("다시 채점", "soft", Pal.accent(lang))
 				rb.pressed.connect(retry_score)
 				add_child(rb)
+		"self":
+			var sp := SelfRatePanel.new(lang, score_target if score_target != "" else target, self_rec, Pal.accent(lang))
+			sp.rated.connect(_on_self_rated)
+			add_child(sp)
+			_add_prosody_off()
+		"self_ok":
+			add_child(UI.colored("✓ 스스로 '잘했어요'로 평가했어요. 기록에 남겼어요.", Pal.OK_ON, "Strong"))
+			_add_prosody_off()
 		"ok":
 			var card := UI.card("Card", 12)
 			card.body.add_child(ScorePanel.build(result, lang))
@@ -458,6 +506,12 @@ func _render() -> void:
 				add_child(_prosody_box)
 				_apply_prosody()
 	UI.fix_cjk(self)
+
+
+## 억양 그래프를 못 쓸 때(PC에 닿지 않음)는 숨기지 않고 비활성 칸 + 이유 한 줄.
+func _add_prosody_off() -> void:
+	if lang == "en" and show_prosody and not Store.pref_bool("hide_prosody") and SelfRatePanel.prosody_off():
+		add_child(SelfRatePanel.disabled_feature("억양", "억양 비교", SelfRatePanel.PROSODY_REASON))
 
 
 func _apply_prosody() -> void:

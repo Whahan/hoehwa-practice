@@ -308,7 +308,14 @@ func _on_scored(res: Dictionary, _tgt: String) -> void:
 		return
 	var sc: int = clampi(roundi(float(res.get("score", 0))), 0, 100)
 	r["tries"] = int(r["tries"]) + 1
-	r["best"] = maxi(int(r["best"]), sc)
+	var was_best: int = int(r["best"])
+	r["best"] = maxi(was_best, sc)
+	# 자가 평가("잘했어요")로 통과한 문장은 점수가 아니라서 평균에서 뺀다 (r.self). 진짜 점수가 같거나 더 높으면 점수로 되돌린다.
+	if SelfRatePanel.is_self_rated(res):
+		if sc > was_best:
+			r["self"] = true
+	elif sc >= was_best:
+		r["self"] = false
 	var bad: Dictionary = r["bad"]
 	for p in SpeakDrill.bad_phonemes(res):
 		bad[p] = int(bad.get(p, 0)) + 1
@@ -422,6 +429,7 @@ static func summarize(rs: Array) -> Dictionary:
 	var tried := 0
 	var passed := 0
 	var sum := 0
+	var self_n := 0 ## 스스로 평가로 통과한 문장 (평균 점수에 넣지 않는다)
 	var bad_all := {}
 	var weak: Array = []
 	for i in rs.size():
@@ -429,7 +437,10 @@ static func summarize(rs: Array) -> Dictionary:
 		if int(r["tries"]) <= 0:
 			continue
 		tried += 1
-		sum += int(r["best"])
+		if bool(r.get("self", false)):
+			self_n += 1
+		else:
+			sum += int(r["best"])
 		if bool(r["passed"]):
 			passed += 1
 		if int(r["best"]) < PASS_SCORE:
@@ -440,7 +451,7 @@ static func summarize(rs: Array) -> Dictionary:
 	for p in bad_all.keys():
 		if worst.is_empty() or int(bad_all[p]) > int(worst["n"]):
 			worst = {"p": str(p), "n": int(bad_all[p])}
-	return {"n": rs.size(), "tried": tried, "passed": passed, "avg": roundi(float(sum) / float(tried)) if tried > 0 else 0, "worst": worst, "weak": weak}
+	return {"n": rs.size(), "tried": tried, "passed": passed, "avg": roundi(float(sum) / float(tried - self_n)) if tried - self_n > 0 else 0, "worst": worst, "weak": weak, "self_n": self_n}
 
 
 ## 70점 미만으로 끝난 문장을 복습 카드로 (최대 5개). 추가한 장 수를 돌려준다.
@@ -547,6 +558,8 @@ func _render_start(c: VBoxContainer) -> void:
 	intro.body.add_child(UI.label("듣고 바로 따라 말하기", "H2"))
 	intro.body.add_child(UI.label("원어민 목소리를 한 번 듣고 곧바로 따라 말해요. 문장마다 점수와 억양을 보여 주고, 느리게 듣거나 일부분만 반복할 수 있어요.", "Muted"))
 	c.add_child(intro)
+	if SelfRatePanel.needed():
+		c.add_child(UI.label("지금은 점수를 낼 수 없어요(점수는 PC 연결 시). 따라 말한 뒤 내 목소리와 원어민 소리를 들어 보고 스스로 평가해요.", "Small"))
 
 	var week := UI.card("Card", 8)
 	week.body.add_child(UI.label("이번 주 예문", "H3"))
@@ -646,9 +659,12 @@ func _render_top() -> void:
 	var r: Dictionary = results[idx] if idx < results.size() else {}
 	if not r.is_empty() and int(r["tries"]) > 0:
 		var ok := bool(r["passed"])
-		_top_box.add_child(UI.colored(
-			("✓ 통과! 이 문장은 %d점이에요." % int(r["best"])) if ok else ("✕ 아직 %d점이에요. 한 번 더 따라 해 볼까요?" % int(r["best"])),
-			Pal.OK_ON if ok else Pal.WARN_ON, "Strong"))
+		if bool(r.get("self", false)):
+			_top_box.add_child(UI.colored("✓ 통과! 스스로 '잘했어요'로 평가했어요.", Pal.OK_ON, "Strong"))
+		else:
+			_top_box.add_child(UI.colored(
+				("✓ 통과! 이 문장은 %d점이에요." % int(r["best"])) if ok else ("✕ 아직 %d점이에요. 한 번 더 따라 해 볼까요?" % int(r["best"])),
+				Pal.OK_ON if ok else Pal.WARN_ON, "Strong"))
 	if attribution != "":
 		_top_box.add_child(_attribution_label(s))
 	UI.fix_cjk(_top_box)
@@ -687,8 +703,15 @@ func _render_summary(c: VBoxContainer) -> void:
 	if int(sm["tried"]) == 0:
 		card.body.add_child(UI.label("말해 본 문장이 없어요.", "H2"))
 	else:
-		card.body.add_child(UI.colored("평균 %d점" % int(sm["avg"]), score_ink(float(sm["avg"])), "H1", false))
-		card.body.add_child(UI.label("통과 %d개 / 시도 %d개 (통과 기준 %d점)" % [int(sm["passed"]), int(sm["tried"]), PASS_SCORE], "Strong"))
+		if int(sm["self_n"]) >= int(sm["tried"]):
+			# 전부 스스로 평가: 점수가 없으니 평균을 보이지 않는다
+			card.body.add_child(UI.colored("✓ 잘했어요 %d개" % int(sm["passed"]), Pal.OK_ON, "H1", false))
+			card.body.add_child(UI.label("시도 %d개 · 점수 대신 스스로 평가했어요" % int(sm["tried"]), "Strong"))
+		else:
+			card.body.add_child(UI.colored("평균 %d점" % int(sm["avg"]), score_ink(float(sm["avg"])), "H1", false))
+			card.body.add_child(UI.label("통과 %d개 / 시도 %d개 (통과 기준 %d점)" % [int(sm["passed"]), int(sm["tried"]), PASS_SCORE], "Strong"))
+			if int(sm["self_n"]) > 0:
+				card.body.add_child(UI.label("평균에는 스스로 평가한 %d개를 넣지 않았어요." % int(sm["self_n"]), "Small"))
 	if lang == "en" and not (sm["worst"] as Dictionary).is_empty():
 		card.body.add_child(UI.label("가장 많이 틀린 소리:  %s  (%d번)" % [str(sm["worst"]["p"]), int(sm["worst"]["n"])], "Muted"))
 	if xp_gained > 0:
@@ -704,6 +727,9 @@ func _render_summary(c: VBoxContainer) -> void:
 		# the mark (✓ passed / ✕ not passed) is the shape cue next to the coloured score
 		var tag := "-" if int(r["tries"]) == 0 else "%s %d" % ["✓" if bool(r["passed"]) else "✕", int(r["best"])]
 		var col: Color = Pal.MUTED if int(r["tries"]) == 0 else score_ink(float(r["best"]))
+		if int(r["tries"]) > 0 and bool(r.get("self", false)):
+			tag = "✓ 자가" # 스스로 평가: 점수 숫자 없음
+			col = Pal.OK_ON
 		var sl := UI.colored(tag, col, "Strong", false)
 		sl.custom_minimum_size.x = Ds.fs(60)
 		row.add_child(sl)

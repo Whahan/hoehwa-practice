@@ -21,6 +21,9 @@ var score_result: Dictionary = {} # backend /score response
 var typed_sim: Dictionary = {} # local similarity for typed answers
 var scoring: bool = false
 var typed_text: String = ""
+## 채점할 곳이 없을 때(Route: /score = none) 자가 평가를 기다리는 녹음, 그리고 "잘했어요"로 평가했는지.
+var self_rec: Dictionary = {}
+var self_good: bool = false
 
 var _page: PageScroll
 var _footer_holder: PanelContainer ## fixed bar under the page: the four FSRS rating buttons (or "next" in practice)
@@ -172,6 +175,8 @@ func _reset_item() -> void:
 	typed_sim = {}
 	scoring = false
 	typed_text = ""
+	self_rec = {}
+	self_good = false
 	_serial += 1
 	if _score_call != null:
 		_score_call.cancel()
@@ -337,6 +342,10 @@ func _render_run(c: VBoxContainer) -> void:
 		card.body.add_child(_record_widget)
 		if scoring:
 			card.body.add_child(UI.label("발음을 채점하는 중이에요…", "Muted"))
+		if not self_rec.is_empty():
+			var sp := SelfRatePanel.new(lang, str(it["target"]), self_rec, acc)
+			sp.rated.connect(_on_self_rated)
+			card.body.add_child(sp)
 		card.body.add_child(UI.label("또는 직접 입력", "Small", false))
 		var row := UI.hbox(8)
 		var le := LineEdit.new()
@@ -368,6 +377,8 @@ func _render_run(c: VBoxContainer) -> void:
 	# result
 	if not score_result.is_empty():
 		card.body.add_child(ScorePanel.build(score_result, lang))
+	elif self_good:
+		card.body.add_child(UI.colored("✓ 스스로 '잘했어요'로 평가했어요. 기록에 남겼어요.", Pal.OK_ON, "Strong"))
 	elif not typed_sim.is_empty():
 		card.body.add_child(_typed_result())
 	c.add_child(card)
@@ -403,6 +414,9 @@ func _add_rating(c: VBoxContainer, it: Dictionary) -> void:
 	else:
 		var pre: int = rating_for_score(score) if score >= 0.0 else FSRS.Rating.AGAIN
 		var hint: String = "점수 %d점에 맞춰 '%s'를 골라 뒀어요." % [roundi(score), RATING_NAME[pre]] if score >= 0.0 else "정답을 확인했으니 '%s'를 골라 뒀어요." % RATING_NAME[pre]
+		if self_good:
+			pre = FSRS.Rating.GOOD
+			hint = "스스로 '잘했어요'라고 평가해서 '%s'를 골라 뒀어요." % RATING_NAME[pre]
 		note.add_child(UI.label("얼마나 잘 기억했나요? " + hint + " 다르게 느꼈다면 직접 눌러 주세요.", "Small"))
 		var now: int = Store.now()
 		var pv: Dictionary = FSRS.preview(it, now)
@@ -476,8 +490,26 @@ func _check_typed() -> void:
 	_render()
 
 
+## 자가 평가 결과: "잘했어요"는 채점 통과와 같은 길(결과 화면 -> 복습 평점, StudyLog.add_score)로, "다시"는 아무것도 기록하지 않는다.
+func _on_self_rated(good: bool) -> void:
+	if status != "run" or self_rec.is_empty():
+		return
+	self_rec = {}
+	if good:
+		var it: Dictionary = items[idx]
+		StudyLog.add_score(lang, SelfRatePanel.good_result(lang, str(it["target"])), "review")
+		self_good = true
+		checked = true
+	_render()
+
+
 func _on_recorded(result: Dictionary) -> void:
 	if scoring:
+		return
+	if SelfRatePanel.needed():
+		# no place to score (no PC, no phone model): no /score request, rate by ear instead
+		self_rec = result
+		_render()
 		return
 	var it: Dictionary = items[idx]
 	scoring = true
