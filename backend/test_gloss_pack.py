@@ -28,7 +28,6 @@ for _p in (HERE, TOOLS):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 import build_gloss_pack as B  # noqa: E402
-import lesson_rules as LR  # noqa: E402  (the backend's blocked-word check, the same list the tool filters with)
 
 MIN_COUNT = {"en": 10000, "ja": 5000}
 FILES = {"en": "gloss_en.json", "ja": "gloss_ja.json"}
@@ -84,8 +83,8 @@ def check_file(path, lang):
         p = ko_problems(v["ko"])
         if not p and re.search(r"[A-Za-z]", v["ko"]):
             p = "ko 에 라틴 문자 섞임 %r" % v["ko"]
-        if not p and LR.blocked(w):
-            p = "차단 단어(lesson_rules.blocked) lemma"
+        if not p and B.is_blocked(lang, w):
+            p = "사전 차단 목록의 lemma (욕설·비하어)"
         if p:
             problems.append("%r: %s" % (w, p))
             if len(problems) >= 5:
@@ -130,6 +129,16 @@ def part1(pack_dir):
         check("%s: 개수 %d 이상, 모양, ko 한글 1~60자" % (FILES[lang], MIN_COUNT[lang]), not p, "; ".join(p[:3]))
     mp = manifest_problems(pack_dir)
     check("manifest: 두 파일 항목의 크기·sha256·records 일치", not mp, "; ".join(mp))
+    try:
+        with open(os.path.join(pack_dir, FILES["en"]), "r", encoding="utf-8") as f:
+            en_keys = json.load(f)
+        gone = [w for w in ("war", "death", "die") if w not in en_keys]
+        dict_bad = [w for w in en_keys if B.is_blocked("en", w)]
+    except Exception as e:
+        gone = ["읽기 실패: %s" % e]
+        dict_bad = ["읽기 실패"]
+    check("사전에 war·death·die 가 남아 있음 (일반 단어는 거르지 않음)", not gone, "빠짐: %r" % gone)
+    check("팩에 사전 차단 목록 lemma 없음 (en)", not dict_bad, "있음: %r" % dict_bad[:10])
 
 
 def part2():
@@ -155,10 +164,14 @@ def part2():
         check("변조 2: 61자 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
         p = variant("latin.json", lambda dd: dd[keys[11]].__setitem__("ko", "아rlington"))
         check("변조 5: 라틴 문자가 섞인 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
-        blocked_key = "god"
-        check("변조 6 준비: 'god' 은 차단 단어 목록에 있음", LR.blocked(blocked_key))
-        p = variant("blocked.json", lambda dd: dd.__setitem__(blocked_key, {"pos": "명사", "ko": "신", "ipa": ""}))
-        check("변조 6: 차단 단어 lemma 를 넣으면 실패", bool(p), "검사기가 통과시킴")
+        blocked_key = "fuck"
+        check("변조 6 준비: 'fuck' 은 사전 차단 목록에 있음", B.is_blocked("en", blocked_key))
+        p = variant("blocked.json", lambda dd: dd.__setitem__(blocked_key, {"pos": "동사", "ko": "씨발", "ipa": ""}))
+        check("변조 6: 사전 차단 목록 lemma 를 넣으면 실패", bool(p), "검사기가 통과시킴")
+        # plain words must stay in the dictionary (not on the list)
+        keep = [w for w in ("war", "death", "die", "sex", "drug", "kill", "blood", "cancer", "god", "church") if B.is_blocked("en", w)]
+        check("일반 단어는 목록에 없음 (war, death, die, sex, drug, kill, blood, cancer, god, church)", not keep,
+              "목록에 있음: %r" % keep)
         p = variant("missing_key.json", lambda dd: dd[keys[9]].pop("ipa"))
         check("변조 3: ipa 키가 없으면 실패", bool(p), "검사기가 통과시킴")
         p = variant("small.json", lambda dd: dd.clear())

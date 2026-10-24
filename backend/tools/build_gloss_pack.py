@@ -327,33 +327,55 @@ def write_sample(out_dir, path):
 
 LATIN = re.compile(r"[A-Za-z]")
 
+# Dictionary-only block list: profanity, sexual vulgarity, ethnic / group slurs. Plain words (war, death, die, sex, drug,
+# kill, blood, cancer, god ...) are NOT here, so they stay in the dictionary. Lemmas are compared in lower case (English)
+# or as they are (Japanese). Kept short on purpose: 30-80 entries.
+DICT_BLOCK_EN = frozenset("""
+fuck fucks fucked fucker fucking motherfucker
+shit shitty bullshit
+bitch
+slut whore cunt
+dick pussy cock prick twat wanker asshole
+porn porno
+nigger nigga faggot fag dyke tranny retard spic kike chink gook coon wetback
+""".split())
 
-def filter_entries(obj, lr):
+DICT_BLOCK_JA = frozenset("""
+クソ くそ 糞
+バカ ばか 馬鹿 アホ あほ 阿呆
+ブス ビッチ ファック
+ちくしょう 畜生 キチガイ 気違い ガイジ
+ホモ オカマ
+ヤリマン 売女 淫売
+土人 チャンコロ
+""".split())
+
+
+def is_blocked(lang, lemma):
+    """True if the dictionary block list has the lemma (English: lower case compare; Japanese: exact)"""
+    if lang == "en":
+        return lemma.lower() in DICT_BLOCK_EN
+    return lemma in DICT_BLOCK_JA
+
+
+def filter_entries(lang, obj):
     """drops the entries that break the output rules; the cache is not changed.
-    rule latin_in_ko: the Korean meaning has a Latin letter (e.g. a leaked romanized name); rule blocked_lemma: the lemma is
-    blocked by the backend's own check (backend/lesson_rules.py blocked(), the list used for lesson content).
+    rule latin_in_ko: the Korean meaning has a Latin letter (e.g. a leaked romanized name);
+    rule blocked_word: the lemma is on the dictionary block list (DICT_BLOCK_EN / DICT_BLOCK_JA).
     returns (kept dict, counts per rule, [(word, rule)] of the dropped entries)"""
     kept = {}
-    counts = {"latin_in_ko": 0, "blocked_lemma": 0}
+    counts = {"latin_in_ko": 0, "blocked_word": 0}
     dropped = []
     for w, v in obj.items():
         if LATIN.search(v["ko"]):
             counts["latin_in_ko"] += 1
             dropped.append((w, "latin_in_ko"))
-        elif lr.blocked(w):
-            counts["blocked_lemma"] += 1
-            dropped.append((w, "blocked_lemma"))
+        elif is_blocked(lang, w):
+            counts["blocked_word"] += 1
+            dropped.append((w, "blocked_word"))
         else:
             kept[w] = v
     return kept, counts, dropped
-
-
-def load_block_rules():
-    """the backend's blocked-word check (backend/lesson_rules.py); the backend folder is put on sys.path only for this"""
-    if BACKEND not in sys.path:
-        sys.path.insert(0, BACKEND)
-    import lesson_rules  # noqa: E402
-    return lesson_rules
 
 
 def pending_words(vocab_words, cache):
@@ -459,12 +481,11 @@ def main(argv=None):
             if missing_words:
                 say("[실패] %s: 아직 요청하지 않은 단어 %d개" % (lang, len(missing_words)))
                 return 1
-        lr = load_block_rules()
         entries = {}
         for lang in langs:
             c = caches[lang]
             got_obj = {w: c.got[w] for w in vocab[lang] if w in c.got}   # every accepted answer
-            out_obj, counts, dropped = filter_entries(got_obj, lr)
+            out_obj, counts, dropped = filter_entries(lang, got_obj)
             fp = os.path.join(args.out, PACK_FILE[lang])
             write_json_atomic(fp, out_obj)
             entries[PACK_FILE[lang]] = {"bytes": os.path.getsize(fp), "sha256": sha256_file(fp), "records": len(out_obj)}
@@ -474,8 +495,8 @@ def main(argv=None):
                 for w, rule in dropped:
                     f.write("%s\t%s\t%s\n" % (w, rule, got_obj[w]["ko"]))
             blank = len(vocab[lang]) - len(got_obj)  # words of the list with no accepted answer
-            say("[결과] %s: 어휘 %d, 응답 뜻 %d, 거른 규칙별 latin_in_ko %d / blocked_lemma %d, 저장 %d, 빈칸 %d (%s)" % (
-                lang, len(vocab[lang]), len(got_obj), counts["latin_in_ko"], counts["blocked_lemma"], len(out_obj), blank, fp))
+            say("[결과] %s: 어휘 %d, 응답 뜻 %d, 거른 규칙별 latin_in_ko %d / blocked_word %d, 저장 %d, 빈칸 %d (%s)" % (
+                lang, len(vocab[lang]), len(got_obj), counts["latin_in_ko"], counts["blocked_word"], len(out_obj), blank, fp))
             say("[결과] %s 제거 목록: %s" % (lang, drop_path))
         update_manifest(args.out, entries)
         say("[결과] manifest.json 항목 추가: %s" % ", ".join(sorted(entries)))
