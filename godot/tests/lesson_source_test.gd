@@ -46,8 +46,11 @@ func _run() -> void:
 	ok(lv.lesson_source() == "tatoeba", "selector defaults to tatoeba when the pref is missing")
 	var body_default: Dictionary = LessonView.lesson_request_body("en", 1, 1, 1, lv.lesson_source())
 	ok(body_default.get("source") == "tatoeba" and JSON.stringify(body_default).contains("\"source\":\"tatoeba\""), "request body carries source tatoeba by default")
-	ok(_find_button(lv._page.content, "실제 예문 레슨 (빠름)") != null, "start screen shows the tatoeba option")
-	var ai_btn: Button = _find_button(lv._page.content, "AI 레슨 (느림)")
+	# The phone uses shorter labels (lesson_view.gd: they fit at 150 % text).
+	var t_label: String = "실제 예문 (빠름)" if Platform.is_phone() else "실제 예문 레슨 (빠름)"
+	var a_label: String = "AI (느림)" if Platform.is_phone() else "AI 레슨 (느림)"
+	ok(_find_button(lv._page.content, t_label) != null, "start screen shows the tatoeba option")
+	var ai_btn: Button = _find_button(lv._page.content, a_label)
 	ok(ai_btn != null, "start screen shows the AI option")
 	if ai_btn != null:
 		ai_btn.pressed.emit()
