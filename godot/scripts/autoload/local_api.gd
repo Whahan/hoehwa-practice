@@ -70,6 +70,8 @@ static func split_query(path: String) -> Array:
 		return [path, {}]
 	var q := {}
 	for part in path.substr(i + 1).split("&", false):
+		# An encoded NUL ends a Godot String early ("a%00b" -> "a"), so it is dropped before decoding.
+		part = part.replace("%00", "")
 		var eq: int = part.find("=")
 		if eq < 0:
 			q[part.uri_decode()] = ""

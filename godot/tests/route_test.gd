@@ -121,8 +121,25 @@ func ok(cond: bool, name: String) -> void:
 		print("  FAIL  ", name)
 
 
+## LocalApi.split_query: an encoded NUL (%00) must not swallow the rest of a value or the following parameters.
+func _t_split_query() -> void:
+	var r: Array = LocalApi.split_query("/practice/sentences?q=a%00b&lang=ja&n=5")
+	ok(r[0] == "/practice/sentences", "split_query path")
+	ok(str(r[1].get("lang", "")) == "ja", "split_query keeps lang after %00")
+	ok(str(r[1].get("n", "")) == "5", "split_query keeps n after %00")
+	ok(str(r[1].get("q", "")) == "ab", "split_query drops only the NUL (got '%s')" % str(r[1].get("q", "")))
+	var r2: Array = LocalApi.split_query("/x?a%00z=1&b=%E3%81%82")
+	ok(r2[1].has("az") and str(r2[1]["az"]) == "1", "split_query NUL in key")
+	ok(str(r2[1].get("b", "")) == "あ", "split_query utf-8 value")
+	var r3: Array = LocalApi.split_query("/x?lang=en&lang2=%00")
+	ok(str(r3[1].get("lang", "")) == "en" and r3[1].has("lang2") and str(r3[1]["lang2"]) == "", "split_query value only NUL")
+	for v in r[1].values() + r2[1].values() + r3[1].values() + r[1].keys() + r2[1].keys():
+		ok(str(v).find(char(0)) < 0, "split_query no NUL in output")
+
+
 func _ready() -> void:
 	print("== route_test start ==")
+	_t_split_query()
 	Store.prefs_path = "user://test_a1_prefs.json"
 	Store.prefs = Store.DEFAULT_PREFS.duplicate(true)
 	Route.clock = func() -> float: return _t
