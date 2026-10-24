@@ -12,3 +12,5 @@ tools/*
 !tools/phone_pack_ja.py
 !tools/phone_pack_espeak.py
 !tools/make_mission_golden.py
+!tools/make_reading_golden.py
+!tools/build_gloss_pack.py

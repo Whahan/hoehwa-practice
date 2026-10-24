@@ -107,3 +107,6 @@ elease_1.0.1` 준비됨). **실제 릴리스는 자동 실행 권한 분류기�
 - 2026-10-16 19:40 v1.0.1 (B) 설치·업데이터 후속 a~h: reviewer 합격(재검토 포함) → 커밋 f20d35f 푸시. 오케스트레이터 보강: 업데이트 성공 시 engine-config.ok 생성(v1.0.0 설치도 재설치 때 앱 엔진 유지). 남은 예외: 재설치가 10단계 전에 끊긴 뒤 설치 대신 업데이트를 돌리면 새로 고른 엔진이 다음 재설치에서 유지 처리됨(드묾).
 - 2026-10-16 20:20 v1.0.1 후보: 전체 테스트(백엔드 5, Godot 6) 통과, v1.0.0 새 설치→1.0.1 업데이트 성공, install.ps1 엔진 유지 보강(03f8378, 검토 합격). 릴리스는 권한 차단으로 미실행.
 - 2026-10-16 21:00 **v1.0.1 공개** (사용자 승인, 메인 세션에서 실행): https://github.com/Whahan/hoehwa-practice/releases/tag/v1.0.1 . 공개 링크로 setup·update zip 내려받아 SHA256 일치, releases/latest = v1.0.1, 1.0.0 설치의 `update.ps1 -CheckOnly` → "새 버전이 있습니다: v1.0.0 -> v1.0.1". 시험 설치본 `D:\Ai\설치 시험 101\` 삭제(바로가기 없음). 참고: publish_release.ps1 은 여러 줄 노트를 -Notes 로 넘기면 깨짐 → -NotesFile 사용.
+- 2026-10-24 14:10 A1 검토 합격(중요 0) → main 병합. 병합 후 route_test caps 구간이 스크립트 오류로 잘렸는데 "0 failed"였음(A1은 system_voices_ok를 bool로, A5는 {en,ja}로) → 8282c96에서 수정 + 구간 끝 확인 시험, 검토 합격. main push 완료(A0·A1·A2·A3b·A5). 회귀 25개 시험 failed 0, `^SCRIPT ERROR:` 0.
+- 2026-10-24 14:15 병렬 시작: A3a(ps/a3a), A4(ps/a4), A6(ps/a6), A7(ps/a7), A2g(ps/a2g, 백엔드 18799 사용 — 끝나면 PID 27560·13164 종료). worktree는 D:\Ai\언어\app_wt\ps_<id>. 공통 규칙: scratchpad\stage1_common_rules.md.
+- 2026-10-24 A4 검토 합격 → main 병합(3d36b66). A3a 검토 중, A6 검토 중, A7·A2g 진행 중. 기존 문제 후보: LocalApi.split_query가 %00에서 뒤 토큰을 잃음(다음 패치).

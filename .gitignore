@@ -28,6 +28,8 @@ backend/tools/*
 !backend/tools/phone_pack_ja.py
 !backend/tools/phone_pack_espeak.py
 !backend/tools/make_mission_golden.py
+!backend/tools/make_reading_golden.py
+!backend/tools/build_gloss_pack.py
 __pycache__/
 *.pyc
 .pytest_cache/
