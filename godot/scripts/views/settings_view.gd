@@ -39,6 +39,9 @@ const TXT_FONT_SAMPLE := "가나다라 ABC abc 123"
 
 ## Standalone: set to false before add_child() when the host mounts the panels itself.
 var auto_panels: bool = true
+## Phone only (main.gd sets it before add_child): the phone-standalone cards ("처리 위치", "기능 현황", the voice engine
+## choice, the data credits). Always off on the PC app, whatever is set here.
+var standalone_panels: bool = false
 
 var _body: VBoxContainer
 var _secs: Dictionary = {} ## id -> {header, group, entries: [{wrap, div, panel}]}
@@ -59,6 +62,12 @@ var _engine_ob: OptionButton
 var _engine_ids: Array = []
 var _engine_note: Label
 var _reset_button: Button
+## Phone standalone cards (null until built): the 처리 위치 card, the 기능 현황 table, the voice engine choice, the
+## per-language voice lists.
+var mode_box: VBoxContainer
+var cap_panel: CapabilityPanel
+var tts_engine_box: VBoxContainer
+var voice_box: VBoxContainer
 
 
 func _init() -> void:
@@ -243,13 +252,20 @@ func _add_switch(sec: String, main: String, key: String) -> void:
 # ---------------------------------------------------------------- default content
 
 func _build_default_content() -> void:
+	var standalone: bool = standalone_panels and Platform.is_phone()
 	if Platform.is_phone():
 		_build_status("connection", "PC 연결 상태")
+		if standalone:
+			_build_processing()
 	else:
 		_build_status("engine", "AI 엔진 상태")
 		_add_custom("engine", _engine_section())
 	_add_custom("learning", _start_block())
+	if standalone:
+		_add_custom("learning", _sources_block())
 	_add_custom("voice", _speed_block())
+	if standalone:
+		_add_custom("voice", _tts_engine_block())
 	_add_custom("voice", _voice_block())
 	_add_custom("voice", _mic_block())
 	_build_display()
@@ -349,13 +365,31 @@ func _speed_block() -> Control:
 
 
 func _voice_block() -> Control:
+	voice_box = UI.vbox(6)
+	_fill_voice_box()
+	return voice_box
+
+
+## (Re)builds the language rows. With the phone's own voices (Tts.engine_now() == "system") the lists are the system
+## voices and a pick is saved as tts_sys_voice_<lang>; otherwise the PC voices (tts_voice_<lang>).
+func _fill_voice_box() -> void:
+	if voice_box == null or not is_instance_valid(voice_box):
+		return
+	UI.clear(voice_box)
 	var phone: bool = Platform.is_phone()
-	var v := UI.vbox(6)
-	v.add_child(UI.label("목소리", "ListMain"))
-	v.add_child(voice_row("en"))
-	v.add_child(voice_row("ja"))
-	v.add_child(UI.label("연결한 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요." if phone else "이 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요.", "Small"))
-	return v
+	var sys: bool = Tts.engine_now() == "system"
+	voice_box.add_child(UI.label("목소리", "ListMain"))
+	voice_box.add_child(voice_row("en"))
+	voice_box.add_child(voice_row("ja"))
+	var note := "연결한 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요." if phone else "이 PC에 설치된 목소리만 보여요. 바꾼 목소리는 바로 저장돼요."
+	if sys:
+		note = "이 폰에 설치된 음성만 보여요. 바꾼 음성은 바로 저장돼요."
+	voice_box.add_child(UI.label(note, "Small"))
+	if sys:
+		for l in ["en", "ja"]:
+			if Tts.voice_for(l) == "":
+				voice_box.add_child(UI.colored(SystemTts.no_voice_text(l), Pal.WARN_ON, "Small"))
+	UI.fix_cjk(voice_box)
 
 
 ## One row of the voice settings: dropdown of the voices installed for `l` + a preview button.
@@ -377,7 +411,12 @@ static func voice_row(l: String) -> Control:
 		ob.custom_minimum_size = Vector2(260, 0)
 	_fill_voice_option(ob, l)
 	ob.item_selected.connect(func(idx: int) -> void:
-		Store.set_pref("tts_voice_" + l, str(ob.get_item_metadata(idx))))
+		var id: String = str(ob.get_item_metadata(idx))
+		if Tts.engine_now() == "system":
+			if id != "": # the "(음성 없음)" placeholder is not a voice
+				Store.set_pref("tts_sys_voice_" + l, id)
+		else:
+			Store.set_pref("tts_voice_" + l, id))
 	line.add_child(ob)
 	var pv := UI.button("미리 듣기", "soft", Pal.PRIMARY)
 	pv.pressed.connect(func() -> void:
@@ -443,6 +482,97 @@ func _on_mic_test(result: Dictionary) -> void:
 	if s != null and _test_player != null and is_instance_valid(_test_player):
 		_test_player.stream = s
 		_test_player.play()
+
+
+# -------- phone standalone (처리 위치, 기능 현황, 읽어 주는 목소리, 출처)
+
+const MODE_CHOICES := [["auto", "자동"], ["phone", "이 폰에서만"], ["pc", "PC에서만"]]
+const MODE_NOTES := {
+	"auto": "PC에 연결돼 있으면 PC와 함께 쓰고, 연결이 없거나 끊기면 이 폰에서 처리해요.",
+	"phone": "PC에는 아무것도 보내지 않고 이 폰 안의 기능만 써요. PC가 필요한 기능은 꺼져요.",
+	"pc": "예전처럼 모든 것을 PC에서 처리해요. PC에 연결돼 있어야 해요.",
+}
+const TTS_CHOICES := [["auto", "자동"], ["system", "이 폰 음성"], ["pc", "PC 음성"]]
+const TTS_NOTES := {
+	"auto": "PC에 연결돼 있으면 PC의 목소리로, 아니면 이 폰의 음성으로 읽어 줘요.",
+	"system": "항상 이 폰에 설치된 음성으로 읽어 줘요. PC나 인터넷이 없어도 돼요.",
+	"pc": "항상 PC의 목소리로 읽어 줘요. PC에 연결돼 있어야 해요.",
+}
+const SOURCE_LINES := [
+	"단어 빈도 자료: wordfreq (데이터 CC BY-SA 4.0)",
+	"예문: Tatoeba (tatoeba.org) · CC BY 2.0 FR",
+]
+
+
+## "처리 위치" (segmented: 자동 / 이 폰에서만 / PC에서만) and the "기능 현황" table, both in the engine section.
+func _build_processing() -> void:
+	mode_box = UI.vbox(8)
+	_fill_mode_box()
+	_add_custom("engine", mode_box)
+	cap_panel = CapabilityPanel.new()
+	_add_custom("engine", cap_panel)
+	Route.mode_changed.connect(_on_route_mode_changed)
+
+
+func _on_route_mode_changed(_m: String) -> void:
+	_fill_mode_box.call_deferred() # not from inside the pressed button
+
+
+func _fill_mode_box() -> void:
+	if mode_box == null or not is_instance_valid(mode_box):
+		return
+	UI.clear(mode_box)
+	var cur: String = Route.normalize_mode(Route.mode)
+	mode_box.add_child(UI.label("처리 위치", "ListMain"))
+	mode_box.add_child(UI.segmented(MODE_CHOICES, cur, func(v: String) -> void: Route.set_mode(v)))
+	mode_box.add_child(UI.label(str(MODE_NOTES[cur]), "Small"))
+	UI.fix_cjk(mode_box)
+
+
+## "읽어 주는 목소리": where the speech comes from (auto / this phone / the PC). The per-language lists below it follow.
+func _tts_engine_block() -> Control:
+	tts_engine_box = UI.vbox(6)
+	_fill_tts_engine_box()
+	return tts_engine_box
+
+
+func _fill_tts_engine_box() -> void:
+	if tts_engine_box == null or not is_instance_valid(tts_engine_box):
+		return
+	UI.clear(tts_engine_box)
+	var cur: String = Tts.engine_pref()
+	tts_engine_box.add_child(UI.label("읽어 주는 목소리", "ListMain"))
+	tts_engine_box.add_child(UI.segmented(TTS_CHOICES, cur, set_tts_engine))
+	tts_engine_box.add_child(UI.label(str(TTS_NOTES[cur]), "Small"))
+	UI.fix_cjk(tts_engine_box)
+
+
+## Saves `tts_engine` (auto | system | pc) and redraws what depends on it. A value that is not offered is ignored.
+func set_tts_engine(v: String) -> void:
+	if not Tts.ENGINES.has(v):
+		return
+	Store.set_pref("tts_engine", v)
+	Tts.stop()
+	_fill_tts_engine_box.call_deferred()
+	_fill_voice_box.call_deferred()
+	if cap_panel != null and is_instance_valid(cap_panel):
+		cap_panel.refresh()
+	if not Tts.voices_loaded.is_connected(_on_tts_voices_loaded):
+		Tts.voices_loaded.connect(_on_tts_voices_loaded, CONNECT_ONE_SHOT)
+	Tts.load_voices()
+
+
+func _on_tts_voices_loaded() -> void:
+	_fill_voice_box.call_deferred()
+
+
+## Credits of the data that ships inside the phone app.
+func _sources_block() -> Control:
+	var b := UI.vbox(4)
+	b.add_child(UI.label("데이터 출처", "ListMain"))
+	for line in SOURCE_LINES:
+		b.add_child(UI.label(str(line), "Small"))
+	return b
 
 
 # -------- display (screen mode, text size, hangul line)

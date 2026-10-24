@@ -36,6 +36,8 @@ const NAV_RECORD := ["stats", "roadmap"]
 ## Views that draw their own title / back / action row while a sub screen is open (the chat, a practice screen): the
 ## phone app bar then shows only its tab name and the connection chip, so nothing appears twice.
 const OWN_HEADER := ["talk", "practice"]
+## Phone: the top badge while no PC is connected and the person chose to work without one.
+const STANDALONE_TEXT := "폰 단독 모드"
 
 var views: Dictionary = {}
 var current: String = ""
@@ -196,11 +198,17 @@ func _ready() -> void:
 		add_v11_tabs()
 		add_sync()
 	# The settings screen is built after add_sync(): its SyncPanel looks for the SyncManager once, when it is made.
-	views[SETTINGS_KEY] = SettingsView.new()
+	var settings := SettingsView.new()
+	settings.standalone_panels = _phone # 처리 위치 / 기능 현황 / 읽어 주는 목소리: the phone app only
+	views[SETTINGS_KEY] = settings
 	_register_view(views[SETTINGS_KEY] as AppView)
 
 	Store.navigate.connect(_on_navigate)
 	Backend.status_changed.connect(_on_backend_status)
+	if _phone:
+		Route.mode_changed.connect(_on_route_mode) # the badge depends on the mode too
+		if standalone_ok():
+			_splash_dismissed = true # "PC 없이 시작" was chosen before: the PC splash never blocks the home screen
 	(views[SETTINGS_KEY] as SettingsView).connect_requested.connect(_open_connect_view)
 	if _phone:
 		get_viewport().gui_focus_changed.connect(_on_focus_changed)
@@ -449,9 +457,15 @@ func _on_backend_status() -> void:
 		Backend.Status.FAILED:
 			dot = Pal.BAD
 			text = "PC 연결 안 됨" if _phone else "AI 엔진 연결 안 됨"
+			if standalone_badge():
+				dot = Pal.MUTED
+				text = STANDALONE_TEXT
 		Backend.Status.NEEDS_PAIRING:
 			dot = Pal.WARN
 			text = "연결 필요" if _phone else "AI 엔진 준비 중…"
+			if standalone_badge():
+				dot = Pal.MUTED
+				text = STANDALONE_TEXT
 		_:
 			dot = Pal.WARN
 			text = "PC 연결 중…" if _phone else "AI 엔진 준비 중…"
@@ -507,11 +521,40 @@ func _chip_kind(c: Color) -> String:
 	return "idle"
 
 
+# ---------------------------------------------------------------- phone: standalone
+
+## Phone: "PC 없이 시작" was chosen (prefs.standalone_ok). Then an unpaired start (NEEDS_PAIRING) does not open the
+## connect screen and no splash covers the home screen.
+func standalone_ok() -> bool:
+	return _phone and bool(Store.prefs.get("standalone_ok", false))
+
+
+## The badge says "폰 단독 모드" instead of "연결 필요" / "PC 연결 안 됨": phone, no PC connected (not paired, or not
+## reachable), and either standalone_ok or the processing place "이 폰에서만".
+func standalone_badge() -> bool:
+	if not _phone or Backend.status == Backend.Status.READY:
+		return false
+	return standalone_ok() or Route.normalize_mode(Route.mode) == "phone"
+
+
+func _on_route_mode(_m: String) -> void:
+	_on_backend_status()
+
+
+## [PC 없이 시작] on the connect screen: close it, make sure nothing covers the home screen, go home.
+func _on_standalone_chosen() -> void:
+	_connect_dismissed = true
+	_splash_dismissed = true
+	_close_connect_view()
+	_on_backend_status()
+	show_view("today")
+
+
 # ---------------------------------------------------------------- phone: connect screen
 
 func _sync_connect_view(st: int) -> void:
 	if st == Backend.Status.NEEDS_PAIRING:
-		if not _connect_dismissed:
+		if not _connect_dismissed and not standalone_ok():
 			_open_connect_view()
 	else:
 		_connect_dismissed = false
@@ -554,6 +597,7 @@ func _open_connect_view() -> void:
 	cv.cancelled.connect(func() -> void:
 		_connect_dismissed = true
 		_close_connect_view())
+	cv.standalone_chosen.connect(_on_standalone_chosen)
 	_connect_pad.add_child(cv)
 	_connect_view = cv
 	_last_kb = -1.0

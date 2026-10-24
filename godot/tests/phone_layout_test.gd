@@ -259,6 +259,10 @@ func _state_checks(state: String, main: Control) -> void:
 			ok(first_sec == "connection" and tv0.section_of(rl) == "connection", "settings: the first section on the screen is 'connection' and RemoteLinkPanel sits in it")
 			ok(rl.get_parent().get_index() == 0, "settings: RemoteLinkPanel is the first entry of that section")
 			ok(bar.title_label().text == "설정" and not bar.back_button().visible, "settings: the bar says 설정 and has no back button (a top-level screen)")
+			# A6: the phone-standalone cards (처리 위치, 기능 현황, 읽어 주는 목소리, 출처) are on the phone's settings
+			var caps_panels: Array = tv0.find_children("*", "CapabilityPanel", true, false)
+			ok(caps_panels.size() == 1 and (caps_panels[0] as CapabilityPanel).rows.size() == 16, "A6 settings: one CapabilityPanel with its 16 rows is in the phone settings")
+			ok(tv0.section_visible("engine") and tv0.section_of(caps_panels[0] as Control) == "engine" and tv0.mode_box != null and tv0.tts_engine_box != null, "A6 settings: 처리 위치 and 기능 현황 sit in the 'engine' section, the voice engine choice is there")
 		"lesson_home":
 			ok(bar.title_label().text == "레슨" and bar.title_label().modulate.a < 0.5, "lesson home: the bar title is the tab name, faded while the big title shows")
 		"talk_setup":
@@ -290,6 +294,8 @@ func _state_checks(state: String, main: Control) -> void:
 		"needs_pairing":
 			ok(main.is_connect_open(), "NEEDS_PAIRING opens the connect screen")
 			ok(main._connect_view.get_global_rect().size.x >= SCREEN_W - 0.5, "connect screen is full width")
+			var sb: Button = (main._connect_view as ConnectView).standalone_button
+			ok(sb != null and sb.is_visible_in_tree() and sb.text == "PC 없이 시작" and sb.get_global_rect().size.y >= 47.5 and sb.get_global_rect().end.x <= SCREEN_W + 0.5, "A6 connect screen: the [PC 없이 시작] button is shown, a touch target and inside the screen")
 		"lesson_speak":
 			var lv: LessonView = main.views["lesson"]
 			ok(lv._record_widget != null and lv._record_widget.get_global_rect().size.x > 300.0, "lesson: record button is full width")
@@ -326,6 +332,7 @@ func _pc_state_checks(state: String, main: Control) -> void:
 			ok(tv0.find_children("*", "PhoneLinkPanel", true, false).size() == 1, "L-06: PhoneLinkPanel is mounted in the PC settings")
 			ok(tv0.find_children("*", "RemoteLinkPanel", true, false).is_empty(), "L-06: no RemoteLinkPanel on the PC")
 			ok(tv0._engine_ob != null, "L-06: the AI engine section is still in the PC settings")
+			ok(tv0.find_children("*", "CapabilityPanel", true, false).is_empty() and tv0.cap_panel == null and tv0.mode_box == null and tv0.tts_engine_box == null, "A6: no phone-standalone card (기능 현황, 처리 위치, 읽어 주는 목소리) in the PC settings")
 			var pl: Control = tv0.find_children("*", "PhoneLinkPanel", true, false)[0]
 			var ids: Array = tv0.section_ids()
 			ok(tv0.section_of(pl) == "connection" and tv0.section_of(tv0._engine_ob) == "engine", "L-06: PhoneLinkPanel is in the 'connection' section and the AI engine dropdown in the 'engine' section")

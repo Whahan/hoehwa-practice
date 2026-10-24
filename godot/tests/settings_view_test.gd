@@ -63,6 +63,7 @@ func _ready() -> void:
 
 	await _test_mount()
 	await _test_standalone()
+	await _test_standalone_panels()
 	await _test_save_values()
 	await _test_display_ui()
 	await _test_reset_sheet()
@@ -193,6 +194,38 @@ func _test_standalone() -> void:
 	ok(sv.section_visible("danger") and sv.section_visible("display") and sv.section_visible("voice") and sv.section_visible("learning"), "standalone: learning, voice, display and danger show")
 	ok(sv.section_visible("engine") == (not _phone), "the engine section shows on the PC only (%s)" % str(sv.section_visible("engine")))
 	ok((sv._engine_ob != null) == (not _phone), "the AI engine dropdown exists on the PC only")
+	sv.queue_free()
+	await _frames(2)
+
+
+## A6: the phone-standalone cards exist on the phone only, and only when the host asks (main.gd does on the phone).
+func _test_standalone_panels() -> void:
+	print("[A6 standalone panels]")
+	var plain := SettingsView.new()
+	_stage(plain)
+	await _frames(3)
+	ok(plain.cap_panel == null and plain.mode_box == null and plain.tts_engine_box == null, "default: a SettingsView builds none of the standalone cards")
+	ok(plain.find_children("*", "CapabilityPanel", true, false).is_empty(), "default: no CapabilityPanel")
+	plain.queue_free()
+	var sv := SettingsView.new()
+	sv.standalone_panels = true
+	_stage(sv)
+	await _frames(3)
+	var text := ""
+	for n in sv.find_children("*", "Label", true, false):
+		text += (n as Label).text + "
+"
+	if _phone:
+		ok(sv.cap_panel != null and sv.mode_box != null and sv.tts_engine_box != null and sv.voice_box != null, "phone with standalone_panels: the cards are built")
+		ok(sv.section_visible("engine") and sv.section_of(sv.cap_panel) == "engine", "phone: 처리 위치 and 기능 현황 are in the 'engine' section, which shows")
+		ok(sv.cap_panel.rows.size() == 16, "phone: the table has 16 rows (%d)" % sv.cap_panel.rows.size())
+		ok(text.contains("처리 위치") and text.contains("기능 현황") and text.contains("읽어 주는 목소리"), "phone: the three headings are on the screen")
+		ok(text.contains("wordfreq") and text.contains("CC BY-SA 4.0") and text.contains("Tatoeba") and text.contains("CC BY 2.0 FR"), "phone: the data credits (wordfreq CC BY-SA 4.0, Tatoeba CC BY 2.0 FR) are on the screen")
+	else:
+		ok(sv.cap_panel == null and sv.mode_box == null and sv.tts_engine_box == null, "PC: standalone_panels=true builds nothing")
+		ok(sv.find_children("*", "CapabilityPanel", true, false).is_empty(), "PC: no CapabilityPanel")
+		ok(sv._engine_ob != null and sv.section_visible("engine"), "PC: the engine section is the AI engine one")
+		ok(not text.contains("처리 위치") and not text.contains("기능 현황") and not text.contains("읽어 주는 목소리") and not text.contains("데이터 출처"), "PC: none of the new headings is on the screen")
 	sv.queue_free()
 	await _frames(2)
 
