@@ -13,6 +13,8 @@ signal connected
 signal cancelled
 ## 시험·W3 용: [연결] 시도가 끝났다(성공 true / 실패 false). 화면에는 이미 결과가 반영돼 있다.
 signal attempt_finished(ok: bool)
+## [PC 없이 시작] was pressed: prefs standalone_ok / route_mode are saved and the screen closes itself (main.gd goes home).
+signal standalone_chosen
 
 ## 가운데 열의 최대 폭(폰은 화면 폭을 그대로 쓴다).
 const COLUMN_W := 480.0
@@ -26,6 +28,7 @@ var code_edit: LineEdit
 var name_edit: LineEdit
 var connect_button: Button
 var cancel_button: Button
+var standalone_button: Button
 var error_label: Label
 var progress_label: Label
 var notice_label: Label
@@ -141,6 +144,13 @@ func _ready() -> void:
 	connect_button = UI.button("연결", "primary", Pal.PRIMARY, 56.0)
 	connect_button.pressed.connect(func() -> void: submit())
 	col.add_child(connect_button)
+	if not allow_cancel:
+		# Phone standalone (docs/phone_standalone_design.md §4.6): lesson, review, dictation... run inside the phone.
+		# Not offered when the screen was opened from "연결 변경" while connected (that person has a PC).
+		standalone_button = UI.button("PC 없이 시작", "soft", Pal.PRIMARY, 56.0)
+		standalone_button.pressed.connect(func() -> void: start_standalone())
+		col.add_child(standalone_button)
+		col.add_child(UI.label("PC 없이도 레슨·복습·읽기 같은 기본 기능은 이 폰에서 써요. AI 대화처럼 PC가 필요한 기능은 나중에 설정에서 PC를 연결하면 돼요.", "Small"))
 	if allow_cancel:
 		cancel_button = UI.button("취소", "soft", Pal.INK, 48.0)
 		cancel_button.pressed.connect(func() -> void:
@@ -254,6 +264,17 @@ func submit() -> void:
 	flow.progress.connect(_on_progress)
 	flow.connect_done.connect(_on_connect_done)
 	flow.connect_to(str(addr["base_url"]), code, name_edit.text)
+
+
+## [PC 없이 시작]: remember the choice (standalone_ok, route_mode "auto") and leave. Nothing is sent to any PC.
+func start_standalone() -> void:
+	if _busy:
+		return
+	Route.set_mode("auto")
+	Store.set_pref(Route.PREF_MODE, "auto") # also when Route already was in "auto" without a saved value
+	Store.set_pref("standalone_ok", true)
+	standalone_chosen.emit()
+	queue_free()
 
 
 func _on_progress(text: String) -> void:
