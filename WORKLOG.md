@@ -110,3 +110,5 @@ elease_1.0.1` 준비됨). **실제 릴리스는 자동 실행 권한 분류기�
 - 2026-10-24 14:10 A1 검토 합격(중요 0) → main 병합. 병합 후 route_test caps 구간이 스크립트 오류로 잘렸는데 "0 failed"였음(A1은 system_voices_ok를 bool로, A5는 {en,ja}로) → 8282c96에서 수정 + 구간 끝 확인 시험, 검토 합격. main push 완료(A0·A1·A2·A3b·A5). 회귀 25개 시험 failed 0, `^SCRIPT ERROR:` 0.
 - 2026-10-24 14:15 병렬 시작: A3a(ps/a3a), A4(ps/a4), A6(ps/a6), A7(ps/a7), A2g(ps/a2g, 백엔드 18799 사용 — 끝나면 PID 27560·13164 종료). worktree는 D:\Ai\언어\app_wt\ps_<id>. 공통 규칙: scratchpad\stage1_common_rules.md.
 - 2026-10-24 A4 검토 합격 → main 병합(3d36b66). A3a 검토 중, A6 검토 중, A7·A2g 진행 중. 기존 문제 후보: LocalApi.split_query가 %00에서 뒤 토큰을 잃음(다음 패치).
+- 2026-10-24 A3a·A6·A7 검토 합격 → main 병합, push. 자가 평가 점수는 평균 제외(0c6fd06, 검토 합격). 복습 자가 평가 reviews 이벤트(d4e8d4a, 미검토 — R1에서 확인 후 push). A8 진행 중(ps/a8). A2g: 무료 DeepSeek 180초 타임아웃 → 18799 백엔드를 로컬 Ollama(--llm-model qwen3:8b)로 재시작, PID 21292(내가 시작, 끝나면 이 PID와 하위만 종료). en 10,000·ja 5,000으로 범위 축소, 약 5시간.
+- 2026-10-24 R1 1라운드 불합격(중요: PC 전용 기능이 폰 단독에서 '다시 설치' 안내) → ps/r1fix 수정, 2라운드 합격 → main 병합(dc357ba), push. A8 병합 포함. 남은 것: A2g(로컬 LLM 진행 중), 시험 APK 재빌드, 사용자 실기 H1/H2.
