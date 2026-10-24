@@ -67,6 +67,7 @@ class VoiceFake:
 		pass
 
 
+var _nohandler_done: bool = false   ## set on the last line of _test_no_handler_files
 var _caps_done: bool = false   ## set on the last line of _test_caps
 var _is_phone: bool = true   ## what Route.is_phone() answers (the test injects it; the test scene runs on the desktop)
 
@@ -98,6 +99,18 @@ class FakeAi:
 
 	static func unavailable_reason() -> Dictionary:
 		return {"err_code": "no_ai", "text_ko": ""}
+
+
+## A handler that exists but whose pack is damaged.
+class FakeCorrupt:
+	static func handle(_m: String, _p: String, _q: Dictionary, _b: Dictionary) -> Dictionary:
+		return LocalApi.fail("pack_corrupt")
+
+	static func is_available() -> bool:
+		return false
+
+	static func unavailable_reason() -> Dictionary:
+		return {"err_code": "pack_corrupt", "text_ko": ""}
 
 
 func ok(cond: bool, name: String) -> void:
@@ -133,6 +146,8 @@ func _ready() -> void:
 	_test_mode_prefs()
 	await _test_dispatch()
 	await _test_api_phone_path()
+	await _test_no_handler_files()
+	ok(_nohandler_done, "no-handler section ran to its end (no script error cut it short)")
 	await _test_api_none_and_explicit()
 	await _test_cancel()
 	await _test_fallback()
@@ -343,6 +358,75 @@ func _test_why_none() -> void:
 	_avail(true)
 
 
+## Stage 1 has no LocalStt / LocalAi file: a phone without a PC must say "needs the PC", never "reinstall the app".
+## Handlers that exist keep their own reason (pack_missing / pack_corrupt).
+func _test_no_handler_files() -> void:
+	print("[handler file missing -> needs_pc, handler present -> its own reason]")
+	var saved_ov: Dictionary = LocalApi.handler_override.duplicate()
+	var saved_adapter = SystemTts.adapter
+	SystemTts.adapter = VoiceFake.new()
+	Tts._sys = null
+	var saved_hook: Callable = Route.pc_ready_hook
+	var saved_base: String = Api.base_url
+	Route.pc_ready_hook = func() -> bool: return false
+	Api.base_url = ""
+	_is_phone = true
+	Route.mode = "auto"
+	Route.clear_flaky()
+	# null override = the handler file is absent (LocalApi.has_handler_file false).
+	LocalApi.handler_override["stt"] = null
+	LocalApi.handler_override["ai"] = null
+	ok(not LocalApi.has_handler_file("stt") and not LocalApi.has_handler_file("ai"), "override null -> has_handler_file false")
+	ok(LocalApi.has_handler_file("lessons"), "fake lessons handler -> has_handler_file true")
+	var items: Dictionary = Route.caps()["items"]
+	var all7 := true
+	var no_reinstall := true
+	for k in ["stt", "score", "chat", "fix", "feedback", "lesson_ai", "missions_judge"]:
+		var it: Dictionary = items[k]
+		var good: bool = str(it["use"]) == "none" and str(it["why"]) == "needs_pc"
+		if not good:
+			print("    caps row ", k, " -> ", it)
+		all7 = all7 and good
+		no_reinstall = no_reinstall and not CapabilityPanel.reason_text(it, "auto").contains("다시 설치")
+	ok(all7, "no PC, no handler file: caps stt/score/chat/fix/feedback/lesson_ai/missions_judge -> none / needs_pc")
+	ok(no_reinstall, "capability panel text of those 7 rows has no 'reinstall' sentence")
+	ok(Route.why_none("POST", "/chat")["err_code"] == "needs_pc" and Route.why_none("POST", "/score")["err_code"] == "needs_pc", "why_none /chat and /score -> needs_pc")
+	var needs_text: String = Route.text_for("needs_pc")
+	var rc: Dictionary = await _req("POST", "/chat", {"messages": []})
+	ok(not rc["ok"] and str(rc["err_code"]) == "needs_pc" and str(rc["error"]) == needs_text and not str(rc["error"]).contains("다시 설치"), "Api.post_json('/chat') -> needs_pc text")
+	var rs: Dictionary = await _req("POST", "/score", {})
+	ok(not rs["ok"] and str(rs["err_code"]) == "needs_pc" and str(rs["error"]) == needs_text, "Api.post_json('/score') -> needs_pc text")
+	for path in ["/stt", "/fix", "/feedback", "/missions/judge"]:
+		var r: Dictionary = await _req("POST", path, {})
+		ok(not r["ok"] and str(r["err_code"]) == "needs_pc", "Api.post_json('" + path + "') -> needs_pc")
+	var rl: Dictionary = await _req("POST", "/lesson", {"source": "ai", "lang": "en"})
+	ok(not rl["ok"] and str(rl["err_code"]) == "needs_pc", "Api.post_json('/lesson' source ai) -> needs_pc")
+	var rd: Dictionary = await LocalApi.dispatch("POST", "/chat", {})
+	ok(not rd["ok"] and str(rd["err_code"]) == "needs_pc", "LocalApi.dispatch /chat without a handler file -> needs_pc")
+	# The real build: when the real handler file does not exist yet, the real LocalApi says needs_pc too.
+	LocalApi.handler_override.clear()
+	LocalApi._loaded.clear()
+	for k in ["stt", "ai"]:
+		if not ResourceLoader.exists(str(LocalApi.HANDLERS[k])):
+			ok(not LocalApi.has_handler_file(k) and Route.why_none("POST", "/chat" if k == "ai" else "/stt")["err_code"] == "needs_pc", "real build, no " + k + " handler file -> needs_pc")
+	# A handler that exists keeps its own reason.
+	LocalApi.handler_override["stt"] = FakeCorrupt
+	ok(LocalApi.has_handler_file("stt") and Route.why_none("POST", "/stt")["err_code"] == "pack_corrupt", "handler present, pack damaged -> pack_corrupt")
+	var rcor: Dictionary = await LocalApi.dispatch("POST", "/stt", {})
+	ok(not rcor["ok"] and str(rcor["err_code"]) == "pack_corrupt", "dispatch to a handler with a damaged pack -> pack_corrupt")
+	LocalApi.handler_override["stt"] = Fake
+	_avail(false)
+	ok(Route.why_none("POST", "/stt")["err_code"] == "pack_missing" and Route.caps()["items"]["stt"]["why"] == "pack_missing", "handler present, pack missing -> pack_missing")
+	_avail(true)
+	LocalApi.handler_override = saved_ov
+	SystemTts.adapter = saved_adapter
+	Tts._sys = null
+	Route.pc_ready_hook = saved_hook
+	Api.base_url = saved_base
+	Route.mode = "auto"
+	_nohandler_done = true
+
+
 func _test_caps() -> void:
 	print("[caps]")
 	var saved_adapter = SystemTts.adapter
@@ -376,7 +460,7 @@ func _test_caps() -> void:
 	ok(i2["chat"]["use"] == "none" and i2["chat"]["why"] == "no_ai", "no PC, AI off: chat none / no_ai")
 	ok(i2["prosody"]["use"] == "none" and i2["prosody"]["why"] == "not_on_phone", "no PC: prosody none / not_on_phone")
 	ok(i2["phoneme"]["use"] == "none" and i2["phoneme"]["why"] == "not_on_phone", "no PC: phoneme none / not_on_phone")
-	ok(i2["stt"]["use"] == "none" and i2["stt"]["why"] == "pack_missing", "no PC, stt off: none / handler reason")
+	ok(i2["stt"]["use"] == "none" and i2["stt"]["why"] == "pack_missing", "no PC, stt handler present but off: none / the handler's own reason (pack_missing)")
 	ok(i2["tts"]["use"] == "none" and i2["tts"]["phone"] == false and i2["tts"]["pc"] == false, "no PC, no system TTS yet: tts none")
 	ok(i2["lesson"]["use"] == "none" and i2["lesson"]["why"] == "pack_missing", "no PC, lessons off: lesson none / pack_missing")
 	ok(not bool(c2["pc"]["connected"]), "caps header: not connected")
@@ -452,7 +536,7 @@ func _test_dispatch() -> void:
 	ok((cur["data"]["en"]["months"] as Array).size() == (Store.curriculum["en"]["months"] as Array).size(), "curriculum has the same month count as Store's")
 	LocalApi.handler_override["practice"] = null
 	var miss: Dictionary = await LocalApi.dispatch("GET", "/practice/ping", {})
-	ok(not miss["ok"] and miss["err_code"] == "pack_missing", "handler override null / missing file -> pack_missing")
+	ok(not miss["ok"] and miss["err_code"] == "needs_pc" and miss["code"] == 503, "handler override null / missing handler file -> needs_pc (not pack_missing)")
 	LocalApi.handler_override["practice"] = Fake
 
 

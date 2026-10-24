@@ -5,7 +5,8 @@ extends Control
 ##   설정  : 퀴즈 종류(글자 -> 소리 / 소리 -> 글자), 글자 종류, 행 범위, 헷갈리는 글자 집중 연습.
 ##   퀴즈  : 10문제, 보기 4개. 결과에서 틀린 글자를 복습 카드로 넣을 수 있다.
 ## 글자표 · 문제 만들기는 KanaData, 익힘 기록은 StudyLog.add_kana*, 복습 카드는 Store.add_review.
-## 소리는 Tts (일본어 /tts). 서버 연결이 없으면(Api.base_url == "") Tts 를 부르지 않고 한 줄 안내만 보인다.
+## 소리는 Tts (일본어). PC 엔진이면 서버 연결이 없을 때(Api.base_url == ""), 폰 시스템 음성 엔진이면 일본어 음성이
+## 없을 때 Tts 를 부르지 않고 한 줄 안내만 보인다.
 ## 허브(PracticeView)는 이 화면을 `open("ja")` 로 열고 `closed` 신호로 돌아온다 (다른 연습 화면과 같은 계약).
 
 signal closed
@@ -16,6 +17,7 @@ const CELL_MIN_W := 48.0
 const CELL_MIN_H := 64.0
 const GRID_GAP := 6
 const NO_SOUND_TEXT := "소리를 들으려면 PC와 연결해 주세요. 지금은 소리 없이 글자만 익힐 수 있어요."
+const NO_VOICE_TEXT := "이 폰에 일본어 음성이 없어요. 폰 설정에서 일본어 음성 데이터를 내려받으면 소리를 들을 수 있어요. 지금은 소리 없이 글자만 익힐 수 있어요."
 const TABLE_HINT := "글자를 누르면 소리가 나요."
 
 ## 허브에서 이 화면을 보여 줄 언어인지 (일본어 탭에서만).
@@ -23,9 +25,17 @@ static func available(l: String) -> bool:
 	return l == "ja"
 
 
-## 소리를 낼 수 있는 연결이 있는지. 폰은 PC와 짝짓기 전에는 주소가 비어 있다.
+## 소리를 낼 수 있는지. 폰 시스템 음성 엔진이면 일본어 음성이 있는지, PC 엔진이면 PC 연결이 있는지
+## (폰은 PC와 짝짓기 전에는 주소가 비어 있다).
 static func sound_available() -> bool:
+	if str(Tts.engine_now()) == "system":
+		return bool(Tts.system_voices_ok().get("ja", false))
 	return Api.base_url != ""
+
+
+## 소리를 낼 수 없을 때 보여 줄 한 줄: 폰 음성 엔진이면 "일본어 음성 없음", PC 엔진이면 "PC 연결 필요".
+static func no_sound_text() -> String:
+	return NO_VOICE_TEXT if str(Tts.engine_now()) == "system" else NO_SOUND_TEXT
 
 
 var lang: String = "ja"
@@ -171,7 +181,7 @@ func _render_table_footer() -> void:
 			pb.pressed.connect(func() -> void: play_kana(last_ch))
 			row.add_child(pb)
 	if not sound_available():
-		col.content.add_child(UI.colored(NO_SOUND_TEXT, Pal.WARN_ON, "Small"))
+		col.content.add_child(UI.colored(no_sound_text(), Pal.WARN_ON, "Small"))
 	UI.fix_cjk(col.content)
 
 
@@ -291,7 +301,7 @@ func _build_setup(c: VBoxContainer) -> void:
 	c.add_child(UI.section_header("문제 종류", Ds.S2))
 	c.add_child(UI.segmented([["read", "글자 → 소리"], ["listen", "소리 → 글자"]], str(cfg["kind"]), func(v: String) -> void: set_cfg("kind", v), Callable(self, "_script_accent")))
 	if str(cfg["kind"]) == "listen":
-		c.add_child(UI.label(NO_SOUND_TEXT if not sound_available() else "소리를 듣고 알맞은 글자를 골라요.", "Small"))
+		c.add_child(UI.label(no_sound_text() if not sound_available() else "소리를 듣고 알맞은 글자를 골라요.", "Small"))
 
 	c.add_child(UI.section_header("글자 종류", Ds.S2))
 	c.add_child(UI.segmented([["hira", "히라가나"], ["kata", "가타카나"], ["both", "둘 다"]], str(cfg["script"]), func(v: String) -> void: set_cfg("script", v), Callable(self, "_script_accent")))
@@ -546,7 +556,7 @@ func _build_quiz(c: VBoxContainer) -> void:
 			lb.pressed.connect(func() -> void: play_kana(str(current()["ch"])))
 			card.body.add_child(lb)
 		else:
-			card.body.add_child(UI.label(NO_SOUND_TEXT, "Muted"))
+			card.body.add_child(UI.label(no_sound_text(), "Muted"))
 			card.body.add_child(UI.colored("소리 대신 로마자 힌트:  %s" % str(q["ro"]), Pal.INK, "H2", false))
 	c.add_child(card)
 
@@ -612,7 +622,7 @@ func _render_quiz_state() -> void:
 			pb.pressed.connect(func() -> void: play_kana(str(q["ch"])))
 			_feedback_box.add_child(pb)
 		else:
-			_feedback_box.add_child(UI.colored(NO_SOUND_TEXT, Pal.WARN_ON, "Small"))
+			_feedback_box.add_child(UI.colored(no_sound_text(), Pal.WARN_ON, "Small"))
 		UI.fix_cjk(_feedback_box)
 	var row: HBoxContainer = SpeakDrill.new_footer_row(_shell)
 	row.add_child(UI.spacer())
@@ -659,7 +669,7 @@ func _build_result(c: VBoxContainer) -> void:
 				row.add_child(pb)
 			wc.body.add_child(row)
 		if not sound_available():
-			wc.body.add_child(UI.colored(NO_SOUND_TEXT, Pal.WARN_ON, "Small"))
+			wc.body.add_child(UI.colored(no_sound_text(), Pal.WARN_ON, "Small"))
 	c.add_child(wc)
 
 	if not wrong.is_empty():

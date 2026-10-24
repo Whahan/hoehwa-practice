@@ -9,6 +9,8 @@ extends Node
 ##   static func handle(method: String, path: String, query: Dictionary, body: Dictionary) -> Dictionary
 ##   static func is_available() -> bool
 ##   static func unavailable_reason() -> Dictionary   # {err_code, text_ko}
+## A handler MAY also define `is_available_for(path, query, body) -> bool` and `unavailable_reason_for(path, query, body)`
+## (same results, but for one request: LocalApi prefers them when present).
 ## `handle` returns `LocalApi.ok(data, degraded)` or `LocalApi.fail(err_code[, text_ko])`. `path` is given
 ## WITHOUT the query; `query` holds the parsed query string (all values are Strings).
 ## Handlers are loaded by path (`load()`), never by class name, so a missing handler file only means
@@ -92,6 +94,15 @@ func handler_for(key: String) -> GDScript:
 	return script
 
 
+## True when the handler FILE for `key` exists (or a test override that is not null). A file that does not exist
+## yet (LocalStt/LocalAi arrive in later stages) means "this needs the PC" (needs_pc), not "the pack is missing".
+func has_handler_file(key: String) -> bool:
+	if handler_override.has(key):
+		return handler_override[key] != null
+	var p: String = str(HANDLERS.get(key, ""))
+	return p != "" and ResourceLoader.exists(p)
+
+
 ## Can a phone handler serve `method path` right now? (health and curriculum are synthesized here)
 func available(method: String, path: String, body: Dictionary = {}) -> bool:
 	var entry: Dictionary = Route.policy_for(method, path, body)
@@ -101,7 +112,14 @@ func available(method: String, path: String, body: Dictionary = {}) -> bool:
 	if key == "health" or key == "curriculum":
 		return true
 	var script: GDScript = handler_for(key)
-	if script == null or not script.has_method("is_available"):
+	if script == null:
+		return false
+	# Optional per-request check (e.g. lesson bank of the requested language): a handler may define
+	# `static func is_available_for(path: String, query: Dictionary, body: Dictionary) -> bool`.
+	if script.has_method("is_available_for"):
+		var sq: Array = split_query(path)
+		return bool(script.call("is_available_for", sq[0], sq[1], body))
+	if not script.has_method("is_available"):
 		return false
 	return bool(script.call("is_available"))
 
@@ -127,6 +145,8 @@ func dispatch(method: String, path: String, body: Dictionary = {}) -> Dictionary
 		served_count += 1
 		return ok(c)
 	var script: GDScript = handler_for(key)
+	if script == null and not has_handler_file(key):
+		return fail("needs_pc")
 	if script == null or not script.has_method("handle"):
 		return fail("pack_missing")
 	served_count += 1
@@ -153,9 +173,17 @@ func why_none(method: String, path: String, body: Dictionary = {}) -> Dictionary
 	if key == "" or key == "health" or key == "curriculum":
 		return {"err_code": "not_on_phone", "text_ko": Route.text_for("not_on_phone")}
 	var script: GDScript = handler_for(key)
+	if script == null and not has_handler_file(key):
+		# No handler in this build (stage 1 has none for stt / ai): only the PC can do it.
+		return {"err_code": "needs_pc", "text_ko": Route.text_for("needs_pc")}
 	if script == null or not script.has_method("unavailable_reason"):
 		return {"err_code": "pack_missing", "text_ko": Route.text_for("pack_missing")}
-	var r: Variant = script.call("unavailable_reason")
+	var r: Variant
+	if script.has_method("unavailable_reason_for"):
+		var sq: Array = split_query(path)
+		r = script.call("unavailable_reason_for", sq[0], sq[1], body)
+	else:
+		r = script.call("unavailable_reason")
 	if not (r is Dictionary) or str((r as Dictionary).get("err_code", "")) == "":
 		return {"err_code": "needs_pc", "text_ko": Route.text_for("needs_pc")}
 	return r

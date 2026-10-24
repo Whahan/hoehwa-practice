@@ -435,6 +435,8 @@ func _add_rating(c: VBoxContainer, it: Dictionary) -> void:
 			var b := UI.button("%s\n%s" % [RATING_NAME[r], FSRS.format_interval(wait)], "primary" if r == pre else "outline", colors[r], 64)
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			b.pressed.connect(func() -> void:
+				if not self_good: # a self-rated "good" already left its one review event (see _on_self_rated)
+					StudyLog.add_event(lang, "reviews")
 				Store.rate_review(str(it["id"]), r)
 				done_count += 1
 				Store.save_progress()
