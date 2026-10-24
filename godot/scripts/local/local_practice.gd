@@ -46,6 +46,23 @@ static func is_available() -> bool:
 	return bool(PackLoader.load_json("practice_en.json")["ok"])
 
 
+## Per request: Japanese sentences need practice_ja.json only (a damaged English pack must not stop them).
+static func is_available_for(path: String, query: Dictionary, _body: Dictionary) -> bool:
+	if path == "/practice/sentences" and str(query.get("lang", "en")) == "ja":
+		return bool(PackLoader.load_json("practice_ja.json")["ok"])
+	return is_available()
+
+
+static func unavailable_reason_for(path: String, query: Dictionary, _body: Dictionary) -> Dictionary:
+	if path == "/practice/sentences" and str(query.get("lang", "en")) == "ja":
+		var r: Dictionary = PackLoader.load_json("practice_ja.json")
+		if bool(r["ok"]):
+			return {"err_code": "", "text_ko": ""}
+		var code: String = str(r["err_code"])
+		return {"err_code": code, "text_ko": Route.text_for(code)}
+	return unavailable_reason()
+
+
 ## {err_code, text_ko} of the English practice pack problem; empty values when the pack is fine.
 static func unavailable_reason() -> Dictionary:
 	var r: Dictionary = PackLoader.load_json("practice_en.json")

@@ -7,11 +7,13 @@ extends Node
 
 const TMP_PREFS := "user://test_a3a_prefs.json"
 const TMP_PACK := "user://test_a3a_pack"
+const TMP_PACK2 := "user://test_r1fix_pack"
 const LESSON_CELL := "3-2"
 const TATOEBA_URL := "https://tatoeba.org/sentences/show/"
 
 var passed: int = 0
 var failed: int = 0
+var _onelang_done: bool = false
 
 
 func _ready() -> void:
@@ -42,6 +44,8 @@ func _run() -> void:
 	await _test_cursor_store()
 	await _test_lesson_inputs()
 	await _test_broken_packs()
+	await _test_one_language_broken()
+	ok(_onelang_done, "one-language-broken section ran to its end (no script error cut it short)")
 	PackLoader.base_dir = PackLoader.DEFAULT_DIR
 	PackLoader.reset()
 	Store.prefs_path = TMP_PREFS
@@ -179,6 +183,7 @@ func _test_lesson_inputs() -> void:
 # ---------------------------------------------------------------- broken packs
 
 func _test_broken_packs() -> void:
+	_wipe(TMP_PACK)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TMP_PACK))
 	var src: FileAccess = FileAccess.open(PackLoader.DEFAULT_DIR + "/manifest.json", FileAccess.READ)
 	var mf: FileAccess = FileAccess.open(TMP_PACK + "/manifest.json", FileAccess.WRITE)
@@ -204,6 +209,68 @@ func _test_broken_packs() -> void:
 	ok(not bool(ph["ok"]) and str(ph["err_code"]) == "pack_missing", "broken: phonemes without phoneme_drills -> pack_missing")
 	PackLoader.base_dir = PackLoader.DEFAULT_DIR
 	PackLoader.reset()
+
+
+## English lesson bank + English practice pack damaged, Japanese ones intact: Japanese requests must still be served,
+## English ones must be reported unavailable (the requested language decides, not the English files).
+## Removes the files of a scratch pack folder and the folder itself (nothing else).
+func _wipe(dir: String) -> void:
+	var g: String = ProjectSettings.globalize_path(dir)
+	if not DirAccess.dir_exists_absolute(g):
+		return
+	for f in DirAccess.get_files_at(g):
+		DirAccess.remove_absolute(g.path_join(f))
+	DirAccess.remove_absolute(g)
+
+
+func _test_one_language_broken() -> void:
+	print("[one language damaged]")
+	_wipe(TMP_PACK2)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TMP_PACK2))
+	for f in ["manifest.json", "lesson_bank_ja.json", "practice_ja.json"]:
+		var src: FileAccess = FileAccess.open(PackLoader.DEFAULT_DIR + "/" + f, FileAccess.READ)
+		var dst: FileAccess = FileAccess.open(TMP_PACK2 + "/" + f, FileAccess.WRITE)
+		dst.store_buffer(src.get_buffer(src.get_length()))
+		dst.close()
+	for f in ["lesson_bank_en.json", "practice_en.json"]:
+		var full: FileAccess = FileAccess.open(PackLoader.DEFAULT_DIR + "/" + f, FileAccess.READ)
+		var bytes: PackedByteArray = full.get_buffer(full.get_length())
+		var bad: FileAccess = FileAccess.open(TMP_PACK2 + "/" + f, FileAccess.WRITE)
+		bad.store_buffer(bytes.slice(0, bytes.size() / 2))
+		bad.close()
+	PackLoader.base_dir = TMP_PACK2
+	PackLoader.reset()
+	ok(not LocalLessons.is_available() and not LocalLessons.is_available("en"), "en bank damaged -> is_available() / is_available('en') false")
+	ok(LocalLessons.is_available("ja"), "...but is_available('ja') true")
+	ok(not LocalApi.available("POST", "/lesson", {"lang": "en"}), "LocalApi.available POST /lesson lang=en -> false")
+	ok(LocalApi.available("POST", "/lesson", {"lang": "ja"}), "LocalApi.available POST /lesson lang=ja -> true (en bank damaged)")
+	var r: Dictionary = await _lesson(2, 1, "ja")
+	ok(bool(r["ok"]) and str(r["data"]["bank_id"]).begins_with("ja-2-1-"), "ja lesson is served while the en bank is damaged")
+	var why_en: Dictionary = LocalApi.why_none("POST", "/lesson", {"lang": "en"})
+	ok(str(why_en["err_code"]) == "pack_corrupt", "why_none for en -> pack_corrupt")
+	ok(str(LocalLessons.unavailable_reason("ja")["err_code"]) == "", "unavailable_reason('ja') is empty")
+	# practice: Japanese sentences only need practice_ja.json
+	ok(not LocalPractice.is_available(), "practice_en damaged -> LocalPractice.is_available() false")
+	ok(LocalApi.available("GET", "/practice/sentences?lang=ja&mode=shadow&n=3"), "LocalApi.available practice sentences lang=ja -> true")
+	ok(not LocalApi.available("GET", "/practice/sentences?lang=en&mode=shadow&n=3"), "LocalApi.available practice sentences lang=en -> false")
+	var pj: Dictionary = await _http_get("/practice/sentences?lang=ja&mode=shadow&n=3&seed=1")
+	ok(bool(pj["ok"]) and (pj["data"]["sentences"] as Array).size() == 3, "ja practice sentences served while the en pack is damaged")
+	# a damaged ja bank, intact en bank: the mirror image
+	PackLoader.base_dir = PackLoader.DEFAULT_DIR
+	PackLoader.reset()
+	ok(LocalApi.available("POST", "/lesson", {"lang": "en"}) and LocalApi.available("POST", "/lesson", {"lang": "ja"}), "intact pack: both languages available")
+	PackLoader.base_dir = TMP_PACK2
+	var jf: FileAccess = FileAccess.open(PackLoader.DEFAULT_DIR + "/lesson_bank_ja.json", FileAccess.READ)
+	var jb: PackedByteArray = jf.get_buffer(jf.get_length())
+	var jw: FileAccess = FileAccess.open(TMP_PACK2 + "/lesson_bank_ja.json", FileAccess.WRITE)
+	jw.store_buffer(jb.slice(0, jb.size() / 3))
+	jw.close()
+	PackLoader.reset()
+	ok(not LocalLessons.is_available("ja") and str(LocalLessons.unavailable_reason("ja")["err_code"]) == "pack_corrupt", "ja bank damaged -> is_available('ja') false, pack_corrupt")
+	PackLoader.base_dir = PackLoader.DEFAULT_DIR
+	PackLoader.reset()
+	_wipe(TMP_PACK2)
+	_onelang_done = true
 
 
 # ---------------------------------------------------------------- practice

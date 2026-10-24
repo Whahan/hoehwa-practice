@@ -23,6 +23,21 @@ var _saved := {}
 var _holder: Control = null
 var _screen: KanaScreen = null
 var _pressed_log: Array = []
+var _standalone_done: bool = false ## _test_phone_standalone_voice reached its last line
+
+
+## SystemTts adapter with a fixed voice list (no real phone voices needed).
+class VoiceFake:
+	extends SystemTts.Adapter
+	var voices: Array = []
+	func available() -> bool:
+		return true
+	func get_voices() -> Array:
+		return voices
+	func speak(_t: String, _v: String, _vol: int, _p: float, _r: float, _id: int, _i: bool) -> void:
+		pass
+	func stop() -> void:
+		pass
 
 
 func ok(cond: bool, name: String) -> void:
@@ -54,6 +69,8 @@ func _ready() -> void:
 	await _test_screen_layout()
 	await _test_screen_quiz_flow()
 	await _test_no_connection()
+	await _test_phone_standalone_voice()
+	ok(_standalone_done, "phone-alone voice section ran to its end (no script error cut it short)")
 	await _test_touch_or_click()
 	_teardown()
 	print("== kana result: %d passed, %d failed ==" % [passed, failed])
@@ -837,6 +854,67 @@ func _test_no_connection() -> void:
 	ok(s.stage == "result" and s.correct_count() == 10, "the quiz runs to the result without sound")
 	ok(tts_calls.is_empty() and Api.sent_count == before_sent, "...with no sound request and no network call at all")
 	Api.base_url = "http://127.0.0.1:9"
+
+
+## Phone alone (no PC address, system TTS engine): the sound follows the Japanese system voice, not Api.base_url.
+func _test_phone_standalone_voice() -> void:
+	print("[phone alone: sound follows the Japanese system voice]")
+	var saved_adapter = SystemTts.adapter
+	var saved_pref: Variant = Store.prefs.get("tts_engine", "auto")
+	var saved_hook: Callable = Route.phone_hook
+	Route.phone_hook = func() -> bool: return true
+	Tts.fetch_hook = Callable() ## the PC-path hook of this test would force engine "pc"
+	Store.prefs["tts_engine"] = "system"
+	Api.base_url = ""
+	tts_calls.clear()
+	var sent0: int = Api.sent_count
+	# 1) the phone has a Japanese voice -> sound available, buttons shown, no notice
+	var vf := VoiceFake.new()
+	vf.voices = [{"name": "Kyoko", "id": "ja-a", "language": "ja_JP"}, {"name": "English", "id": "en-a", "language": "en_US"}]
+	SystemTts.adapter = vf
+	Tts._sys = null
+	ok(str(Tts.engine_now()) == "system", "setup: phone alone -> engine_now() == system")
+	ok(KanaScreen.sound_available(), "ja system voice present, no PC address -> sound_available() true")
+	var s := _make_screen()
+	s.open("ja")
+	await _frames(3)
+	s.tap_cell("か")
+	await _frames(3)
+	ok(s.sound_requests == 1 and s.silent_requests == 0, "tapping a cell asks for sound (sound %d, silent %d)" % [s.sound_requests, s.silent_requests])
+	ok(_has_text(s._shell["footer_col"], "듣기"), "the listen button is shown in the cell footer")
+	ok(not _has_text(s._shell["footer_col"], KanaScreen.NO_SOUND_TEXT) and not _has_text(s._shell["footer_col"], KanaScreen.NO_VOICE_TEXT), "no 'no sound' notice while a Japanese voice exists")
+	ok(Api.sent_count == sent0, "no request left through Api")
+	# 2) only an English voice -> not available, voice-specific notice (not the PC notice)
+	vf.voices = [{"name": "English", "id": "en-a", "language": "en_US"}]
+	Tts._sys = null
+	ok(not KanaScreen.sound_available(), "no ja voice (only en) -> sound_available() false")
+	ok(KanaScreen.no_sound_text() == KanaScreen.NO_VOICE_TEXT and KanaScreen.NO_VOICE_TEXT.contains("일본어 음성"), "notice text says the phone has no Japanese voice")
+	s = _make_screen()
+	s.open("ja")
+	await _frames(3)
+	s.tap_cell("か")
+	await _frames(3)
+	ok(s.sound_requests == 0 and s.silent_requests == 1, "no ja voice: the tap stays silent (sound %d, silent %d)" % [s.sound_requests, s.silent_requests])
+	ok(_has_text(s._shell["footer_col"], KanaScreen.NO_VOICE_TEXT), "the footer shows the 'no Japanese voice' notice")
+	ok(not _has_text(s._shell["footer_col"], KanaScreen.NO_SOUND_TEXT), "...not the 'connect the PC' one")
+	ok(not _has_text(s._shell["footer_col"], "듣기"), "no listen button without a Japanese voice")
+	s.start_quiz({"kind": "listen", "script": "hira"}, 5)
+	await _frames(3)
+	ok(_has_text(s._shell["page"], "로마자 힌트"), "listen quiz shows the romaji hint when the phone has no ja voice")
+	ok(tts_calls.is_empty() and Api.sent_count == sent0, "no PC fetch and no network call")
+	# 3) PC engine on a phone, not connected -> the old 'connect the PC' notice
+	Store.prefs["tts_engine"] = "pc"
+	ok(str(Tts.engine_now()) == "pc" and not KanaScreen.sound_available() and KanaScreen.no_sound_text() == KanaScreen.NO_SOUND_TEXT, "engine pc, no PC address -> not available, old PC notice")
+	Api.base_url = "http://127.0.0.1:9"
+	ok(KanaScreen.sound_available(), "engine pc with an address -> available")
+	Api.base_url = ""
+	SystemTts.adapter = saved_adapter
+	Tts._sys = null
+	Store.prefs["tts_engine"] = saved_pref
+	Route.phone_hook = saved_hook
+	Tts.fetch_hook = Callable(self, "_tts_hook")
+	Api.base_url = "http://127.0.0.1:9"
+	_standalone_done = true
 
 
 # ---------------------------------------------------------------- touch / click

@@ -92,6 +92,12 @@ func _wait_until(cond: Callable, timeout: float = 8.0) -> bool:
 
 func _ready() -> void:
 	print("== standalone_flow_test start ==")
+	# The run proves nothing without both arguments: stop at once with one failure, before any screen is built.
+	if not Platform.is_phone() or Api.base_url != "http://127.0.0.1:9":
+		ok(false, "needs `-- --phone --api=http://127.0.0.1:9` (phone %s, base_url '%s'): nothing was run" % [str(Platform.is_phone()), Api.base_url])
+		print("== standalone_flow_test: %d passed, %d failed ==" % [passed, failed])
+		get_tree().quit(1)
+		return
 	_old_prefs = Store.prefs_path
 	_old_progress = Store.progress_path
 	_old_log = StudyLog.path

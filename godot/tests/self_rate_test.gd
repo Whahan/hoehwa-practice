@@ -13,7 +13,7 @@ const TEST_PROGRESS := "user://self_rate_progress.json"
 const TEST_LOG := "user://self_rate_studylog.json"
 const TARGET := "Can I have a menu?"
 const SECTIONS := ["widget", "lesson_none", "lesson_again", "review_none", "shadow_none", "phoneme_none", "drill_none",
-	"pc_mode", "phone_mode", "caps"]
+	"pc_mode", "phone_mode", "caps", "review_count"]
 
 
 ## Spy code appended to a copy of api.gd (see _make_spy_script): `_start` is the one entry of every request.
@@ -339,6 +339,7 @@ func _run() -> void:
 	await _test_lesson_none()
 	await _test_lesson_again()
 	await _test_review_none()
+	await _test_review_count()
 	await _test_shadow_none()
 	await _test_phoneme_none()
 	await _test_drill_none()
@@ -520,10 +521,57 @@ func _test_review_none() -> void:
 		good_btn.pressed.emit()
 	await _frames(3)
 	ok(rv.done_count == 1, "rating the card moves on (done_count %d)" % rv.done_count)
+	ok(event_count("reviews") == 1, "self-rated card: rating it does not count a second review (%d)" % event_count("reviews"))
 	ok(_score_requests() == 0, "still no /score request")
 	rv.queue_free()
 	await _frames(1)
 	reached["review_none"] = true
+
+
+## Every completed card leaves exactly one "reviews" event: self-rated (already counted when 잘했어요 was pressed),
+## scored (PC / phone score) and typed. Never two for one card.
+func _test_review_count() -> void:
+	print("[review count: one event per completed card]")
+	_mode_pc()
+	_fresh_state()
+	var rv: ReviewView = await _mk_review()
+	ok(rv.status == "run" and event_count("reviews") == 0, "session started, no review event yet")
+	# scored card (score_result as the /score answer would fill it)
+	rv.score_result = score_fix.duplicate(true)
+	rv.checked = true
+	rv._render()
+	await _frames(2)
+	ok(event_count("reviews") == 0, "a scored card is not counted before it is rated")
+	var good_btn: Button = null
+	for n in _nodes(rv):
+		if n is Button and (n as Button).text.begins_with("좋음"):
+			good_btn = n
+	ok(good_btn != null, "scored card: the rating bar is there")
+	if good_btn != null:
+		good_btn.pressed.emit()
+	await _frames(3)
+	ok(rv.done_count == 1 and event_count("reviews") == 1, "scored card rated -> one review event (done %d, events %d)" % [rv.done_count, event_count("reviews")])
+	rv.queue_free()
+	await _frames(1)
+	# typed card
+	_fresh_state()
+	var rv2: ReviewView = await _mk_review()
+	rv2.typed_text = TARGET
+	rv2._check_typed()
+	await _frames(2)
+	ok(rv2.checked and not rv2.typed_sim.is_empty() and event_count("reviews") == 0, "typed card checked, not counted yet")
+	var btn2: Button = null
+	for n in _nodes(rv2):
+		if n is Button and (n as Button).text.begins_with("좋음"):
+			btn2 = n
+	ok(btn2 != null, "typed card: the rating bar is there")
+	if btn2 != null:
+		btn2.pressed.emit()
+	await _frames(3)
+	ok(rv2.done_count == 1 and event_count("reviews") == 1, "typed card rated -> one review event (done %d, events %d)" % [rv2.done_count, event_count("reviews")])
+	rv2.queue_free()
+	await _frames(1)
+	reached["review_count"] = true
 
 
 func _test_shadow_none() -> void:

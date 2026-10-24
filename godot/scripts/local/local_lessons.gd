@@ -18,17 +18,31 @@ const LANG_MSG := "lang은 'en' 또는 'ja'여야 해요."
 const SOURCE_MSG := "source는 'tatoeba' 또는 'ai'여야 해요."
 
 
-static func is_available() -> bool:
-	return bool(PackLoader.load_json(_bank_file("en"))["ok"])
+static func is_available(lang: String = "en") -> bool:
+	return bool(PackLoader.load_json(_bank_file(_bank_lang(lang)))["ok"])
 
 
-## {err_code, text_ko} of the English bank problem; empty values when the pack is fine.
-static func unavailable_reason() -> Dictionary:
-	var r: Dictionary = PackLoader.load_json(_bank_file("en"))
+## {err_code, text_ko} of the bank problem for `lang` (default English); empty values when the pack is fine.
+static func unavailable_reason(lang: String = "en") -> Dictionary:
+	var r: Dictionary = PackLoader.load_json(_bank_file(_bank_lang(lang)))
 	if bool(r["ok"]):
 		return {"err_code": "", "text_ko": ""}
 	var code: String = str(r["err_code"])
 	return {"err_code": code, "text_ko": Route.text_for(code)}
+
+
+## Per request: the bank of the REQUESTED language decides (a damaged English bank must not stop a Japanese lesson).
+static func is_available_for(_path: String, _query: Dictionary, body: Dictionary) -> bool:
+	return is_available(_str_or(body.get("lang"), "en"))
+
+
+static func unavailable_reason_for(_path: String, _query: Dictionary, body: Dictionary) -> Dictionary:
+	return unavailable_reason(_str_or(body.get("lang"), "en"))
+
+
+## en / ja only; anything else is judged by the English bank (handle() answers bad_request for it).
+static func _bank_lang(lang: String) -> String:
+	return lang if lang == "ja" else "en"
 
 
 ## Only POST /lesson is served here.
