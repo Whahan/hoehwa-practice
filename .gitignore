@@ -23,7 +23,11 @@ backend/data/
 backend/cache/
 backend/logs/
 *.log
-backend/tools/
+backend/tools/*
+!backend/tools/build_phone_pack.py
+!backend/tools/phone_pack_ja.py
+!backend/tools/phone_pack_espeak.py
+!backend/tools/make_mission_golden.py
 __pycache__/
 *.pyc
 .pytest_cache/

@@ -1,7 +1,43 @@
 {
  "v": 1,
- "built": "2026-10-24T08:55:42+09:00",
+ "built": "2026-10-24T09:22:58+09:00",
  "files": [
+  {
+   "path": "examples_en.json",
+   "bytes": 1035639,
+   "sha256": "95401e6fabb654dda9e6defb1b377decf7b436005780e7de3b2f6cc0e6dd6ed6",
+   "records": 8358
+  },
+  {
+   "path": "examples_ja.json",
+   "bytes": 313903,
+   "sha256": "3d14d92d6ac31804f19f71315502c85faf5f13a9197fd9d5d5ecc779b242b742",
+   "records": 2129
+  },
+  {
+   "path": "ipa_en.json",
+   "bytes": 521048,
+   "sha256": "26a119ee8f912dffb090895ea00ed74ad0d7bc54e6230da1a4614d8e4512ff97",
+   "records": 20530
+  },
+  {
+   "path": "ja_reading_map.json",
+   "bytes": 623348,
+   "sha256": "adcddf2bedb4baa000a4845d59347934207bd2d8cea042f7fdefac94d6901eba",
+   "records": 24136
+  },
+  {
+   "path": "lesson_bank_en.json",
+   "bytes": 2668083,
+   "sha256": "dfbb366cc36dcd4454125762e9d353a676d4d650e5294522ea1f2b9022a18615",
+   "records": 960
+  },
+  {
+   "path": "lesson_bank_ja.json",
+   "bytes": 3586568,
+   "sha256": "06636bf21dad9f808eac6fad7f39e2cc369b9137e5504698540a4e39304fcd03",
+   "records": 960
+  },
   {
    "path": "missions.json",
    "bytes": 77626,
@@ -13,9 +49,52 @@
    "bytes": 13529,
    "sha256": "bc86a010bd397a6ec5f444c6e2471179a396277cfd4f4860b7d782ea18824121",
    "records": 15
+  },
+  {
+   "path": "practice_en.json",
+   "bytes": 1711330,
+   "sha256": "074d65c47d52541ee01c375b16f2c150ac3069e54cb729f855ad8a2ae179fdf7",
+   "records": 7956
+  },
+  {
+   "path": "practice_ja.json",
+   "bytes": 625525,
+   "sha256": "6aed1e0635e171ed455c7952392ca91a7a8bbb35080b15496cca82f3c42de253",
+   "records": 1848
+  },
+  {
+   "path": "reading_en.json",
+   "bytes": 2161089,
+   "sha256": "0eaafb71ceeb4dc70d514b1cb0ef912479e01a3064894f1b64778191aa4ab710",
+   "records": 26766
   }
  ],
  "sources": [
+  {
+   "id": "tatoeba",
+   "license": "CC BY 2.0 FR (sentence text; some CC0)",
+   "url": "https://tatoeba.org"
+  },
+  {
+   "id": "wordfreq",
+   "license": "Apache-2.0 (code); data files CC BY-SA 4.0 [wordfreq 3.1.1]",
+   "url": "https://github.com/rspeer/wordfreq"
+  },
+  {
+   "id": "spacy-lemma-rules",
+   "license": "MIT (spaCy 3.8.16, en_core_web_sm lemma rules)",
+   "url": "https://spacy.io"
+  },
+  {
+   "id": "espeak-ng-output",
+   "license": "espeak-ng is GPL-3.0; only its pre-computed output (word to IPA) is shipped, no code",
+   "url": "https://github.com/espeak-ng/espeak-ng"
+  },
+  {
+   "id": "pyopenjtalk-output",
+   "license": "MIT (pyopenjtalk-plus 0.4.1.post9); OpenJTalk BSD-3-Clause",
+   "url": "https://github.com/tsukumijima/pyopenjtalk-plus"
+  },
   {
    "id": "hoehwa-content",
    "license": "MIT",

@@ -7,4 +7,8 @@ __pycache__/
 data/
 secrets.json
 secrets.json.tmp
-tools/
+tools/*
+!tools/build_phone_pack.py
+!tools/phone_pack_ja.py
+!tools/phone_pack_espeak.py
+!tools/make_mission_golden.py
