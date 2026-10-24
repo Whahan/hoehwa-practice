@@ -28,6 +28,7 @@ for _p in (HERE, TOOLS):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 import build_gloss_pack as B  # noqa: E402
+import lesson_rules as LR  # noqa: E402  (the backend's blocked-word check, the same list the tool filters with)
 
 MIN_COUNT = {"en": 10000, "ja": 5000}
 FILES = {"en": "gloss_en.json", "ja": "gloss_ja.json"}
@@ -81,6 +82,10 @@ def check_file(path, lang):
             problems.append("항목 모양 이상: %r" % (w,))
             break
         p = ko_problems(v["ko"])
+        if not p and re.search(r"[A-Za-z]", v["ko"]):
+            p = "ko 에 라틴 문자 섞임 %r" % v["ko"]
+        if not p and LR.blocked(w):
+            p = "차단 단어(lesson_rules.blocked) lemma"
         if p:
             problems.append("%r: %s" % (w, p))
             if len(problems) >= 5:
@@ -148,6 +153,12 @@ def part2():
         check("변조 1: 한글 없는 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
         p = variant("too_long.json", lambda dd: dd[keys[7]].__setitem__("ko", "가" * 61))
         check("변조 2: 61자 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
+        p = variant("latin.json", lambda dd: dd[keys[11]].__setitem__("ko", "아rlington"))
+        check("변조 5: 라틴 문자가 섞인 ko 를 넣으면 실패", bool(p), "검사기가 통과시킴")
+        blocked_key = "god"
+        check("변조 6 준비: 'god' 은 차단 단어 목록에 있음", LR.blocked(blocked_key))
+        p = variant("blocked.json", lambda dd: dd.__setitem__(blocked_key, {"pos": "명사", "ko": "신", "ipa": ""}))
+        check("변조 6: 차단 단어 lemma 를 넣으면 실패", bool(p), "검사기가 통과시킴")
         p = variant("missing_key.json", lambda dd: dd[keys[9]].pop("ipa"))
         check("변조 3: ipa 키가 없으면 실패", bool(p), "검사기가 통과시킴")
         p = variant("small.json", lambda dd: dd.clear())
@@ -210,6 +221,32 @@ def part3():
     check("limit: N개는 앞에서부터, None 은 전부, 0 은 오류",
           B.limit_vocab(words, 5) == words[:5] and B.limit_vocab(words, None) == words
           and _raises(lambda: B.limit_vocab(words, 0), ValueError))
+
+    # retry: only blank words are asked again (2 passes), answers already cached stay as they are
+    tmp2 = tempfile.mkdtemp(prefix="gloss_test_retry_")
+    real_call = B.call_gloss
+    try:
+        c = B.Cache(tmp2, "en")
+        c.append(["a", "b", "c"], {"a": {"pos": "명사", "ko": "가", "ipa": ""}}, 0, 2)
+        calls = []
+
+        def fake_call(url, lang, words, timeout=900):
+            calls.append(list(words))
+            return {"glosses": [{"i": i, "lemma": w, "pos": "명사", "ko": "나", "ipa": ""}
+                                for i, w in enumerate(words) if w == "b"]}
+
+        B.call_gloss = fake_call
+        run = B.Run("http://127.0.0.1:9", 4.0, False)
+        run.estimated = True
+        left = B.retry_missing(run, "en", ["a", "b", "c"], c, passes=2)
+        check("retry: 빈칸만 다시 요청(첫 회차 [b,c], 둘째 회차 [c])",
+              calls == [["b", "c"], ["c"]], "calls=%r" % (calls,))
+        check("retry: 기존 응답은 그대로, 새 응답만 추가, 끝까지 빈 단어 반환",
+              c.got["a"]["ko"] == "가" and c.got["b"]["ko"] == "나" and left == ["c"],
+              "got=%r left=%r" % (c.got, left))
+    finally:
+        B.call_gloss = real_call
+        shutil.rmtree(tmp2, ignore_errors=True)
 
     pool = [("en", "w%03d" % i, "뜻%d" % i) for i in range(500)]
     s1 = B.make_sample(pool)

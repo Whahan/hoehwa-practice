@@ -325,6 +325,58 @@ def write_sample(out_dir, path):
     return len(rows)
 
 
+LATIN = re.compile(r"[A-Za-z]")
+
+
+def filter_entries(obj, lr):
+    """drops the entries that break the output rules; the cache is not changed.
+    rule latin_in_ko: the Korean meaning has a Latin letter (e.g. a leaked romanized name); rule blocked_lemma: the lemma is
+    blocked by the backend's own check (backend/lesson_rules.py blocked(), the list used for lesson content).
+    returns (kept dict, counts per rule, [(word, rule)] of the dropped entries)"""
+    kept = {}
+    counts = {"latin_in_ko": 0, "blocked_lemma": 0}
+    dropped = []
+    for w, v in obj.items():
+        if LATIN.search(v["ko"]):
+            counts["latin_in_ko"] += 1
+            dropped.append((w, "latin_in_ko"))
+        elif lr.blocked(w):
+            counts["blocked_lemma"] += 1
+            dropped.append((w, "blocked_lemma"))
+        else:
+            kept[w] = v
+    return kept, counts, dropped
+
+
+def load_block_rules():
+    """the backend's blocked-word check (backend/lesson_rules.py); the backend folder is put on sys.path only for this"""
+    if BACKEND not in sys.path:
+        sys.path.insert(0, BACKEND)
+    import lesson_rules  # noqa: E402
+    return lesson_rules
+
+
+def pending_words(vocab_words, cache):
+    """words that were asked before but have no accepted answer in the cache (the blank ones)"""
+    return [w for w in vocab_words if w in cache.asked and w not in cache.got]
+
+
+def retry_missing(run, lang, vocab_words, cache, passes=2):
+    """asks again only the blank words of one language, in batches of BATCH; answers already cached are kept as they are.
+    Returns the blank words left after the last pass."""
+    for p in range(passes):
+        left = pending_words(vocab_words, cache)
+        say("[%s] 빈칸 재요청 %d회차: %d단어" % (lang, p + 1, len(left)))
+        if not left:
+            break
+        for start in range(0, len(left), BATCH):
+            run_batch(run, lang, left[start:start + BATCH], cache)
+    left = pending_words(vocab_words, cache)
+    if left:
+        say("[%s] %d회 재요청 후에도 빈칸 %d단어: %s" % (lang, passes, len(left), ", ".join(left)))
+    return left
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Build the Korean gloss packs from the PC backend")
     ap.add_argument("--vocab-dir", default=None)
@@ -337,6 +389,8 @@ def main(argv=None):
     ap.add_argument("--max-hours", type=float, default=4.0)
     ap.add_argument("--no-limit", action="store_true")
     ap.add_argument("--sample", default=None)
+    ap.add_argument("--retry-missing", action="store_true",
+                    help="ask again only the blank words (asked before, no accepted answer); cached answers stay; 2 passes")
     args = ap.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -377,6 +431,10 @@ def main(argv=None):
         run = Run(args.url, args.max_hours, args.no_limit)
         run.total_todo = sum(len(todo[lang]) for lang in langs)
         try:
+            if args.retry_missing:
+                run.estimated = True  # the retry is short: no timing estimate
+                for lang in langs:
+                    retry_missing(run, lang, vocab[lang], caches[lang])
             for lang in langs:
                 if todo[lang]:
                     run_lang(run, lang, todo[lang], caches[lang], len(vocab[lang]))
@@ -388,6 +446,10 @@ def main(argv=None):
         except OverLimit as e:
             say("[중단] %s" % e)
             return 4
+        if args.retry_missing and run.failed_batches:
+            # a retry pass may fail again: those words stay blank (reported), the files are still written
+            say("[재요청] 실패한 묶음 %d개의 단어는 빈칸으로 둠" % run.failed_batches)
+            run.failed_batches = 0
         if run.failed_batches:
             say("[실패] %d개 묶음이 끝내 실패함. 파일은 쓰지 않음. 같은 명령으로 다시 실행하면 이어서 처리" % run.failed_batches)
             return 1
@@ -397,15 +459,24 @@ def main(argv=None):
             if missing_words:
                 say("[실패] %s: 아직 요청하지 않은 단어 %d개" % (lang, len(missing_words)))
                 return 1
+        lr = load_block_rules()
         entries = {}
         for lang in langs:
             c = caches[lang]
-            out_obj = {w: c.got[w] for w in vocab[lang] if w in c.got}
+            got_obj = {w: c.got[w] for w in vocab[lang] if w in c.got}   # every accepted answer
+            out_obj, counts, dropped = filter_entries(got_obj, lr)
             fp = os.path.join(args.out, PACK_FILE[lang])
             write_json_atomic(fp, out_obj)
             entries[PACK_FILE[lang]] = {"bytes": os.path.getsize(fp), "sha256": sha256_file(fp), "records": len(out_obj)}
-            say("[결과] %s: 어휘 %d, 뜻 %d개 저장, 거른 응답 %d, 빈칸 %d (%s)" % (
-                lang, len(vocab[lang]), len(out_obj), c.rejected, c.missing, fp))
+            os.makedirs(args.cache, exist_ok=True)
+            drop_path = os.path.join(args.cache, "gloss_dropped_%s.tsv" % lang)
+            with open(drop_path, "w", encoding="utf-8", newline="\n") as f:
+                for w, rule in dropped:
+                    f.write("%s\t%s\t%s\n" % (w, rule, got_obj[w]["ko"]))
+            blank = len(vocab[lang]) - len(got_obj)  # words of the list with no accepted answer
+            say("[결과] %s: 어휘 %d, 응답 뜻 %d, 거른 규칙별 latin_in_ko %d / blocked_lemma %d, 저장 %d, 빈칸 %d (%s)" % (
+                lang, len(vocab[lang]), len(got_obj), counts["latin_in_ko"], counts["blocked_lemma"], len(out_obj), blank, fp))
+            say("[결과] %s 제거 목록: %s" % (lang, drop_path))
         update_manifest(args.out, entries)
         say("[결과] manifest.json 항목 추가: %s" % ", ".join(sorted(entries)))
 
