@@ -353,7 +353,7 @@ func _test_widget() -> void:
 	_fresh_state()
 	var good: Dictionary = SelfRatePanel.good_result("en", TARGET)
 	ok(SelfRatePanel.is_self_rated(good) and not SelfRatePanel.is_self_rated(score_fix) and not SelfRatePanel.is_self_rated(null), "good_result is marked self_rated, a real score and null are not")
-	ok(StudyLog.add_score("en", good, "test") and score_count() == 1, "good_result is accepted by StudyLog.add_score (one speaking count)")
+	ok(StudyLog.add_score("en", good, "test") and score_count() == 0, "good_result is accepted by StudyLog.add_score but stays out of the score average")
 	StudyLog.reset()
 	ok(SelfRatePanel.needed() and SelfRatePanel.prosody_off() and SelfRatePanel.phoneme_off(), "in mode phone without a handler: score, prosody and phoneme are off")
 	var panel := SelfRatePanel.new("en", TARGET, rec, Pal.EN)
@@ -431,7 +431,7 @@ func _test_lesson_none() -> void:
 	find_button(lv, "잘했어요").pressed.emit()
 	await _frames(3)
 	ok(SelfRatePanel.is_self_rated(lv.speak_result) and lv.speak_self_rec.is_empty(), "잘했어요 becomes the speak result")
-	ok(score_count() == 1, "StudyLog got one speaking count (%d)" % score_count())
+	ok(score_count() == 0, "self-rated speaking stays out of the StudyLog score average (%d)" % score_count())
 	ok(_score_requests() == 0, "still no /score request after rating")
 	var rl: Node = null
 	for n in _nodes(lv):
@@ -472,7 +472,7 @@ func _test_lesson_again() -> void:
 	await _frames(3)
 	find_button(lv, "잘했어요").pressed.emit()
 	await _frames(3)
-	ok(score_count() == 1, "다시 then 잘했어요 counts one (%d)" % score_count())
+	ok(score_count() == 0, "다시 then 잘했어요: still no score entry (%d)" % score_count())
 	ok(_score_requests() == 0, "no /score request in this flow either")
 	lv.queue_free()
 	await _frames(1)
@@ -508,7 +508,7 @@ func _test_review_none() -> void:
 	await _frames(3)
 	find_button(rv, "잘했어요").pressed.emit()
 	await _frames(3)
-	ok(rv.self_good and rv.checked and score_count() == 1, "잘했어요 reveals the answer and counts one speaking (%d)" % score_count())
+	ok(rv.self_good and rv.checked and score_count() == 0, "잘했어요 reveals the answer, no score entry (%d)" % score_count())
 	ok(find_label(rv, "스스로 '잘했어요'") != null, "the result card says it was self-rated")
 	var good_btn: Button = null
 	for n in _nodes(rv):
@@ -550,7 +550,7 @@ func _test_shadow_none() -> void:
 	await _frames(3)
 	var r0: Dictionary = sh.results[0]
 	ok(int(r0["tries"]) == 1 and bool(r0["passed"]) and bool(r0.get("self", false)), "shadow: 잘했어요 passes the sentence (tries 1, self)")
-	ok(score_count() == 1 and event_count("shadow") == 1, "shadow: StudyLog got one speaking count and one shadow event (%d, %d)" % [score_count(), event_count("shadow")])
+	ok(score_count() == 0 and event_count("shadow") == 1, "shadow: one shadow event, no score entry (%d, %d)" % [score_count(), event_count("shadow")])
 	ok(find_label(sh, "스스로 '잘했어요'") != null, "shadow: the verdict says it was self-rated")
 	var sm: Dictionary = ShadowScreen.summarize(sh.results)
 	ok(int(sm["tried"]) == 1 and int(sm["passed"]) == 1 and int(sm["self_n"]) == 1 and int(sm["avg"]) == 0, "shadow: summarize counts the self-rated one but not in the average")
@@ -591,7 +591,7 @@ func _test_phoneme_none() -> void:
 	await _frames(3)
 	ok(int(ps.results[0]["tries"]) == 1 and bool(ps.results[0]["success"]) and not bool(ps.results[0]["unavailable"]), "drill: 잘했어요 counts as a success")
 	ok(find_label(ps, "스스로 '잘했어요'") != null and find_label(ps, "음소 분석을 쓸 수 없어요") == null, "drill: the verdict says self-rated, not 'analysis unavailable'")
-	ok(score_count() == 1, "drill: StudyLog got one speaking count (%d)" % score_count())
+	ok(score_count() == 0, "drill: no score entry for a self-rated success (%d)" % score_count())
 	ps.finish()
 	await _frames(2)
 	ok(ps.stage == "summary" and event_count("drill") == 1 and find_label(ps, "잘했어요 (스스로 평가)") != null, "drill: summary says self-rated and the drill event is logged once")
@@ -616,7 +616,7 @@ func _test_drill_none() -> void:
 	ok(d.status == "self" and hook_calls.is_empty(), "SpeakDrill in score none: self state, zero requests through the hook")
 	find_button(d, "잘했어요").pressed.emit()
 	await _frames(3)
-	ok(d.status == "self_ok" and score_count() == 1 and hook_calls.is_empty(), "잘했어요: self_ok, one count, still zero requests")
+	ok(d.status == "self_ok" and score_count() == 0 and hook_calls.is_empty(), "잘했어요: self_ok, no score entry, still zero requests")
 	d.set_target("Hello again.")
 	ok(d.status == "idle", "a new target resets the drill")
 	d.queue_free()

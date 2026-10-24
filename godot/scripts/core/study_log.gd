@@ -522,6 +522,10 @@ static func add_score_any(lang: String, res: Variant, _source: String = "") -> b
 	if not _valid_lang(lang) or not (res is Dictionary):
 		return false
 	var d: Dictionary = res
+	# A self-rated "잘했어요" (SelfRatePanel.good_result, no scoring engine) is not a pronunciation score: it stays
+	# out of the score average. The practice itself is counted by the lesson result / shadow / drill / review records.
+	if d.get("self_rated", false) == true:
+		return true
 	var tr: Variant = d.get("transcript", null)
 	if not (tr is String) or (tr as String).strip_edges() == "":
 		return false
