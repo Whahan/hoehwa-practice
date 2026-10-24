@@ -249,7 +249,7 @@ decide(method, path):
 
 - `none`의 이유: `Route.why_none(path)` → `{err_code, text_ko}` (예: `model_missing`, `no_ai`, `needs_pc`).
 - **PC가 요청 도중 끊기면(자동 모드)**: `Api._on_completed`에서 `err_code == "transport"` 또는 `not_connected`이고 `phone_ok`이면 같은 요청을 폰 핸들러로 한 번 넘긴다(요청이 PC에서 부작용이 없는 것은 `/tts`, `/stt`, `/score`, `/prosody`, `/reading/*`, 모든 GET, `/lesson`, `/missions*`, `/practice/*` — `IDEMPOTENT_POST` 개념 확장; `/chat`·`/fix`·`/feedback`은 폰 AI가 있을 때만 폴백). 한 번 폴백하면 `pc_flaky()`가 60초 true라 그 사이 요청은 PC에 시도하지 않고 바로 폰으로(90초 타임아웃을 매번 기다리지 않게). 60초 뒤 첫 요청이 PC를 다시 시험한다. 토스트: "PC에 닿지 않아 폰에서 처리했어요"(5분에 한 번).
-- **PC 우선이 아닌 것(`prefer:"phone"`)**: 폰이 더 낫거나 같은 기능 — `GET /curriculum`(번들), `GET /practice/*`, `GET /missions`, `/missions/check`(50 ms 규칙이라 왕복이 더 느림), `/reading/analyze`(영어). 그 외는 `prefer:"pc"`.
+- **PC 우선이 아닌 것(`prefer:"phone"`)**: 폰이 더 낫거나 같은 기능 — `GET /practice/*`, `GET /missions`, `/missions/check`(50 ms 규칙이라 왕복이 더 느림), `/reading/analyze`(영어). 그 외는 `prefer:"pc"`. (A1 결정, 2026-10-24: `GET /curriculum`은 `prefer:"pc"`로 바꿈. PC가 연결돼 있으면 PC 최신 커리큘럼을 받아 캐시하고, 연결이 없을 때만 폰 번들을 씀. 폰 답(`via`/`degraded` 키가 있는 응답)은 `Store.refresh_curriculum`이 캐시에 쓰지 않음.)
 - **TTS**는 `Api`를 안 거치므로 별도 설정 `tts_engine`(`auto|system|pc`). 자동 = PC 연결 시 PC(Kokoro), 아니면 시스템. 연결 중이라도 지연이 싫은 사용자는 `system`을 고를 수 있다.
 
 ### 4.3 경로별 공급자 표 (정책 `POLICY`)
@@ -257,7 +257,7 @@ decide(method, path):
 | 경로 | PC | 폰 처리(핸들러) | prefer | 폰 처리가 `none`이 되는 조건·이유 코드 |
 |---|---|---|---|---|
 | `GET /health` | 예 | `LocalApi`가 합성(§5.3) | pc | 항상 가능 |
-| `GET /curriculum` | 예 | `LocalCurriculum`(= `Store`의 번들) | phone | 항상 |
+| `GET /curriculum` | 예 | `LocalCurriculum`(= `Store`의 번들) | pc | 항상 |
 | `POST /tts`, `GET /tts/voices` | 예 | **Api 미경유**, `Tts` 내부 | (tts_engine) | 시스템 음성 없음 → `no_voice` |
 | `POST /stt` | 예 | `LocalStt`(whisper_bridge) | pc | 모델 없음 `model_missing`, 라이브러리 없음 `engine_missing` |
 | `POST /score` | 예 | `LocalScore` | pc | 위와 같음 |

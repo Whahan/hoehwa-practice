@@ -87,7 +87,7 @@ func engine_pref() -> String:
 ## "pc" (Kokoro through the backend) or "system" (the phone's own voices). The PC app is always "pc".
 ## Phone: pref pc -> pc, system -> system, auto -> pc while the backend is connected and the mode is not "phone".
 func engine_now() -> String:
-	if Platform.is_pc() or fetch_hook.is_valid(): # (a test's fetch hook belongs to the PC path)
+	if not Route.is_phone() or fetch_hook.is_valid(): # (a test's fetch hook belongs to the PC path)
 		return "pc"
 	match engine_pref():
 		"pc":

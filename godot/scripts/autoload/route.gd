@@ -255,10 +255,15 @@ func caps() -> Dictionary:
 			phone_has = false
 			use = "pc" if (md != "phone" and pc_has and not pc_flaky()) else "none"
 		elif k == "tts":
-			phone_has = bool(Tts.call("system_voices_ok")) if Tts.has_method("system_voices_ok") else false
+			# system_voices_ok() is {"en": bool, "ja": bool}; caps is not per language, so any voice counts.
+			var voices: Dictionary = Tts.call("system_voices_ok") if Tts.has_method("system_voices_ok") else {}
+			phone_has = voices.values().has(true)
 			if Tts.has_method("engine_now"):
 				var e: String = str(Tts.call("engine_now"))
-				use = "phone" if e == "system" or e == "phone" else ("pc" if e == "pc" else "none")
+				if e == "system" or e == "phone":
+					use = "phone" if phone_has else "none" # system engine without a voice reads nothing aloud
+				else:
+					use = "pc" if e == "pc" else "none"
 			else:
 				use = "pc" if (md != "phone" and connected and pc_has) else ("phone" if (md != "pc" and phone_has) else "none")
 		var why := ""

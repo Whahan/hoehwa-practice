@@ -53,6 +53,21 @@ var _t: float = 1000.0
 var _fell_back: Array = []
 var _auth_failed: int = 0
 var _modes_seen: Array = []
+## SystemTts adapter with a fixed voice list, so caps' tts row does not depend on the voices of the test machine.
+class VoiceFake:
+	extends SystemTts.Adapter
+	var voices: Array = []
+	func available() -> bool:
+		return true
+	func get_voices() -> Array:
+		return voices
+	func speak(_t: String, _v: String, _vol: int, _p: float, _r: float, _id: int, _i: bool) -> void:
+		pass
+	func stop() -> void:
+		pass
+
+
+var _caps_done: bool = false   ## set on the last line of _test_caps
 var _is_phone: bool = true   ## what Route.is_phone() answers (the test injects it; the test scene runs on the desktop)
 
 
@@ -114,6 +129,7 @@ func _ready() -> void:
 	_test_health_rule()
 	_test_why_none()
 	_test_caps()
+	ok(_caps_done, "caps section ran to its end (no script error cut it short)")
 	_test_mode_prefs()
 	await _test_dispatch()
 	await _test_api_phone_path()
@@ -329,6 +345,9 @@ func _test_why_none() -> void:
 
 func _test_caps() -> void:
 	print("[caps]")
+	var saved_adapter = SystemTts.adapter
+	SystemTts.adapter = VoiceFake.new() # no system voice
+	Tts._sys = null
 	Route.mode = "auto"
 	_avail(true)
 	Route.clear_flaky()
@@ -368,7 +387,16 @@ func _test_caps() -> void:
 	var i3: Dictionary = Route.caps()["items"]
 	ok(i3["chat"]["use"] == "phone" and i3["tts"]["use"] == "none", "phone mode: chat on the phone, tts none (no phone TTS yet)")
 	ok(i3["phoneme"]["use"] == "none", "phone mode: phoneme none")
+	var vf := VoiceFake.new()
+	vf.voices = [{"name": "English", "id": "en-a", "language": "en_US"}]
+	SystemTts.adapter = vf
+	Tts._sys = null
+	var i4: Dictionary = Route.caps()["items"]
+	ok(i4["tts"]["use"] == "phone" and i4["tts"]["phone"] == true, "phone mode with a system voice: tts on the phone")
+	SystemTts.adapter = saved_adapter
+	Tts._sys = null
 	Route.mode = "auto"
+	_caps_done = true
 
 
 func _test_mode_prefs() -> void:

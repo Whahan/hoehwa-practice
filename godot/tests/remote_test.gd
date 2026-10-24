@@ -67,7 +67,6 @@ func _ready() -> void:
 		return
 	_saved_remote_path = Api.remote_path
 	_use_test_curriculum_path()
-	Route.mode = "pc" ## remote mode talks to the PC for every path (A1: mode pc keeps the old behaviour); not saved to prefs
 	Api.remote_path = TEST_REMOTE
 	_cleanup_files()
 	if fake == null and admin_url == "":
