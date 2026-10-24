@@ -269,6 +269,10 @@ try {
     Step "APK 검증"
     $pinForBuild = if ($isDebugBuild) { $null } else { $PinFile }
     Test-Apk $tmpApk $tools $Version $pinForBuild $abis $isDebugBuild
+    Step "폰 단독 데이터 팩 검사"
+    $pk = Native "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Pkg "check_phone_pack.ps1"), $tmpApk)
+    $pk[0] | ForEach-Object { Write-Host $_ }
+    if ($pk[1] -ne 0) { Fail "폰 단독 데이터 팩 검사에 실패했어요(종료코드 $($pk[1]))." }
     Move-Item -LiteralPath $tmpApk -Destination $finalApk -Force
     $tmpApk = $null
     $script:ExitCode = 0

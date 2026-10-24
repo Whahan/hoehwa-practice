@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/standalone_flow_test.gd" id="1_a8"]
+
+[node name="StandaloneFlowTest" type="Node"]
+script = ExtResource("1_a8")
