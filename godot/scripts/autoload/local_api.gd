@@ -3,7 +3,7 @@ extends Node
 ##   {ok, code, data, bytes, error, cancelled, err_code, err_body}  and  data.via == "phone", data.degraded == [].
 ## Design: docs/phone_standalone_design.md §4.4, §5.1–5.3.
 ##
-## A0 (orchestrator): contract, handler registry, `ok`/`fail`, query parsing. A1 implements `dispatch`,
+## A0 (orchestrator): contract, handler registry, `ok`/`fail`, query parsing. A1 implemented `dispatch`,
 ## `available`, `why_none`, the synthetic /health and the Api hook. Handlers (A3a, A3b, A4, later B/C) live in
 ## res://scripts/local/local_<name>.gd and expose three static functions:
 ##   static func handle(method: String, path: String, query: Dictionary, body: Dictionary) -> Dictionary
@@ -38,6 +38,7 @@ var served_count: int = 0
 var handler_override: Dictionary = {}
 
 var _loaded: Dictionary = {}   # key -> GDScript or null (missing)
+var _curriculum_cache: Dictionary = {}
 
 
 ## Success result. `data` gets via/degraded when it is a Dictionary.
@@ -91,7 +92,7 @@ func handler_for(key: String) -> GDScript:
 	return script
 
 
-## A0 stub (A1 implements): can a phone handler serve `method path` right now?
+## Can a phone handler serve `method path` right now? (health and curriculum are synthesized here)
 func available(method: String, path: String, body: Dictionary = {}) -> bool:
 	var entry: Dictionary = Route.policy_for(method, path, body)
 	var key: String = str(entry.get("phone", ""))
@@ -100,27 +101,49 @@ func available(method: String, path: String, body: Dictionary = {}) -> bool:
 	if key == "health" or key == "curriculum":
 		return true
 	var script: GDScript = handler_for(key)
-	if script == null:
+	if script == null or not script.has_method("is_available"):
 		return false
 	return bool(script.call("is_available"))
 
 
-## A0 stub (A1 implements, incl. threads for slow handlers and the synthetic /health). Must stay a coroutine.
+## Serves `method path[?query]` with a phone handler. Always a coroutine: it yields one frame before the work, so
+## the result arrives asynchronously like a network answer (Api can cancel in between). The result has the shape
+## of an Api result; a handler that returns something else becomes a `bad_format` failure.
 func dispatch(method: String, path: String, body: Dictionary = {}) -> Dictionary:
 	var sq: Array = split_query(path)
-	var entry: Dictionary = Route.policy_for(method, sq[0], body)
+	var m: String = method.to_upper()
+	var entry: Dictionary = Route.policy_for(m, sq[0], body)
 	var key: String = str(entry.get("phone", ""))
+	await get_tree().process_frame
 	if key == "":
 		return fail("not_on_phone")
 	if key == "health":
+		served_count += 1
 		return ok(health())
 	if key == "curriculum":
-		return fail("needs_pc")   # A1: Store's bundled curriculum
+		var c: Dictionary = _curriculum()
+		if c.is_empty():
+			return fail("pack_missing")
+		served_count += 1
+		return ok(c)
 	var script: GDScript = handler_for(key)
-	if script == null:
+	if script == null or not script.has_method("handle"):
 		return fail("pack_missing")
 	served_count += 1
-	return script.call("handle", method.to_upper(), sq[0], sq[1], body)
+	var res: Variant = await script.call("handle", m, sq[0], sq[1], body)
+	return _normalize(res)
+
+
+## Fills missing keys of a handler result; anything that is not a result Dictionary becomes `bad_format`.
+func _normalize(res: Variant) -> Dictionary:
+	if not (res is Dictionary) or not (res as Dictionary).has("ok"):
+		return fail("bad_format")
+	var out: Dictionary = (res as Dictionary).duplicate()
+	var base: Dictionary = ok(null)
+	for k in base.keys():
+		if not out.has(k):
+			out[k] = base[k]
+	return out
 
 
 ## {err_code, text_ko}: why `method path` has no phone processing right now.
@@ -130,11 +153,46 @@ func why_none(method: String, path: String, body: Dictionary = {}) -> Dictionary
 	if key == "" or key == "health" or key == "curriculum":
 		return {"err_code": "not_on_phone", "text_ko": Route.text_for("not_on_phone")}
 	var script: GDScript = handler_for(key)
-	if script == null:
+	if script == null or not script.has_method("unavailable_reason"):
 		return {"err_code": "pack_missing", "text_ko": Route.text_for("pack_missing")}
-	return script.call("unavailable_reason")
+	var r: Variant = script.call("unavailable_reason")
+	if not (r is Dictionary) or str((r as Dictionary).get("err_code", "")) == "":
+		return {"err_code": "needs_pc", "text_ko": Route.text_for("needs_pc")}
+	return r
 
 
-## Synthetic phone /health (A1 fills stt/score/tts/llm/tatoeba from the handlers and Tts).
+## Synthetic phone /health (same keys as the PC one; used by the settings screen and caps, never as a PC probe).
 func health() -> Dictionary:
-	return HEALTH_TEMPLATE.duplicate(true)
+	var h: Dictionary = HEALTH_TEMPLATE.duplicate(true)
+	var stt: GDScript = handler_for("stt")
+	var stt_ok: bool = stt != null and stt.has_method("is_available") and bool(stt.call("is_available"))
+	h["stt"] = stt_ok
+	h["score"] = stt_ok
+	h["tatoeba"] = PackLoader.has_file("examples_en.json")
+	var voices: Variant = false
+	if Tts.has_method("system_voices_ok"):
+		voices = Tts.call("system_voices_ok")
+	if voices is Dictionary:
+		h["tts"] = {"en": bool((voices as Dictionary).get("en", false)), "ja": bool((voices as Dictionary).get("ja", false))}
+	else:
+		h["tts"] = {"en": bool(voices), "ja": bool(voices)}
+	var ai: GDScript = handler_for("ai")
+	var llm: bool = ai != null and ai.has_method("is_available") and bool(ai.call("is_available"))
+	h["llm"] = llm
+	h["llm_provider"] = "openai_api" if llm else "none"
+	return h
+
+
+## The bundled curriculum in the shape of the PC `GET /curriculum` answer ({"en": {...months...}, "ja": {...}}),
+## which Store.refresh_curriculum validates. {} when the file is missing or malformed.
+func _curriculum() -> Dictionary:
+	if not _curriculum_cache.is_empty():
+		return _curriculum_cache
+	var f := FileAccess.open(Store.CURRICULUM_BUNDLED, FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	if parsed is Dictionary and Store._valid_curriculum(parsed):
+		_curriculum_cache = parsed
+		return _curriculum_cache
+	return {}
