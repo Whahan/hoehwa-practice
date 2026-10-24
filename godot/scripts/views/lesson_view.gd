@@ -1082,7 +1082,8 @@ func _skip_speak() -> void:
 
 # ---------------------------------------------------------------- scoring
 
-## 자가 평가 결과: "잘했어요"는 채점 통과와 같은 길(speak_result -> 푼 결과, StudyLog.add_score)로, "다시"는 아무것도 기록하지 않는다.
+## 자가 평가 결과: "잘했어요"는 채점 통과와 같은 길(speak_result -> 푼 결과)로 간다(StudyLog.add_score는 자가 평가를
+## 점수 평균에 넣지 않음). "다시"는 아무것도 기록하지 않는다.
 func _on_self_rated(good: bool) -> void:
 	if status != "run" or speak_self_rec.is_empty():
 		return

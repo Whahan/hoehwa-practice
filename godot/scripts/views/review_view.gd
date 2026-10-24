@@ -490,14 +490,15 @@ func _check_typed() -> void:
 	_render()
 
 
-## 자가 평가 결과: "잘했어요"는 채점 통과와 같은 길(결과 화면 -> 복습 평점, StudyLog.add_score)로, "다시"는 아무것도 기록하지 않는다.
+## 자가 평가 결과: "잘했어요"는 채점 통과와 같은 길(결과 화면 -> 복습 평점)로 가고 StudyLog에 복습 1회를 남긴다
+## (자가 평가는 발음 점수 평균에 넣지 않음). "다시"는 아무것도 기록하지 않는다.
 func _on_self_rated(good: bool) -> void:
 	if status != "run" or self_rec.is_empty():
 		return
 	self_rec = {}
 	if good:
 		var it: Dictionary = items[idx]
-		StudyLog.add_score(lang, SelfRatePanel.good_result(lang, str(it["target"])), "review")
+		StudyLog.add_event(lang, "reviews")
 		self_good = true
 		checked = true
 	_render()

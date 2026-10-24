@@ -503,12 +503,12 @@ func _test_review_none() -> void:
 	ok(card_reasons(rv).has(SelfRatePanel.PHONEME_REASON), "phoneme card is disabled with a reason")
 	find_button(rv, "다시").pressed.emit()
 	await _frames(3)
-	ok(find_panel(rv) == null and not rv.checked and score_count() == 0, "다시 records nothing and the card stays open")
+	ok(find_panel(rv) == null and not rv.checked and score_count() == 0 and event_count("reviews") == 0, "다시 records nothing and the card stays open")
 	rv._on_recorded(rec)
 	await _frames(3)
 	find_button(rv, "잘했어요").pressed.emit()
 	await _frames(3)
-	ok(rv.self_good and rv.checked and score_count() == 0, "잘했어요 reveals the answer, no score entry (%d)" % score_count())
+	ok(rv.self_good and rv.checked and score_count() == 0 and event_count("reviews") == 1, "잘했어요 reveals the answer, one review event, no score entry (%d, %d)" % [score_count(), event_count("reviews")])
 	ok(find_label(rv, "스스로 '잘했어요'") != null, "the result card says it was self-rated")
 	var good_btn: Button = null
 	for n in _nodes(rv):
