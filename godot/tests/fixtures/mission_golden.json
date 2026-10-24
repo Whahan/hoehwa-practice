@@ -1,0 +1,1535 @@
+{
+ "v": 1,
+ "source": "backend/content/missions.json",
+ "source_sha256": "6f6be80f56f2fee5f609ece27a1b649fb77b47752eb132fec8ecb434f29b1c44",
+ "generator": "backend/tools/make_mission_golden.py",
+ "entries": [
+  {
+   "mission_id": "cafe_order",
+   "text": "Hi, good morning! Can I get a large latte, please?",
+   "norm": "hi good morning can i get a large latte please",
+   "reached": [
+    "greet",
+    "order_drink",
+    "ask_size"
+   ]
+  },
+  {
+   "mission_id": "cafe_order",
+   "text": "Ｈｉ，　ｇｏｏｄ　ｍｏｒｎｉｎｇ",
+   "norm": "hi good morning",
+   "reached": [
+    "greet"
+   ]
+  },
+  {
+   "mission_id": "cafe_order",
+   "text": "I’d like a medium coffee, to go please.",
+   "norm": "i'd like a medium coffee to go please",
+   "reached": [
+    "order_drink",
+    "ask_size"
+   ]
+  },
+  {
+   "mission_id": "cafe_order",
+   "text": "HELLO,   I'M   HERE   FOR   A   SMALL   TEA!!!",
+   "norm": "hello i'm here for a small tea",
+   "reached": [
+    "greet",
+    "ask_size"
+   ]
+  },
+  {
+   "mission_id": "cafe_order",
+   "text": "“Yes, that’s all. Thank you so much!”",
+   "norm": "yes that's all thank you so much",
+   "reached": [
+    "thank"
+   ]
+  },
+  {
+   "mission_id": "cafe_order",
+   "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a good morning",
+   "norm": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a",
+   "reached": []
+  },
+  {
+   "mission_id": "self_intro",
+   "text": "My name is Jun and I'm from Busan.",
+   "norm": "my name is jun and i'm from busan",
+   "reached": [
+    "say_name",
+    "origin"
+   ]
+  },
+  {
+   "mission_id": "self_intro",
+   "text": "Nice to meet you! I’m Minji.",
+   "norm": "nice to meet you i'm minji",
+   "reached": [
+    "say_name",
+    "nice_meet"
+   ]
+  },
+  {
+   "mission_id": "self_intro",
+   "text": "I like hiking and reading books, especially on weekends.",
+   "norm": "i like hiking and reading books especially on weekends",
+   "reached": [
+    "hobby"
+   ]
+  },
+  {
+   "mission_id": "self_intro",
+   "text": "What about you? Where are you from?",
+   "norm": "what about you where are you from",
+   "reached": [
+    "ask_back"
+   ]
+  },
+  {
+   "mission_id": "self_intro",
+   "text": "안녕하세요 저는 민지예요",
+   "norm": "",
+   "reached": []
+  },
+  {
+   "mission_id": "hotel_checkin",
+   "text": "Yes, I have a reservation under the name Kim.",
+   "norm": "yes i have a reservation under the name kim",
+   "reached": [
+    "reservation"
+   ]
+  },
+  {
+   "mission_id": "hotel_checkin",
+   "text": "I booked a room for two nights, a king bed please.",
+   "norm": "i booked a room for two nights a king bed please",
+   "reached": [
+    "reservation",
+    "room_request"
+   ]
+  },
+  {
+   "mission_id": "hotel_checkin",
+   "text": "Is breakfast included? Is there wifi in the room?",
+   "norm": "is breakfast included is there wifi in the room",
+   "reached": [
+    "breakfast_wifi"
+   ]
+  },
+  {
+   "mission_id": "hotel_checkin",
+   "text": "Could I check out at ten, and I’ll pay by card?",
+   "norm": "could i check out at ten and i'll pay by card",
+   "reached": [
+    "checkout_pay"
+   ]
+  },
+  {
+   "mission_id": "ask_directions",
+   "text": "Excuse me, where is the train station?",
+   "norm": "excuse me where is the train station",
+   "reached": [
+    "ask_place"
+   ]
+  },
+  {
+   "mission_id": "ask_directions",
+   "text": "How far is it from here? Is it far?",
+   "norm": "how far is it from here is it far",
+   "reached": [
+    "ask_distance"
+   ]
+  },
+  {
+   "mission_id": "ask_directions",
+   "text": "So I turn left at the bank, right?",
+   "norm": "so i turn left at the bank right",
+   "reached": [
+    "confirm_route"
+   ]
+  },
+  {
+   "mission_id": "ask_directions",
+   "text": "Ｔｈａｎｋ　ｙｏｕ　ｓｏ　ｍｕｃｈ，　ｂｙｅ",
+   "norm": "thank you so much bye",
+   "reached": [
+    "thank_bye"
+   ]
+  },
+  {
+   "mission_id": "restaurant",
+   "text": "A table for two please.",
+   "norm": "a table for two please",
+   "reached": [
+    "seat_party"
+   ]
+  },
+  {
+   "mission_id": "restaurant",
+   "text": "What do you recommend? Any specials today?",
+   "norm": "what do you recommend any specials today",
+   "reached": [
+    "ask_recommend"
+   ]
+  },
+  {
+   "mission_id": "restaurant",
+   "text": "I’ll have the salmon, please.",
+   "norm": "i'll have the salmon please",
+   "reached": [
+    "order_main"
+   ]
+  },
+  {
+   "mission_id": "pharmacy_doctor",
+   "text": "I have a headache and I feel dizzy.",
+   "norm": "i have a headache and i feel dizzy",
+   "reached": [
+    "symptom"
+   ]
+  },
+  {
+   "mission_id": "pharmacy_doctor",
+   "text": "It started two days ago and it’s getting worse.",
+   "norm": "it started two days ago and it's getting worse",
+   "reached": [
+    "duration"
+   ]
+  },
+  {
+   "mission_id": "pharmacy_doctor",
+   "text": "Should I take one pill twice a day?",
+   "norm": "should i take one pill twice a day",
+   "reached": [
+    "dosage"
+   ]
+  },
+  {
+   "mission_id": "return_item",
+   "text": "It’s too small for me, and it has a hole.",
+   "norm": "it's too small for me and it has a hole",
+   "reached": [
+    "reason"
+   ]
+  },
+  {
+   "mission_id": "return_item",
+   "text": "I have the receipt right here.",
+   "norm": "i have the receipt right here",
+   "reached": [
+    "receipt"
+   ]
+  },
+  {
+   "mission_id": "return_item",
+   "text": "Can I exchange it or get a refund?",
+   "norm": "can i exchange it or get a refund",
+   "reached": [
+    "exchange_refund"
+   ]
+  },
+  {
+   "mission_id": "job_interview",
+   "text": "My name is Min-ho and I work in design.",
+   "norm": "my name is min ho and i work in design",
+   "reached": [
+    "intro"
+   ]
+  },
+  {
+   "mission_id": "job_interview",
+   "text": "I'm a designer with three years of experience.",
+   "norm": "i'm a designer with three years of experience",
+   "reached": [
+    "intro"
+   ]
+  }
+ ],
+ "norm_cases": [
+  {
+   "text": "Ｈｅｌｌｏ，　Ｗｏｒｌｄ！",
+   "norm": "hello world"
+  },
+  {
+   "text": "I’m here, ‘ok‘ “yes” ` ´ ʼ ′ ＇",
+   "norm": "i'm here 'ok' yes ' ' ' '"
+  },
+  {
+   "text": "a″b",
+   "norm": "a''b"
+  },
+  {
+   "text": "x—y–z−wーv－u",
+   "norm": "x y z w v u"
+  },
+  {
+   "text": "ﬁne ﬂow ﬃce ﬀ ﬄ ﬅ",
+   "norm": "fine flow ffice ff ffl st"
+  },
+  {
+   "text": "x² y⁴ z₀ ①⑩ ⑧",
+   "norm": "x2 y4 z0 110 8"
+  },
+  {
+   "text": "ⒶⓐⓩⓏ",
+   "norm": "aazz"
+  },
+  {
+   "text": "½ and ¼ ¾",
+   "norm": "1 2 and 1 4 3 4"
+  },
+  {
+   "text": "™ ª º ⁱ ⁿ",
+   "norm": "tm a o i n"
+  },
+  {
+   "text": "ｱｲ",
+   "norm": ""
+  },
+  {
+   "text": "안녕 hello 세상",
+   "norm": "hello"
+  },
+  {
+   "text": "tab\tnew\nline   spaces",
+   "norm": "tab new line spaces"
+  },
+  {
+   "text": "   ",
+   "norm": ""
+  },
+  {
+   "text": "",
+   "norm": ""
+  },
+  {
+   "text": "Don’t STOP",
+   "norm": "don't stop"
+  },
+  {
+   "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabcdefgh",
+   "norm": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+   "text": "Kelvin K",
+   "norm": "kelvin k"
+  },
+  {
+   "text": "don＇t",
+   "norm": "don't"
+  }
+ ],
+ "table_cases": [
+  [
+   32,
+   ""
+  ],
+  [
+   33,
+   ""
+  ],
+  [
+   34,
+   ""
+  ],
+  [
+   35,
+   ""
+  ],
+  [
+   36,
+   ""
+  ],
+  [
+   37,
+   ""
+  ],
+  [
+   38,
+   ""
+  ],
+  [
+   39,
+   "'"
+  ],
+  [
+   40,
+   ""
+  ],
+  [
+   41,
+   ""
+  ],
+  [
+   42,
+   ""
+  ],
+  [
+   43,
+   ""
+  ],
+  [
+   44,
+   ""
+  ],
+  [
+   45,
+   ""
+  ],
+  [
+   46,
+   ""
+  ],
+  [
+   47,
+   ""
+  ],
+  [
+   48,
+   "0"
+  ],
+  [
+   49,
+   "1"
+  ],
+  [
+   50,
+   "2"
+  ],
+  [
+   51,
+   "3"
+  ],
+  [
+   52,
+   "4"
+  ],
+  [
+   53,
+   "5"
+  ],
+  [
+   54,
+   "6"
+  ],
+  [
+   55,
+   "7"
+  ],
+  [
+   56,
+   "8"
+  ],
+  [
+   57,
+   "9"
+  ],
+  [
+   58,
+   ""
+  ],
+  [
+   59,
+   ""
+  ],
+  [
+   60,
+   ""
+  ],
+  [
+   61,
+   ""
+  ],
+  [
+   62,
+   ""
+  ],
+  [
+   63,
+   ""
+  ],
+  [
+   64,
+   ""
+  ],
+  [
+   65,
+   "a"
+  ],
+  [
+   66,
+   "b"
+  ],
+  [
+   67,
+   "c"
+  ],
+  [
+   68,
+   "d"
+  ],
+  [
+   69,
+   "e"
+  ],
+  [
+   70,
+   "f"
+  ],
+  [
+   71,
+   "g"
+  ],
+  [
+   72,
+   "h"
+  ],
+  [
+   73,
+   "i"
+  ],
+  [
+   74,
+   "j"
+  ],
+  [
+   75,
+   "k"
+  ],
+  [
+   76,
+   "l"
+  ],
+  [
+   77,
+   "m"
+  ],
+  [
+   78,
+   "n"
+  ],
+  [
+   79,
+   "o"
+  ],
+  [
+   80,
+   "p"
+  ],
+  [
+   81,
+   "q"
+  ],
+  [
+   82,
+   "r"
+  ],
+  [
+   83,
+   "s"
+  ],
+  [
+   84,
+   "t"
+  ],
+  [
+   85,
+   "u"
+  ],
+  [
+   86,
+   "v"
+  ],
+  [
+   87,
+   "w"
+  ],
+  [
+   88,
+   "x"
+  ],
+  [
+   89,
+   "y"
+  ],
+  [
+   90,
+   "z"
+  ],
+  [
+   91,
+   ""
+  ],
+  [
+   92,
+   ""
+  ],
+  [
+   93,
+   ""
+  ],
+  [
+   94,
+   ""
+  ],
+  [
+   95,
+   ""
+  ],
+  [
+   96,
+   "'"
+  ],
+  [
+   97,
+   "a"
+  ],
+  [
+   98,
+   "b"
+  ],
+  [
+   99,
+   "c"
+  ],
+  [
+   100,
+   "d"
+  ],
+  [
+   101,
+   "e"
+  ],
+  [
+   102,
+   "f"
+  ],
+  [
+   103,
+   "g"
+  ],
+  [
+   104,
+   "h"
+  ],
+  [
+   105,
+   "i"
+  ],
+  [
+   106,
+   "j"
+  ],
+  [
+   107,
+   "k"
+  ],
+  [
+   108,
+   "l"
+  ],
+  [
+   109,
+   "m"
+  ],
+  [
+   110,
+   "n"
+  ],
+  [
+   111,
+   "o"
+  ],
+  [
+   112,
+   "p"
+  ],
+  [
+   113,
+   "q"
+  ],
+  [
+   114,
+   "r"
+  ],
+  [
+   115,
+   "s"
+  ],
+  [
+   116,
+   "t"
+  ],
+  [
+   117,
+   "u"
+  ],
+  [
+   118,
+   "v"
+  ],
+  [
+   119,
+   "w"
+  ],
+  [
+   120,
+   "x"
+  ],
+  [
+   121,
+   "y"
+  ],
+  [
+   122,
+   "z"
+  ],
+  [
+   123,
+   ""
+  ],
+  [
+   124,
+   ""
+  ],
+  [
+   125,
+   ""
+  ],
+  [
+   126,
+   ""
+  ],
+  [
+   12288,
+   ""
+  ],
+  [
+   96,
+   "'"
+  ],
+  [
+   180,
+   ""
+  ],
+  [
+   8216,
+   "'"
+  ],
+  [
+   8217,
+   "'"
+  ],
+  [
+   700,
+   "'"
+  ],
+  [
+   8242,
+   "'"
+  ],
+  [
+   8243,
+   "''"
+  ],
+  [
+   8208,
+   ""
+  ],
+  [
+   8209,
+   ""
+  ],
+  [
+   8210,
+   ""
+  ],
+  [
+   8211,
+   ""
+  ],
+  [
+   8212,
+   ""
+  ],
+  [
+   8213,
+   ""
+  ],
+  [
+   8722,
+   ""
+  ],
+  [
+   12540,
+   ""
+  ],
+  [
+   170,
+   "a"
+  ],
+  [
+   186,
+   "o"
+  ],
+  [
+   8305,
+   "i"
+  ],
+  [
+   8319,
+   "n"
+  ],
+  [
+   185,
+   "1"
+  ],
+  [
+   178,
+   "2"
+  ],
+  [
+   179,
+   "3"
+  ],
+  [
+   8304,
+   "0"
+  ],
+  [
+   8308,
+   "4"
+  ],
+  [
+   8309,
+   "5"
+  ],
+  [
+   8310,
+   "6"
+  ],
+  [
+   8311,
+   "7"
+  ],
+  [
+   8312,
+   "8"
+  ],
+  [
+   8313,
+   "9"
+  ],
+  [
+   8320,
+   "0"
+  ],
+  [
+   8321,
+   "1"
+  ],
+  [
+   8322,
+   "2"
+  ],
+  [
+   8323,
+   "3"
+  ],
+  [
+   8324,
+   "4"
+  ],
+  [
+   8325,
+   "5"
+  ],
+  [
+   8326,
+   "6"
+  ],
+  [
+   8327,
+   "7"
+  ],
+  [
+   8328,
+   "8"
+  ],
+  [
+   8329,
+   "9"
+  ],
+  [
+   9312,
+   "1"
+  ],
+  [
+   9313,
+   "2"
+  ],
+  [
+   9314,
+   "3"
+  ],
+  [
+   9315,
+   "4"
+  ],
+  [
+   9316,
+   "5"
+  ],
+  [
+   9317,
+   "6"
+  ],
+  [
+   9318,
+   "7"
+  ],
+  [
+   9319,
+   "8"
+  ],
+  [
+   9320,
+   "9"
+  ],
+  [
+   9321,
+   "10"
+  ],
+  [
+   188,
+   "1 4"
+  ],
+  [
+   189,
+   "1 2"
+  ],
+  [
+   190,
+   "3 4"
+  ],
+  [
+   8482,
+   "tm"
+  ],
+  [
+   64256,
+   "ff"
+  ],
+  [
+   64257,
+   "fi"
+  ],
+  [
+   64258,
+   "fl"
+  ],
+  [
+   64259,
+   "ffi"
+  ],
+  [
+   64260,
+   "ffl"
+  ],
+  [
+   64261,
+   "st"
+  ],
+  [
+   64262,
+   "st"
+  ],
+  [
+   9398,
+   "a"
+  ],
+  [
+   9399,
+   "b"
+  ],
+  [
+   9400,
+   "c"
+  ],
+  [
+   9401,
+   "d"
+  ],
+  [
+   9402,
+   "e"
+  ],
+  [
+   9403,
+   "f"
+  ],
+  [
+   9404,
+   "g"
+  ],
+  [
+   9405,
+   "h"
+  ],
+  [
+   9406,
+   "i"
+  ],
+  [
+   9407,
+   "j"
+  ],
+  [
+   9408,
+   "k"
+  ],
+  [
+   9409,
+   "l"
+  ],
+  [
+   9410,
+   "m"
+  ],
+  [
+   9411,
+   "n"
+  ],
+  [
+   9412,
+   "o"
+  ],
+  [
+   9413,
+   "p"
+  ],
+  [
+   9414,
+   "q"
+  ],
+  [
+   9415,
+   "r"
+  ],
+  [
+   9416,
+   "s"
+  ],
+  [
+   9417,
+   "t"
+  ],
+  [
+   9418,
+   "u"
+  ],
+  [
+   9419,
+   "v"
+  ],
+  [
+   9420,
+   "w"
+  ],
+  [
+   9421,
+   "x"
+  ],
+  [
+   9422,
+   "y"
+  ],
+  [
+   9423,
+   "z"
+  ],
+  [
+   9424,
+   "a"
+  ],
+  [
+   9425,
+   "b"
+  ],
+  [
+   9426,
+   "c"
+  ],
+  [
+   9427,
+   "d"
+  ],
+  [
+   9428,
+   "e"
+  ],
+  [
+   9429,
+   "f"
+  ],
+  [
+   9430,
+   "g"
+  ],
+  [
+   9431,
+   "h"
+  ],
+  [
+   9432,
+   "i"
+  ],
+  [
+   9433,
+   "j"
+  ],
+  [
+   9434,
+   "k"
+  ],
+  [
+   9435,
+   "l"
+  ],
+  [
+   9436,
+   "m"
+  ],
+  [
+   9437,
+   "n"
+  ],
+  [
+   9438,
+   "o"
+  ],
+  [
+   9439,
+   "p"
+  ],
+  [
+   9440,
+   "q"
+  ],
+  [
+   9441,
+   "r"
+  ],
+  [
+   9442,
+   "s"
+  ],
+  [
+   9443,
+   "t"
+  ],
+  [
+   9444,
+   "u"
+  ],
+  [
+   9445,
+   "v"
+  ],
+  [
+   9446,
+   "w"
+  ],
+  [
+   9447,
+   "x"
+  ],
+  [
+   9448,
+   "y"
+  ],
+  [
+   9449,
+   "z"
+  ],
+  [
+   65281,
+   ""
+  ],
+  [
+   65282,
+   ""
+  ],
+  [
+   65283,
+   ""
+  ],
+  [
+   65284,
+   ""
+  ],
+  [
+   65285,
+   ""
+  ],
+  [
+   65286,
+   ""
+  ],
+  [
+   65287,
+   "'"
+  ],
+  [
+   65288,
+   ""
+  ],
+  [
+   65289,
+   ""
+  ],
+  [
+   65290,
+   ""
+  ],
+  [
+   65291,
+   ""
+  ],
+  [
+   65292,
+   ""
+  ],
+  [
+   65293,
+   ""
+  ],
+  [
+   65294,
+   ""
+  ],
+  [
+   65295,
+   ""
+  ],
+  [
+   65296,
+   "0"
+  ],
+  [
+   65297,
+   "1"
+  ],
+  [
+   65298,
+   "2"
+  ],
+  [
+   65299,
+   "3"
+  ],
+  [
+   65300,
+   "4"
+  ],
+  [
+   65301,
+   "5"
+  ],
+  [
+   65302,
+   "6"
+  ],
+  [
+   65303,
+   "7"
+  ],
+  [
+   65304,
+   "8"
+  ],
+  [
+   65305,
+   "9"
+  ],
+  [
+   65306,
+   ""
+  ],
+  [
+   65307,
+   ""
+  ],
+  [
+   65308,
+   ""
+  ],
+  [
+   65309,
+   ""
+  ],
+  [
+   65310,
+   ""
+  ],
+  [
+   65311,
+   ""
+  ],
+  [
+   65312,
+   ""
+  ],
+  [
+   65313,
+   "a"
+  ],
+  [
+   65314,
+   "b"
+  ],
+  [
+   65315,
+   "c"
+  ],
+  [
+   65316,
+   "d"
+  ],
+  [
+   65317,
+   "e"
+  ],
+  [
+   65318,
+   "f"
+  ],
+  [
+   65319,
+   "g"
+  ],
+  [
+   65320,
+   "h"
+  ],
+  [
+   65321,
+   "i"
+  ],
+  [
+   65322,
+   "j"
+  ],
+  [
+   65323,
+   "k"
+  ],
+  [
+   65324,
+   "l"
+  ],
+  [
+   65325,
+   "m"
+  ],
+  [
+   65326,
+   "n"
+  ],
+  [
+   65327,
+   "o"
+  ],
+  [
+   65328,
+   "p"
+  ],
+  [
+   65329,
+   "q"
+  ],
+  [
+   65330,
+   "r"
+  ],
+  [
+   65331,
+   "s"
+  ],
+  [
+   65332,
+   "t"
+  ],
+  [
+   65333,
+   "u"
+  ],
+  [
+   65334,
+   "v"
+  ],
+  [
+   65335,
+   "w"
+  ],
+  [
+   65336,
+   "x"
+  ],
+  [
+   65337,
+   "y"
+  ],
+  [
+   65338,
+   "z"
+  ],
+  [
+   65339,
+   ""
+  ],
+  [
+   65340,
+   ""
+  ],
+  [
+   65341,
+   ""
+  ],
+  [
+   65342,
+   ""
+  ],
+  [
+   65343,
+   ""
+  ],
+  [
+   65344,
+   "'"
+  ],
+  [
+   65345,
+   "a"
+  ],
+  [
+   65346,
+   "b"
+  ],
+  [
+   65347,
+   "c"
+  ],
+  [
+   65348,
+   "d"
+  ],
+  [
+   65349,
+   "e"
+  ],
+  [
+   65350,
+   "f"
+  ],
+  [
+   65351,
+   "g"
+  ],
+  [
+   65352,
+   "h"
+  ],
+  [
+   65353,
+   "i"
+  ],
+  [
+   65354,
+   "j"
+  ],
+  [
+   65355,
+   "k"
+  ],
+  [
+   65356,
+   "l"
+  ],
+  [
+   65357,
+   "m"
+  ],
+  [
+   65358,
+   "n"
+  ],
+  [
+   65359,
+   "o"
+  ],
+  [
+   65360,
+   "p"
+  ],
+  [
+   65361,
+   "q"
+  ],
+  [
+   65362,
+   "r"
+  ],
+  [
+   65363,
+   "s"
+  ],
+  [
+   65364,
+   "t"
+  ],
+  [
+   65365,
+   "u"
+  ],
+  [
+   65366,
+   "v"
+  ],
+  [
+   65367,
+   "w"
+  ],
+  [
+   65368,
+   "x"
+  ],
+  [
+   65369,
+   "y"
+  ],
+  [
+   65370,
+   "z"
+  ],
+  [
+   65371,
+   ""
+  ],
+  [
+   65372,
+   ""
+  ],
+  [
+   65373,
+   ""
+  ],
+  [
+   65374,
+   ""
+  ]
+ ]
+}
