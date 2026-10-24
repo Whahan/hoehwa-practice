@@ -15,6 +15,7 @@ const SLOW_SPEED := 0.75
 const MAX_CACHE := 200
 const GAP_SEC := 0.15
 const DEFAULT_VOICE := {"en": "af_heart", "ja": "jf_alpha"}
+const ENGINES := ["auto", "system", "pc"] ## pref `tts_engine` (docs/phone_standalone_design.md §4.2, §5.4)
 
 const EN_ABBR := ["mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc", "e.g", "i.e", "u.s", "no", "mt", "inc", "ltd", "approx"]
 const CLOSERS := "\"'”’)]」』）】"
@@ -25,7 +26,7 @@ const PUNCT := "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~…—–“”‘’「」『
 var busy: bool = false ## waiting for the backend
 var playing: bool = false
 var current_key: String = ""
-var voices: Dictionary = {} ## lang -> [{id, name, gender, default}] from GET /tts/voices (empty until loaded)
+var voices: Dictionary = {} ## lang -> [{id, name, gender, default}] from GET /tts/voices or the phone's voices (empty until loaded)
 var gap_sec: float = GAP_SEC
 ## Tests: Callable(text, lang, speed, voice) -> AudioStreamWAV (may be a coroutine) used instead of the backend.
 var fetch_hook: Callable = Callable()
@@ -36,6 +37,8 @@ var _player: AudioStreamPlayer
 var _cache: Dictionary = {} # key -> AudioStreamWAV
 var _cache_order: Array[String] = []
 var _job: Job = null
+var _sys: SystemTts = null ## system-voice engine (phone), created on first use
+var _voices_engine: String = "" ## which engine `voices` came from ("pc" | "system" | "" = unknown/PC)
 
 
 class Job:
@@ -65,10 +68,47 @@ func _ready() -> void:
 	_player.bus = "Master"
 	add_child(_player)
 	_player.finished.connect(_on_finished)
+	if Platform.is_phone():
+		_sys_get().wake() # the system engine initialises asynchronously: start it early
 
 
 static func cache_key(text: String, lang: String, speed: float, voice: String = "") -> String:
 	return "%s|%.2f|%s|%s" % [lang, speed, voice, text]
+
+
+# ---------------------------------------------------------------- engine choice
+
+## The saved `tts_engine`, anything outside auto|system|pc counts as auto.
+func engine_pref() -> String:
+	var e: String = str(Store.prefs.get("tts_engine", "auto"))
+	return e if ENGINES.has(e) else "auto"
+
+
+## "pc" (Kokoro through the backend) or "system" (the phone's own voices). The PC app is always "pc".
+## Phone: pref pc -> pc, system -> system, auto -> pc while the backend is connected and the mode is not "phone".
+func engine_now() -> String:
+	if Platform.is_pc() or fetch_hook.is_valid(): # (a test's fetch hook belongs to the PC path)
+		return "pc"
+	match engine_pref():
+		"pc":
+			return "pc"
+		"system":
+			return "system"
+	return "pc" if Backend.is_ready() and Route.mode != "phone" else "system"
+
+
+## {"en": bool, "ja": bool}: does this phone have a system voice for the language (read by LocalApi's /health).
+func system_voices_ok() -> Dictionary:
+	return _sys_get().voices_ok()
+
+
+func _sys_get() -> SystemTts:
+	if _sys == null:
+		_sys = SystemTts.new(self)
+		_sys.chunk_started.connect(func(i: int, t: String) -> void: chunk_started.emit(i, t))
+		_sys.state_changed.connect(func(b: bool, p: bool) -> void: _set_state(b, p))
+		_sys.finished.connect(func() -> void: sequence_finished.emit())
+	return _sys
 
 
 func normal_speed() -> float:
@@ -76,12 +116,16 @@ func normal_speed() -> float:
 
 
 func voice_for(lang: String) -> String:
+	if engine_now() == "system":
+		return _sys_get().voice_id_for(lang)
 	var v: String = str(Store.prefs.get("tts_voice_" + lang, "")).strip_edges()
 	return v if v != "" else str(DEFAULT_VOICE.get(lang, ""))
 
 
 ## True when every chunk of `text` is already in memory.
 func is_cached(text: String, lang: String, slow: bool = false) -> bool:
+	if engine_now() == "system":
+		return false # the system engine gives no audio data to keep
 	var speed: float = SLOW_SPEED if slow else normal_speed()
 	var voice: String = voice_for(lang)
 	var chunks: Array[String] = split_chunks(text.strip_edges(), lang)
@@ -94,6 +138,12 @@ func is_cached(text: String, lang: String, slow: bool = false) -> bool:
 
 
 func stop() -> void:
+	_stop_pc()
+	if _sys != null:
+		_sys.stop()
+
+
+func _stop_pc() -> void:
 	var job: Job = _job
 	_job = null
 	if job != null:
@@ -123,6 +173,12 @@ func speak_chunks(chunks: Array, lang: String, slow: bool = false, voice: String
 		if s != "":
 			clean.append(s)
 	if clean.is_empty():
+		return
+	if engine_now() == "system":
+		_stop_pc()
+		last_timing = {} # no audio data -> no pitch comparison
+		current_key = ""
+		await _sys_get().speak_chunks(clean, lang, SLOW_SPEED if slow else normal_speed(), voice)
 		return
 	stop()
 	var job := Job.new()
@@ -257,18 +313,42 @@ func _set_state(b: bool, p: bool) -> void:
 
 ## Loads GET /tts/voices once (only the voice packs present on the PC).
 func load_voices() -> void:
-	if not voices.is_empty():
+	if engine_now() == "system":
+		await _load_system_voices()
+		return
+	if not voices.is_empty() and _voices_engine != "system":
 		return
 	var req_call = Api.get_json("/tts/voices", Api.TIMEOUT_SHORT, false)
 	var res: Dictionary = await req_call.wait()
 	if res["ok"] and res["data"] is Dictionary and (res["data"] as Dictionary).get("voices", null) is Dictionary:
 		voices = (res["data"] as Dictionary)["voices"]
+		_voices_engine = "pc"
 		voices_loaded.emit()
+
+
+## The phone's voices into `voices` (same shape as the PC list; no gender). Stays empty (so it is tried again) while the
+## engine reports no voice at all.
+func _load_system_voices() -> void:
+	var sys: SystemTts = _sys_get()
+	sys.wake()
+	var waited := 0.0
+	while waited < sys.voice_wait_sec and sys.all_voices().is_empty() and is_inside_tree():
+		await get_tree().create_timer(0.25).timeout
+		waited += 0.25
+	var d := {"en": sys.voices_for("en"), "ja": sys.voices_for("ja")}
+	if (d["en"] as Array).is_empty() and (d["ja"] as Array).is_empty():
+		return
+	voices = d
+	_voices_engine = "system"
+	voices_loaded.emit()
 
 
 ## [{id, name, gender, default}] for a language; before the list has loaded, only the built-in default.
 func voices_for(lang: String) -> Array:
-	var lst: Variant = voices.get(lang, null)
+	if engine_now() == "system":
+		var sl: Array = _sys_get().voices_for(lang)
+		return sl if not sl.is_empty() else [{"id": "", "name": "(음성 없음)", "gender": "", "default": false}]
+	var lst: Variant = voices.get(lang, null) if _voices_engine != "system" else null
 	if lst is Array and not (lst as Array).is_empty():
 		return lst
 	var d: String = str(DEFAULT_VOICE.get(lang, ""))
@@ -276,8 +356,12 @@ func voices_for(lang: String) -> Array:
 
 
 static func voice_label(v: Dictionary) -> String:
-	var g: String = "여성" if str(v.get("gender", "")) == "female" else "남성"
-	var s: String = "%s · %s" % [str(v.get("name", v.get("id", ""))), g]
+	var s: String = str(v.get("name", v.get("id", "")))
+	match str(v.get("gender", "")): # the phone's voices carry no gender
+		"female":
+			s += " · 여성"
+		"male":
+			s += " · 남성"
 	if bool(v.get("default", false)):
 		s += " (기본)"
 	return s
