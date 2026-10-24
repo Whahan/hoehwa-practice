@@ -2,11 +2,13 @@ extends Node
 ## Route: decides, per request, where a feature runs — on the paired PC ("pc"), inside the phone ("phone")
 ## or nowhere ("none"). Design: docs/phone_standalone_design.md §4.2–4.3, §5.2–5.3.
 ##
-## A0 (orchestrator): contract + POLICY table + error texts. The decision logic, `pc_flaky()` bookkeeping and
-## `caps()` are implemented by A1 (route_test.gd). Until then every request keeps the old behaviour ("pc").
+## A0 (orchestrator): contract + POLICY table + error texts. A1: the decision logic, `pc_flaky()` bookkeeping and
+## `caps()` (tests: tests/route_test.gd).
 ##
 ## Modes (prefs.route_mode): "auto" (PC first, phone when the PC is unreachable), "phone" (never talk to the
 ## PC), "pc" (old behaviour, phone handlers never used). Any other value is treated as "auto".
+## Standalone mode belongs to the phone: on the PC app (Platform.is_phone() == false) every path is "pc",
+## whatever the mode or the policy says.
 
 const MODES := ["auto", "phone", "pc"]
 const DEFAULT_MODE := "auto"
@@ -29,7 +31,8 @@ const CAP_KEYS := ["lesson", "lesson_ai", "practice", "missions", "missions_judg
 ## `POST /lesson` with body.source == "ai" is routed like the "lesson_ai" entry below (see `policy_for`).
 const POLICY := {
 	"GET /health": {"pc": true, "phone": "health", "prefer": "pc", "cap": ""},
-	"GET /curriculum": {"pc": true, "phone": "curriculum", "prefer": "phone", "cap": ""},
+	# prefer pc: a connected phone keeps getting the PC's (possibly newer) curriculum; without a ready PC the bundled copy.
+	"GET /curriculum": {"pc": true, "phone": "curriculum", "prefer": "pc", "cap": ""},
 	"POST /tts": {"pc": true, "phone": "", "prefer": "pc", "cap": "tts"},          # Tts autoload picks the engine itself
 	"GET /tts/voices": {"pc": true, "phone": "", "prefer": "pc", "cap": "tts"},
 	"POST /stt": {"pc": true, "phone": "stt", "prefer": "pc", "cap": "stt"},
@@ -79,6 +82,8 @@ const ERR_TEXT := {
 	"no_permission": "마이크 권한이 없어요. 휴대폰 설정에서 이 앱의 마이크 권한을 켜 주세요.",
 	"ja_reading_pc": "일본어 글 분석은 아직 PC에서만 돼요.",
 	"not_connected": "PC에 연결되지 않았어요.",
+	"bad_request": "요청이 올바르지 않아요.",
+	"not_found": "찾는 항목이 없어요.",
 }
 
 ## HTTP status a phone-side failure carries (§5.2; never 0, never triggers Api.auth_failed).
@@ -86,6 +91,7 @@ const ERR_HTTP := {
 	"not_on_phone": 503, "needs_pc": 503, "pack_missing": 503, "pack_corrupt": 503, "model_missing": 503,
 	"model_corrupt": 503, "engine_missing": 503, "no_ai": 503, "ai_auth": 401, "ai_limit": 429, "ai_overload": 502,
 	"bad_format": 502, "no_voice": 503, "no_permission": 403, "ja_reading_pc": 503, "not_connected": 503,
+	"bad_request": 400, "not_found": 404,
 }
 
 ## `degraded` values a phone result may carry (§5.2).
@@ -102,6 +108,8 @@ var mode: String = DEFAULT_MODE
 var clock: Callable = Callable()
 ## Tests may replace the PC readiness probe (default: Backend.is_ready()).
 var pc_ready_hook: Callable = Callable()
+## Tests may replace the platform probe: returns true for "this is the phone app" (default: Platform.is_phone()).
+var phone_hook: Callable = Callable()
 
 var _flaky_until: float = -1.0
 var _last_fallback_toast: float = -1.0e9
@@ -142,6 +150,13 @@ func now_sec() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
+## True on the phone app (Android or desktop `-- --phone`); the PC app never uses phone handlers.
+func is_phone() -> bool:
+	if phone_hook.is_valid():
+		return bool(phone_hook.call())
+	return Platform.is_phone()
+
+
 func pc_ready() -> bool:
 	if pc_ready_hook.is_valid():
 		return bool(pc_ready_hook.call())
@@ -162,29 +177,95 @@ func clear_flaky() -> void:
 	_flaky_until = -1.0
 
 
-## Where `method path` goes right now: "pc" | "phone" | "none". A0 stub: always the old behaviour.
-## A1 implements §4.2 (mode × entry.pc × entry.phone × LocalApi.available(path)).
+## Where `method path` goes right now: "pc" | "phone" | "none" (§4.2, as fixed in the A1 task):
+##   - PC app (not is_phone()) -> always "pc"
+##   - no policy entry (/mic, /llm, /lan, /sync, ...) -> "pc" in auto/pc mode, "none" in phone mode (never the PC)
+##   - GET /health probes the PC: auto/pc -> "pc", phone -> "none" (never the synthetic phone /health)
+##   - mode pc -> "pc"; mode phone -> "phone" if a handler can serve it else "none"
+##   - mode auto -> by `prefer`, a PC that is ready (and not flaky) first, else the phone, else try the PC
 func decide(method: String, path: String, body: Dictionary = {}) -> String:
-	var entry: Dictionary = policy_for(method, path, body)
-	if entry.is_empty():
+	if not is_phone():
 		return "pc"
-	return "pc"
+	var entry: Dictionary = policy_for(method, path, body)
+	var md: String = normalize_mode(mode)
+	if entry.is_empty():
+		return "none" if md == "phone" else "pc"
+	if method.to_upper() == "GET" and path.split("?")[0] == "/health":
+		return "none" if md == "phone" else "pc"
+	var phone_ok: bool = str(entry.get("phone", "")) != "" and LocalApi.available(method, path, body)
+	var pc_possible: bool = bool(entry.get("pc", false)) and Api.base_url != "" and not pc_flaky()
+	if md == "pc":
+		return "pc" if bool(entry.get("pc", false)) else "none"
+	if md == "phone":
+		return "phone" if phone_ok else "none"
+	if str(entry.get("prefer", "pc")) == "phone":
+		if phone_ok:
+			return "phone"
+		return "pc" if pc_possible else "none"
+	if pc_possible and pc_ready():
+		return "pc"
+	if phone_ok:
+		return "phone"
+	return "pc" if pc_possible else "none"
 
 
-## {err_code, text_ko} explaining why `path` is "none" right now (A1).
+## {err_code, text_ko} explaining why `method path` is "none" right now.
 func why_none(method: String, path: String, body: Dictionary = {}) -> Dictionary:
 	var entry: Dictionary = policy_for(method, path, body)
+	if normalize_mode(mode) == "pc" and (entry.is_empty() or not bool(entry.get("pc", false)) or Api.base_url == ""):
+		return {"err_code": "not_connected", "text_ko": text_for("not_connected")}
 	if entry.is_empty() or str(entry.get("phone", "")) == "":
-		return {"err_code": "not_on_phone", "text_ko": ERR_TEXT["not_on_phone"]}
-	return {"err_code": "needs_pc", "text_ko": ERR_TEXT["needs_pc"]}
+		return {"err_code": "not_on_phone", "text_ko": text_for("not_on_phone")}
+	var r: Dictionary = LocalApi.why_none(method, path, body)
+	if str(r.get("err_code", "")) == "":
+		return {"err_code": "needs_pc", "text_ko": text_for("needs_pc")}
+	if str(r.get("text_ko", "")) == "":
+		r["text_ko"] = text_for(str(r["err_code"]))
+	return r
 
 
-## Capability table for the settings card and tests (§5.3). A1 fills `use`/`phone`/`pc`/`why` per key.
+## True at most once per FALLBACK_TOAST_SEC: the caller may then show "PC에 닿지 않아 폰에서 처리했어요".
+func take_fallback_toast() -> bool:
+	var t: float = now_sec()
+	if t - _last_fallback_toast < FALLBACK_TOAST_SEC:
+		return false
+	_last_fallback_toast = t
+	return true
+
+
+## Capability table for the settings card and tests (§5.3).
 func caps() -> Dictionary:
 	var items := {}
+	var md: String = normalize_mode(mode)
+	var connected: bool = pc_ready()
 	for k in CAP_KEYS:
-		items[k] = {"use": "pc" if pc_ready() else "none", "phone": false, "pc": pc_ready(), "why": ""}
-	return {"mode": mode, "pc": {"connected": pc_ready(), "flaky": pc_flaky()}, "items": items}
+		var spec: PackedStringArray = str(CAP_PATH[k]).split(" ")
+		var path: String = spec[1]
+		var body := {}
+		if path.ends_with("#ai"):
+			path = path.trim_suffix("#ai")
+			body = {"source": "ai"}
+		var method: String = spec[0]
+		var entry: Dictionary = policy_for(method, path, body)
+		var pc_has: bool = bool(entry.get("pc", false)) and Api.base_url != ""
+		var phone_has: bool = LocalApi.available(method, path, body)
+		var use: String = decide(method, path, body)
+		if k == "phoneme":
+			# Stage 1 has no phone phoneme analysis; the PC does it (when PC use is allowed at all).
+			phone_has = false
+			use = "pc" if (md != "phone" and pc_has and not pc_flaky()) else "none"
+		elif k == "tts":
+			phone_has = bool(Tts.call("system_voices_ok")) if Tts.has_method("system_voices_ok") else false
+			if Tts.has_method("engine_now"):
+				var e: String = str(Tts.call("engine_now"))
+				use = "phone" if e == "system" or e == "phone" else ("pc" if e == "pc" else "none")
+			else:
+				use = "pc" if (md != "phone" and connected and pc_has) else ("phone" if (md != "pc" and phone_has) else "none")
+		var why := ""
+		if use == "none":
+			why = "not_on_phone" if k == "phoneme" else str(why_none(method, path, body).get("err_code", ""))
+		items[k] = {"use": use, "phone": phone_has, "pc": pc_has, "why": why}
+	return {"mode": md, "pc": {"connected": connected, "flaky": pc_flaky()}, "items": items}
 
 
 static func text_for(err_code: String) -> String:

@@ -207,6 +207,12 @@ func refresh_curriculum() -> void:
 	var req_call = Api.get_json("/curriculum", Api.TIMEOUT_SHORT, false)
 	var res: Dictionary = await req_call.wait()
 	if res["ok"] and _valid_curriculum(res["data"]):
+		# A phone-side answer (LocalApi: the bundled copy, with via/degraded keys) is not a PC answer: it is not cached
+		# and does not set curriculum_from_backend. Store already holds the bundled copy (or the cache of an earlier
+		# PC answer, which must not be replaced by the older bundled one), so there is nothing to apply.
+		var d: Variant = res["data"]
+		if d is Dictionary and ((d as Dictionary).has("via") or (d as Dictionary).has("degraded")):
+			return
 		curriculum = res["data"]
 		curriculum_from_backend = true
 		Progress.write_text_atomic(curriculum_cache_path, JSON.stringify(curriculum))

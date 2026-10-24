@@ -34,6 +34,12 @@ const EXIT_GRACE_MSEC := 1500
 ## POST paths that are safe to send twice (no side effects on the PC). Every GET is safe as well.
 const IDEMPOTENT_POST := ["/tts", "/stt", "/score", "/prosody", "/sync/push"]
 const IDEMPOTENT_POST_PREFIX := ["/reading/"]
+## Requests that may be repeated on the phone after the PC failed with a transport error (no side effects).
+## Every GET, IDEMPOTENT_POST, /reading/*, plus the POSTs below. The AI ones are only repeated when the phone's own
+## AI is available (LocalApi.available is required for every fallback anyway).
+const FALLBACK_POST := ["/lesson", "/missions", "/missions/check", "/chat", "/fix", "/feedback", "/missions/judge"]
+const FALLBACK_POST_PREFIX := ["/practice/"]
+const FALLBACK_TOAST := "PC에 닿지 않아 폰에서 처리했어요"
 
 ## Overridable for tests: `godot ... -- --api=http://127.0.0.1:8771`
 var base_url: String = BASE_URL
@@ -106,6 +112,10 @@ class ApiCall:
 	var use_auth: bool = true
 	var retries: int = 0
 	var in_flight: bool = false
+	## Went through Route.decide() (false for requests to an explicit address).
+	var routable: bool = false
+	## The request body (kept for a phone fallback).
+	var body: Dictionary = {}
 	var _req: HTTPRequest = null
 
 	## Awaitable: returns immediately if already finished.
@@ -175,6 +185,25 @@ func _start(method: int, path: String, body: Variant, timeout: float, report: bo
 		req_call.payload = JSON.stringify(body)
 	active_count += 1
 	req_call.on_cancel = func() -> void: active_count = maxi(0, active_count - 1)
+	if base_override == "":
+		# Route hook (docs/phone_standalone_design.md §4.1): "pc" keeps the code below, "phone" is served by LocalApi
+		# without any network, "none" fails at once with a Korean reason. Explicit-address requests are never routed.
+		req_call.routable = true
+		var m: String = "GET" if method == HTTPClient.METHOD_GET else "POST"
+		var body_dict: Dictionary = body if body is Dictionary else {}
+		req_call.body = body_dict
+		var via: String = Route.decide(m, path, body_dict)
+		if via == "phone":
+			_run_phone(req_call, m, path, body_dict, report)
+			return req_call
+		if via == "none":
+			var why: Dictionary = Route.why_none(m, path, body_dict)
+			var ec: String = str(why.get("err_code", "needs_pc"))
+			var text: String = str(why.get("text_ko", ""))
+			if text == "":
+				text = Route.text_for(ec)
+			_finish_later(req_call, _fail(Route.http_for(ec), text, ec, {"error": text, "code": ec, "via": "phone"}), report)
+			return req_call
 	if req_call.base == "":
 		# A phone that is not paired yet: no network, no 127.0.0.1.
 		_finish_later(req_call, _fail(0, NOT_CONNECTED_TEXT, "not_connected"), report)
@@ -184,6 +213,18 @@ func _start(method: int, path: String, body: Variant, timeout: float, report: bo
 		var msg := "요청을 보내지 못했어요. 앱을 다시 시작해 주세요. (코드 %d)" % err
 		_finish_later(req_call, _fail(0, msg), report)
 	return req_call
+
+
+## Serves `req_call` with a phone handler (no HTTPRequest, `sent_count` untouched). A cancel in the meantime wins:
+## the late handler result is dropped.
+func _run_phone(req_call: ApiCall, method: String, path: String, body: Dictionary, report: bool) -> void:
+	var res: Dictionary = await LocalApi.dispatch(method, path, body)
+	if req_call.done:
+		return
+	active_count = maxi(0, active_count - 1)
+	if report and not res["ok"] and res["error"] != "":
+		Toast.error(res["error"])
+	req_call._complete(res)
 
 
 ## Creates the HTTPRequest for `req_call` and sends it. Used for the first try and for the single retry.
@@ -240,6 +281,10 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 		req_call.retries += 1
 		_retry_later(req_call, report)
 		return
+	if result != HTTPRequest.RESULT_SUCCESS and _can_fall_back(req_call):
+		# The PC did not answer (auto mode): do the same request once on the phone, then skip the PC for a while.
+		_fall_back(req_call, report)
+		return
 	active_count = maxi(0, active_count - 1)
 	var res: Dictionary
 	if result != HTTPRequest.RESULT_SUCCESS:
@@ -268,6 +313,46 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 		if code == 401 and req_call.use_auth and token != "" and (err_code == "token_missing" or err_code == "token_invalid") and not _auth_failed_sent:
 			_auth_failed_sent = true
 			auth_failed.emit(err_code)
+	if report and not res["ok"] and res["error"] != "":
+		Toast.error(res["error"])
+	req_call._complete(res)
+
+
+## Side-effect-free requests that may be repeated on the phone after a transport failure of the PC.
+static func is_fallback_safe(method: int, path: String) -> bool:
+	if is_idempotent(method, path):
+		return true
+	var p: String = path.split("?")[0]
+	if method == HTTPClient.METHOD_POST and p in FALLBACK_POST:
+		return true
+	for pre in FALLBACK_POST_PREFIX:
+		if p.begins_with(pre):
+			return true
+	return false
+
+
+func _can_fall_back(req_call: ApiCall) -> bool:
+	if not req_call.routable or not Route.is_phone() or Route.normalize_mode(Route.mode) != "auto":
+		return false ## the PC app never falls back to the phone
+	var m: String = "GET" if req_call.method == HTTPClient.METHOD_GET else "POST"
+	var p: String = req_call.path.split("?")[0]
+	if m == "GET" and p == "/health":
+		return false ## a probe of the PC itself: its failure must stay visible
+	if not is_fallback_safe(req_call.method, req_call.path):
+		return false
+	return LocalApi.available(m, req_call.path, req_call.body)
+
+
+func _fall_back(req_call: ApiCall, report: bool) -> void:
+	var m: String = "GET" if req_call.method == HTTPClient.METHOD_GET else "POST"
+	Route.mark_pc_flaky()
+	Route.fell_back.emit(req_call.path.split("?")[0])
+	if Route.take_fallback_toast():
+		Toast.info(FALLBACK_TOAST)
+	var res: Dictionary = await LocalApi.dispatch(m, req_call.path, req_call.body)
+	if req_call.done:
+		return
+	active_count = maxi(0, active_count - 1)
 	if report and not res["ok"] and res["error"] != "":
 		Toast.error(res["error"])
 	req_call._complete(res)
