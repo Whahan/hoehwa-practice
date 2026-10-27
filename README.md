@@ -1,6 +1,6 @@
 # 회화 연습 프로그램 (영어·일본어)
 
-한국어 사용자를 위한 Windows용(안드로이드 폰에서도 PC에 연결해 사용 가능) 영어·일본어 말하기 연습 프로그램입니다. 1년 커리큘럼을 따라 매일 레슨을 풀고, AI 원어민과 대화하고, 내 발음을 녹음해 채점받습니다. 음성 인식·목소리·발음 채점은 내 PC 안에서 돌아가고 비용이 들지 않습니다.
+한국어 사용자를 위한 Windows용(안드로이드 폰에서도 PC에 연결해 쓰거나, 1.3부터는 PC 없이 폰만으로도 사용 가능) 영어·일본어 말하기 연습 프로그램입니다. 1년 커리큘럼을 따라 매일 레슨을 풀고, AI 원어민과 대화하고, 내 발음을 녹음해 채점받습니다. 음성 인식·목소리·발음 채점은 내 PC 안에서 돌아가고 비용이 들지 않습니다.
 
 - **다운로드:** https://github.com/Whahan/hoehwa-practice/releases/latest
 - **저장소:** https://github.com/Whahan/hoehwa-practice
@@ -63,7 +63,7 @@
 
 ## 휴대폰에서 쓰기 (안드로이드)
 
-안드로이드 폰에서 레슨·대화·읽기·복습·로드맵을 쓸 수 있습니다. 음성 인식·목소리·채점·AI는 여전히 **내 PC**가 하고, 폰은 화면과 마이크만 맡습니다. 그래서 PC 앱이 켜져 있어야 합니다. **연결은 Tailscale로만 합니다**(같은 와이파이나 USB 테더링 같은 사설 네트워크로는 연결되지 않고, PC를 자동으로 찾아 주는 기능도 없습니다). PC와 폰에 Tailscale을 설치하고 같은 구글 계정으로 로그인하면, 와이파이가 달라도(밖에서 모바일 데이터로도) 폰에서 이 PC의 회화 연습을 쓸 수 있고, 통신은 Tailscale이 암호화합니다. 폰 연결은 기본으로 꺼져 있고, 켜도 연결 코드를 입력한 폰만 쓸 수 있습니다. (PC 앱도 휴대폰 연결이 들어 있는 버전이어야 합니다. 폰 앱은 PC 앱과 같은 버전으로 나옵니다.)
+안드로이드 폰에서 레슨·대화·읽기·복습·로드맵을 쓸 수 있습니다. PC와 연결하면 음성 인식·목소리·채점·AI는 **내 PC**가 하고, 폰은 화면과 마이크만 맡습니다(이때는 PC 앱이 켜져 있어야 합니다). **PC 없이 폰만으로 쓰기(1.3부터):** 연결 화면의 "PC 없이 시작"을 누르면 레슨·복습·받아쓰기·쉐도잉 문장 듣기(폰에 설치된 음성)·미션 대본·영어 읽기와 단어 뜻·예문·히라가나/가타카나 익히기를 폰 안에서 합니다. 말하기는 "내 목소리 듣기 / 원어민 듣기" 뒤 스스로 "잘했어요 / 다시"로 평가합니다. 발음 채점·AI 대화·억양·음소 분석·일본어 읽기 분석은 PC에 연결했을 때만 됩니다. 자세한 것은 [INSTALL.md](INSTALL.md) 5절에 있습니다. **연결은 Tailscale로만 합니다**(같은 와이파이나 USB 테더링 같은 사설 네트워크로는 연결되지 않고, PC를 자동으로 찾아 주는 기능도 없습니다). PC와 폰에 Tailscale을 설치하고 같은 구글 계정으로 로그인하면, 와이파이가 달라도(밖에서 모바일 데이터로도) 폰에서 이 PC의 회화 연습을 쓸 수 있고, 통신은 Tailscale이 암호화합니다. 폰 연결은 기본으로 꺼져 있고, 켜도 연결 코드를 입력한 폰만 쓸 수 있습니다. (PC 앱도 휴대폰 연결이 들어 있는 버전이어야 합니다. 폰 앱은 PC 앱과 같은 버전으로 나옵니다.)
 
 **폰에 설치 (한 번만)**
 
@@ -164,7 +164,9 @@
 | [wav2vec2 espeak](https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft) | 음소 발음 채점 | Apache 2.0 |
 | [LanguageTool](https://languagetool.org) | 문법 교정 (설치 때 내려받음) | LGPL 2.1 |
 | [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) | 복습 주기 알고리즘 (GDScript로 옮김) | MIT |
-| [pyopenjtalk](https://github.com/r9y9/pyopenjtalk), [spaCy](https://spacy.io), [wordfreq](https://github.com/rspeer/wordfreq) | 일본어 읽기, 단어 원형, 단어 빈도 | 각 프로젝트 라이선스 |
+| [pyopenjtalk](https://github.com/r9y9/pyopenjtalk), [spaCy](https://spacy.io) | 일본어 읽기, 단어 원형 | 각 프로젝트 라이선스 |
+| [wordfreq](https://github.com/rspeer/wordfreq) 단어 빈도 데이터 | 단어 난이도·연습 문장 고르기 (폰 데이터 묶음에도 포함) | 코드 MIT, 데이터 CC BY-SA 4.0 |
+| 폰용 단어 뜻 사전(영어 약 1만·일본어 약 5천 단어) | 폰 단독 모드의 단어 뜻 | 이 프로젝트가 로컬 AI(Qwen3 8B)로 만든 자료. 일부 뜻이 틀릴 수 있습니다 |
 | [Ollama](https://ollama.com) + Qwen3 8B | 오프라인 로컬 AI | MIT / Apache 2.0 |
 | [OpenCode](https://opencode.ai) (DeepSeek V4.1 Flash 무료) | 기본 AI 엔진 (각 사용자 본인 계정) | OpenCode 이용약관 |
 
