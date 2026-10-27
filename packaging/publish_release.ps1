@@ -104,8 +104,10 @@ if ($WithApk -and -not $SkipBuild) {
 $tracked = (Native git @("-C", $App, "ls-files"))[0]
 $badName = '(^|/)(secrets\.json[^/]*|auth\.json|\.env(\.[^/]*)?|progress\.json|prefs\.json|shots_progress\.json|release\.pass|keystore\.properties|lan_devices[^/]*\.json[^/]*)$'
 $badDir  = '^(runtime|dist|backups?)/|^backend/(models|data|cache|logs|tools)/|(^|/)\.venv/|^packaging/(out|locks)/|^godot/\.godot/|(^|/)__pycache__/'
+# backend/tools/ holds downloads and caches; only the data-pack build scripts that .gitignore lets in may be tracked
+$toolsAllowed = '^backend/tools/(build_phone_pack|phone_pack_ja|phone_pack_espeak|make_mission_golden|make_reading_golden|build_gloss_pack)\.py$'
 $badExt  = '\.(sqlite[0-9]*|sqlite-(journal|wal)|pem|key|log|pyc|keystore|jks|p12|pfx|apk|aab|idsig)$'
-$forbidden = $tracked | Where-Object { $_ -match $badName -or $_ -match $badDir -or $_ -match $badExt }
+$forbidden = $tracked | Where-Object { $_ -match $badName -or ($_ -match $badDir -and $_ -notmatch $toolsAllowed) -or $_ -match $badExt }
 if ($forbidden) { throw ("files that must not be published are tracked:`n" + ($forbidden -join "`n")) }
 $keyRegex = '((^|[^A-Za-z0-9_])sk-(ant-|proj-)?[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
 $keyHits = Native git @("-C", $App, "grep", "-I", "-n", "-E", $keyRegex) -AllowFail
