@@ -29,7 +29,7 @@ app/
 ## 엔드포인트
 
 ### GET /health
-`{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "qwen3:8b", "llm_provider": "opencode"|"ollama", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}}`
+`{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "qwen3:8b", "llm_provider": "opencode"|"ollama", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}, "song": bool, "song_v": 1}`
 각 기능이 준비됐는지. Godot는 시작할 때 이것으로 서버 기동을 확인한다.
 - `grammar`: LanguageTool(오프라인 문법 검사기)과 Java 17+가 있어 쓸 수 있는지.
 - `llm_fallback.active`: 선택한 엔진(무료 DeepSeek)이 한도·권한 문제로 막혀서 `until`까지 로컬 AI가 대신 답하는 중인지. `reason`은 화면에 그대로 보여 줄 한국어 (예: "DeepSeek V4.1 Flash (무료 · OpenCode) 사용 한도에 도달해서 23:21까지 로컬 AI로 답해요."). 로컬 AI(Ollama)도 연결되지 않으면 `active`는 true이지만 `reason`은 "AI 엔진을 쓸 수 없어요: …"로 시작한다.
@@ -259,7 +259,7 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 ### 구조
 - 켜면 `127.0.0.1:<port>`(위 "공통")는 그대로 두고, **추가 리스너**가 **이 PC의 Tailscale IPv4 주소(들)`:<lan.port>`(기본 8775)에만** 바인딩해 한 프로세스 안의 보조 스레드에서 같은 앱을 서비스한다. `0.0.0.0`에는 바인딩하지 않는다(같은 와이파이·LAN 주소로는 포트가 열려 있지 않다). 서버 재시작은 없다. 끄면 그 포트가 바로 닫힌다.
 - **인증은 리스너 기준이다.** 추가 리스너로 들어온 요청은 소스 IP가 127.0.0.1이어도 전부 `Authorization: Bearer hp1_…` 토큰이 필요하다. 루프백 리스너(PC 앱)는 지금처럼 토큰이 없다.
-- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`, 그리고 영어 v1.1의 `GET /practice/ping` `GET /practice/sentences` `GET /practice/phonemes` `GET /practice/phoneme` `GET /missions` `POST /missions/check` `POST /missions/judge`, 1.2 기록 동기화의 `GET /sync/pull` `POST /sync/push`(모두 25개). 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
+- 추가 리스너에는 **허용 목록**만 열린다: `GET /health` `GET /curriculum` `POST /tts` `GET /tts/voices` `POST /stt` `POST /score` `POST /prosody` `POST /chat` `POST /feedback` `POST /fix` `POST /lesson` `POST /reading/analyze` `POST /reading/gloss` `GET /examples` `GET /lan/me` `POST /lan/unpair`, 그리고 영어 v1.1의 `GET /practice/ping` `GET /practice/sentences` `GET /practice/phonemes` `GET /practice/phoneme` `GET /missions` `POST /missions/check` `POST /missions/judge`, 1.2 기록 동기화의 `GET /sync/pull` `POST /sync/push`, 노래 공부의 `POST /song/upload` `GET /song/upload` `POST /song/jobs` `GET /song/jobs/status` `POST /song/jobs/cancel` `GET /song/result` `GET /song/audio` `POST /song/jobs/release` `POST /song/enrich`(모두 34개). 그 밖(`/mic/*`, `/llm*`, `/docs`, `/openapi.json`, `/debug/*`, 모르는 경로, GET/POST 말고 다른 메서드)은 403 `lan_forbidden`, 관리 엔드포인트(`/lan`, `/lan/code`, `/lan/devices/*`)는 403 `local_only`. 토큰 확인이 먼저라서 토큰이 없으면 둘 다 401이다.
 - **출발지 주소 필터**: 추가 리스너는 **루프백과 Tailscale 범위**(IPv4 100.64.0.0/10, IPv6 `fd7a:115c:a1e0::/48`)에서 온 연결만 받는다. 사설(10/8, 172.16/12, 192.168/16)·링크로컬·그 밖의 ULA·공인 주소에서 온 연결은 **응답 없이 바로 끊는다**(`/hello`도 안 보인다). `::ffff:100.x` 형태(IPv4-mapped)는 풀어서 비교한다.
 - **Tailscale 주소 탐지**: Windows `GetAdaptersAddresses`(ctypes, 새 의존성 없음)로 찾는다: 이름이나 설명에 `Tailscale`(대소문자 무시)이 들어가고 **켜져 있는(up) 어댑터**의 100.64/10 IPv4만, 최대 3개. 이름이 Ethernet 등인 어댑터의 100.x(통신사 CGNAT)는 Tailscale로 치지 않는다. 켤 때마다 새로 탐지하고(`GET /lan`의 표시용 값은 5초 캐시), 실패하거나 Windows가 아니면 빈 목록이다. 리스너는 IPv4 전용이라 IPv6 주소는 표시하지 않는다.
 - **Tailscale 주소가 없으면 켜지지 않는다**: `POST /lan {"enabled": true}`는 409 `no_tailscale`이고 아무것도 열지 않는다(`error`: "이 PC에서 Tailscale이 꺼져 있거나 설치되지 않았어요. tailscale.com 에서 설치하고 휴대폰과 같은 구글 계정으로 로그인한 뒤 다시 켜 주세요."; `GET /lan`의 `network_reason`도 같은 문구). 탐지한 주소에 bind 할 수 없을 때(주소가 사라짐)도 같은 409다. 시작할 때 저장된 `enabled`가 true여도 같은 판정을 하고, 주소가 없으면 꺼진 채 시작한다(`error`에 이유, 저장된 설정은 그대로).
@@ -447,6 +447,64 @@ backend/data/sync/
 | 503 | `sync_off` | 허브 폴더를 쓸 수 없음, 또는 `--sync-dir` 없이 띄운 시험 서버 | 이 PC에서는 기록 동기화를 쓸 수 없어요. |
 
 - 폰 경로에서 게이트가 먼저 내는 응답(401 `token_missing`·`token_invalid`, 403 `lan_forbidden`, 408 `request_timeout`, 429 `rate_limited`, 본문 16 MB 초과 413 `too_large`)은 위 "휴대폰 연결" 절의 오류 코드와 같다.
+
+## 노래 공부 (/song/*)
+
+사용자가 가진 음악 파일(+가사)로 줄 시간이 맞는 곡을 만든다. 구현은 `backend/song.py`, 설계는 `docs/song_study_design.md` §5.1·§3.6·§12.1b·§12.1c다. 서버는 곡을 **보관하지 않는다**: 작업 폴더는 `backend/cache/song_jobs/`(git·배포 제외)이고, 클라이언트가 `release`하면 즉시, 아니면 완료 24시간·미완료 업로드 2시간 뒤에 지운다. 가사·제목·음원은 로그에 쓰지 않는다. 아래 JSON은 모두 가짜 예시다.
+
+공통: 오류는 `{"error": "한국어 문장", "code": "기계가 읽는 코드"}`(`code`가 있는 것이 이 절의 특징이다). 요청 본문이 JSON이 아니거나 필드가 틀리면 422가 아니라 400 `bad_request`. `upload_id`는 소문자 hex 32자(클라이언트가 만든다), `job`은 `j_` + hex 8자이며 정규식에 안 맞으면 400(경로에 쓰이지 않는다). 폰은 `Authorization: Bearer hp1_…`(휴대폰 연결 허용 목록에 아래 9개 경로가 들어 있다), PC 앱은 루프백이라 토큰 없음. 옛 서버에는 `/health`의 `song` 키가 없다 → 클라이언트가 "PC 프로그램을 최신으로 업데이트해 주세요"를 띄운다.
+
+한도(`song.py` 상단): 파일 ≤ 64 MiB(`MAX_SONG_BYTES`), 길이 ≤ 600초(`MAX_SONG_SEC`, 1초 미만도 거절), 업로드 조각 원본 ≤ 3 MiB(`CHUNK_BYTES`), 가사 ≤ 400줄(`MAX_LINES`)·한 줄 200자(`MAX_LINE_CHARS`, 넘으면 잘라서 `lyrics_truncated`)·합계 20000자(`MAX_LYRIC_CHARS`), 대기열 3(`QUEUE_MAX`), 작업 폴더 합계 1 GiB(`FOLDER_MAX`)와 디스크 여유 1 GiB.
+
+### GET /health 추가 필드
+`"song": bool`(PyAV·numpy가 있어 곡 처리를 할 수 있음), `"song_v": 1`.
+
+### POST /song/upload — 음악 파일 한 조각
+요청 `{"upload_id": "<hex32>", "index": 0, "total": 3, "name": "x.m4a", "data_b64": "…"}` (`name`의 확장자는 mp3 ogg wav m4a flac aac opus 중 하나, 조각 원본 ≤ 3 MiB). 조각은 0번부터 순서대로.
+- 중간 조각 → `{"upload_id", "received": 1, "bytes": 3145728}`
+- 마지막 조각(`index == total-1`) → 서버가 파일을 끝까지 읽어 확인하고 MP3로 정규화한 뒤 `{"upload_id", "done": true, "bytes": 3702144, "duration": 231.42, "format": "mp3", "sha256": "<64hex>"}`. `bytes`·`sha256`은 **서버가 보관하는 MP3**의 값이다(이미 44.1 kHz·최대 스테레오·160 kbps 이하 MP3면 바이트 그대로, 아니면 128 kbps로 다시 인코딩). `/song/audio`가 돌려주는 파일과 같다.
+- 같은 조각을 다시 보내면 200(멱등). 이미 받은 번호보다 앞서면 409 `upload_gap` + `"expected": n`. 새 업로드가 0이 아닌 번호로 시작해도 `expected: 0`.
+- 오류: 400 `bad_request` `bad_index`, 413 `too_large`(누적 64 MiB 초과) `too_long`(600초 초과), 415 `bad_audio`(못 읽음·오디오 없음·DRM·확장자 모름·1초 미만), 503 `storage_full` `song_unavailable`. 413·415면 업로드 폴더를 바로 지운다.
+
+### GET /song/upload?upload_id=… — 이어 올리기
+`{"upload_id", "next": 2, "bytes": 6291456, "done": false}`. 모르는 업로드는 404 `no_upload`. 서버가 다시 시작돼도 업로드 조각은 남아 있다(2시간).
+
+### POST /song/jobs — 작업 시작 (202)
+```json
+{"upload_id": "<hex32>", "lang": "en", "title": "Demo", "artist": "Someone",
+ "lyrics": {"source": "none|pasted|lrclib", "lrclib_id": 123,
+            "lines": [{"text": "first line", "t": 12.3, "p": 0}, {"text": "", "t": null, "p": 0}]},
+ "options": {"translate": true, "gloss": true, "verify": true, "precise": false, "ai_ok": false}}
+```
+- `lyrics`가 없거나 `source` `none`이면 가사 없음(받아 적어 줄을 만든다). 줄의 `t`(초) 대부분이 있으면 LRC 시간으로 쓰고(`verify`가 켜져 있으면 곡의 20·50·80% 지점 30초 세 곳만 받아 적어 전체 오프셋을 추정; 0.25초 미만은 잡음으로 보고 0, 적용하면 `offset_guess` 경고), 없으면 전체를 받아 적어 가사와 정렬한다. 빈 줄은 건너뛰고 연(`p`)은 유지한다.
+- **`ai_ok`**(없으면 false): 가사를 AI 서비스로 보내도 되는가. false면 번역·단어 뜻을 AI에 보내지 않고 `ko:""`와 경고 `ko_missing`/`gloss_missing`으로 끝낸다(외부 전송 0). 클라이언트는 `ai_ok = song_consent AND 곡별 해석 켬`을 보낸다. 값은 모두 불리언이어야 한다(아니면 400).
+- 응답 202 `{"job": "j_8hex", "state": "queued", "queue_pos": 0}`. `queue_pos`는 앞에 있는 작업 수.
+- 오류: 400 `bad_request`(필드·가사 400줄 초과·합계 20000자 초과), 404 `no_upload`, 409 `upload_gap`(업로드가 아직 끝나지 않음, `expected`) `job_running`(같은 업로드로 이미 대기·실행 중인 작업이 있음), 429 `queue_full`(대기·실행 중 작업이 3개).
+
+### GET /song/jobs/status?job=…
+```json
+{"job": "j_1a2b3c4d", "state": "running", "stage": "asr", "pct": 38, "eta_sec": 41.5,
+ "message_ko": "받아 적는 중 (3/9)", "warnings": [], "error": null, "queue_pos": 0}
+```
+`state`: `queued` `running` `done` `failed` `cancelled`. `stage`: `decode` `asr` `align` `enrich` `package`(끝나면 ""). `pct`는 줄어들지 않고 100에서 `done`. `eta_sec`는 받아 적는 동안(처음 2창 뒤)과 해석 동안만 숫자, 아니면 null. `queue_pos`는 `queued`일 때만. `failed`면 `error: {"code", "message"}`: `asr_failed` `no_speech`(소리 없는 파일) `model_missing` `server_restart`(PC 프로그램이 다시 시작됨; 같은 `upload_id`로 `POST /song/jobs`를 다시 호출) `internal`. 해석이 실패해도 작업은 `done`이고 `warnings`에 `ko_missing`/`gloss_missing`. `warnings` 값: `low_match` `no_vocals` `ko_missing` `gloss_missing` `est_times` `offset_guess` `duration_mismatch` `hallucination_cut` `lyrics_truncated`. 모르는 작업 404 `no_job`.
+
+### POST /song/jobs/cancel
+`{"job": "j_…"}` → `{"ok": true, "state": "cancelled"}`를 곧바로 돌려준다(이미 끝났으면 `state`는 그대로, `ok: true`). 스레드는 창 사이에 멈추고 작업 폴더를 지운다(업로드 폴더는 남아서 같은 파일로 다시 시작할 수 있다).
+
+### GET /song/result?job=…
+곡 JSON(설계 §5.2, `id` 없음). `audio`는 `{"file": "audio.mp3", "bytes", "sha256", "orig_name", "parts": 2}`. 서버가 정한 시간(`t0` `t1` 단어 `s` `e`)에 LRC 오프셋 추정이 **이미 더해져 있고** `offset`은 항상 0.0이다. 일본어는 줄마다 `reading`(히라가나)·`pron`(가타카나), 단어마다 `reading`. 끝나지 않았으면(취소·실패 포함) 409 `not_done`.
+
+### GET /song/audio?job=…&part=0
+`{"part": 0, "parts": 2, "bytes": 3145728, "total_bytes": 3702144, "data_b64": "…", "sha256": "<서버 MP3 전체>"}` — 조각 원본 ≤ 3 MiB. 이어 붙인 바이트의 SHA-256이 `sha256`과 같아야 설치한다(다르면 `release`하지 않고 다시 받는다). `part`가 범위 밖이면 400 `bad_index`, 미완료 409 `not_done`.
+
+### POST /song/jobs/release
+`{"job": "j_…"}` → `{"ok": true, "removed": true}` — 작업·업로드 폴더를 즉시 삭제(이미 없으면 `removed: false`). 대기·실행 중이면 409 `job_running`(먼저 취소). `{"upload_id": "<hex32>"}`만 보내면 작업이 없는 업로드를 지운다.
+
+### POST /song/enrich — 고친 줄의 읽기·해석 다시 만들기 (동기, 최대 60초)
+요청 `{"lang": "en", "lines": [{"i": 3, "text": "…"}], "tasks": ["reading", "translate", "tokens", "gloss"], "known": ["love"], "ai_ok": false}` — 줄은 1~20개(넘으면 400 `bad_request`), 줄당 200자까지. 응답 `{"lines": [{"i": 3, "reading": "", "pron": "", "ko": "…", "words": [{"w", "lemma", "level", "zipf", "content"}]}], "glossary": {"lemma": {"pos", "ko", "ipa", "pron"}}, "warnings": []}` — 요청한 `tasks`의 키만 줄에 들어간다. `ai_ok`가 false면 `translate`·`gloss`는 AI에 보내지 않고 `ko:""` + `ko_missing`/`gloss_missing`. 60초를 넘기면 504 `enrich_timeout`, 동시에 2건을 넘기면 429 `queue_full`.
+
+### 시험
+`HOEHWA_TEST_HOOKS=1`일 때만 읽는 환경 변수: `HOEHWA_SONG_DIR`(작업 폴더), `HOEHWA_SONG_TTL_SEC`(두 TTL을 이 초로), `HOEHWA_SONG_FAKE_ASR=1`(가짜 Whisper: 가사 단어를 곡 전체에 고르게 "들은" 것으로 하고, 가사가 없으면 번호 붙은 가짜 단어), `HOEHWA_SONG_FAKE_ASR_DELAY`(창마다 걸리는 초). `lan_stub_server.py --song [--song-dir D] [--song-delay S]`는 모델 없이 이 API 전체(가짜 전사·가짜 AI)를 낸다. 시험은 `backend/test_song.py`(서버 없이 약 1분), `--stub PORT`(스텁 실제 HTTP), `--base URL --song-file F.mp3 --lyrics-json TRUTH.json`(실제 모델이 있는 시험 서버).
 
 ## 학습 단계 기준 (stage)
 | stage | 영어 | 일본어 |

@@ -2859,7 +2859,8 @@ def health():
     return {"ok": True, "stt": _stt_model is not None, "tts": {"en": _tts_ready["en"], "ja": _tts_ready["ja"]}, "tts_device": _tts_device,
             "llm": llm_available(), "llm_model": CFG["llm_model"], "llm_provider": llm_provider(), "score": _stt_model is not None and _ojt is not None,
             "phoneme": features.phoneme_ready(), "tatoeba": readmode.tatoeba_ready(),
-            "grammar": grammar.installed(), "llm_fallback": _fallback_status()}
+            "grammar": grammar.installed(), "llm_fallback": _fallback_status(),
+            "song": song.available(), "song_v": song.SONG_V}
 
 
 def _fallback_status():
@@ -3191,11 +3192,15 @@ def examples(lang: str = "en", q: str = "", limit: int = 5):
 # The routers carry no auth code: the phone link (lan.py) gates them per listener like every other route.
 import practice
 import missions
+import song   # song study (/song/*): upload, job queue, result, enrich (docs/song_study_design.md)
 
 practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, ja_pron=ja_pron, readmode=readmode, lesson_rules=lesson_rules, features=features)
 missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)
+song.init(log=log, ApiError=ApiError, readmode=readmode, ollama_json=ollama_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
+          ja_to_kata=ja_to_kata, get_model=get_stt, run_lock=_stt_run_lock, stt_info=_stt_info)
 app.include_router(practice.router)
 app.include_router(missions.router)
+app.include_router(song.router)
 
 
 # ----------------------------------------------------------------------------------------------

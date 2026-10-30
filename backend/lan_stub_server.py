@@ -14,6 +14,10 @@
   --devices-file         where tokens (SHA-256 only) are kept; default backend\\lan_devices-<tag>.json (git-ignored)
   --tag                  names the default devices file
   --sync-dir             folder of the learning-record sync hub (sync_hub.py); without it every /sync/* answers 503 sync_off
+  --song                 also serve /song/* (song.py) with a FAKE Whisper and fake readmode / LLM (no model, no network): the
+                         job pipeline, the folders and the LAN gate are real. Needs the test hooks. /health then has song:true.
+  --song-dir             job folder of --song (default backend\cache\song_jobs; give a scratch folder in tests)
+  --song-delay           seconds the fake Whisper "works" per 20 s window (default 0)
 
 Answers: /health /stt /tts(0.3 s WAV) /score /prosody /chat /mic/start /llm(POST) and the rest of the phone allow-list, plus
 lan.router (/hello /pair /lan ...). Prints "STUB_READY ..." on stdout once the app is up. Everything is fake: do not judge quality with it.
@@ -43,6 +47,7 @@ if "--no-hooks" not in sys.argv:
 
 import lan
 import sync_hub
+import song
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -57,6 +62,9 @@ ap.add_argument("--devices-file", default="")
 ap.add_argument("--lan-port", type=int, default=8863)
 ap.add_argument("--lan-enabled", action="store_true")
 ap.add_argument("--sync-dir", default="")
+ap.add_argument("--song", action="store_true", help="serve /song/* with a fake Whisper (needs the test hooks)")
+ap.add_argument("--song-dir", default="")
+ap.add_argument("--song-delay", type=float, default=0.0)
 ap.add_argument("--no-hooks", action="store_true", help="do not set the test hooks (the real Tailscale adapters decide)")
 ap.add_argument("--allow-real-ports", action="store_true", help="allow the app's real ports (never do this next to the app)")
 ARGS = ap.parse_args()
@@ -86,6 +94,11 @@ app = FastAPI(title="Phone link stub backend", lifespan=lifespan)
 lan.attach(app, CFG, lambda cfg: None, log, BASE, tag=ARGS.tag or None, devices_file=ARGS.devices_file or None,
            persist=False, auto_start=True)
 sync_hub.attach(app, BASE, log, sync_dir=ARGS.sync_dir or None, test_server=True)
+if ARGS.song:
+    if os.environ.get("HOEHWA_TEST_HOOKS") != "1":
+        sys.exit("--song needs the test hooks (do not combine it with --no-hooks)")
+    song.init(log=log, root=ARGS.song_dir or None, fake_asr=True, fake_delay=ARGS.song_delay, **song.fake_helpers())
+    app.include_router(song.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -117,7 +130,8 @@ WAV = _wav()
 def health():
     return {"ok": True, "stub": True, "stt": True, "tts": {"en": True, "ja": True}, "tts_device": "cpu", "llm": True,
             "llm_model": "stub", "llm_provider": "opencode", "score": True, "phoneme": True, "tatoeba": True, "grammar": True,
-            "llm_fallback": {"active": False, "until": None, "reason": ""}}
+            "llm_fallback": {"active": False, "until": None, "reason": ""},
+            **({"song": True, "song_v": song.SONG_V} if ARGS.song else {})}
 
 
 @app.get("/curriculum")

@@ -84,6 +84,10 @@ ALLOW = {
     ("GET", "/missions"), ("POST", "/missions/check"), ("POST", "/missions/judge"),
     # 1.2 learning-record sync hub (sync_hub.py)
     ("GET", "/sync/pull"), ("POST", "/sync/push"),
+    # song study (song.py): upload chunks, jobs, result, audio, enrich (ids go in the query/body: the gate matches exact paths)
+    ("POST", "/song/upload"), ("GET", "/song/upload"), ("POST", "/song/jobs"), ("GET", "/song/jobs/status"),
+    ("POST", "/song/jobs/cancel"), ("GET", "/song/result"), ("GET", "/song/audio"), ("POST", "/song/jobs/release"),
+    ("POST", "/song/enrich"),
 }
 
 MSG = {
