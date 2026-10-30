@@ -646,6 +646,11 @@ J0(폰)은 U2 전에. S0은 K3+K6 뒤, 결과로 K3의 기본 설정을 확정(�
 - Q3 AI 전송: **허용, 첫 사용 때 동의 시트로 알리고 곡마다 끌 수 있게**(추천대로). 로컬 Ollama 사용 시 외부 전송 없음을 시트에 표시.
 - 작업자: Haiku 작업자(`worker`)는 폐지됨 — §7 표의 `worker` 담당은 모두 `worker-hard`가 맡음.
 
+### 12.1b 계약 추가 (2026-10-30, K4 보고 반영 — §5.1보다 우선)
+- `POST /song/jobs`의 `options`와 `POST /song/enrich` 요청에 **`"ai_ok": bool`**(없으면 false)을 추가한다. 서버(K5)는 이 값을 `song_enrich.enrich_lines(..., allow_ai=ai_ok)`로 넘기고, false면 번역·단어 뜻을 AI에 보내지 않고 `ko:""`·`ko_missing`/`gloss_missing` 경고로 끝낸다(외부 전송 0).
+- 클라이언트(U2·U4b)는 `ai_ok = song_consent AND (곡별 해석 켬)`으로 보낸다. 동의 전에는 항상 false. 이 AND는 U2·U4b 합격 조건에 넣는다.
+- `song_enrich.init(...)` 연동 인자: `readmode, ollama_json, ko_ok, ja_reading, ja_pron, log, ApiError`(K5가 server.py에서 연결). `/song/enrich` 라우터가 ≤20줄·60초 제한을 직접 건다(모듈은 400줄까지 받음).
+
 ### 12.2 기본값으로 진행해도 되는 작은 결정 (반대할 때만 알려 주세요)
 | # | 결정 | 기본 |
 |---|---|---|
