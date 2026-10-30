@@ -431,6 +431,8 @@ func request_delete(id: String) -> void:
 
 
 func delete_now(id: String) -> void:
+	if is_loading(): # the list thread is using SongStore's caches; never touch the store from two threads
+		return
 	if not SongModel.is_valid_id(id):
 		return
 	if SongStore.delete(id):
@@ -454,6 +456,8 @@ func request_cleanup() -> void:
 
 
 func cleanup_now() -> void:
+	if is_loading(): # see delete_now
+		return
 	var n: int = 0
 	var bad: int = 0
 	for id in orphans.duplicate():
