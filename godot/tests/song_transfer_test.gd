@@ -643,7 +643,7 @@ func _fake_sections() -> void:
 	var all: Array = [["normal", _fake_normal], ["drop", _fake_chunk_drop], ["unreachable", _fake_upload_transport_fail],
 		["fcancel", _fake_cancel_upload], ["jcancel", _fake_cancel_job], ["sha", _fake_sha], ["failed", _fake_job_failed],
 		["poll", _fake_poll_transport], ["install", _fake_install_fail], ["restart", _fake_server_restart], ["old", _fake_old_server],
-		["jobs", _fake_job_errors], ["misc", _fake_misc]]
+		["jobs", _fake_job_errors], ["misc", _fake_misc], ["badvals", _fake_bad_values]]
 	for e in all:
 		if _want(str(e[0])):
 			await (e[1] as Callable).call()
@@ -1019,6 +1019,87 @@ func _fake_job_errors() -> void:
 		t2.queue_free()
 
 
+func _fake_bad_values() -> void:
+	print("[fake: the PC answers with null / text / negative / array / object where a number or bool is expected]")
+	# [name, answer key, field, how to set it up, what must be true afterwards]
+	var cases: Array = [
+		["health song_v", "GET /health", "song_v", "", false],
+		["upload received", "POST /song/upload:0", "received", "", false],
+		["upload done", "POST /song/upload:3", "done", "", false],
+		["upload_gap expected", "POST /song/upload:1", "expected", "gap", false],
+		["GET upload next", "GET /song/upload", "next", "preset", false],
+		["GET upload done", "GET /song/upload", "done", "preset", false],
+		["status pct", "GET /song/jobs/status", "pct", "", false],
+		["status queue_pos", "GET /song/jobs/status", "queue_pos", "", false],
+		["audio part", "GET /song/audio", "part", "", true],
+		["audio parts", "GET /song/audio", "parts", "", true],
+		["audio bytes", "GET /song/audio", "bytes", "", true],
+		["audio total_bytes", "GET /song/audio", "total_bytes", "", true]]
+	var values: Array = [["null", null], ["text", "abc"], ["negative", -5], ["array", [1, 2]], ["object", {"a": 1}]]
+	var bad_count: int = 0
+	var all_codes: bool = true
+	var no_install: bool = true
+	var no_release: bool = true
+	var pending_ok: bool = true
+	var msgs_ok: bool = true
+	var seen_ok: bool = true
+	var shown: Array = []
+	for c in cases:
+		for v in values:
+			_reset_store()
+			fake.reset()
+			var extra: Dictionary = {}
+			if c[3] == "gap":
+				fake.cfg["gap_at"] = {"POST /song/upload:1": 1}
+			if c[3] == "preset":
+				var pre: String = Crypto.new().generate_random_bytes(16).hex_encode()
+				await _http(HTTPClient.METHOD_POST, "/song/upload", {"upload_id": pre, "index": 0, "total": 4, "name": "fake.mp3", "data_b64": "AAAA"})
+				extra["upload_id"] = pre
+			fake.cfg["bad"] = {c[1]: {c[2]: v[1]}}
+			var t := _new_t(100000)
+			var r: Dictionary = _res(await _go(t, _fake_src(), _params(extra), 20.0))
+			bad_count += 1
+			var label: String = "%s = %s" % [c[0], v[0]]
+			var good_code: bool = r.get("ok") == false and r.get("err_code") == "bad_response"
+			if not good_code:
+				all_codes = false
+				shown.append("%s -> %s" % [label, str(r.get("err_code", "(no err_code)"))])
+			if not _has_hangul(str(r.get("message", ""))):
+				msgs_ok = false
+			if not _songs().is_empty():
+				no_install = false
+			if fake.count("POST /song/jobs/release") != 0:
+				no_release = false
+			# audio answers: the PC still holds the song, so the pending record stays; status / upload answers leave no job to resume
+			if c[4] and not (SongStore.pending_list().size() == 1 and r.get("resumable") == true):
+				pending_ok = false
+			if not c[4] and r.get("resumable") == true:
+				pending_ok = false
+			if t.busy:
+				seen_ok = false
+			t.queue_free()
+	ok(bad_count == 60, "bad values: %d answers tried (12 fields x 5 kinds of wrong value)" % bad_count)
+	ok(all_codes, "bad values: every one ends with ok=false, err_code=bad_response %s" % str(shown))
+	ok(msgs_ok, "bad values: every one has a Korean message")
+	ok(no_install, "bad values: nothing was installed")
+	ok(no_release, "bad values: the PC's copy was never released")
+	ok(pending_ok, "bad values: pending kept (resumable) only when the song is already finished on the PC")
+	ok(seen_ok, "bad values: the transfer is idle again after every one")
+	# the checker itself: a normal answer must not be called bad (so the cases above fail for the right reason)
+	_reset_store()
+	fake.reset()
+	var tn := _new_t(100000)
+	ok(_res(await _go(tn, _fake_src(), _params())).get("ok") == true, "self-test: the same fake without a wrong value installs fine")
+	tn.queue_free()
+	# numbers as floats (JSON has no int/float split) are fine
+	_reset_store()
+	fake.reset()
+	fake.cfg["bad"] = {"GET /song/jobs/status": {"pct": 40.0, "queue_pos": 1.0}, "POST /song/upload:0": {"received": 1.0}}
+	var tf := _new_t(100000)
+	ok(_res(await _go(tf, _fake_src(), _params())).get("ok") == true, "float-typed numbers (40.0) are accepted")
+	tf.queue_free()
+
+
 func _fake_misc() -> void:
 	print("[fake: busy, abandon, file name rules, message of a second start]")
 	_reset_store()
@@ -1299,6 +1380,11 @@ class FakeSong:
 				await get_tree().create_timer(float(dl[k]) / 1000.0).timeout
 				break
 		var res: Array = _route(m, path, q, body, entry, idx_key, key)
+		var bad: Dictionary = cfg.get("bad", {})
+		for k in [idx_key, key]:
+			if bad.has(k) and res[1] is Dictionary:
+				for f in (bad[k] as Dictionary): ## wrong-typed values in an otherwise normal answer
+					(res[1] as Dictionary)[f] = (bad[k] as Dictionary)[f]
 		var la: Dictionary = cfg["lose_answer"]
 		for k in [idx_key, key]:
 			if la.has(k) and int(la[k]) != 0:

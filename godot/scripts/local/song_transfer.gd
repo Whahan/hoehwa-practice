@@ -373,6 +373,39 @@ static func _is_hex32(s: String) -> bool:
 	return true
 
 
+## A number the PC sent, as int. Only a real int / finite float inside [lo, hi] counts. A missing key gives `dflt`
+## (null = the key is required). Anything else (null, text, array, dictionary, NaN, out of range) gives null = bad answer.
+static func _int_at(d: Variant, k: String, dflt: Variant, lo: int, hi: int) -> Variant:
+	if not (d is Dictionary):
+		return null
+	var dd: Dictionary = d
+	if not dd.has(k):
+		return dflt
+	var v: Variant = dd[k]
+	var n: int = 0
+	if v is int:
+		n = v
+	elif v is float and is_finite(v) and absf(v) < 4.0e18:
+		n = int(v)
+	else:
+		return null
+	return n if (n >= lo and n <= hi) else null
+
+
+## A boolean the PC sent: only a real bool counts (missing -> dflt, anything else -> null = bad answer).
+static func _bool_at(d: Variant, k: String, dflt: Variant) -> Variant:
+	if not (d is Dictionary):
+		return null
+	var dd: Dictionary = d
+	if not dd.has(k):
+		return dflt
+	return dd[k] if dd[k] is bool else null
+
+
+static func _bad_res() -> Dictionary:
+	return {"ok": false, "code": 200, "data": null, "error": "", "cancelled": false, "err_code": "bad_response", "err_body": null}
+
+
 ## Fire-and-forget server clean-up after a cancel. Static: it must outlive this node and never touch it.
 static func _cleanup_server(job: String, up: String, inflight: Variant, kind: String) -> void:
 	var jid: String = job
@@ -409,9 +442,12 @@ func _preflight(r: Run) -> Dictionary:
 			return _result_err("cancelled")
 		if res.get("ok", false):
 			var d: Variant = res.get("data")
-			if not (d is Dictionary) or not bool((d as Dictionary).get("song", false)):
+			if not (d is Dictionary) or (d as Dictionary).get("song", false) != true:
 				return _result_err("pc_old")
-			if int((d as Dictionary).get("song_v", 1)) > SONG_V:
+			var sv: Variant = _int_at(d, "song_v", 1, 0, 1000000)
+			if sv == null:
+				return _result_err("bad_response")
+			if int(sv) > SONG_V:
 				return _result_err("app_old")
 			return {}
 		if _is_transport(res) and fails < retry_delays.size():
@@ -502,10 +538,13 @@ func _server_next(r: Run, total: int) -> Dictionary:
 	var res: Dictionary = await _req(r, false, "/song/upload?upload_id=" + r.upload_id, {}, 20.0)
 	if res.get("ok", false) and res.get("data") is Dictionary:
 		var d: Dictionary = res["data"]
-		var nx: int = clampi(int(d.get("next", 0)), 0, total)
-		if bool(d.get("done", false)):
-			nx = total
-		return {"ok": true, "next": nx, "done": bool(d.get("done", false))}
+		var nv: Variant = _int_at(d, "next", null, 0, total)
+		var dn: Variant = _bool_at(d, "done", false)
+		if nv == null or dn == null:
+			return {"ok": false, "res": _bad_res()}
+		return {"ok": true, "next": total if dn == true else int(nv), "done": dn == true}
+	if res.get("ok", false):
+		return {"ok": false, "res": _bad_res()} ## 200 but not an object
 	return {"ok": false, "res": res}
 
 
@@ -548,10 +587,15 @@ func _upload(r: Run, size: int) -> Dictionary:
 			return _result_err("cancelled")
 		if res.get("ok", false):
 			fails = 0
-			var d: Dictionary = res["data"] if res.get("data") is Dictionary else {}
-			if bool(d.get("done", false)):
+			var dv: Variant = res.get("data")
+			var recv: Variant = _int_at(dv, "received", next + 1, 0, total)
+			var dne: Variant = _bool_at(dv, "done", false)
+			if not (dv is Dictionary) or recv == null or dne == null:
+				return _result_err("bad_response")
+			var d: Dictionary = dv
+			if dne == true:
 				r.up_sha = str(d.get("sha256", "")).to_lower()
-			next = clampi(maxi(next + 1, int(d.get("received", next + 1))), 0, total)
+			next = clampi(maxi(next + 1, int(recv)), 0, total)
 			_emit(r, "upload", PCT_UPLOAD_END * float(next) / float(total), "올리는 중 %d/%d" % [mini(next + 1, total), total])
 			continue
 		var ec: String = str(res.get("err_code", ""))
@@ -561,8 +605,10 @@ func _upload(r: Run, size: int) -> Dictionary:
 			if resync > MAX_RESYNC:
 				return _api_err(res)
 			var eb: Variant = res.get("err_body")
-			var exp: int = int((eb as Dictionary).get("expected", 0)) if eb is Dictionary else 0
-			next = clampi(exp, 0, total)
+			var exp: Variant = _int_at(eb, "expected", null, 0, total)
+			if exp == null:
+				return _result_err("bad_response") ## a gap answer must say where to continue
+			next = int(exp)
 			continue
 		if _is_transport(res):
 			fails += 1
@@ -577,6 +623,8 @@ func _upload(r: Run, size: int) -> Dictionary:
 			resyncs += 1
 			if st2["ok"]:
 				next = int(st2["next"])
+			elif str(st2["res"].get("err_code", "")) == "bad_response":
+				return _result_err("bad_response")
 			elif str(st2["res"].get("err_code", "")) == "no_upload":
 				if next > 0:
 					restarts += 1
@@ -676,10 +724,9 @@ func _create_job(r: Run) -> Dictionary:
 	return {}
 
 
-func _status_text(d: Dictionary) -> String:
+func _status_text(d: Dictionary, spct: int, qp: int) -> String:
 	var state: String = str(d.get("state", ""))
 	if state == "queued":
-		var qp: int = int(d.get("queue_pos", 0))
 		return "순서를 기다리는 중" if qp <= 0 else "순서를 기다리는 중 (앞에 %d곡)" % qp
 	var stage: String = str(d.get("stage", ""))
 	var msg: String = str(STAGE_TEXT.get(stage, ""))
@@ -687,7 +734,7 @@ func _status_text(d: Dictionary) -> String:
 		msg = str(d.get("message_ko", "")).strip_edges()
 	if msg == "":
 		msg = "곡을 만드는 중"
-	var out: String = "%s %d%%" % [msg, clampi(int(d.get("pct", 0)), 0, 100)]
+	var out: String = "%s %d%%" % [msg, spct]
 	var eta: String = eta_text(d.get("eta_sec", null))
 	if eta != "":
 		out += " · " + eta
@@ -719,9 +766,14 @@ func _run_job(r: Run) -> Dictionary:
 		var d: Dictionary = res["data"] if res.get("data") is Dictionary else {}
 		var state: String = str(d.get("state", ""))
 		if state == "queued" or state == "running":
-			var spct: float = clampf(float(d.get("pct", 0)), 0.0, 100.0)
+			var pv: Variant = _int_at(d, "pct", 0, 0, 100)
+			var qv: Variant = _int_at(d, "queue_pos", 0, 0, 1000000)
+			if pv == null or qv == null:
+				SongStore.pending_remove(r.job)
+				return _result_err("bad_response")
+			var spct: float = float(int(pv))
 			var stage: String = "queued" if state == "queued" else (str(d.get("stage", "")) if str(d.get("stage", "")) != "" else "decode")
-			_emit(r, stage, PCT_UPLOAD_END + (PCT_JOB_END - PCT_UPLOAD_END) * spct / 100.0, _status_text(d))
+			_emit(r, stage, PCT_UPLOAD_END + (PCT_JOB_END - PCT_UPLOAD_END) * spct / 100.0, _status_text(d, int(pv), int(qv)))
 		elif state == "done":
 			if d.get("warnings") is Array:
 				st_warnings = (d["warnings"] as Array).duplicate()
@@ -863,19 +915,27 @@ func _fetch_audio(r: Run, song: Dictionary) -> Dictionary:
 				e["keep_pending"] = true
 			return e
 		if not (res.get("data") is Dictionary):
-			return _result_err("sha_mismatch", "", true)
+			return _result_err("bad_response", "", true)
 		var d: Dictionary = res["data"]
-		var pn: int = int(d.get("parts", 0))
-		if int(d.get("part", -1)) != part or pn < 1 or pn > MAX_PARTS or (parts != 0 and pn != parts) or not (d.get("data_b64") is String):
+		var pn_v: Variant = _int_at(d, "parts", null, 1, MAX_PARTS)
+		var pi_v: Variant = _int_at(d, "part", null, 0, MAX_PARTS)
+		var nb_v: Variant = _int_at(d, "bytes", null, 1, MAX_FILE_BYTES)
+		if pn_v == null or pi_v == null or nb_v == null or not (d.get("data_b64") is String) or not (d.get("sha256") is String):
+			return _result_err("bad_response", "", true)
+		var tb_v: Variant = _int_at(d, "total_bytes", null, 1, MAX_FILE_BYTES) if part == 0 else 0
+		if tb_v == null:
+			return _result_err("bad_response", "", true)
+		var pn: int = int(pn_v)
+		if int(pi_v) != part or (parts != 0 and pn != parts):
 			return _result_err("sha_mismatch", "", true)
 		parts = pn
 		var raw: PackedByteArray = Marshalls.base64_to_raw(str(d["data_b64"]))
-		if raw.size() != int(d.get("bytes", -1)) or raw.is_empty():
+		if raw.size() != int(nb_v) or raw.is_empty():
 			return _result_err("sha_mismatch", "", true)
 		var psha: String = str(d.get("sha256", "")).to_lower()
 		if part == 0:
 			server_sha = psha
-			total_bytes = int(d.get("total_bytes", -1))
+			total_bytes = int(tb_v)
 		elif psha != server_sha:
 			return _result_err("sha_mismatch", "", true)
 		audio.append_array(raw)
