@@ -1,0 +1,74 @@
+{
+ "schema": 1,
+ "id": "song_en",
+ "lang": "en",
+ "voice": "af_heart",
+ "tempo": 90,
+ "sample_rate": 44100,
+ "duration": 20.6899,
+ "lyrics_file": "lyrics_en.txt",
+ "intro": 1.37,
+ "snr_db": [
+  "inf",
+  "10",
+  "5",
+  "0"
+ ],
+ "lines": [
+  {
+   "i": 0,
+   "base_i": 0,
+   "repeat": 0,
+   "text": "The kettle hums while the morning climbs the wall",
+   "p": 0,
+   "t0": 1.37,
+   "t1": 3.72
+  },
+  {
+   "i": 1,
+   "base_i": 1,
+   "repeat": 0,
+   "text": "I count my steps to the old blue chair",
+   "p": 0,
+   "t0": 4.8301,
+   "t1": 6.7102
+  },
+  {
+   "i": 2,
+   "base_i": 2,
+   "repeat": 0,
+   "text": "Nobody calls, so the quiet stays small",
+   "p": 0,
+   "t0": 7.8063,
+   "t1": 10.0463
+  },
+  {
+   "i": 3,
+   "base_i": 3,
+   "repeat": 0,
+   "text": "A paper boat rides the puddle by the gate",
+   "p": 1,
+   "t0": 11.452,
+   "t1": 13.6119
+  },
+  {
+   "i": 4,
+   "base_i": 4,
+   "repeat": 0,
+   "text": "I whistle one note and watch it drift",
+   "p": 1,
+   "t0": 14.3003,
+   "t1": 16.2603
+  },
+  {
+   "i": 5,
+   "base_i": 5,
+   "repeat": 0,
+   "text": "Tomorrow can wait while the tea is warm",
+   "p": 1,
+   "t0": 17.3199,
+   "t1": 19.1899
+  }
+ ],
+ "note": "t0/t1 are sample-exact positions where each synthesized line was placed (speech edges, +-0.01 s pad). Regenerating may move times slightly if Kokoro output differs."
+}
