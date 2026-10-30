@@ -107,7 +107,7 @@ func _finish() -> void:
 func _test_tabs() -> void:
 	var keys: Array = _main.tab_keys()
 	print("  tabs: ", keys)
-	ok(keys == ["today", "lesson", "talk", "review", "practice", "reading", "stats", "roadmap", "settings"], "tab order: 오늘, 레슨, 대화, 복습, then 연습, 읽기, 기록, 로드맵, 설정 (W4 shell)")
+	ok(keys == ["today", "lesson", "talk", "review", "practice", "reading", "song", "stats", "roadmap", "settings"], "tab order: 오늘, 레슨, 대화, 복습, then 연습, 읽기, 노래, 기록, 로드맵, 설정 (W4 shell + song study U1)")
 	ok(_main.views["practice"] is PracticeView and _main.views["stats"] is StatsView, "views: PracticeView and StatsView")
 	var labels := {}
 	for t in _main._tabs:
@@ -122,10 +122,10 @@ func _test_tabs() -> void:
 	ok(clocks == 1, "exactly one StudyClock under main (%d)" % clocks)
 	if _phone:
 		var bt: BottomTabs = _main._bottom_tabs
-		ok(bt.direct_keys() == ["today", "lesson", "talk", "review"] and bt.overflow_keys() == ["practice", "reading", "stats", "roadmap", "settings"], "phone: 4 cells + 더보기 with 연습, 읽기, 기록, 로드맵, 설정 (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
+		ok(bt.direct_keys() == ["today", "lesson", "talk", "review"] and bt.overflow_keys() == ["practice", "reading", "song", "stats", "roadmap", "settings"], "phone: 4 cells + 더보기 with 연습, 읽기, 노래, 기록, 로드맵, 설정 (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
 		ok(bt.cell_buttons().size() == 5, "phone: bar has 5 cells (4 tabs + 더보기)")
 	else:
-		ok(_main._bottom_tabs == null and _main._side_nav.item_buttons().size() == 9, "PC: 9 side-nav items (8 tabs + 설정), no bottom bar")
+		ok(_main._bottom_tabs == null and _main._side_nav.item_buttons().size() == 10, "PC: 10 side-nav items (9 tabs + 설정), no bottom bar")
 
 
 func _test_navigation() -> void:
@@ -179,7 +179,7 @@ func _test_layout() -> void:
 				right = maxf(right, b.get_global_rect().end.x)
 		var status_right: float = _main._status_text.get_global_rect().end.x
 		print("  width %d: visible nav items %d, right edge %.0f, status right %.0f, nav width %.0f" % [w, vis.size(), right, status_right, nav.size.x])
-		ok(vis.size() == 9, "width %d: every tab and 설정 is a visible side-nav item (no 더보기 menu, %d)" % [w, vis.size()])
+		ok(vis.size() == 10, "width %d: every tab and 설정 is a visible side-nav item (no 더보기 menu, %d)" % [w, vis.size()])
 		ok(right <= float(w) + 0.5 and status_right <= float(w) + 0.5, "width %d: nothing is cut off at the right edge" % w)
 		ok(nav.size.x >= 223.0 and nav.size.x <= 225.0 and nav.get_global_rect().end.x <= _main._content.get_global_rect().position.x + 0.5, "width %d: the 224 px side nav does not overlap the page" % w)
 		for k in _main.tab_keys(): # the items work at every width
