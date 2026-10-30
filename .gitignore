@@ -31,6 +31,7 @@ backend/tools/*
 !backend/tools/make_reading_golden.py
 !backend/tools/build_gloss_pack.py
 !backend/tools/make_song_fixtures.py
+!backend/tools/song_bench.py
 godot/tests/fixtures/song/_gen/
 __pycache__/
 *.pyc

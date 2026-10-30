@@ -105,7 +105,7 @@ $tracked = (Native git @("-C", $App, "ls-files"))[0]
 $badName = '(^|/)(secrets\.json[^/]*|auth\.json|\.env(\.[^/]*)?|progress\.json|prefs\.json|shots_progress\.json|release\.pass|keystore\.properties|lan_devices[^/]*\.json[^/]*)$'
 $badDir  = '^(runtime|dist|backups?)/|^backend/(models|data|cache|logs|tools)/|(^|/)\.venv/|^packaging/(out|locks)/|^godot/\.godot/|(^|/)__pycache__/'
 # backend/tools/ holds downloads and caches; only the data-pack build scripts that .gitignore lets in may be tracked
-$toolsAllowed = '^backend/tools/(build_phone_pack|phone_pack_ja|phone_pack_espeak|make_mission_golden|make_reading_golden|build_gloss_pack)\.py$'
+$toolsAllowed = '^backend/tools/(build_phone_pack|phone_pack_ja|phone_pack_espeak|make_mission_golden|make_reading_golden|build_gloss_pack|make_song_fixtures|song_bench)\.py$'
 $badExt  = '\.(sqlite[0-9]*|sqlite-(journal|wal)|pem|key|log|pyc|keystore|jks|p12|pfx|apk|aab|idsig)$'
 $forbidden = $tracked | Where-Object { $_ -match $badName -or ($_ -match $badDir -and $_ -notmatch $toolsAllowed) -or $_ -match $badExt }
 if ($forbidden) { throw ("files that must not be published are tracked:`n" + ($forbidden -join "`n")) }
