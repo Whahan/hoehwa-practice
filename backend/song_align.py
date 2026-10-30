@@ -30,7 +30,9 @@ from bisect import bisect_left, bisect_right
 
 # ---- constants -------------------------------------------------------------------------------------------------
 LOW_MATCH = 0.4            # match rate below this -> "low_match" (+ "est_times")
-NEAR_RATIO = 0.75          # English words this similar (difflib ratio) count as the same word (misrecognition)
+NEAR_RATIO = 0.75          # English words this similar (difflib ratio) count as the same word (misrecognition) ...
+NEAR_TOL_MIN = 1.5         # ... but only when the recognised time is within max(NEAR_TOL_MIN, NEAR_TOL_FRAC x gap between the
+NEAR_TOL_FRAC = 0.25       # two neighbouring exact anchors) of the time the exact anchors predict (rhymes night/light/right)
 JA_MIN_RUN = 3             # Japanese: a matched kana only counts when it is part of >= 3 consecutive matches
 MAX_LINES = 400
 MAX_LINE_CHARS = 200
@@ -161,10 +163,26 @@ def _r3(x):
 
 
 # ---- recognised words ------------------------------------------------------------------------------------------
+def _asr_key(item, w, lang, reader):
+    """Comparison key of one recognised word. Japanese words that carry ``"k"`` (K3 song_asr.contextual_readings: the
+    katakana reading in the context of the line) use it and are not read again: Whisper gives single characters and
+    reading each one alone is wrong (窓+辺 -> マド+ヘン, in context マド+ベ). An empty ``k`` means the piece has no
+    reading of its own (a neighbour carries it, or punctuation): only latin letters / digits of the word stay."""
+    if _is_ja(lang):
+        k = item.get("k")
+        if isinstance(k, str):
+            key = normalize_key(k, lang)
+            if key:
+                return key
+            return "".join(c for c in normalize_key(w, lang) if c.isascii() and c.isalnum())
+    return normalize_key(w, lang, reader)
+
+
 def sanitize_asr(words, duration=None, lang="en", reader=None):
     """Clean the recognised words: aliases (word/start/end/probability), drop bad items, sort by start, make the
     times monotone (each word starts at or after the previous one ended, minimum length 0.02 s), clip to
-    [0, duration]. Returns [{"w","s","e","p","key"}] (words without a key are dropped)."""
+    [0, duration]. Returns [{"w","s","e","p","key"}] (words without a key are dropped). Japanese words with a
+    ``"k"`` reading (K3) are keyed by it and not read again with ``reader``."""
     items = []
     for it in words or []:
         if not isinstance(it, dict):
@@ -174,7 +192,7 @@ def sanitize_asr(words, duration=None, lang="en", reader=None):
         e = _num(it.get("e", it.get("end")))
         if w is None or s is None or e is None:
             continue
-        key = normalize_key(w, lang, reader)
+        key = _asr_key(it, w, lang, reader)
         if not key:
             continue
         items.append({"w": _clean(w), "s": max(0.0, s), "e": max(0.0, e),
@@ -280,9 +298,10 @@ def _near_map(lk, ak):
     return out
 
 
-def _align_dp(lk, ak, near):
+def _align_dp(lk, ak, near, allowed=None):
     """Overlap alignment (free leading/trailing gaps) of two key lists. Returns [(i, j, kind)] with kind 2 = same,
-    1 = near. Band around the diagonal when the table would be large."""
+    1 = near. Band around the diagonal when the table would be large. ``allowed(i, j)`` (0-based lyric / recognised
+    index) restricts the near pairings (None = all of them)."""
     n, m = len(lk), len(ak)
     if n == 0 or m == 0:
         return []
@@ -310,7 +329,12 @@ def _align_dp(lk, ak, near):
             bv, bd = _NEG, 0
             if plo <= j - 1 <= phi:
                 b = ak[j - 1]
-                sc = 2.0 if a == b else (1.0 if (nm is not None and b in nm) else _MISMATCH)
+                if a == b:
+                    sc = 2.0
+                elif nm is not None and b in nm and (allowed is None or allowed(i - 1, j - 1)):
+                    sc = 1.0
+                else:
+                    sc = _MISMATCH
                 bv = prev[j - 1 - plo] + sc
             if plo <= j <= phi:
                 v = prev[j - plo] - _GAP
@@ -337,7 +361,7 @@ def _align_dp(lk, ak, near):
             a, b = lk[i - 1], ak[j - 1]
             if a == b:
                 matches.append((i - 1, j - 1, 2))
-            elif near and b in near.get(a, ()):
+            elif near and b in near.get(a, ()) and (allowed is None or allowed(i - 1, j - 1)):
                 matches.append((i - 1, j - 1, 1))
             i -= 1
             j -= 1
@@ -347,6 +371,51 @@ def _align_dp(lk, ak, near):
             j -= 1
     matches.reverse()
     return matches
+
+
+def _expected_times(weights, exact, rate):
+    """Time a lyric unit should have if the exact anchors are right. ``exact`` = [(unit, time)] sorted by unit.
+    Returns (expected, tolerance) per unit: interpolated by weight between the two neighbouring anchors (tolerance
+    max(NEAR_TOL_MIN, NEAR_TOL_FRAC x their time gap)), extrapolated at the average anchor speed (``rate`` s/weight
+    when there is only one anchor) beyond the outer ones."""
+    n = len(weights)
+    cw = [0.0]
+    for w in weights:
+        cw.append(cw[-1] + w)
+    ex_i = [e[0] for e in exact]
+    if len(exact) >= 2 and cw[exact[-1][0]] > cw[exact[0][0]]:
+        rate = (exact[-1][1] - exact[0][1]) / (cw[exact[-1][0]] - cw[exact[0][0]])
+    rate = max(rate, 1e-3)
+    exp, tol = [], []
+    for i in range(n):
+        mid = (cw[i] + cw[i + 1]) / 2.0
+        q = bisect_left(ex_i, i)
+        pe = exact[q - 1] if q > 0 else None
+        ne = exact[q] if q < len(exact) else None
+        if pe and ne and cw[ne[0]] > cw[pe[0]]:
+            cp, cq = cw[pe[0]], cw[ne[0]]
+            e = pe[1] + (mid - cp) / (cq - cp) * (ne[1] - pe[1])
+            t = max(NEAR_TOL_MIN, NEAR_TOL_FRAC * (ne[1] - pe[1]))
+        else:
+            ref = pe or ne
+            e = ref[1] + (mid - cw[ref[0]]) * rate
+            t = max(2.0, 0.35 * abs(e - ref[1]))
+        exp.append(e)
+        tol.append(t)
+    return exp, tol
+
+
+def _align_consistent(keys, weights, ak, au, near):
+    """Alignment in which a near pairing (misrecognised word) only counts when it fits the timing. Pass 1 aligns with
+    exact matches only and predicts the time of every lyric unit from them; pass 2 lets a near pair count when the
+    recognised time is within predicted time +- tolerance. A rhyming word somewhere else in the song (night / light /
+    right) is therefore not taken for the lyric word. With no exact anchor nothing can be checked: no near pair."""
+    first = _align_dp(keys, ak, {})
+    exact = [(i, au[j][1]) for i, j, _ in first]
+    if not exact:
+        return first
+    exp, tol = _expected_times(weights, exact, _SEC_PER_WEIGHT["en"])
+    return _align_dp(keys, ak, near, lambda i, j: abs(au[j][1] - exp[i]) <= tol[i])
 
 
 def _filter_runs(matches, min_run):
@@ -498,7 +567,7 @@ def align_lyrics(lyrics, asr_words, duration, lang="en", reader=None):
     ak = [u[0] for u in au]
     ja = _is_ja(lang)
     near = {} if ja else _near_map(keys, ak)
-    matches = _align_dp(keys, ak, near)
+    matches = _align_consistent(keys, weights, ak, au, near) if near else _align_dp(keys, ak, near)
     matches = _filter_runs(matches, JA_MIN_RUN if ja else 1)
     anchors = {i: (au[j][1], au[j][2]) for i, j, _ in matches}
     anchored = [i in anchors for i in range(len(keys))]

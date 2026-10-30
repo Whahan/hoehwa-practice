@@ -301,6 +301,146 @@ la1 = sa.lines_from_asr([{"word": " Hello", "start": 1.0, "end": 1.4, "probabili
 ok("faster-whisper field names accepted", la1["lines"] and la1["lines"][0]["words"][0]["w"] == "Hello" and la1["lines"][0]["conf"] == 0.8)
 
 # ------------------------------------------------------------------------------------------------------------------
+print("[K2b near matches must fit the timing (rhymes)]")
+
+
+def wrong_anchors(res, truth_words, tol=1.0):
+    """words that are NOT marked est but are further than ``tol`` s from their true start (a wrong anchor)"""
+    ws = [w for ln in res["lines"] for w in ln["words"]]
+    return [(truth_words[i][0], round(w["s"] - truth_words[i][1], 1)) for i, w in enumerate(ws)
+            if not w["est"] and abs(w["s"] - truth_words[i][1]) > tol]
+
+
+def scene_truth(lines, start=10.0, gap=4.0, step=0.45):
+    return [(w, start + li * gap + k * step) for li, ln in enumerate(lines) for k, w in enumerate(ln.split())]
+
+
+LYR_R = ["the night is bright and long", "I see the light", "you hold me tight", "we fight the fright", "and sleep till the sight"]
+TR_R = scene_truth(LYR_R)
+def _asr_of(truth_words, lo, hi):
+    return [{"w": w, "s": round(s, 3), "e": round(s + 0.4, 3)} for w, s in truth_words[lo:hi]]
+
+
+# lines 0, 1, 3, 4 recognised exactly; line 2 ("you hold me tight", sung at 18-19.8) is missing, but a rhyme "right" is
+# heard at 16.3, 3 s before it: near "tight" by spelling, wrong by time
+asr_r = _asr_of(TR_R, 0, 10) + [{"w": "right", "s": 16.3, "e": 16.7}] + _asr_of(TR_R, 14, 23)
+rr = sa.align_lyrics([{"text": x} for x in LYR_R], asr_r, 40.0, "en")
+rw = [w for ln in rr["lines"] for w in ln["words"]]
+ok("rhyme: a rhyming word off the predicted time (3 s early) is no anchor: 0 wrong anchors", wrong_anchors(rr, TR_R) == [], wrong_anchors(rr, TR_R))
+ok("rhyme: 'tight' stays est (est flag agrees with the real accuracy)", [w["est"] for w in rw if w["w"] == "tight"] == [True])
+ok("rhyme: the 19 exact words around it are still anchors", not any(w["est"] for w in rw[:10]) and sum(1 for w in rw if not w["est"]) == 19,
+   [(w["w"], w["est"]) for w in rw])
+inv("rhyme", rr["lines"], 40.0)
+
+LYR_C2 = ["I walk alone tonight", "under the pale moonlight", "nothing here feels right", "I hold on with all my might",
+          "you said we would be fine", "I counted every sign", "now I stand in line", "hoping that you are mine",
+          "the night is long and cold", "the stories all are old", "the hands I used to hold", "have turned to dust and gold"]
+TR_C2 = scene_truth(LYR_C2)
+
+
+def garbled_run(seed, drop_lines, miss, garble):
+    """Recognition of LYR_C2 with whole lines missing, random words missing and random words replaced by rhymes."""
+    rnd = random.Random(seed)
+    asr_, k = [], 0
+    for li, ln in enumerate(LYR_C2):
+        for w in ln.split():
+            s = TR_C2[k][1]
+            k += 1
+            if li in drop_lines or rnd.random() < miss:
+                continue
+            ww = rnd.choice(["night", "light", "right", "might", "line", "mine", "old", "cold", "hold", "gold"]) if rnd.random() < garble else w
+            asr_.append({"w": ww, "s": round(s, 3), "e": round(s + 0.4, 3)})
+    return sa.align_lyrics([{"text": x} for x in LYR_C2], asr_, 70.0, "en")
+
+
+g5 = garbled_run(5, {3, 4, 5, 6}, 0.1, 0.2)
+ok("rhyme: 12 lines, seed 5 (4 lines missing, rhymes inserted): 0 wrong anchors", wrong_anchors(g5, TR_C2) == [], wrong_anchors(g5, TR_C2))
+inv("rhyme seed 5", g5["lines"], 70.0)
+for sd, drop_, miss_, gar_ in [(1, {1}, 0, 0), (2, {2, 5}, 0, 0), (3, set(), 0.3, 0.3)]:
+    gx = garbled_run(sd, drop_, miss_, gar_)
+    ok("rhyme: seed %d keeps 0 wrong anchors, match rate does not fall" % sd, wrong_anchors(gx, TR_C2) == [] and gx["match_rate"] >= 0.55, (wrong_anchors(gx, TR_C2), gx["match_rate"]))
+
+print("[K2b real misrecognitions with the right timing stay anchors]")
+LYR_N = ["we love the summer rain", "she walks along the quiet shore", "they dream beneath the silver moon", "I hear the ocean sing"]
+TR_N = scene_truth(LYR_N)
+SUBST = {"love": "loved", "walks": "walk", "dream": "dreams", "ocean": "oceans"}
+asr_n = [{"w": SUBST.get(w, w), "s": round(s, 3), "e": round(s + 0.4, 3)} for w, s in TR_N]
+rn_on = sa.align_lyrics([{"text": x} for x in LYR_N], asr_n, 30.0, "en")
+old_ratio = sa.NEAR_RATIO
+sa.NEAR_RATIO = 2.0                                           # no near matching at all
+try:
+    rn_off = sa.align_lyrics([{"text": x} for x in LYR_N], asr_n, 30.0, "en")
+finally:
+    sa.NEAR_RATIO = old_ratio
+ok("near: inflection errors (love/loved, walks/walk, ...) anchor when the time fits: rate 1.0", rn_on["match_rate"] == 1.0, rn_on["match_rate"])
+ok("near: ... which is higher than with near matching off (%.2f)" % rn_off["match_rate"], rn_on["match_rate"] > rn_off["match_rate"] and rn_off["anchored"] == rn_on["total"] - 4)
+nw = [w for ln in rn_on["lines"] for w in ln["words"]]
+ok("near: the anchored near words carry the recognised time and est False",
+   all((not w["est"]) and abs(w["s"] - TR_N[i][1]) < 1e-6 for i, w in enumerate(nw) if TR_N[i][0] in SUBST))
+inv("near inflections", rn_on["lines"], 30.0)
+
+print("[K2b japanese: the 'k' reading of a recognised word wins]")
+
+
+class Reader2:
+    """Reads every character alone, as the old per-piece reader did: 窓辺 -> マド+ヘン, 椅子 -> ハシ+コ."""
+    MAP = {"窓": "マド", "辺": "ヘン", "椅": "ハシ", "子": "コ", "の": "ノ"}
+
+    def __call__(self, text):
+        return "".join(self.MAP.get(c, c) for c in text)
+
+
+LYR_K = [{"text": "窓辺の椅子", "tokens": [{"w": "窓辺", "kata": "マドベ"}, {"w": "の", "kata": "ノ"}, {"w": "椅子", "kata": "イス"}]}]
+ASR_K = [{"w": "窓", "s": 1.0, "e": 1.4, "k": "マド"}, {"w": "辺", "s": 1.4, "e": 1.8, "k": "ベ"}, {"w": "の", "s": 1.8, "e": 2.0, "k": "ノ"},
+         {"w": "椅", "s": 2.0, "e": 2.6, "k": "イス"}, {"w": "子", "s": 2.6, "e": 2.9, "k": ""}]
+ASR_NK = [{kk: vv for kk, vv in w.items() if kk != "k"} for w in ASR_K]
+san_k = sa.sanitize_asr(ASR_K, 10.0, "ja", Reader2())
+ok("k: sanitize_asr keys the words by 'k' (not read again); an empty k drops a kanji piece",
+   [w["key"] for w in san_k] == ["マド", "ベ", "ノ", "イス"], [w["key"] for w in san_k])
+ok("k: ... and without k the reader is used as before",
+   [w["key"] for w in sa.sanitize_asr(ASR_NK, 10.0, "ja", Reader2())] == ["マド", "ヘン", "ノ", "ハシ", "コ"])
+ok("k: not a string -> ignored (reader used); empty k keeps latin letters",
+   [w["key"] for w in sa.sanitize_asr([{"w": "窓", "s": 0, "e": 1, "k": None}, {"w": "OK", "s": 1, "e": 2, "k": ""}], 10.0, "ja", Reader2())] == ["マド", "ok"])
+ok("k: hiragana in k is folded to katakana", sa.sanitize_asr([{"w": "x", "s": 0, "e": 1, "k": "まど"}], 10.0, "ja")[0]["key"] == "マド")
+rk = sa.align_lyrics(LYR_K, ASR_K, 10.0, "ja", Reader2())
+rnk = sa.align_lyrics(LYR_K, ASR_NK, 10.0, "ja", Reader2())
+ok("k: with the contextual readings 窓辺の椅子 matches completely (rate 1.0)", rk["match_rate"] == 1.0, rk["match_rate"])
+kw = rk["lines"][0]["words"]
+ok("k: ... and the words take the recognised times, none est",
+   [w["w"] for w in kw] == ["窓辺", "の", "椅子"] and kw[0]["s"] == 1.0 and kw[0]["e"] == 1.8 and kw[2]["s"] == 2.0 and not any(w["est"] for w in kw), kw)
+ok("k: without k the per-character readings do not match (old behaviour, rate < 0.5)", rnk["match_rate"] < 0.5, rnk["match_rate"])
+inv("k anchored", rk["lines"], 10.0)
+inv("k not given", rnk["lines"], 10.0)
+
+print("[K2b gaps of the K2 tests: extrapolation speed, line start monotone]")
+LYR_X = [{"text": "ant bat cow dog eel fox gnu hen"}]
+
+
+def xw(cow, fox):
+    r = sa.align_lyrics(LYR_X, [{"w": "cow", "s": cow, "e": cow + 0.3}, {"w": "fox", "s": fox, "e": fox + 0.3}], 40.0, "en")
+    return r, r["lines"][0]["words"]
+
+
+rx1, wx1 = xw(10.0, 11.8)
+# speed = (12.1 - 10.0) / (4 words x weight 4) = 0.13125 s per weight; the 2 words before / after take 8 x 0.13125 = 1.05 s
+ok("extrapolation: words before the first anchor run at the anchors' average speed", abs(wx1[0]["s"] - 8.95) < 0.002 and abs(wx1[1]["s"] - 9.475) < 0.002 and abs(wx1[1]["e"] - 10.0) < 0.002, wx1[:2])
+ok("extrapolation: words after the last anchor run at the same speed", abs(wx1[6]["s"] - 12.1) < 0.002 and abs(wx1[7]["e"] - 13.15) < 0.002, wx1[6:])
+ok("extrapolation: the anchors themselves are exact and not est", wx1[2]["s"] == 10.0 and wx1[5]["e"] == 12.1 and not wx1[2]["est"] and not wx1[5]["est"] and wx1[0]["est"])
+inv("extrapolation speed", rx1["lines"], 40.0)
+rx2, wx2 = xw(10.0, 30.0)
+# 20.3 s / 16 = 1.27 s per weight is capped at 0.6: 8 x 0.6 = 4.8 s before the first anchor
+ok("extrapolation: the speed is capped at 0.6 s per weight", abs(wx2[0]["s"] - 5.2) < 0.002 and abs(wx2[7]["e"] - 30.3 - 4.8) < 0.002, (wx2[0], wx2[7]))
+inv("extrapolation speed cap", rx2["lines"], 40.0)
+
+recs_m, _ = sa._prepare_lyrics([{"text": "aaa bbb"}, {"text": "ccc ddd"}, {"text": "eee fff"}], "en", None)
+_k, wts_m, real_m, spans_m, lr_m = sa._build_units(recs_m, "en")
+# unit times that go backwards between lines (line 1 would start before line 0): the line starts must still ascend
+times_m = [[5.0, 5.5], [5.5, 6.0], [3.0, 3.5], [3.5, 4.0], [8.0, 8.5], [8.5, 9.0]]
+lm_ = sa._finalize(recs_m, spans_m, lr_m, times_m, [True] * 6, 20.0)
+ok("line start monotone: a line whose units start earlier than the previous line is moved up", [l["t0"] for l in lm_] == [5.0, 5.0, 8.0], [l["t0"] for l in lm_])
+inv("line start monotone", lm_, 20.0)
+
+# ------------------------------------------------------------------------------------------------------------------
 print("[size, speed, purity]")
 big_lyr = [{"text": " ".join("w%d" % ((k * 7 + j) % 400) for j in range(8)), "p": k // 8} for k in range(400)]
 big_asr = [{"w": "w%d" % ((k * 3) % 400), "s": round(k * 0.3, 2), "e": round(k * 0.3 + 0.25, 2)} for k in range(800)]
