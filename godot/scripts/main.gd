@@ -31,11 +31,11 @@ const BACK_EXIT_MSEC := 2000
 ## Phone bottom bar: 4 tabs + "더보기" (the rest goes into the sheet).
 const PHONE_MAX_DIRECT := 5
 ## PC SideNav: the order of the items in the two sections (a tab that is in neither list goes to the end of "기록").
-const NAV_LEARN := ["today", "lesson", "talk", "practice", "reading", "review"]
+const NAV_LEARN := ["today", "lesson", "talk", "practice", "reading", "song", "review"]
 const NAV_RECORD := ["stats", "roadmap"]
 ## Views that draw their own title / back / action row while a sub screen is open (the chat, a practice screen): the
 ## phone app bar then shows only its tab name and the connection chip, so nothing appears twice.
-const OWN_HEADER := ["talk", "practice"]
+const OWN_HEADER := ["talk", "practice", "song"]
 ## Phone: the top badge while no PC is connected and the person chose to work without one.
 const STANDALONE_TEXT := "폰 단독 모드"
 
@@ -253,13 +253,14 @@ func add_tab(key: String, label: String, view: AppView, short_label: String = ""
 		_rebuild_nav()
 
 
-## English v1.1: 연습 after 복습, 기록 after 읽기, and the study clock (StudyLog writer).
+## English v1.1: 연습 after 복습, 기록 after 읽기, and the study clock (StudyLog writer). 노래 (song study, docs/song_study_design.md) after 읽기.
 func add_v11_tabs() -> void:
 	if views.has("practice"):
 		return
 	add_child(StudyClock.new())
 	add_tab("practice", "연습", PracticeView.new(), "연습", "review")
 	add_tab("stats", "기록", StatsView.new(), "기록", "reading")
+	add_tab("song", "노래", SongView.new(), "노래", "reading") # PC: after 읽기 in the side nav; phone: inside 더보기
 
 
 ## 1.2: learning-record sync (timers, app lifecycle, first-connection dialog). Like the StudyClock it is only added when this
