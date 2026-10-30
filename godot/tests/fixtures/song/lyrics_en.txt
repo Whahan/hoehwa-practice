@@ -1,0 +1,9 @@
+# 직접 작성, CC0 (Written by hand for tests, public domain dedication CC0). Not a real song.
+# Format: lines starting with '#' are comments; a blank line starts a new stanza; every other line is one sung line.
+The kettle hums while the morning climbs the wall
+I count my steps to the old blue chair
+Nobody calls, so the quiet stays small
+
+A paper boat rides the puddle by the gate
+I whistle one note and watch it drift
+Tomorrow can wait while the tea is warm

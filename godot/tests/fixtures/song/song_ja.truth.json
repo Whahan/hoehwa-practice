@@ -1,0 +1,65 @@
+{
+ "schema": 1,
+ "id": "song_ja",
+ "lang": "ja",
+ "voice": "jf_alpha",
+ "tempo": 90,
+ "sample_rate": 44100,
+ "duration": 16.6619,
+ "lyrics_file": "lyrics_ja.txt",
+ "intro": 1.23,
+ "snr_db": [
+  "inf",
+  "10",
+  "5",
+  "0"
+ ],
+ "lines": [
+  {
+   "i": 0,
+   "base_i": 0,
+   "repeat": 0,
+   "text": "朝の窓辺で小さなやかんが鳴る",
+   "p": 0,
+   "t0": 1.23,
+   "t1": 3.47
+  },
+  {
+   "i": 1,
+   "base_i": 1,
+   "repeat": 0,
+   "text": "青い椅子まで歩数をかぞえる",
+   "p": 0,
+   "t0": 3.8766,
+   "t1": 5.6466
+  },
+  {
+   "i": 2,
+   "base_i": 2,
+   "repeat": 0,
+   "text": "門のそばの水たまりに紙の舟",
+   "p": 1,
+   "t0": 6.5085,
+   "t1": 8.8586
+  },
+  {
+   "i": 3,
+   "base_i": 3,
+   "repeat": 0,
+   "text": "一つの音で口笛を吹いてみる",
+   "p": 1,
+   "t0": 10.0515,
+   "t1": 12.1415
+  },
+  {
+   "i": 4,
+   "base_i": 4,
+   "repeat": 0,
+   "text": "お茶があたたかいうちは明日を待とう",
+   "p": 1,
+   "t0": 13.0319,
+   "t1": 15.1619
+  }
+ ],
+ "note": "t0/t1 are sample-exact positions where each synthesized line was placed (speech edges, +-0.01 s pad). Regenerating may move times slightly if Kokoro output differs."
+}
