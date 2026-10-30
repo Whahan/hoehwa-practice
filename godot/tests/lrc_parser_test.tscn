@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/lrc_parser_test.gd" id="1_lrc"]
+
+[node name="LrcParserTest" type="Node"]
+script = ExtResource("1_lrc")
