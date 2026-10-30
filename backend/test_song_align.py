@@ -402,6 +402,19 @@ ok("k: ... and without k the reader is used as before",
 ok("k: not a string -> ignored (reader used); empty k keeps latin letters",
    [w["key"] for w in sa.sanitize_asr([{"w": "窓", "s": 0, "e": 1, "k": None}, {"w": "OK", "s": 1, "e": 2, "k": ""}], 10.0, "ja", Reader2())] == ["マド", "ok"])
 ok("k: hiragana in k is folded to katakana", sa.sanitize_asr([{"w": "x", "s": 0, "e": 1, "k": "まど"}], 10.0, "ja")[0]["key"] == "マド")
+# the order the real K3 song_asr.contextual_readings gives: the empty reading sits on the piece BEFORE (椅 "", 子 "イス")
+ASR_K3 = [dict(ASR_K[0]), dict(ASR_K[1]), dict(ASR_K[2]), dict(ASR_K[3], k=""), dict(ASR_K[4], k="イス")]
+san_k3 = sa.sanitize_asr(ASR_K3, 10.0, "ja", Reader2())
+ok("k: an empty-k piece before the reading piece is dropped but hands its start over (椅 2.0 + 子 -> イス starts 2.0)",
+   [w["key"] for w in san_k3] == ["マド", "ベ", "ノ", "イス"] and san_k3[3]["s"] == 2.0 and san_k3[3]["e"] == 2.9, san_k3)
+rk3 = sa.align_lyrics(LYR_K, ASR_K3, 10.0, "ja", Reader2())
+ok("k: K3 order (empty reading first): rate 1.0 and 椅子 starts at 2.0 (not 2.6)",
+   rk3["match_rate"] == 1.0 and rk3["lines"][0]["words"][2]["s"] == 2.0 and rk3["lines"][0]["words"][2]["e"] == 2.9, rk3["lines"][0]["words"])
+inv("k K3 order", rk3["lines"], 10.0)
+far = sa.sanitize_asr([{"w": "椅", "s": 1.0, "e": 1.5, "k": ""}, {"w": "子", "s": 5.0, "e": 5.5, "k": "イス"}], 10.0, "ja")
+ok("k: an unread piece does not hand its start to a piece that is not next to it (gap > 0.3 s)", far[0]["s"] == 5.0, far)
+ok("k: punctuation with an empty k hands nothing over",
+   sa.sanitize_asr([{"w": "、", "s": 1.0, "e": 1.5, "k": ""}, {"w": "子", "s": 1.5, "e": 2.0, "k": "ス"}], 10.0, "ja")[0]["s"] == 1.5)
 rk = sa.align_lyrics(LYR_K, ASR_K, 10.0, "ja", Reader2())
 rnk = sa.align_lyrics(LYR_K, ASR_NK, 10.0, "ja", Reader2())
 ok("k: with the contextual readings 窓辺の椅子 matches completely (rate 1.0)", rk["match_rate"] == 1.0, rk["match_rate"])

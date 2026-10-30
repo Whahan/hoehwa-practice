@@ -40,6 +40,7 @@ MAX_OFFSET = 5.0           # |offset| limit (seconds), same as the UI slider
 OFFSET_STEP = 0.05
 OFFSET_SEARCH = 6.0        # +-seconds searched for an LRC offset
 OFFSET_MIN_SUPPORT = 5     # fewer supporting lines -> offset 0
+LEAD_JOIN_GAP = 0.3        # an unread (k "") piece hands its start to the next piece when that follows within this gap (s)
 MIN_WORD_SEC = 0.02
 MIN_LINE_SEC = 0.05
 FULL_CELLS = 2_000_000     # DP cells before the alignment switches to a band around the diagonal
@@ -193,11 +194,26 @@ def sanitize_asr(words, duration=None, lang="en", reader=None):
         if w is None or s is None or e is None:
             continue
         key = _asr_key(it, w, lang, reader)
-        if not key:
+        # a kanji / kana piece whose "k" is empty has no reading of its own (K3 puts it on the piece after it): it is
+        # dropped, but the word starts where this piece started
+        lead = (not key and _is_ja(lang) and isinstance(it.get("k"), str) and bool(_ja_key_chars(_clean(w))))
+        if not key and not lead:
             continue
         items.append({"w": _clean(w), "s": max(0.0, s), "e": max(0.0, e),
                       "p": _num(it.get("p", it.get("probability"))), "key": key})
     items.sort(key=lambda x: (x["s"], x["e"]))
+    kept, lead_s, lead_e = [], None, 0.0
+    for it in items:
+        if not it["key"]:
+            if lead_s is None:
+                lead_s = it["s"]
+            lead_e = it["e"]
+            continue
+        if lead_s is not None and it["s"] - lead_e <= LEAD_JOIN_GAP:
+            it["s"] = min(it["s"], lead_s)
+        lead_s = None
+        kept.append(it)
+    items = kept
     out = []
     prev_e = 0.0
     for it in items:
