@@ -78,6 +78,7 @@ var _time_label: Label = null
 var _btn_revert: Button = null
 var _btn_save: Button = null
 var _transport: PanelContainer = null
+var _confirm_sheet: Sheet = null
 
 
 func _init() -> void:
@@ -134,10 +135,7 @@ func on_hide() -> void:
 func go_back() -> bool:
 	_flush_text()
 	if is_dirty() and not read_only:
-		var sh: Sheet = Sheet.confirm(self, "저장하지 않은 변경이 있어요", "버리고 나갈까요? 고친 내용은 사라져요.", "버리고 나가기", true, "계속 고치기")
-		sh.closed.connect(func(r: Variant) -> void:
-			if str(r) == "ok":
-				_leave())
+		_confirm("저장하지 않은 변경이 있어요", "버리고 나갈까요? 고친 내용은 사라져요.", "버리고 나가기", "계속 고치기", _leave)
 		return true
 	_leave()
 	return true
@@ -210,10 +208,17 @@ static func fmt_time(t: float) -> String:
 	return "%d:%05.2f" % [m, t - 60.0 * float(m)]
 
 
-## "지금 위치" (곡 시간, 오프셋 반영): 재생 중이거나 멈춘 상태면 플레이어 위치, 아니면 마지막으로 알려진 위치.
+## 플레이어가 알려 주는 곡 시간 t(플레이어가 불러 둔 옛 오프셋 기준)를 지금 편집 중인 오프셋 기준으로 바꾼다.
+## 오디오 시간 = t + player.offset 이고, 곡 시간 = 오디오 시간 - working.offset.
+func _song_time(t: float) -> float:
+	var a: float = t + (player.offset if player != null and is_instance_valid(player) else 0.0)
+	return clampf(a - float(working.get("offset", 0.0)), 0.0, float(working.get("duration", 0.0)))
+
+
+## "지금 위치" (곡 시간, 지금 편집 중인 오프셋 기준): 재생 중이거나 멈춘 상태면 플레이어 위치, 아니면 마지막으로 알려진 위치.
 func current_pos() -> float:
 	if player != null and is_instance_valid(player) and player.is_loaded() and (player.is_playing() or player.is_paused()):
-		_hold = player.position()
+		_hold = _song_time(player.position())
 	return _hold
 
 
@@ -623,7 +628,7 @@ func _ensure_fresh() -> void:
 	if player == null or working.is_empty():
 		return
 	if _sig() != _loaded_sig:
-		var pos: float = _hold
+		var pos: float = current_pos() # 다시 불러오기 전에, 옛 오프셋으로 불러 둔 플레이어에서 읽는다
 		_load_player()
 		_hold = pos
 		_render_banners()
@@ -667,16 +672,14 @@ func toggle_play() -> void:
 func seek(t: float) -> void:
 	if player == null or not audio_ready:
 		return
-	_hold = clampf(t, 0.0, float(working.get("duration", 0.0)))
 	_ensure_fresh()
+	_hold = clampf(t, 0.0, float(working.get("duration", 0.0)))
 	player.play_from(_hold)
 	_sync_transport()
 
 
 func _on_position(t: float) -> void:
-	_hold = t
-	if _slider != null and is_instance_valid(_slider):
-		_slider.set_value_no_signal(t)
+	_hold = _song_time(t)
 	_sync_transport()
 
 
@@ -684,6 +687,7 @@ func _sync_transport() -> void:
 	if _play_btn == null or not is_instance_valid(_play_btn):
 		return
 	var playing: bool = player != null and is_instance_valid(player) and player.is_playing()
+	current_pos() # 오프셋이 바뀐 직후에도 막대·시간이 지금 오프셋 기준이 되게
 	var txt: String = "멈춤" if playing else "▶ 재생"
 	if _play_btn.text != txt:
 		_play_btn.text = txt
@@ -693,6 +697,7 @@ func _sync_transport() -> void:
 	if _time_label.text != lt:
 		_time_label.text = lt
 	_slider.max_value = maxf(dur, 0.1)
+	_slider.set_value_no_signal(_hold)
 	_slider.editable = audio_ready
 
 
@@ -1136,24 +1141,31 @@ func _after_edit(structural: bool, touched: int) -> void:
 
 # ---------------------------------------------------------------- buttons
 
+## 확인 시트는 한 번에 하나만 연다(뒤로 가기를 거듭 눌러도 겹쳐 뜨지 않는다). ok 면 on_ok 를 부른다.
+func _confirm(title: String, msg: String, ok_text: String, cancel_text: String, on_ok: Callable) -> void:
+	if _confirm_sheet != null and is_instance_valid(_confirm_sheet) and Sheet.is_open():
+		return
+	var sh: Sheet = Sheet.confirm(self, title, msg, ok_text, true, cancel_text)
+	_confirm_sheet = sh
+	sh.closed.connect(func(r: Variant) -> void:
+		if _confirm_sheet == sh:
+			_confirm_sheet = null
+		if str(r) == "ok":
+			on_ok.call())
+
+
 func _ask_delete(i: int) -> void:
 	if i < 0 or i >= line_count():
 		return
 	var preview: String = str((lines()[i] as Dictionary)["text"])
-	var sh: Sheet = Sheet.confirm(self, "이 줄을 지울까요?", preview.left(60), "지우기", true)
-	sh.closed.connect(func(r: Variant) -> void:
-		if str(r) == "ok":
-			delete_line(i))
+	_confirm("이 줄을 지울까요?", preview.left(60), "지우기", "취소", func() -> void: delete_line(i))
 
 
 func _on_revert_pressed() -> void:
 	_flush_text()
 	if not is_dirty():
 		return
-	var sh: Sheet = Sheet.confirm(self, "변경을 모두 취소할까요?", "고친 내용이 처음 상태로 돌아가요.", "변경 취소", true, "계속 고치기")
-	sh.closed.connect(func(r: Variant) -> void:
-		if str(r) == "ok":
-			revert())
+	_confirm("변경을 모두 취소할까요?", "고친 내용이 처음 상태로 돌아가요.", "변경 취소", "계속 고치기", revert)
 
 
 func _on_save_pressed() -> void:

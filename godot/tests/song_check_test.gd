@@ -305,6 +305,7 @@ func _ready() -> void:
 	_test_open()
 	_test_text()
 	_test_times()
+	_test_offset_clock()
 	_test_merge_split_delete()
 	_test_offset_revert()
 	_test_fuzz()
@@ -471,6 +472,52 @@ func _test_times() -> void:
 	ok(is_equal_approx(f3.now, 13.5) and s3.set_line_start_now(3) and is_equal_approx(float(_line_of(s3, 3)["t0"]), 13.0), "with offset 0.5 the audio is at 13.5 but 'now' is song time 13.0")
 	_check(s3, "now with offset")
 	_close_scr(d3)
+	_close_scr(d)
+
+
+func _test_offset_clock() -> void:
+	# Changing the offset while the player stays loaded with the old one: every audio <-> song time conversion on the
+	# screen must use the offset being edited now (review finding: 'now' was computed with the old offset).
+	var d: Dictionary = _open_song()
+	var scr: SongCheckScreen = d["scr"]
+	var fake: Fake = d["fake"]
+	scr.player.play_from(15.0)
+	scr.player.pause()
+	ok(scr.set_song_offset(0.5), "offset 0.5 set while paused")
+	ok(is_equal_approx(scr.current_pos(), 14.5), "paused at audio 15.0, offset 0.5 -> now is song time 14.5 (%s)" % scr.current_pos())
+	ok(scr.set_line_start_now(3) and is_equal_approx(float(_line_of(scr, 3)["t0"]), 14.5), "offset change -> paused -> start = now gives 14.5, not 15.0 (%s)" % _line_of(scr, 3)["t0"])
+	scr.player.play_from(17.0)
+	scr.player.pause()
+	ok(scr.set_line_end_now(3) and is_equal_approx(float(_line_of(scr, 3)["t1"]), 16.5), "offset change -> paused -> end = now gives 16.5 (%s)" % _line_of(scr, 3)["t1"])
+	ok(is_equal_approx(scr._slider.value, 16.5) and scr._time_label.text.begins_with(SongCheckScreen.fmt_time(16.5)), "progress bar and time follow the edited offset (%s, %s)" % [scr._slider.value, scr._time_label.text])
+	# the offset changes again while paused: the bar moves at once, nothing is played
+	scr.player.play_from(12.0)
+	scr.player.pause()
+	ok(is_equal_approx(scr._slider.value, 11.5), "paused at audio 12.0, offset 0.5 -> bar at 11.5")
+	scr.set_song_offset(0.3)
+	ok(is_equal_approx(scr._slider.value, 11.7) and scr._time_label.text.begins_with(SongCheckScreen.fmt_time(11.7)), "a new offset moves the bar and time at once (%s, %s)" % [scr._slider.value, scr._time_label.text])
+	scr.set_song_offset(-0.4)
+	ok(is_equal_approx(scr.current_pos(), 12.4) and scr.set_line_start_now(3) and is_equal_approx(float(_line_of(scr, 3)["t0"]), 12.4), "a negative offset works too (now 12.4)")
+	scr.set_song_offset(0.3)
+	# resuming after the offset change keeps the place in the audio
+	scr.toggle_play()
+	ok(scr.player.is_playing() and absf(float(fake.starts.back()) - (scr.current_pos() + 0.3)) < 0.06 and absf(float(fake.starts.back()) - 12.0) < 0.001, "play after an offset change continues at audio 12.0 (%s)" % str(fake.starts.back()))
+	scr.player.pause()
+	ok(is_equal_approx(scr.current_pos(), 11.7), "after the reload 'now' is still 11.7 (%s)" % scr.current_pos())
+	scr.seek(5.0)
+	ok(absf(float(fake.starts.back()) - 5.3) < 0.001 and is_equal_approx(scr.current_pos(), 5.0), "seek(5.0) after the offset change plays audio 5.3 and reports 5.0 (%s)" % scr.current_pos())
+	_check(scr, "offset clock")
+	# a back press while the confirmation is open does not stack a second sheet
+	scr.set_text(0, "Unsaved")
+	scr.go_back()
+	scr.go_back()
+	_press(scr, "BtnRevert")
+	ok(Sheet.depth() == 1, "repeated back / revert presses keep one confirmation sheet (depth %d)" % Sheet.depth())
+	Sheet.close_top("cancel")
+	ok(Sheet.depth() == 0 and _closed_n == 0, "cancelling closes it and stays")
+	scr.go_back()
+	ok(Sheet.depth() == 1, "a new back press opens the sheet again")
+	Sheet.close_top("cancel")
 	_close_scr(d)
 
 
