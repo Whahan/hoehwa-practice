@@ -385,8 +385,8 @@ static func _int_at(d: Variant, k: String, dflt: Variant, lo: int, hi: int) -> V
 	var n: int = 0
 	if v is int:
 		n = v
-	elif v is float and is_finite(v) and absf(v) < 4.0e18:
-		n = int(v)
+	elif v is float and is_finite(v) and absf(v) < 4.0e18 and v == floorf(v):
+		n = int(v) ## a fraction (40.5) is not a count
 	else:
 		return null
 	return n if (n >= lo and n <= hi) else null
@@ -400,6 +400,19 @@ static func _bool_at(d: Variant, k: String, dflt: Variant) -> Variant:
 	if not dd.has(k):
 		return dflt
 	return dd[k] if dd[k] is bool else null
+
+
+static var _b64_re: RegEx = null
+
+
+## Standard base64 text (A-Z a-z 0-9 + / and up to 2 "=" at the end, length a multiple of 4), not empty.
+static func _is_base64(t: String) -> bool:
+	if t.is_empty() or t.length() % 4 != 0:
+		return false
+	if _b64_re == null:
+		_b64_re = RegEx.new()
+		_b64_re.compile("^[A-Za-z0-9+/]+={0,2}$")
+	return _b64_re.search(t) != null
 
 
 static func _bad_res() -> Dictionary:
@@ -442,7 +455,8 @@ func _preflight(r: Run) -> Dictionary:
 			return _result_err("cancelled")
 		if res.get("ok", false):
 			var d: Variant = res.get("data")
-			if not (d is Dictionary) or (d as Dictionary).get("song", false) != true:
+			## "song" must be the real boolean true; a missing key or any other type is an answer from a program without the song feature
+			if not (d is Dictionary) or _bool_at(d, "song", false) != true:
 				return _result_err("pc_old")
 			var sv: Variant = _int_at(d, "song_v", 1, 0, 1000000)
 			if sv == null:
@@ -929,6 +943,8 @@ func _fetch_audio(r: Run, song: Dictionary) -> Dictionary:
 		if int(pi_v) != part or (parts != 0 and pn != parts):
 			return _result_err("sha_mismatch", "", true)
 		parts = pn
+		if not _is_base64(str(d["data_b64"])):
+			return _result_err("bad_response", "", true)
 		var raw: PackedByteArray = Marshalls.base64_to_raw(str(d["data_b64"]))
 		if raw.size() != int(nb_v) or raw.is_empty():
 			return _result_err("sha_mismatch", "", true)

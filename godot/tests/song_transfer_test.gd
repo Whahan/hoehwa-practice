@@ -67,12 +67,21 @@ func _ready() -> void:
 	if up:
 		await _real_sections()
 	_stop_real()
-	await get_tree().create_timer(0.4).timeout
 	var closed: Dictionary = await _http(HTTPClient.METHOD_GET, "/health")
+	for i in 40: ## the old server needs a moment to let go of the port
+		if int(closed["code"]) == 0:
+			break
+		await get_tree().create_timer(0.25).timeout
+		closed = await _http(HTTPClient.METHOD_GET, "/health")
 	ok(int(closed["code"]) == 0, "stub server is gone and port %d is closed again" % PORT)
 	fake = FakeSong.new()
 	add_child(fake)
 	var fup: bool = fake.setup(PORT)
+	for i in 20: ## the port may still be in its last moments of closing
+		if fup:
+			break
+		await get_tree().create_timer(0.25).timeout
+		fup = fake.setup(PORT)
 	ok(fup, "fake server is listening on port %d" % PORT)
 	if fup:
 		await _fake_sections()
@@ -379,6 +388,11 @@ func _test_phone_none() -> void:
 
 func _start_real() -> bool:
 	var busy: Dictionary = await _http(HTTPClient.METHOD_GET, "/health")
+	for i in 20: ## a server of the run before may still be letting go of the port (it is never started by anyone else)
+		if int(busy["code"]) == 0:
+			break
+		await get_tree().create_timer(0.25).timeout
+		busy = await _http(HTTPClient.METHOD_GET, "/health")
 	if int(busy["code"]) != 0:
 		print("  port %d is already in use, not starting" % PORT)
 		return false
@@ -1085,6 +1099,37 @@ func _fake_bad_values() -> void:
 	ok(no_release, "bad values: the PC's copy was never released")
 	ok(pending_ok, "bad values: pending kept (resumable) only when the song is already finished on the PC")
 	ok(seen_ok, "bad values: the transfer is idle again after every one")
+	# /health "song" of the wrong type: an old program, nothing is uploaded
+	var song_vals: Array = [["null", null], ["text", "abc"], ["one", 1], ["zero", 0], ["array", [1]], ["object", {}], ["fraction", 40.5], ["false", false]]
+	var song_ok: bool = true
+	var song_shown: Array = []
+	for v in song_vals:
+		_reset_store()
+		fake.reset()
+		fake.cfg["bad"] = {"GET /health": {"song": v[1]}}
+		var th := _new_t(100000)
+		var rh: Dictionary = _res(await _go(th, _fake_src(), _params(), 20.0))
+		if not (rh.get("ok") == false and rh.get("err_code") == "pc_old" and fake.count("POST /song/upload") == 0 and _has_hangul(str(rh.get("message", "")))):
+			song_ok = false
+			song_shown.append("%s -> %s" % [v[0], str(rh.get("err_code", "(none)"))])
+		th.queue_free()
+	ok(song_ok, "bad values: /health song = null/text/1/0/array/object/40.5/false -> pc_old, nothing uploaded %s" % str(song_shown))
+	# audio answers with a fraction or text that is not base64
+	var audio_extra: Array = [["total_bytes 40.5", {"total_bytes": 40.5}], ["bytes 40.5", {"bytes": 40.5}], ["data_b64 not base64", {"data_b64": "!!!not base64!!!"}],
+		["data_b64 empty", {"data_b64": ""}], ["data_b64 number", {"data_b64": 123}], ["data_b64 bad length", {"data_b64": "QUJD="}], ["sha256 number", {"sha256": 5}]]
+	var extra_ok: bool = true
+	var extra_shown: Array = []
+	for v in audio_extra:
+		_reset_store()
+		fake.reset()
+		fake.cfg["bad"] = {"GET /song/audio": v[1]}
+		var te := _new_t(100000)
+		var re: Dictionary = _res(await _go(te, _fake_src(), _params(), 20.0))
+		if not (re.get("ok") == false and re.get("err_code") == "bad_response" and fake.count("POST /song/jobs/release") == 0 and _songs().is_empty() and re.get("resumable") == true):
+			extra_ok = false
+			extra_shown.append("%s -> %s" % [v[0], str(re.get("err_code", "(none)"))])
+		te.queue_free()
+	ok(extra_ok, "bad values: audio fraction / non-base64 text -> bad_response, no release, resumable %s" % str(extra_shown))
 	# the checker itself: a normal answer must not be called bad (so the cases above fail for the right reason)
 	_reset_store()
 	fake.reset()
