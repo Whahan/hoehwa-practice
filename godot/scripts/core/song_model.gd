@@ -11,7 +11,8 @@ extends RefCounted
 ##   - 시간은 [0, duration] 으로 자르고 t1 > t0 (최소 MIN_LINE), 줄은 t0 오름차순(같으면 원래 순서), 줄 번호 i 는 0.. 로 다시 붙인다.
 ##     (marks.lines 와 stats.best 의 줄 번호는 줄이 옮겨진 만큼 따라 옮긴다. 지워진 줄의 표시는 버린다.)
 ##   - 줄 <= MAX_LINES(400), 단어 <= MAX_WORDS(80), 용어집 <= MAX_GLOSSARY, 문자열은 필드별 상한, 제어문자 제거.
-##   - 모르는 level 은 "mid". 알 수 없는 키는 최상위·줄·단어에서 보존한다(보정하지 않음).
+##   - 모르는 level 은 "mid". 알 수 없는 키는 최상위·줄·단어에서 보존한다(보정하지 않음). 단 "_" 로 시작하는 키는
+##     실행 중 내부 값(예: _audio_path)이라 디스크의 값을 믿지 않고 버린다.
 ##   - NaN/inf/문자열 같은 숫자 아닌 값은 0 (또는 기본값)으로 본다.
 
 const CURRENT_V := 1
@@ -127,7 +128,7 @@ static func normalize(raw: Variant) -> Dictionary:
 	var out := {}
 	# unknown top-level keys are kept as they are
 	for k in src.keys():
-		if k is String and not _KNOWN_TOP.has(k):
+		if k is String and not _KNOWN_TOP.has(k) and not k.begins_with("_"):
 			out[k] = _copy(src[k])
 	var v: int = int_of(src.get("v", 1), 1, 1000000, 1)
 	out["v"] = v
@@ -207,7 +208,7 @@ static func _copy(v: Variant) -> Variant:
 static func _norm_line_raw(rl: Dictionary) -> Dictionary:
 	var ln := {}
 	for k in rl.keys():
-		if k is String and not _KNOWN_LINE.has(k):
+		if k is String and not _KNOWN_LINE.has(k) and not k.begins_with("_"):
 			ln[k] = _copy(rl[k])
 	ln["p"] = int_of(rl.get("p", 0), 0, 9999, 0)
 	ln["text"] = clean_str(rl.get("text", ""), LEN_LINE)
@@ -248,7 +249,7 @@ static func _fix_words(ln: Dictionary, dur: float) -> void:
 			var wd: Dictionary = w
 			var o := {}
 			for k in wd.keys():
-				if k is String and not _KNOWN_WORD.has(k):
+				if k is String and not _KNOWN_WORD.has(k) and not k.begins_with("_"):
 					o[k] = _copy(wd[k])
 			o["w"] = clean_str(wd.get("w", ""), LEN_WORD)
 			o["lemma"] = clean_str(wd.get("lemma", ""), LEN_WORD)

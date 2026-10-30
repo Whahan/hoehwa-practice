@@ -33,6 +33,7 @@ static var max_bytes: int = MAX_BYTES
 static var fake_used_bytes: int = 0 ## 시험: 사용량에 더해지는 가짜 크기
 ## 시험: (임시 파일 경로) -> bool. 설정돼 있고 false 를 돌려주면 그 파일 쓰기는 실패로 본다 (일부만 써 둔 채 끊긴 상황 흉내).
 static var write_hook: Callable = Callable()
+static var rename_fail: bool = false ## 시험: 이름 바꾸기가 거절되는 상황
 static var _warned: bool = false
 static var _quarantined: Array = []
 static var _sha_cache: Dictionary = {} ## audio path -> [size, mtime]  (확인이 끝난 것)
@@ -44,12 +45,35 @@ static func _g(p: String) -> String:
 	return ProjectSettings.globalize_path(p)
 
 
-## 시험 보호: 시험 중에는 실제 폴더를 쓰지 않는다.
+## 경로를 비교용으로 정리한다: 절대경로(globalize), `\` -> `/`, `.`·`..` 정리, 각 요소 끝의 점·공백 제거(Windows 가
+## 같은 폴더로 보는 `songs.` `songs `), 소문자(대소문자를 가리지 않는 파일 시스템).
+static func canon(p: String) -> String:
+	var g: String = p
+	if g.begins_with("user://") or g.begins_with("res://"):
+		g = ProjectSettings.globalize_path(g)
+	g = g.replace("\\", "/").simplify_path()
+	var parts: PackedStringArray = []
+	for part in g.split("/"):
+		var c: String = part
+		if c != "." and c != "..":
+			while c.length() > 1 and (c.ends_with(".") or c.ends_with(" ")):
+				c = c.substr(0, c.length() - 1)
+		parts.append(c)
+	return "/".join(parts).rstrip("/").to_lower()
+
+
+## 시험 보호: 시험 중에는 실제 폴더 `user://songs` (대소문자·끝 점/공백·절대경로·하위 경로 포함)를 쓰지 않는다.
 static func blocked() -> bool:
 	if not Progress.test_guard:
 		return false
-	var r: String = root.rstrip("/").simplify_path()
-	return r == ROOT or r.begins_with(ROOT + "/")
+	var r: String = canon(root)
+	var real: String = canon(ROOT)
+	return r == real or r.begins_with(real + "/")
+
+
+## 실제 절대경로가 곡 폴더(root) 아래인가 (root 자체는 아님).
+static func _inside_root(path: String) -> bool:
+	return canon(path).begins_with(canon(root) + "/")
 
 
 static func _guard() -> bool:
@@ -114,16 +138,11 @@ static func _write_atomic(path: String, text: String) -> bool:
 	if err != OK:
 		DirAccess.remove_absolute(gt)
 		return false
-	if DirAccess.rename_absolute(gt, _g(path)) == OK:
+	if not rename_fail and DirAccess.rename_absolute(gt, _g(path)) == OK:
 		return true
-	var f2: FileAccess = FileAccess.open(path, FileAccess.WRITE)
-	if f2 == null:
-		DirAccess.remove_absolute(gt)
-		return false
-	f2.store_string(text)
-	f2.close()
+	## the rename was refused: the old file is NOT overwritten in place (a cut write would lose it); give up instead
 	DirAccess.remove_absolute(gt)
-	return true
+	return false
 
 
 static func _write_bytes(path: String, data: PackedByteArray) -> bool:
@@ -138,8 +157,21 @@ static func _write_bytes(path: String, data: PackedByteArray) -> bool:
 	return err == OK
 
 
+static func _is_link(gp: String) -> bool:
+	var d: DirAccess = DirAccess.open(gp.get_base_dir())
+	return d != null and d.is_link(gp)
+
+
+## Removes a folder tree. Never follows a link (junction / symlink): the link itself is removed, what it points to is
+## left alone. Refuses anything whose real path is not below `root`.
 static func _rm_rf(path: String) -> void:
 	var gp: String = _g(path)
+	if not _inside_root(gp):
+		last_error = "outside_root"
+		return
+	if _is_link(gp):
+		DirAccess.remove_absolute(gp)
+		return
 	var d: DirAccess = DirAccess.open(gp)
 	if d != null:
 		for sub in d.get_directories():
@@ -182,7 +214,7 @@ static func _song_ids() -> Array:
 	if d == null:
 		return ids
 	for sub in d.get_directories():
-		if SongModel.is_valid_id(sub):
+		if SongModel.is_valid_id(sub) and not d.is_link(_g(root).path_join(sub)): ## a link is not a song folder
 			ids.append(sub)
 	ids.sort()
 	return ids

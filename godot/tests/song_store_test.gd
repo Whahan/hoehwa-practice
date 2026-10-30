@@ -59,7 +59,16 @@ func _write(p: String, text: String) -> void:
 	f.close()
 
 
+func _is_link(path: String) -> bool:
+	var d := DirAccess.open(_g(path).get_base_dir())
+	return d != null and d.is_link(_g(path))
+
+
+## Test cleanup: never follows a link (a left-over junction must not take a real folder with it).
 func _rm_rf(path: String) -> void:
+	if _is_link(path):
+		DirAccess.remove_absolute(_g(path))
+		return
 	var d := DirAccess.open(_g(path))
 	if d != null:
 		for sub in d.get_directories():
@@ -110,6 +119,7 @@ func _install(title: String = "Test Song", n: int = 1500, created: int = 1790000
 
 func _fresh() -> void:
 	SongStore.write_hook = Callable()
+	SongStore.rename_fail = false
 	SongStore.fake_used_bytes = 0
 	SongStore.max_songs = SongStore.MAX_SONGS
 	SongStore.max_bytes = SongStore.MAX_BYTES
@@ -133,11 +143,13 @@ func _ready() -> void:
 	_test_broken_json()
 	_test_audio_checks()
 	_test_atomic_save()
+	_test_internal_keys()
 	_test_read_only()
 	_test_pending()
 	_test_order_and_lookup()
 	_test_delete()
 	_test_traversal()
+	_test_links()
 	_test_guard()
 
 	_fresh()
@@ -378,6 +390,12 @@ func _test_atomic_save() -> void:
 	ok(_read(path) == keep and SongStore.load_song(id)["title"] == "Renamed", "failed write: the previous song.json is intact")
 	ok(not FileAccess.file_exists(path + ".tmp"), "failed write: temp file cleaned")
 	SongStore.write_hook = Callable()
+	# the rename is refused: the old file is not overwritten in place, the temp file is removed
+	SongStore.rename_fail = true
+	s["title"] = "Rename Refused"
+	ok(SongStore.save_song(s) == false and SongStore.last_error == "disk_write", "rename refused -> false / disk_write")
+	ok(_read(path) == keep and not FileAccess.file_exists(path + ".tmp"), "rename refused: song.json byte for byte the same, no .tmp left")
+	SongStore.rename_fail = false
 	ok(SongStore.save_song({"id": "s_0000000000ff", "title": "x"}) == false, "save_song of a song with no folder -> false")
 	ok(SongStore.save_song({"title": "no id"}) == false and SongStore.last_error == "bad_song", "save_song without an id -> false")
 	var s2: Dictionary = SongStore.load_song(id)
@@ -386,6 +404,25 @@ func _test_atomic_save() -> void:
 	SongStore.save_song(s2)
 	var s3: Dictionary = SongStore.load_song(id)
 	ok(float(s3["lines"][0]["t0"]) == 0.0 and float(s3["offset"]) == 5.0, "save_song normalizes before writing")
+
+
+func _test_internal_keys() -> void:
+	print("[keys starting with _ are not read from disk]")
+	_fresh()
+	var id: String = _install("Internal")["id"]
+	var path: String = ROOT + "/" + id + "/song.json"
+	var raw: Dictionary = JSON.parse_string(_read(path))
+	raw["_audio_path"] = "C:/Windows/win.ini"
+	raw["_secret"] = 1
+	raw["audio_path"] = "kept"
+	raw["lines"][0]["_audio_path"] = "x"
+	raw["lines"][0]["words"] = [{"w": "a", "lemma": "a", "level": "easy", "s": 1.0, "e": 2.0, "_audio_path": "y", "extra": 3}]
+	_write(path, JSON.stringify(raw))
+	var s: Dictionary = SongStore.load_song(id)
+	var text: String = JSON.stringify(s)
+	ok(not s.has("_audio_path") and not s.has("_secret") and not text.contains("_audio_path") and not text.contains("win.ini"), "load_song: _audio_path / _* keys from song.json dropped (top, line, word)")
+	ok(s.get("audio_path", "") == "kept" and s["lines"][0]["words"][0]["extra"] == 3, "  ... keys without a leading _ are kept")
+	ok(SongStore.list()[0]["id"] == id, "  ... the song still lists")
 
 
 func _test_read_only() -> void:
@@ -487,6 +524,70 @@ func _test_traversal() -> void:
 	ok(SongStore.pending_put({"job": "a/b", "t": 1}) == false and SongStore.pending_put({"job": "..", "t": 1}) == false, "pending jobs with path characters refused")
 
 
+## Makes a directory link (Windows junction, otherwise a symlink). true when it exists and is seen as a link.
+func _mklink(link: String, target: String) -> bool:
+	var out := []
+	var gl: String = _g(link)
+	var gt: String = _g(target)
+	var code: int = -1
+	if OS.get_name() == "Windows":
+		code = OS.execute("cmd", ["/c", "mklink", "/J", gl.replace("/", "\\"), gt.replace("/", "\\")], out, true)
+	else:
+		code = OS.execute("ln", ["-s", gt, gl], out, true)
+	return code == 0 and _is_link(link)
+
+
+func _outside_ok(files: Array) -> bool:
+	for f in files:
+		if not FileAccess.file_exists(f):
+			return false
+	return true
+
+
+func _test_links() -> void:
+	print("[links are never followed when deleting]")
+	_fresh()
+	var out := "user://test_songs_outside"
+	_rm_rf(out)
+	DirAccess.make_dir_recursive_absolute(_g(out + "/deep"))
+	_write(out + "/keep.txt", "keep")
+	_write(out + "/deep/deep.txt", "deep")
+	var files := [out + "/keep.txt", out + "/deep/deep.txt"]
+	# a valid song.json outside: a linked "song folder" must not show up as a song
+	_write(out + "/song.json", JSON.stringify(_song("Outside")))
+	DirAccess.make_dir_recursive_absolute(_g(ROOT))
+	var lid := "s_aaaaaaaaaaaa"
+	var made: bool = _mklink(ROOT + "/" + lid, out)
+	ok(made, "a directory link to a folder outside the songs root could be created")
+	if made:
+		ok(SongStore.list().is_empty() and SongStore.orphan_ids().is_empty(), "a linked folder named like a song is not listed")
+		ok(SongStore.delete(lid) == true and _outside_ok(files), "delete(link id): files outside the root are still there")
+		ok(not DirAccess.dir_exists_absolute(_g(ROOT + "/" + lid)) and DirAccess.dir_exists_absolute(_g(out + "/deep")), "  ... the link is gone, the target folder stays")
+	# a link inside a real song folder
+	var id: String = _install("Has Link")["id"]
+	var lk: String = ROOT + "/" + id + "/sub"
+	var made2: bool = _mklink(lk, out)
+	ok(made2, "a link inside a song folder could be created")
+	if made2:
+		ok(SongStore.delete(id) == true and _outside_ok(files), "delete(song) with a link inside: outside files survive")
+		ok(not DirAccess.dir_exists_absolute(_g(ROOT + "/" + id)), "  ... the song folder is gone")
+	# a link named like a staging folder: the next install cleans it without following it
+	var made3: bool = _mklink(ROOT + "/_tmp_s_bbbbbbbbbbbb", out)
+	ok(made3, "a staging-named link could be created")
+	if made3:
+		ok(_install("After Link")["ok"] == true and _outside_ok(files), "install's staging cleanup does not follow the link")
+		ok(not DirAccess.dir_exists_absolute(_g(ROOT + "/_tmp_s_bbbbbbbbbbbb")), "  ... the staging link itself is removed")
+	# _rm_rf refuses folders outside the root
+	SongStore._rm_rf(out)
+	ok(_outside_ok(files) and SongStore.last_error == "outside_root", "_rm_rf of a path outside the root: nothing deleted")
+	# nothing left that points out of the root
+	for sub in _dirs(ROOT):
+		if _is_link(ROOT + "/" + sub):
+			DirAccess.remove_absolute(_g(ROOT + "/" + sub))
+	_rm_rf(out)
+	ok(not DirAccess.dir_exists_absolute(_g(out)), "test cleanup of the outside folder")
+
+
 func _test_guard() -> void:
 	print("[test guard on the real folder]")
 	var saved: String = SongStore.root
@@ -501,8 +602,19 @@ func _test_guard() -> void:
 	ok(SongStore.blocked() == true, "trailing slash does not get around it")
 	SongStore.root = "user://songs/../songs"
 	ok(SongStore.blocked() == true, "../ does not get around it")
+	var variants := ["user://SONGS", "user://Songs/sub", "user://songs.", "user://songs ", "user://songs. ", ProjectSettings.globalize_path("user://songs"),
+		ProjectSettings.globalize_path("user://songs").replace("/", "\\").to_upper(), ProjectSettings.globalize_path("user://Songs") + "/deep/er", "user://test_x/../SongS", "user://songs/./."]
+	for v in variants:
+		SongStore.root = v
+		ok(SongStore.blocked() == true and SongStore.list().is_empty() and SongStore.install(_song(), _audio(10))["ok"] == false, "blocked: `%s`" % v)
+	SongStore.root = "user://songs/x"
+	ok(SongStore.delete("s_0123456789ab") == false and SongStore.pending_put({"job": "j_2", "t": 1}) == false, "blocked sub folder: delete / pending_put refused")
 	SongStore.root = ROOT
 	ok(SongStore.blocked() == false, "a user://test_* root is allowed")
+	for v in ["user://songsx", "user://test_songs/songs", "user://my_songs", "user://songs_other/songs"]:
+		SongStore.root = v
+		ok(SongStore.blocked() == false, "not blocked: `%s` (a different folder)" % v)
+	SongStore.root = ROOT
 	SongStore.root = "user://songs_other"
 	ok(SongStore.blocked() == false, "user://songs_other is a different folder")
 	SongStore.root = saved

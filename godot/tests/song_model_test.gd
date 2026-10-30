@@ -190,6 +190,19 @@ func _test_unknown_and_version() -> void:
 	var n: Dictionary = SongModel.normalize(s)
 	ok(n["future_field"]["a"] == [1, 2, 3], "unknown top-level key kept")
 	ok(n["lines"][0]["karaoke"] == "yes" and n["lines"][0]["words"][0]["color"] == "red", "unknown line / word keys kept")
+	var si := _song()
+	si["_audio_path"] = "C:/Windows/win.ini"
+	si["_x"] = 1
+	si["audio_path"] = "ok"
+	si["lines"][0]["_audio_path"] = "z"
+	si["lines"][0]["_y"] = 2
+	si["lines"][0]["words"][0]["_audio_path"] = "w"
+	si["lines"][0]["words"][0]["keep_me"] = 5
+	var ni: Dictionary = SongModel.normalize(si)
+	var nit: String = JSON.stringify(ni)
+	ok(not ni.has("_audio_path") and not ni.has("_x") and not ni["lines"][0].has("_audio_path") and not ni["lines"][0].has("_y") and not ni["lines"][0]["words"][0].has("_audio_path"), "keys starting with _ dropped at top / line / word level")
+	ok(not nit.contains("_audio_path") and not nit.contains("win.ini"), "  ... nothing of them left anywhere in the result")
+	ok(ni["audio_path"] == "ok" and ni["lines"][0]["words"][0]["keep_me"] == 5, "  ... other unknown keys are still kept")
 	var s2 := _song()
 	s2["v"] = 2
 	s2["new_thing"] = 7

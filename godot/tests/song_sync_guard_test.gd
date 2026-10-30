@@ -35,6 +35,10 @@ func _g(p: String) -> String:
 
 
 func _rm_rf(path: String) -> void:
+	var up := DirAccess.open(_g(path).get_base_dir())
+	if up != null and up.is_link(_g(path)):
+		DirAccess.remove_absolute(_g(path)) ## a link: remove only the link
+		return
 	var d := DirAccess.open(_g(path))
 	if d != null:
 		for sub in d.get_directories():
