@@ -8,11 +8,16 @@ extends AppView
 ## 화면 연결(U5, 설계 4.3): 이 화면이 허브다 (PracticeView 와 같은 모양, 한 번에 하위 화면 하나).
 ##   [+ 곡 추가] -> SongAddScreen (song_added(id)) -> SongCheckScreen (saved -> closed) -> SongStudyScreen (closed)
 ##   곡 탭 -> SongStudyScreen ; 학습 화면 ⋯ 메뉴: 가사 확인·수정 (SongCheckScreen, 닫으면 학습 화면으로), 곡 삭제, 곡 정보
+## 가사 외우기(M7, docs/lyrics_memorize_design.md §4, §8 M7):
+##   [가사만 추가] -> (처음이면 동의 시트) -> SongLyricsAddScreen (PC 없어도 됨, song_added(id)) -> SongMemoScreen (closed -> 목록)
+##   곡 탭: kind "lyrics" -> SongMemoScreen, 음원 곡 -> SongStudyScreen ; 학습 화면 ⋯ 메뉴 "가사 외우기" (memo_requested(id)) -> SongMemoScreen (closed -> 목록)
+##   목록 행의 "외운 줄 N/M" 은 SongStore.memo_summary 를 목록 스레드 안에서 읽는다 (화면 스레드는 파일을 읽지 않는다).
 ## 화면을 닫을 때는 on_hide() -> remove_child -> queue_free 로 해제한다 (Song 버스·녹음·요청이 그 자리에서 정리된다).
 ## 안드로이드 뒤로 가기: 시트가 열려 있으면 시트 먼저(main.gd 가 Sheet.handle_back 을 먼저 부르고, go_back 도 같은 순서를 지킨다), 그다음 화면.
 ## 화면을 여는 것과 같은 신호도 그대로 낸다 (시험 · 다른 연결용):
 ##   add_requested                      [+ 곡 추가] 를 눌렀고 추가해도 되는 상태(PC 연결, 동의함)
-##   song_open_requested(song_id)       곡을 눌렀다 (오디오가 있는 곡만)
+##   lyrics_add_requested               [가사만 추가] 를 눌렀고 동의함 (PC 연결은 필요 없다)
+##   song_open_requested(song_id)       곡을 눌렀다 (음원 곡은 학습 화면, 가사만 곡은 외우기 화면. 오디오가 깨진 음원 곡은 제외)
 ## host_screens == false 이면 화면을 직접 열지 않는다 (신호만). 그때 신호에 연결된 곳이 없으면 "준비 중" 안내만 한다.
 ##
 ## SongStore.list() 는 처음 부를 때 오디오 sha256 을 최대 400 MiB 계산하므로 느리다 → 다른 스레드에서 부르고(use_thread),
@@ -20,6 +25,7 @@ extends AppView
 ## 시험은 SongStore.root 를 user://test_* 로 바꾸고, `loader` 로 느린 목록을 흉내 낸다.
 
 signal add_requested
+signal lyrics_add_requested
 signal song_open_requested(song_id: String)
 
 const NAME_KO := {"en": "영어", "ja": "일본어"}
@@ -31,19 +37,21 @@ const MSG_NO_PC_PC := "곡 추가는 PC 연결 시 가능해요. AI 엔진이 �
 const MSG_OLD_PC := "PC 프로그램을 최신으로 업데이트해 주세요. 지금 연결된 PC에는 곡 추가 기능이 없어요. 저장된 곡은 지금도 공부할 수 있어요."
 const MSG_FULL := "저장 공간이 가득 찼어요 (곡 %d개 · %s). 곡을 지운 뒤에 추가해 주세요."
 const MSG_MISSING_AUDIO := "오디오 파일이 없어요 — 삭제 후 다시 추가해 주세요"
+const MSG_LYRICS_ONLY := "가사만"
 const MSG_SAVED_HERE := "곡과 가사는 이 기기에만 저장돼요. 동기화와 백업에는 들어가지 않아요."
 
 ## 시험에서 바꾸는 값
-var loader: Callable = Callable() ## () -> {"list","orphans","usage","quarantined"}; 비어 있으면 SongStore. 스레드에서 불린다.
+var loader: Callable = Callable() ## () -> {"list","orphans","usage","quarantined","memo"(선택: id -> memo_summary)}; 비어 있으면 SongStore. 스레드에서 불린다.
 var use_thread: bool = true
 
 var host_screens: bool = true ## false: 신호만 내고 하위 화면은 열지 않는다 (시험)
-var screen: Control = null ## 열려 있는 하위 화면 (SongAddScreen | SongCheckScreen | SongStudyScreen), 없으면 null
-var screen_kind: String = "" ## "add" | "check" | "study"
+var screen: Control = null ## 열려 있는 하위 화면 (SongAddScreen | SongCheckScreen | SongStudyScreen | SongLyricsAddScreen | SongMemoScreen), 없으면 null
+var screen_kind: String = "" ## "add" | "check" | "study" | "lyrics_add" | "memo"
 
 var state: String = "idle" ## idle | loading | ready | error
 var songs: Array = [] ## SongStore.list() 항목
 var orphans: Array = [] ## 복구할 수 없는 곡 id
+var memos: Dictionary = {} ## 가사만 곡 id -> SongStore.memo_summary (목록 스레드가 읽은 것)
 var usage: Dictionary = {}
 var load_count: int = 0 ## 목록 읽기를 끝낸 횟수 (시험용)
 var last_sheet: Sheet = null ## 마지막으로 연 시트 (시험용)
@@ -51,12 +59,14 @@ var last_sheet: Sheet = null ## 마지막으로 연 시트 (시험용)
 var _page: PageScroll
 var _header: Control = null
 var _add_btn: Button = null
+var _lyrics_btn: Button = null
 var _notice_box: VBoxContainer
 var _body: VBoxContainer
 var _thread: Thread = null
 var _defer_frames: int = 0
 var _reload_pending: bool = false
 var _loaded_once: bool = false
+var _consent_next: String = "add" ## 동의 시트 뒤에 할 일: "add" | "lyrics"
 var _check_from: String = "" ## 가사 확인 화면을 연 곳: "add" (곡 추가 직후) | "study" (⋯ 메뉴)
 var _rows: Dictionary = {} ## id -> row Control
 var _del_btns: Dictionary = {} ## id -> Button
@@ -72,16 +82,24 @@ func _ready() -> void:
 	add_child(_page)
 	var c: VBoxContainer = _page.content
 	var actions: Array = []
-	if not phone: # PC: the action sits in the title row; the phone has a full-width button under it
-		actions = [{"id": "add", "text": "+ 곡 추가", "cb": Callable(self, "request_add")}]
+	if not phone: # PC: the actions sit in the title row; the phone has full-width buttons under it
+		actions = [
+			{"id": "add", "text": "+ 곡 추가", "cb": Callable(self, "request_add")},
+			{"id": "lyrics", "text": "가사만 추가", "cb": Callable(self, "request_add_lyrics")},
+		]
 	_header = PageHeader.build("노래", "내 음악과 가사로 영어·일본어를 공부해요", actions)
 	c.add_child(_header)
 	if phone:
 		_add_btn = UI.button("+ 곡 추가", "primary", Pal.PRIMARY, 56.0)
 		_add_btn.pressed.connect(request_add)
 		c.add_child(_add_btn)
+		_lyrics_btn = UI.button("가사만 추가", "soft", Pal.PRIMARY, 56.0)
+		_lyrics_btn.pressed.connect(request_add_lyrics)
+		c.add_child(_lyrics_btn)
 	else:
-		_add_btn = (_header.get_meta("action_buttons", {}) as Dictionary).get("add", null)
+		var hb: Dictionary = _header.get_meta("action_buttons", {})
+		_add_btn = hb.get("add", null)
+		_lyrics_btn = hb.get("lyrics", null)
 	_notice_box = UI.vbox(0)
 	c.add_child(_notice_box)
 	_body = UI.vbox(12)
@@ -239,9 +257,18 @@ func request_add() -> void:
 	_go_add()
 
 
-func show_consent() -> void:
+## [가사만 추가]: PC 가 없어도 된다. 동의 시트(처음 한 번) -> lyrics_add_requested -> SongLyricsAddScreen.
+func request_add_lyrics() -> void:
+	if not Store.pref_bool(CONSENT_PREF):
+		show_consent("lyrics")
+		return
+	_go_lyrics()
+
+
+func show_consent(next: String = "add") -> void:
 	if last_sheet != null and is_instance_valid(last_sheet) and not last_sheet.is_closed():
 		return
+	_consent_next = next
 	var body := UI.vbox(10)
 	for para in consent_text().split("\n\n"):
 		body.add_child(UI.label(para))
@@ -256,7 +283,10 @@ func _on_consent_closed(result: Variant) -> void:
 	if str(result) != "agree":
 		return # "취소" or a dismissed sheet: nothing is saved, the add screen stays closed
 	Store.set_pref(CONSENT_PREF, true)
-	_go_add()
+	if _consent_next == "lyrics":
+		_go_lyrics()
+	else:
+		_go_add()
 
 
 func _go_add() -> void:
@@ -265,14 +295,26 @@ func _go_add() -> void:
 		open_screen("add", {"lang": Store.lang()})
 
 
+func _go_lyrics() -> void:
+	lyrics_add_requested.emit()
+	if host_screens:
+		open_screen("lyrics_add", {"lang": Store.lang()})
+
+
 # ---------------------------------------------------------------- loading the list
 
 func _default_load() -> Dictionary:
 	if SongStore.blocked(): # a test run must not look into the real songs folder (and must not log an error either)
-		return {"list": [], "orphans": [], "usage": {"songs": 0, "bytes": 0, "max_songs": SongStore.max_songs, "max_bytes": SongStore.max_bytes}, "quarantined": []}
+		return {"list": [], "orphans": [], "usage": {"songs": 0, "bytes": 0, "max_songs": SongStore.max_songs, "max_bytes": SongStore.max_bytes}, "quarantined": [], "memo": {}}
 	var l: Array = SongStore.list()
 	var q: Array = SongStore.take_quarantined()
-	return {"list": l, "orphans": SongStore.orphan_ids(), "usage": SongStore.usage(), "quarantined": q}
+	var memo: Dictionary = {}
+	var now: int = int(Time.get_unix_time_from_system())
+	for s in l: # read-only, never moves a file: safe in this thread
+		if str((s as Dictionary).get("kind", "audio")) == "lyrics":
+			var sid: String = str((s as Dictionary)["id"])
+			memo[sid] = SongStore.memo_summary(sid, now)
+	return {"list": l, "orphans": SongStore.orphan_ids(), "usage": SongStore.usage(), "quarantined": q, "memo": memo}
 
 
 func is_loading() -> bool:
@@ -329,6 +371,12 @@ func _finish_load(res: Variant) -> void:
 				if SongModel.is_valid_id(o):
 					orphans.append(str(o))
 		usage = (r["usage"] as Dictionary).duplicate() if r.get("usage", null) is Dictionary else {"songs": songs.size(), "bytes": 0, "max_songs": SongStore.MAX_SONGS, "max_bytes": SongStore.MAX_BYTES}
+		memos = {}
+		if r.get("memo", null) is Dictionary:
+			for k in (r["memo"] as Dictionary):
+				var v: Variant = (r["memo"] as Dictionary)[k]
+				if SongModel.is_valid_id(str(k)) and v is Dictionary and not (v as Dictionary).is_empty():
+					memos[str(k)] = v
 		if r.get("quarantined", null) is Array:
 			quarantined = r["quarantined"]
 		state = "ready"
@@ -420,20 +468,43 @@ func _render_ready() -> void:
 	_body.add_child(UI.margin(UI.label(MSG_SAVED_HERE, "Small"), Ds.S2, 0, Ds.S2, 0))
 
 
+## "외운 줄 3/12" (SongStore.memo_summary 의 memorized/total). 읽지 못한 곡은 "".
+func memo_text(id: String) -> String:
+	var m: Variant = memos.get(id, null)
+	if not (m is Dictionary):
+		return ""
+	return "외운 줄 %d/%d" % [int((m as Dictionary).get("memorized", 0)), int((m as Dictionary).get("total", 0))]
+
+
+## 곡 목록 항목의 종류: "lyrics" | "audio" ("" = 목록에 없음).
+func song_kind(id: String) -> String:
+	for s in songs:
+		if str((s as Dictionary).get("id", "")) == id:
+			return "lyrics" if str((s as Dictionary).get("kind", "audio")) == "lyrics" else "audio"
+	return ""
+
+
 func _song_row(list: ListGroup, s: Dictionary) -> void:
 	var id: String = str(s["id"])
 	var title: String = clip(str(s.get("title", "")), TITLE_MAX)
 	if title == "":
 		title = "(제목 없음)"
 	var is_ready: bool = bool(s.get("ready", true))
+	var lyrics_only: bool = str(s.get("kind", "audio")) == "lyrics"
 	var parts: Array = []
 	var artist: String = clip(str(s.get("artist", "")), ARTIST_MAX)
 	if artist != "":
 		parts.append(artist)
 	parts.append(str(NAME_KO.get(str(s.get("lang", "")), "")))
-	parts.append(fmt_dur(float(s.get("duration", 0.0))))
+	if not lyrics_only: # a lyrics-only song has no length
+		parts.append(fmt_dur(float(s.get("duration", 0.0))))
 	parts.append("%d줄" % int(s.get("lines", 0)))
-	if not is_ready:
+	if lyrics_only:
+		parts.append(MSG_LYRICS_ONLY)
+		parts.append(memo_text(id))
+		if bool(s.get("read_only", false)):
+			parts.append("읽기 전용")
+	elif not is_ready:
 		parts.append("오디오 없음")
 	elif bool(s.get("read_only", false)):
 		parts.append("읽기 전용")
@@ -457,7 +528,7 @@ func _song_row(list: ListGroup, s: Dictionary) -> void:
 
 const MSG_LOADING := "곡 목록을 읽는 중이에요. 잠시 뒤에 다시 눌러 주세요."
 
-## kind: "add" {lang} | "check" {id} | "study" {id, tab}. 하나만 열린다 (열려 있으면 먼저 닫는다). 열었으면 true.
+## kind: "add" {lang} | "check" {id} | "study" {id, tab} | "lyrics_add" {lang} | "memo" {id}. 하나만 열린다 (열려 있으면 먼저 닫는다). 열었으면 true.
 ## 목록을 읽는 동안에는 열지 않는다 (SongStore 를 두 곳에서 쓰지 않는다).
 func open_screen(kind: String, args: Dictionary = {}) -> bool:
 	if not host_screens:
@@ -478,6 +549,9 @@ func open_screen(kind: String, args: Dictionary = {}) -> bool:
 			s.connect("song_added", _on_song_added)
 		"study":
 			s.connect("check_requested", _on_check_requested)
+			s.connect("memo_requested", _on_memo_requested)
+		"lyrics_add":
+			s.connect("song_added", _on_lyrics_added)
 	_page.visible = false
 	add_child(s)
 	s.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -494,6 +568,10 @@ func _make_screen(kind: String) -> Control:
 			return SongCheckScreen.new()
 		"study":
 			return SongStudyScreen.new()
+		"lyrics_add":
+			return SongLyricsAddScreen.new()
+		"memo":
+			return SongMemoScreen.new()
 	return null
 
 
@@ -575,6 +653,23 @@ func _open_check_deferred(id: String, from_screen: Control) -> void:
 		_close_screen()
 
 
+## 가사만 곡을 저장했다 -> 외우기 화면으로 (화면을 바꾸는 일은 신호가 끝난 뒤에).
+func _on_lyrics_added(id: String) -> void:
+	_open_memo_deferred.call_deferred(id, screen)
+
+
+## 학습 화면 ⋯ 메뉴 "가사 외우기": 같은 곡을 외우기 화면으로 연다. 닫으면 목록으로 돌아간다.
+func _on_memo_requested(id: String) -> void:
+	_open_memo_deferred.call_deferred(id, screen)
+
+
+func _open_memo_deferred(id: String, from_screen: Control) -> void:
+	if from_screen != screen or not is_instance_valid(from_screen): # the person left that screen first
+		return
+	if not open_screen("memo", {"id": id}):
+		_close_screen()
+
+
 # ---------------------------------------------------------------- actions
 
 func _on_song_tap(id: String, is_ready: bool) -> void:
@@ -583,7 +678,7 @@ func _on_song_tap(id: String, is_ready: bool) -> void:
 		return
 	song_open_requested.emit(id)
 	if host_screens:
-		open_screen("study", {"id": id})
+		open_screen("memo" if song_kind(id) == "lyrics" else "study", {"id": id})
 	elif song_open_requested.get_connections().is_empty():
 		Toast.info("곡 학습 화면은 아직 준비 중이에요")
 
@@ -596,15 +691,20 @@ func song_title(id: String) -> String:
 	return ""
 
 
+## 삭제 확인 문구: 가사만 곡은 외우기 기록도 함께 지워진다고 알린다 (음원 곡은 U1 문구 그대로).
+func delete_text(id: String) -> String:
+	if song_kind(id) == "lyrics":
+		return "'%s'의 가사와 외우기 기록이 이 기기에서 지워져요. 되돌릴 수 없어요. 복습 카드는 그대로 남아요." % song_title(id)
+	return "'%s'의 음악과 가사, 이 곡의 학습 기록이 이 기기에서 지워져요. 되돌릴 수 없어요. 복습 카드는 그대로 남아요." % song_title(id)
+
+
 ## Delete: a confirm sheet first. The sheet's "ok" removes the folder (SongStore.delete) and reloads the list.
 func request_delete(id: String) -> void:
 	if not SongModel.is_valid_id(id) or is_loading():
 		return
 	if last_sheet != null and is_instance_valid(last_sheet) and not last_sheet.is_closed():
 		return
-	last_sheet = Sheet.confirm(self, "곡을 지울까요?",
-		"'%s'의 음악과 가사, 이 곡의 학습 기록이 이 기기에서 지워져요. 되돌릴 수 없어요. 복습 카드는 그대로 남아요." % song_title(id),
-		"삭제", true)
+	last_sheet = Sheet.confirm(self, "곡을 지울까요?", delete_text(id), "삭제", true)
 	last_sheet.closed.connect(func(r: Variant) -> void:
 		if str(r) == "ok":
 			delete_now(id))
@@ -656,6 +756,10 @@ func cleanup_now() -> void:
 
 func add_button() -> Button:
 	return _add_btn
+
+
+func lyrics_button() -> Button:
+	return _lyrics_btn
 
 
 func row_for(id: String) -> Control:

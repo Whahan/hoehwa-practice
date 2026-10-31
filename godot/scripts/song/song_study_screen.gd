@@ -29,6 +29,7 @@ extends Control
 
 signal closed
 signal check_requested(song_id: String) ## ⋯ 메뉴 "가사 확인·수정": 연결하는 쪽이 이 화면을 닫고 SongCheckScreen 을 연다
+signal memo_requested(song_id: String) ## ⋯ 메뉴 "가사 외우기": 연결하는 쪽이 이 화면을 닫고 SongMemoScreen 을 연다 (닫으면 목록으로)
 signal deleted(song_id: String) ## ⋯ 메뉴 "곡 삭제" 가 끝났다 (바로 뒤에 closed)
 signal tab_changed(kind: String)
 signal highlight_changed(i: int) ## 강조할 줄이 바뀜 (재생 중이면 재생 줄, 아니면 고른 줄)
@@ -73,7 +74,7 @@ var keep_pitch: bool = true
 var repeat: int = 1
 var audio_ok: bool = false ## 소리 파일을 읽었다
 var open_error: String = "" ## 곡을 못 열었을 때의 문구
-var result: String = "" ## 나간 이유: "" | "back" | "deleted" | "partial" (곡이 일부만 지워짐) | "check"
+var result: String = "" ## 나간 이유: "" | "back" | "deleted" | "partial" (곡이 일부만 지워짐) | "check" | "memo"
 var last_sheet: Sheet = null ## 마지막으로 연 시트 (시험용)
 
 var _shell: Dictionary = {}
@@ -182,7 +183,7 @@ func page_title() -> String:
 	return (_shell["title"] as Label).text
 
 
-# ---------------------------------------------------------------- ⋯ menu (가사 확인·수정 · 곡 정보 · 곡 삭제)
+# ---------------------------------------------------------------- ⋯ menu (가사 확인·수정 · 가사 외우기 · 곡 정보 · 곡 삭제)
 
 func _sheet_open() -> bool:
 	return last_sheet != null and is_instance_valid(last_sheet) and not last_sheet.is_closed()
@@ -191,7 +192,7 @@ func _sheet_open() -> bool:
 func open_menu() -> void:
 	if song.is_empty() or _sheet_open():
 		return
-	last_sheet = Sheet.choice(self, "곡 메뉴", [["check", "가사 확인·수정"], ["info", "곡 정보"], ["delete", "곡 삭제"]])
+	last_sheet = Sheet.choice(self, "곡 메뉴", [["check", "가사 확인·수정"], ["memo", "가사 외우기"], ["info", "곡 정보"], ["delete", "곡 삭제"]])
 	last_sheet.closed.connect(_on_menu_pick)
 
 
@@ -199,6 +200,8 @@ func _on_menu_pick(v: Variant) -> void:
 	match str(v):
 		"check":
 			request_check()
+		"memo":
+			request_memo()
 		"info":
 			show_info()
 		"delete":
@@ -215,6 +218,18 @@ func request_check() -> void:
 	_leave()
 	result = "check"
 	check_requested.emit(song_id)
+
+
+## 가사 외우기 화면으로 간다 (같은 곡 id). 재생은 멈춘다. 연결된 곳이 없으면 안내만 한다.
+func request_memo() -> void:
+	if song.is_empty():
+		return
+	if memo_requested.get_connections().is_empty():
+		Toast.info("가사 외우기는 노래 목록에서 열 수 있어요")
+		return
+	_leave()
+	result = "memo"
+	memo_requested.emit(song_id)
 
 
 ## 곡 정보 시트의 줄들: 제목 · 가수 · 언어 · 길이 · 줄 수 · 파일 크기 · 가사 출처.

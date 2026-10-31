@@ -10,7 +10,8 @@ extends Control
 ##
 ## LRCLIB 이용 규칙(§2 C1, 노래 공부 U2 와 같다): 사용자가 [가사 찾기] 를 누를 때만 부른다. 곡 하나(제목+가수가 같은 동안)당
 ##   GET /api/get 1번 + 검색 1번까지만(같은 단추를 다시 눌러도 새로 부르지 않는다). 입력 중 자동 호출 없음. 제목이나 가수를 다른 곡으로
-##   고치면 새 곡이다. 제목·가수가 둘 다 2글자 이상이어야 부른다. 곡 길이(m:ss, 선택)는 적었을 때만 get 에 보낸다.
+##   고치면 새 곡이다(이미 찾은 후보·고른 가사도 비운다). get 은 제목·가수가 둘 다 2글자 이상이어야, 검색은 둘 중 하나만 2글자 이상이어도
+##   부른다(SongAddScreen 과 같다). 곡 길이(m:ss, 선택)는 적었을 때만 보낸다.
 ##   요청마다 세대 번호를 붙여서, 화면을 나가거나 다른 곡으로 바꾼 뒤 늦게 오는 답은 버린다. 결과 글자는 길이 제한이 없어서 말줄임으로 자른다.
 ##
 ## 가사 자르기(서버 한도 §5.1과 같음): 400줄 · 한 줄 200자 · 합계 20000자, [Chorus] 같은 [ ... ] 만 있는 줄 제외 -> SongAddScreen.prepare_lyrics 재사용.
@@ -244,6 +245,7 @@ func set_title(t: String) -> void:
 func set_artist(t: String) -> void:
 	artist_text = t.substr(0, SongModel.LEN_TITLE)
 	_query_changed()
+	_refresh_footer_state()
 
 
 func set_duration_text(t: String) -> void:
@@ -343,7 +345,8 @@ func _query_key() -> String:
 	return query_key(title_text, artist_text)
 
 
-## 제목이나 가수가 다른 곡으로 바뀌었다: 이 곡의 찾기 횟수를 새로 센다. 이미 받은 후보는 새 결과가 올 때까지 그대로 둔다.
+## 제목이나 가수가 다른 곡으로 바뀌었다: 이 곡의 찾기 횟수를 새로 세고, 이전 곡에서 받은 후보와 고른 가사도 비운다
+## (그대로 두면 이전 곡의 가사가 새 제목으로 저장된다).
 func _query_changed() -> void:
 	var k: String = _query_key()
 	if k == _lr_key:
@@ -352,10 +355,14 @@ func _query_changed() -> void:
 	lr_get_calls = 0
 	lr_search_calls = 0
 	_lr_gen += 1 ## 이전 곡의 늦은 답은 버린다
-	if lr_busy:
-		lr_busy = false
-		lr_status = ""
-		lr_message = ""
+	var had: bool = lr_busy or lr_status != "" or lr_message != "" or not lr_items.is_empty() or not lr_record.is_empty()
+	lr_busy = false
+	lr_status = ""
+	lr_message = ""
+	lr_items = []
+	lr_record = {}
+	if had:
+		_update_preview()
 		if is_inside_tree() and not _dead:
 			_render_keep_focus()
 
@@ -401,8 +408,14 @@ func _drop_client() -> void:
 	_client = null
 
 
-func _query_ok() -> bool:
+## get(정확히 찾기): 제목과 가수가 둘 다 2글자 이상.
+func _get_ok() -> bool:
 	return title_text.strip_edges().length() >= LrclibClient.MIN_QUERY_CHARS and artist_text.strip_edges().length() >= LrclibClient.MIN_QUERY_CHARS
+
+
+## search(비슷한 곡 찾기): 제목·가수 중 하나만 2글자 이상이어도 된다.
+func _search_ok() -> bool:
+	return title_text.strip_edges().length() >= LrclibClient.MIN_QUERY_CHARS or artist_text.strip_edges().length() >= LrclibClient.MIN_QUERY_CHARS
 
 
 func _short_query() -> void:
@@ -415,7 +428,7 @@ func _short_query() -> void:
 func find_lyrics() -> void:
 	if lr_busy:
 		return
-	if not _query_ok():
+	if not _get_ok():
 		_short_query()
 		return
 	if lr_get_calls >= 1:
@@ -464,7 +477,7 @@ func find_lyrics() -> void:
 func search_lyrics() -> void:
 	if lr_busy:
 		return
-	if not _query_ok():
+	if not _search_ok():
 		_short_query()
 		return
 	if lr_search_calls >= 1:

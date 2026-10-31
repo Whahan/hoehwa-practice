@@ -15,7 +15,7 @@ const SID := "s_0123456789ab"
 const SID2 := "s_ba9876543210"
 const TONE_MP3 := "res://tests/fixtures/song/tone_8s.mp3"
 const SECTIONS := ["open", "bar", "list", "word", "tabs", "contract", "sing_hook", "sing_api", "self_rate", "ja", "attribution",
-	"leave", "errors", "real_audio", "layout"]
+	"leave", "errors", "real_audio", "layout", "memo_menu"]
 
 ## 가짜 /score 응답 (노래 점수 = (0.6·정확도 + 0.25·또렷함) / 0.85)
 const SCORE_HIGH := {"transcript": "the quiet river runs on", "score": 10, "accuracy": 90, "clarity": 80, "fluency": 10,
@@ -462,6 +462,53 @@ func _run() -> void:
 	await _t_leave_errors()
 	await _t_real_audio()
 	await _t_layout()
+	await _t_memo_menu()
+
+
+# ---------------------------------------------------------------- ⋯ menu: 가사 외우기 (lyrics memorize M7)
+
+func _t_memo_menu() -> void:
+	closed_n = 0
+	var toasts: Array = []
+	var on_toast := func(t: String, _k: String) -> void: toasts.append(t)
+	Toast.message.connect(on_toast)
+	var r: Array = await _open(_song(6))
+	var s: SongStudyScreen = r[0]
+	var asked: Array = []
+	s.play_line(1)
+	ok(s.player.is_playing(), "memo menu: a line is playing")
+	# nothing connected (no hub): a notice, the screen and the song stay as they were
+	s.request_memo()
+	ok(asked.is_empty() and s.result == "" and s.player.is_playing() and toasts.any(func(t: String) -> bool: return t.contains("가사 외우기")), "memo menu: with no hub connected request_memo() only shows a notice (no signal, song keeps playing, result stays empty)")
+	s.memo_requested.connect(func(id: String) -> void: asked.append(id))
+	s.open_menu()
+	await _frames(2)
+	var b: Dictionary = s.last_sheet.buttons if s.last_sheet != null else {}
+	ok(b.has("check") and b.has("memo") and b.has("info") and b.has("delete"), "memo menu: the ⋯ menu has 가사 확인·수정 / 가사 외우기 / 곡 정보 / 곡 삭제 (%s)" % [b.keys()])
+	var btn_texts: Array = []
+	if s.last_sheet != null:
+		for bn in s.last_sheet.find_children("*", "Button", true, false):
+			btn_texts.append((bn as Button).text)
+	ok(btn_texts.has("가사 외우기") and btn_texts.has("가사 확인·수정"), "memo menu: the sheet shows the text 가사 외우기 and the old 가사 확인·수정 item is still there (%s)" % [btn_texts])
+	ok(asked.is_empty(), "memo menu: opening the menu emits nothing")
+	if b.has("memo"):
+		(b["memo"] as Button).pressed.emit()
+	await _frames(3)
+	ok(asked == [SID], "memo menu: tapping 가사 외우기 emits memo_requested(<this song's id>) exactly once (%s)" % [asked])
+	ok(s.result == "memo" and not s.player.is_playing() and closed_n == 0, "memo menu: the song is stopped, result is 'memo', the screen does not close itself (the hub does)")
+	await _free_screen(s)
+	# a screen that could not open its song asks for nothing
+	var s2: SongStudyScreen = _new_screen(Fake.new())
+	s2.memo_requested.connect(func(id: String) -> void: asked.append(id))
+	s2.open("en", {"id": "s_aaaaaaaaaaaa"})
+	await _frames(2)
+	s2.request_memo()
+	s2.open_menu()
+	await _frames(1)
+	ok(asked == [SID] and s2.last_sheet == null, "memo menu: with no song (open error) there is no menu and nothing is emitted")
+	await _free_screen(s2)
+	Toast.message.disconnect(on_toast)
+	reached["memo_menu"] = true
 
 
 # ---------------------------------------------------------------- open / bar / list

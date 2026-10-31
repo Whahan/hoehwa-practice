@@ -11,6 +11,8 @@ extends Node
 const ROOT := "user://test_songs_u1"
 const DIR := "user://test_u1"
 const MARK := "ZZSONGLINEZZ"
+const TONE := "res://tests/fixtures/song/tone_8s.mp3"
+const VIEW_SRC := "res://scripts/views/song_view.gd"
 
 var passed: int = 0
 var failed: int = 0
@@ -247,6 +249,7 @@ func _ready() -> void:
 	await _test_broken_songs()
 	ok(Api.sent_count == _sent0, "listing, opening, deleting and cleaning up sent no request to any server (Api.sent_count %d -> %d)" % [_sent0, Api.sent_count])
 	await _test_add_gate()
+	await _test_m7_hub()
 	await _test_layout()
 	await _test_load_edges()
 	await _test_real_folder_untouched()
@@ -603,6 +606,342 @@ func _test_add_gate() -> void:
 	_disconnect_pc()
 	v.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- lyrics memorize M7 (hub wiring)
+
+const LYR_LINES := ["the kettle hums a morning tune", "my window holds a pale blue sky", "we count the steps along the shore",
+	"a paper boat goes drifting by", "the kettle hums a morning tune", "lanterns glow above the lane", "night folds up the little town"]
+
+
+func _until(cond: Callable, max_sec: float = 10.0) -> bool:
+	var t0: int = Time.get_ticks_msec()
+	while float(Time.get_ticks_msec() - t0) / 1000.0 < max_sec:
+		if bool(cond.call()):
+			return true
+		await get_tree().process_frame
+	return bool(cond.call())
+
+
+func _bus_exists() -> bool:
+	return AudioServer.get_bus_index(SongPlayer.BUS_NAME) != -1
+
+
+func _lyrics_song(title: String, texts: Array) -> Dictionary:
+	var lines: Array = []
+	for i in texts.size():
+		lines.append({"i": i, "p": 0, "t0": 0.0, "t1": 0.0, "text": str(texts[i]), "reading": "", "pron": "", "ko": "", "conf": null, "est": true, "stale": false, "words": []})
+	return {"v": 1, "kind": "lyrics", "lang": "en", "title": title, "artist": "Hub Tester", "created": 1790000500, "duration": 0.0,
+		"audio": {"file": "", "bytes": 0, "sha256": "", "orig_name": ""},
+		"source": {"lyrics": "pasted", "lrclib_id": null, "timing": "none", "attribution": ""}, "offset": 0.0,
+		"lines": lines, "glossary": {}, "marks": {"lines": [], "words": []}, "stats": {"plays": 0, "last": 0, "best": {}}, "warnings": [], "app": "1.4.0"}
+
+
+func _install_lyr(title: String, texts: Array = LYR_LINES) -> String:
+	var r: Dictionary = SongStore.install_lyrics(_lyrics_song(title, texts))
+	return str(r.get("id", ""))
+
+
+## The first `n` distinct lines of the song become "memorized" (a state-2 card) in its memo.json.
+func _memorize(id: String, n: int) -> void:
+	var keys: Array = MemoModel.keys_of(SongStore.load_song(id))
+	var memo: Dictionary = MemoModel.new_memo()
+	var now: int = int(Time.get_unix_time_from_system())
+	for i in mini(n, keys.size()):
+		memo["lines"][keys[i]["key"]] = {"stage": 8, "seen": now, "tries": 1, "passes": 1,
+			"card": {"due": now + 5 * 86400, "stability": 2.3, "difficulty": 5.1, "state": 2, "step": 0, "last_review": now - 86400, "reps": 2, "lapses": 0}}
+	SongStore.save_memo(id, memo)
+
+
+func _install_tone(title: String) -> String:
+	var lines: Array = []
+	for i in 3:
+		lines.append({"i": i, "p": 0, "t0": 0.5 + i * 2.2, "t1": 2.3 + i * 2.2, "text": "A made up song line number %d about the sea" % i, "words": []})
+	var song := {"v": 1, "lang": "en", "title": title, "artist": "Hub Tester", "created": 1790000600, "duration": 8.0,
+		"audio": {"file": "audio.mp3", "bytes": 0, "sha256": "", "orig_name": "tone.mp3"},
+		"source": {"lyrics": "pasted", "lrclib_id": null, "timing": "line", "attribution": ""},
+		"lines": lines, "glossary": {}, "marks": {"lines": [], "words": []}, "stats": {"plays": 0, "last": 0, "best": {}}, "warnings": []}
+	var r: Dictionary = SongStore.install(song, FileAccess.get_file_as_bytes(TONE))
+	return str(r["id"]) if bool(r["ok"]) else ""
+
+
+func _row_text(v: SongView, id: String) -> String:
+	var r: Control = v.row_for(id)
+	return _texts(r) if r != null else ""
+
+
+func _make_hub() -> SongView:
+	var v := SongView.new() # host_screens stays true: the hub opens the real screens
+	_stage(v)
+	return v
+
+
+func _test_m7_hub() -> void:
+	print("[M7: lyrics-only songs in the hub: rows, tap by kind, add / memorize flow, delete text, closing]")
+	_fresh()
+	_toasts.clear()
+	_close_sheets()
+	_disconnect_pc()
+	Store.set_pref("song_consent", true)
+	var sent0: int = Api.sent_count
+	var lyr: String = _install_lyr("Kettle Hum")
+	_memorize(lyr, 2)
+	var aud: String = _install_tone("Tone Study")
+	ok(lyr != "" and aud != "", "M7 fixtures installed (a lyrics-only song with 2 memorized lines and an audio song)")
+	var v := _make_hub()
+	var thread_ids: Array = []
+	v.loader = func() -> Dictionary:
+		thread_ids.append(OS.get_thread_caller_id())
+		return v._default_load()
+	await _frames(2)
+	v.refresh()
+	await _wait_loaded(v)
+	ok(not thread_ids.is_empty() and int(thread_ids[0]) != OS.get_main_thread_id() and not v.memos.is_empty(), "the memo summaries are read inside the list thread (thread %s, main %d)" % [thread_ids, OS.get_main_thread_id()])
+	# --- source: SongStore.memo_summary is called from _default_load only
+	var src: String = FileAccess.get_file_as_string(VIEW_SRC)
+	var calls := 0
+	var in_load := false
+	var calls_in_load := 0
+	for ln in src.split("\n"):
+		if ln.begins_with("func "):
+			in_load = ln.begins_with("func _default_load")
+		var t: String = ln.strip_edges()
+		if t.contains("SongStore.memo_summary(") and not t.begins_with("#"):
+			calls += 1
+			if in_load:
+				calls_in_load += 1
+	ok(calls == 1 and calls_in_load == 1, "song_view.gd calls SongStore.memo_summary exactly once, inside _default_load (the list thread): %d / %d" % [calls, calls_in_load])
+	# --- rows
+	ok(v.song_kind(lyr) == "lyrics" and v.song_kind(aud) == "audio" and v.song_kind("s_zzzzzzzzzzzz") == "", "song_kind: lyrics / audio / unknown")
+	var ms: Dictionary = SongStore.memo_summary(lyr, int(Time.get_unix_time_from_system()))
+	ok(int(ms.get("memorized", -1)) == 2 and int(ms.get("total", -1)) == 6, "fixture: memo_summary says 2 of 6 (7 lines, one repeated) (%s)" % [ms])
+	var lt: String = _row_text(v, lyr)
+	ok(lt.contains("가사만") and lt.contains("외운 줄 %d/%d" % [int(ms["memorized"]), int(ms["total"])]), "lyrics row: the text 가사만 and '외운 줄 N/M' equal to memo_summary (%s)" % lt.replace("\n", " | "))
+	ok(v.memo_text(lyr) == "외운 줄 %d/%d" % [int(ms["memorized"]), int(ms["total"])] and v.memo_text(aud) == "", "memo_text matches memo_summary; an audio song has none")
+	ok(not lt.contains("오디오 없음") and not lt.contains("0:00") and lt.contains("7줄") and lt.contains("영어"), "lyrics row: no '오디오 없음', no length, 7 lines, language")
+	var at: String = _row_text(v, aud)
+	ok(at.contains("0:08") and at.contains("3줄") and at.contains("영어") and not at.contains("가사만") and not at.contains("외운 줄") and not at.contains("오디오 없음"), "audio row: as before (length, lines), no lyrics-only text (%s)" % at.replace("\n", " | "))
+	# the numbers follow the file (a checker that always printed 2/6 would fail here), and a broken memo.json does not hide the song
+	_memorize(lyr, 4)
+	v.refresh()
+	await _wait_loaded(v)
+	ok(_row_text(v, lyr).contains("외운 줄 4/6") and not _row_text(v, lyr).contains("외운 줄 2/6"), "after memorizing 2 more lines the row says 외운 줄 4/6")
+	var mf := FileAccess.open(SongStore.song_dir(lyr).path_join("memo.json"), FileAccess.WRITE)
+	mf.store_string("{ not json")
+	mf.close()
+	v.refresh()
+	await _wait_loaded(v)
+	ok(v.row_for(lyr) != null and _row_text(v, lyr).contains("가사만") and not _row_text(v, lyr).contains("외운 줄") and v.state == "ready", "a broken memo.json: the song is still listed (가사만), no 외운 줄 text, no error card")
+	ok(FileAccess.file_exists(SongStore.song_dir(lyr).path_join("memo.json")), "listing never moved the broken memo.json (read-only)")
+	DirAccess.remove_absolute(_g(SongStore.song_dir(lyr).path_join("memo.json")))
+	_memorize(lyr, 2)
+	v.refresh()
+	await _wait_loaded(v)
+	# --- buttons
+	var lb: Button = v.lyrics_button()
+	ok(lb != null and lb.text == "가사만 추가" and v.add_button() != null, "[가사만 추가] button exists next to [+ 곡 추가]")
+	if _phone:
+		await _frames(2)
+		ok(lb.get_parent() == v._page.content and lb.get_global_rect().size.y >= Ds.touch_min() - 0.5 and lb.get_global_rect().size.x > 300.0, "phone: [가사만 추가] is a second full-width button under [+ 곡 추가]")
+	else:
+		ok(lb.get_parent() == v._header, "PC: [가사만 추가] is an action of the title row")
+	# --- tap by kind
+	v._on_song_tap(lyr, true)
+	await _frames(3)
+	ok(v.screen_kind == "memo" and v.screen is SongMemoScreen and (v.screen as SongMemoScreen).song_id == lyr and v.page_title().contains("Kettle Hum"), "tapping a lyrics-only song opens SongMemoScreen (screen_kind 'memo') on that song")
+	ok(not v._page.visible and v.header_block() == null and v.scroll_host() == null, "the list is hidden behind the screen")
+	var memo_ref: WeakRef = weakref(v.screen)
+	ok(v.go_back() and v.screen == null and v._page.visible, "back from the memorize home goes to the list")
+	await _frames(3)
+	ok(memo_ref.get_ref() == null, "the memorize screen is freed")
+	await _wait_loaded(v)
+	v._on_song_tap(aud, true)
+	await _frames(3)
+	ok(v.screen_kind == "study" and v.screen is SongStudyScreen and (v.screen as SongStudyScreen).song_id == aud, "tapping an audio song opens SongStudyScreen (as before)")
+	# --- study screen menu -> memorize screen -> back to the list
+	var st: SongStudyScreen = v.screen as SongStudyScreen
+	var st_ref: WeakRef = weakref(st)
+	st.play_line(1)
+	ok(_bus_exists(), "the study screen has the Song bus")
+	st.open_menu()
+	await _frames(2)
+	ok(st.last_sheet != null and st.last_sheet.buttons.has("memo"), "the menu of the study screen has 가사 외우기")
+	(st.last_sheet.buttons["memo"] as Button).pressed.emit()
+	ok(await _until(func() -> bool: return v.screen_kind == "memo"), "menu > 가사 외우기 opens the memorize screen")
+	await _frames(3)
+	var mm: SongMemoScreen = v.screen as SongMemoScreen
+	ok(mm != null and mm.song_id == aud, "...for the same song id (the audio song)")
+	ok(st_ref.get_ref() == null and not _bus_exists(), "the study screen was freed and the Song bus is gone")
+	ok(v.go_back() and v.screen == null and v._page.visible, "closing the memorize screen goes to the list, not back to the study screen")
+	await _frames(3)
+	await _wait_loaded(v)
+	# --- adding: no PC
+	ok(v.add_block_reason() == "no_pc", "no PC for this section")
+	_toasts.clear()
+	v.add_button().pressed.emit()
+	await _frames(2)
+	ok(v.screen == null and not Sheet.is_open() and _toast_has("곡 추가는 PC 연결 시"), "no PC: [+ 곡 추가] still only shows the notice")
+	var req_lyr: Array = [0]
+	var req_add: Array = [0]
+	v.lyrics_add_requested.connect(func() -> void: req_lyr[0] += 1)
+	v.add_requested.connect(func() -> void: req_add[0] += 1)
+	v.lyrics_button().pressed.emit()
+	await _frames(3)
+	ok(v.screen_kind == "lyrics_add" and v.screen is SongLyricsAddScreen and req_lyr[0] == 1 and req_add[0] == 0 and not Sheet.is_open(), "no PC: [가사만 추가] opens SongLyricsAddScreen (consent already given)")
+	ok(Api.sent_count == sent0, "opening it sent no request (Api.sent_count %d -> %d)" % [sent0, Api.sent_count])
+	var la: SongLyricsAddScreen = v.screen as SongLyricsAddScreen
+	la.set_title("Hub Made Song")
+	la.set_pasted("my own first line here\nmy own second line here\nmy own third line here")
+	ok(la.save() == "", "a pasted song saves with no PC")
+	var new_id: String = la.added_id
+	ok(await _until(func() -> bool: return v.screen_kind == "memo"), "song_added moves the hub to the memorize screen by itself")
+	await _frames(2)
+	var mm2: SongMemoScreen = v.screen as SongMemoScreen
+	ok(new_id != "" and mm2 != null and mm2.song_id == new_id and mm2.is_lyrics_song(), "...on the new song")
+	ok(Api.sent_count == sent0, "saving and memorizing sent no request to the PC (Api.sent_count unchanged)")
+	# back button: one step at a time (session -> home -> list)
+	ok(mm2.start_today() and mm2.view == "session", "a session starts on the new song")
+	await _frames(2)
+	ok(v.go_back() and v.screen == mm2 and mm2.view == "home", "back (1): session -> memorize home, the screen stays")
+	ok(v.go_back() and v.screen == null and v._page.visible, "back (2): memorize home -> list")
+	await _wait_loaded(v)
+	var nt: String = _row_text(v, new_id)
+	ok(v.song_kind(new_id) == "lyrics" and nt.contains("가사만") and nt.contains("외운 줄 0/3"), "the new song is in the list with 외운 줄 0/3 (%s)" % nt.replace("\n", " | "))
+	# android back: the sheet first
+	v.lyrics_button().pressed.emit()
+	await _frames(3)
+	var la2: SongLyricsAddScreen = v.screen as SongLyricsAddScreen
+	la2.set_pasted("some words I typed")
+	ok(v.go_back() and Sheet.is_open() and v.screen == la2, "back with pasted text: a confirm sheet opens, the screen stays")
+	ok(v.go_back() and not Sheet.is_open() and v.screen == la2, "back again: the sheet closes first, the screen still stays")
+	ok(v.go_back() and Sheet.is_open() and v.screen == la2, "back again: the question comes up once more")
+	la2._confirm_sheet.buttons["ok"].pressed.emit()
+	await _frames(3)
+	ok(v.screen == null and v._page.visible, "the leave button goes to the list")
+	await _wait_loaded(v)
+	ok(v.songs.size() == 3 and Api.sent_count == sent0, "nothing was saved by the abandoned form (3 songs), still no request")
+	# --- consent sheet for the first use
+	Store.prefs.erase("song_consent")
+	req_lyr[0] = 0
+	v.lyrics_button().pressed.emit()
+	await _frames(3)
+	ok(Sheet.is_open() and v.screen == null and req_lyr[0] == 0 and _texts(v.last_sheet).contains("lrclib.net") and v.last_sheet.buttons.has("agree"), "first use: the consent sheet comes up first (it names lrclib.net), no screen yet")
+	v.last_sheet.buttons["cancel"].pressed.emit()
+	await _frames(3)
+	ok(v.screen == null and req_lyr[0] == 0 and not Store.pref_bool("song_consent"), "cancel: no screen, nothing saved")
+	v.lyrics_button().pressed.emit()
+	await _frames(3)
+	v.last_sheet.buttons["agree"].pressed.emit()
+	await _frames(3)
+	ok(Store.pref_bool("song_consent") and v.screen_kind == "lyrics_add" and req_lyr[0] == 1 and req_add[0] == 0, "agree: consent saved, SongLyricsAddScreen opens, add_requested is not emitted")
+	ok(Api.sent_count == sent0, "the consent steps sent no request")
+	ok(v.go_back() and v.screen == null, "back from the empty form leaves at once")
+	await _wait_loaded(v)
+	# --- the list thread blocks opening screens
+	v.loader = func() -> Dictionary:
+		OS.delay_msec(500)
+		return v._default_load()
+	v.refresh()
+	await _frames(2)
+	ok(v.is_loading(), "a slow list read is running")
+	_toasts.clear()
+	v._on_song_tap(lyr, true)
+	v.lyrics_button().pressed.emit()
+	ok(v.screen == null and _toast_has("곡 목록을 읽는 중"), "while the list is read: tapping a lyrics song or [가사만 추가] opens nothing and says so")
+	await _wait_loaded(v)
+	v._on_song_tap(lyr, true)
+	ok(v.screen_kind == "memo", "after the read the same tap works")
+	v.refresh()
+	ok(not v.is_loading() and v._thread == null, "with a screen open refresh() starts no list thread")
+	# closing while a slow list read starts: the thread is joined when the view goes away
+	v.loader = func() -> Dictionary:
+		OS.delay_msec(400)
+		return v._default_load()
+	ok(v.go_back() and v.screen == null, "closing the memorize screen")
+	var th: Thread = v._thread
+	ok(th != null and th.is_started() and v.is_loading(), "...the list is read again on a thread")
+	remove_child(v)
+	v.queue_free()
+	ok(not th.is_started(), "freeing the hub joined the thread (no thread left running)")
+	await _frames(3)
+	# --- delete wording
+	var v2 := _make_hub()
+	await _frames(2)
+	v2.refresh()
+	await _wait_loaded(v2)
+	var del_lyr: String = v2.delete_text(lyr)
+	ok(del_lyr.contains("가사와 외우기 기록이 이 기기에서 지워져요") and del_lyr.contains("Kettle Hum") and del_lyr.contains("되돌릴 수 없어요") and not del_lyr.contains("음악"), "delete text (lyrics-only): the memorize records go too (%s)" % del_lyr)
+	ok(v2.delete_text(aud) == "'Tone Study'의 음악과 가사, 이 곡의 학습 기록이 이 기기에서 지워져요. 되돌릴 수 없어요. 복습 카드는 그대로 남아요.", "delete text (audio song): the old wording, unchanged")
+	v2.delete_button(aud).pressed.emit()
+	await _frames(3)
+	ok(Sheet.is_open() and _texts(v2.last_sheet).contains("음악과 가사, 이 곡의 학습 기록이 이 기기에서 지워져요"), "audio song: the confirm sheet shows the old wording")
+	v2.last_sheet.buttons["cancel"].pressed.emit()
+	await _frames(3)
+	v2.delete_button(lyr).pressed.emit()
+	await _frames(3)
+	ok(Sheet.is_open() and _texts(v2.last_sheet).contains("가사와 외우기 기록이 이 기기에서 지워져요"), "lyrics-only song: the confirm sheet says the memorize records go too")
+	ok(FileAccess.file_exists(SongStore.song_dir(lyr).path_join("memo.json")), "(before deleting: memo.json is there)")
+	v2.last_sheet.buttons["ok"].pressed.emit()
+	await _frames(2)
+	ok(not DirAccess.dir_exists_absolute(_g(SongStore.song_dir(lyr))) and not FileAccess.file_exists(SongStore.song_dir(lyr).path_join("memo.json")), "deleting removes the lyrics folder together with memo.json")
+	await _wait_loaded(v2)
+	ok(v2.row_for(lyr) == null and v2.row_for(aud) != null, "the list reloads without it, the audio song stays")
+	# --- closing: recording cancelled, Song bus gone, screen freed (memorize screen in speak mode)
+	var lyr2: String = _install_lyr("Closing Hum")
+	v2.refresh()
+	await _wait_loaded(v2)
+	Store.prefs["memo_answer"] = "speak"
+	Recorder.mode_override = "android"
+	Recorder.test_hooks = {"granted": func() -> bool: return true, "open": func() -> bool: return true, "close": func() -> void: pass,
+		"level": func() -> float: return 0.1, "recording": func() -> AudioStreamWAV: return null}
+	v2._on_song_tap(lyr2, true)
+	await _frames(3)
+	var mm3: SongMemoScreen = v2.screen as SongMemoScreen
+	var mm3_ref: WeakRef = weakref(mm3)
+	ok(mm3 != null and mm3.start_today(), "speak mode: a session starts")
+	await _frames(2)
+	if mm3.drill != null:
+		mm3.drill.lock_msec = 0 # (the drill ignores taps for 250 ms after each new stage)
+	for k in 4: # the first stages only show the line: [다음 단계] until the answer box (with the recorder) comes
+		if mm3.drill == null or not mm3.drill.find_children("*", "RecorderWidget", true, false).is_empty():
+			break
+		var rb: Node = mm3.drill.find_child("ReadBtn", true, false)
+		if rb is Button and not (rb as Button).disabled:
+			(rb as Button).pressed.emit()
+		await _frames(2)
+	var rec: Node = mm3.drill._recorder if mm3.drill != null else null
+	ok(rec != null and Recorder.begin(rec.get_instance_id()) and Recorder.recording, "a recording is running for the memorize drill")
+	await _frames(2)
+	v2.on_hide()
+	await _frames(2)
+	ok(not Recorder.recording and v2.screen == mm3, "on_hide (tab switch): the recording is cancelled, the screen stays")
+	ok(mm3.view == "home" and mm3.session == null, "...and the session ended (the screen shows its home again)")
+	ok(mm3.start_today(), "a new session starts")
+	await _frames(2)
+	mm3.drill.lock_msec = 0
+	for k in 4:
+		if mm3.drill == null or not mm3.drill.find_children("*", "RecorderWidget", true, false).is_empty():
+			break
+		var rb2: Node = mm3.drill.find_child("ReadBtn", true, false)
+		if rb2 is Button and not (rb2 as Button).disabled:
+			(rb2 as Button).pressed.emit()
+		await _frames(2)
+	var rec2: Node = mm3.drill._recorder if mm3.drill != null else null
+	ok(rec2 != null and Recorder.begin(rec2.get_instance_id()) and Recorder.recording, "a new recording can start again")
+	await _frames(2)
+	ok(v2.go_back() and not Recorder.recording, "back (session -> home): no recording left")
+	ok(v2.go_back() and v2.screen == null, "back (home -> list): the screen is gone from the hub")
+	await _frames(3)
+	ok(mm3_ref.get_ref() == null and not _bus_exists() and not Recorder.recording, "the memorize screen is freed, no Song bus, no recording")
+	Recorder.mode_override = ""
+	Recorder.test_hooks = {}
+	Store.prefs.erase("memo_answer")
+	_close_sheets()
+	v2.queue_free()
+	await _frames(2)
+	Store.prefs.erase("song_consent")
+	ok(Api.sent_count == sent0, "the whole M7 section sent no request (Api.sent_count %d -> %d)" % [sent0, Api.sent_count])
+	ok(true, "M7 section ran to its end")
 
 
 func _test_layout() -> void:
