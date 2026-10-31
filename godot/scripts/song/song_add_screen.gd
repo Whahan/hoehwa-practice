@@ -95,6 +95,7 @@ var added_warnings: Array = []
 
 var _shell: Dictionary = {}
 var _client: LrclibClient = null
+var _lr_gen: int = 0 ## 곡(고른 파일)이 바뀔 때마다 오른다: 날아가던 LRCLIB 요청의 늦은 답은 세대가 다르면 버린다
 var _dead: bool = false
 var _last_block: String = "?"
 var _title_edit: LineEdit = null
@@ -484,6 +485,7 @@ func _on_pick_failed(message: String) -> void:
 # ---------------------------------------------------------------- LRCLIB (only on the user's tap)
 
 func _reset_lrclib() -> void:
+	_lr_gen += 1 ## 이전 곡의 요청이 아직 날아가고 있어도 그 답은 새 곡에 붙지 않는다
 	lr_get_calls = 0
 	lr_search_calls = 0
 	lr_status = ""
@@ -532,10 +534,11 @@ func find_lyrics() -> void:
 	lr_status = "busy"
 	lr_message = MSG_LR_BUSY
 	_render()
+	var gen: int = _lr_gen
 	var client: LrclibClient = _get_client()
 	var res: Dictionary = await client.find(tr, ar, "", _file_seconds())
-	if _dead:
-		return
+	if _dead or gen != _lr_gen:
+		return # 화면이 닫혔거나, 그동안 다른 곡 파일을 골랐다: 이 답은 버린다
 	lr_busy = false
 	match str(res.get("kind", "error")):
 		"exact":
@@ -581,10 +584,11 @@ func search_lyrics() -> void:
 	lr_status = "busy"
 	lr_message = MSG_LR_BUSY
 	_render()
+	var gen: int = _lr_gen
 	var client: LrclibClient = _get_client()
 	var res: Dictionary = await client.search((tr + " " + ar).strip_edges(), tr, ar, _file_seconds())
-	if _dead:
-		return
+	if _dead or gen != _lr_gen:
+		return # see find_lyrics
 	lr_busy = false
 	if bool(res.get("ok", false)):
 		var items: Array = res.get("items", [])

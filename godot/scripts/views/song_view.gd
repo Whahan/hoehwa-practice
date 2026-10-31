@@ -5,10 +5,15 @@ extends AppView
 ## 곡 목록(제목·가수·언어·길이·줄 수), 빈 상태, 사용량("곡 3개 · 12 MB / 400 MB"), 곡 삭제(확인 시트), 깨진 곡 정리,
 ## 첫 곡 추가 때의 동의 시트(L9), PC 에 연결되지 않았을 때의 안내.
 ##
-## 이 화면이 직접 여는 화면은 없다. 곡 추가 화면(U2)과 학습 화면(U4a)은 신호로 부른다:
+## 화면 연결(U5, 설계 4.3): 이 화면이 허브다 (PracticeView 와 같은 모양, 한 번에 하위 화면 하나).
+##   [+ 곡 추가] -> SongAddScreen (song_added(id)) -> SongCheckScreen (saved -> closed) -> SongStudyScreen (closed)
+##   곡 탭 -> SongStudyScreen ; 학습 화면 ⋯ 메뉴: 가사 확인·수정 (SongCheckScreen, 닫으면 학습 화면으로), 곡 삭제, 곡 정보
+## 화면을 닫을 때는 on_hide() -> remove_child -> queue_free 로 해제한다 (Song 버스·녹음·요청이 그 자리에서 정리된다).
+## 안드로이드 뒤로 가기: 시트가 열려 있으면 시트 먼저(main.gd 가 Sheet.handle_back 을 먼저 부르고, go_back 도 같은 순서를 지킨다), 그다음 화면.
+## 화면을 여는 것과 같은 신호도 그대로 낸다 (시험 · 다른 연결용):
 ##   add_requested                      [+ 곡 추가] 를 눌렀고 추가해도 되는 상태(PC 연결, 동의함)
 ##   song_open_requested(song_id)       곡을 눌렀다 (오디오가 있는 곡만)
-## 연결된 곳이 없으면 곡을 눌렀을 때 "준비 중" 안내만 한다.
+## host_screens == false 이면 화면을 직접 열지 않는다 (신호만). 그때 신호에 연결된 곳이 없으면 "준비 중" 안내만 한다.
 ##
 ## SongStore.list() 는 처음 부를 때 오디오 sha256 을 최대 400 MiB 계산하므로 느리다 → 다른 스레드에서 부르고(use_thread),
 ## 그동안 화면은 "불러오는 중" 을 보이며 계속 움직인다. 스레드를 못 쓰면 두 프레임 뒤에 부른다(화면을 먼저 그린다).
@@ -32,6 +37,10 @@ const MSG_SAVED_HERE := "곡과 가사는 이 기기에만 저장돼요. 동기�
 var loader: Callable = Callable() ## () -> {"list","orphans","usage","quarantined"}; 비어 있으면 SongStore. 스레드에서 불린다.
 var use_thread: bool = true
 
+var host_screens: bool = true ## false: 신호만 내고 하위 화면은 열지 않는다 (시험)
+var screen: Control = null ## 열려 있는 하위 화면 (SongAddScreen | SongCheckScreen | SongStudyScreen), 없으면 null
+var screen_kind: String = "" ## "add" | "check" | "study"
+
 var state: String = "idle" ## idle | loading | ready | error
 var songs: Array = [] ## SongStore.list() 항목
 var orphans: Array = [] ## 복구할 수 없는 곡 id
@@ -48,6 +57,7 @@ var _thread: Thread = null
 var _defer_frames: int = 0
 var _reload_pending: bool = false
 var _loaded_once: bool = false
+var _check_from: String = "" ## 가사 확인 화면을 연 곳: "add" (곡 추가 직후) | "study" (⋯ 메뉴)
 var _rows: Dictionary = {} ## id -> row Control
 var _del_btns: Dictionary = {} ## id -> Button
 var _cleanup_btn: Button = null
@@ -85,18 +95,58 @@ func _ready() -> void:
 
 func refresh() -> void:
 	_render_notice()
+	if screen != null:
+		return # 하위 화면이 SongStore 를 쓰는 동안 목록 스레드를 돌리지 않는다. 화면을 닫을 때 다시 읽는다
 	_start_load()
 
 
+## 탭을 떠날 때: 열려 있는 화면의 소리·녹음을 멈춘다 (화면은 그대로 둔다).
+func on_hide() -> void:
+	if screen != null and is_instance_valid(screen) and screen.has_method("on_hide"):
+		screen.call("on_hide")
+
+
 func scroll_host() -> ScrollContainer:
-	return _page
+	return _page if screen == null else null
 
 
 func header_block() -> Control:
-	return _header if _header != null and is_instance_valid(_header) else null
+	return _header if screen == null and _header != null and is_instance_valid(_header) else null
+
+
+# ---------------------------------------------------------------- app bar contract (AppView): an open sub screen gives its own title
+
+func page_title() -> String:
+	if screen != null and is_instance_valid(screen):
+		var sh: Variant = screen.get("_shell")
+		if sh is Dictionary and (sh as Dictionary).get("title", null) is Label:
+			return ((sh as Dictionary)["title"] as Label).text
+	return ""
+
+
+func page_subtitle() -> String:
+	if screen != null and is_instance_valid(screen):
+		var sh: Variant = screen.get("_shell")
+		if sh is Dictionary and (sh as Dictionary).get("count", null) is Label:
+			return ((sh as Dictionary)["count"] as Label).text
+	return ""
+
+
+## 안드로이드 뒤로 가기: 열린 시트가 먼저, 그다음 하위 화면 한 단계 (처리했으면 true). 목록이면 false.
+func go_back() -> bool:
+	if screen == null:
+		return false
+	if Sheet.handle_back():
+		return true
+	if screen.has_method("go_back") and bool(screen.call("go_back")):
+		return true
+	_close_screen()
+	return true
 
 
 func _exit_tree() -> void:
+	if screen != null and is_instance_valid(screen):
+		_unmount() # on_hide + remove_child: the song player gives its audio (and the Song bus) back right here
 	if _thread != null:
 		_thread.wait_to_finish() # the list call cannot be stopped; wait for it so the thread is never left running
 		_thread = null
@@ -186,7 +236,7 @@ func request_add() -> void:
 	if not Store.pref_bool(CONSENT_PREF):
 		show_consent()
 		return
-	add_requested.emit()
+	_go_add()
 
 
 func show_consent() -> void:
@@ -206,7 +256,13 @@ func _on_consent_closed(result: Variant) -> void:
 	if str(result) != "agree":
 		return # "취소" or a dismissed sheet: nothing is saved, the add screen stays closed
 	Store.set_pref(CONSENT_PREF, true)
+	_go_add()
+
+
+func _go_add() -> void:
 	add_requested.emit()
+	if host_screens:
+		open_screen("add", {"lang": Store.lang()})
 
 
 # ---------------------------------------------------------------- loading the list
@@ -397,6 +453,128 @@ func _song_row(list: ListGroup, s: Dictionary) -> void:
 	_del_btns[id] = del
 
 
+# ---------------------------------------------------------------- sub screens (hub)
+
+const MSG_LOADING := "곡 목록을 읽는 중이에요. 잠시 뒤에 다시 눌러 주세요."
+
+## kind: "add" {lang} | "check" {id} | "study" {id, tab}. 하나만 열린다 (열려 있으면 먼저 닫는다). 열었으면 true.
+## 목록을 읽는 동안에는 열지 않는다 (SongStore 를 두 곳에서 쓰지 않는다).
+func open_screen(kind: String, args: Dictionary = {}) -> bool:
+	if not host_screens:
+		return false
+	if is_loading():
+		Toast.info(MSG_LOADING)
+		return false
+	var s: Control = _make_screen(kind)
+	if s == null:
+		return false
+	if screen != null:
+		_unmount()
+	screen = s
+	screen_kind = kind
+	s.connect("closed", _on_screen_closed.bind(s))
+	match kind:
+		"add":
+			s.connect("song_added", _on_song_added)
+		"study":
+			s.connect("check_requested", _on_check_requested)
+	_page.visible = false
+	add_child(s)
+	s.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	s.call("open", str(args.get("lang", Store.lang())), args)
+	bar_changed.emit()
+	return true
+
+
+func _make_screen(kind: String) -> Control:
+	match kind:
+		"add":
+			return SongAddScreen.new()
+		"check":
+			return SongCheckScreen.new()
+		"study":
+			return SongStudyScreen.new()
+	return null
+
+
+## on_hide, tree 에서 떼고, 해제한다 (queue_free). 곧바로 _exit_tree 가 불려 Song 버스·녹음·요청이 정리된다.
+func _unmount() -> void:
+	var s: Control = screen
+	screen = null
+	screen_kind = ""
+	if s == null or not is_instance_valid(s):
+		return
+	if s.has_method("on_hide"):
+		s.call("on_hide")
+	if s.get_parent() == self:
+		remove_child(s)
+	s.queue_free()
+
+
+## 목록으로 돌아간다: 화면을 해제하고 목록을 다시 읽는다 (곡 수·사용량이 바뀌었을 수 있다).
+func _close_screen() -> void:
+	if screen == null:
+		return
+	_unmount()
+	_check_from = ""
+	if _page != null:
+		_page.visible = true
+	_start_load()
+	bar_changed.emit()
+
+
+func _on_screen_closed(s: Control) -> void:
+	if s != screen: # an old screen that was already replaced
+		return
+	if screen_kind == "check":
+		var res: String = str(s.get("result"))
+		var sid: String = str(s.get("song_id"))
+		var from: String = _check_from
+		if SongModel.is_valid_id(sid) and (res == "saved" or from == "study"):
+			# saved -> study; a check opened from the study ⋯ menu always returns to the study screen
+			_check_from = ""
+			if open_screen("study", {"id": sid}):
+				return
+	_close_screen()
+
+
+func _on_song_added(id: String) -> void:
+	_on_added_deferred.call_deferred(id, screen)
+
+
+func _on_added_deferred(id: String, from_screen: Control) -> void:
+	if from_screen != screen or not is_instance_valid(from_screen): # the person left the add screen first
+		return
+	var warns: Array = []
+	var w: Variant = from_screen.get("added_warnings")
+	if w is Array:
+		warns = (w as Array).duplicate()
+	_check_from = "add"
+	if not open_screen("check", {"id": id}):
+		_close_screen()
+		return
+	# the check screen only explains timing doubts: tell the person about the other things the PC could not make
+	var notes: Array = []
+	for k in ["ko_missing", "gloss_missing", "lyrics_truncated"]:
+		if warns.has(k) and SongAddScreen.MSG_WARN.has(k):
+			notes.append(str(SongAddScreen.MSG_WARN[k]))
+	if not notes.is_empty():
+		Toast.info(" ".join(notes))
+
+
+func _on_check_requested(id: String) -> void:
+	_open_check_deferred.call_deferred(id, screen)
+
+
+func _open_check_deferred(id: String, from_screen: Control) -> void:
+	if from_screen != screen or not is_instance_valid(from_screen):
+		return
+	_check_from = "study"
+	if not open_screen("check", {"id": id}):
+		_check_from = ""
+		_close_screen()
+
+
 # ---------------------------------------------------------------- actions
 
 func _on_song_tap(id: String, is_ready: bool) -> void:
@@ -404,7 +582,9 @@ func _on_song_tap(id: String, is_ready: bool) -> void:
 		Toast.error(MSG_MISSING_AUDIO)
 		return
 	song_open_requested.emit(id)
-	if song_open_requested.get_connections().is_empty():
+	if host_screens:
+		open_screen("study", {"id": id})
+	elif song_open_requested.get_connections().is_empty():
 		Toast.info("곡 학습 화면은 아직 준비 중이에요")
 
 

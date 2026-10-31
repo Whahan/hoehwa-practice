@@ -28,6 +28,8 @@ extends Control
 ## 탭이 쓸 화면 함수: select_line(i, play=false) · play_line(i) · highlight_line() · signal highlight_changed(i) · scroll_to_control(c) · line_count().
 
 signal closed
+signal check_requested(song_id: String) ## ⋯ 메뉴 "가사 확인·수정": 연결하는 쪽이 이 화면을 닫고 SongCheckScreen 을 연다
+signal deleted(song_id: String) ## ⋯ 메뉴 "곡 삭제" 가 끝났다 (바로 뒤에 closed)
 signal tab_changed(kind: String)
 signal highlight_changed(i: int) ## 강조할 줄이 바뀜 (재생 중이면 재생 줄, 아니면 고른 줄)
 
@@ -48,6 +50,9 @@ const DEFAULT_TAB := "listen"
 const DEFAULT_ATTRIBUTION := "가사: LRCLIB (lrclib.net) · 개인 학습용으로만 쓰세요"
 const MSG_OPEN_FAIL := "곡을 열 수 없어요. 곡 목록으로 돌아가 다시 열어 보세요."
 const MSG_RECORDING := "녹음하는 동안은 노래를 틀지 않아요."
+const MSG_DELETE_FAIL := "곡을 지우지 못했어요. 파일이 다른 곳에서 열려 있는지 확인해 주세요."
+const SOURCE_KO := {"asr": "소리에서 받아 적음", "pasted": "붙여넣은 가사", "lrclib": "LRCLIB"}
+const LANG_KO := {"en": "영어", "ja": "일본어"}
 const PLAY_TEXT := "▶ 재생"
 const RESUME_TEXT := "▶ 이어서"
 const PAUSE_TEXT := "일시정지"
@@ -67,8 +72,11 @@ var keep_pitch: bool = true
 var repeat: int = 1
 var audio_ok: bool = false ## 소리 파일을 읽었다
 var open_error: String = "" ## 곡을 못 열었을 때의 문구
+var result: String = "" ## 나간 이유: "" | "back" | "deleted" | "check"
+var last_sheet: Sheet = null ## 마지막으로 연 시트 (시험용)
 
 var _shell: Dictionary = {}
+var _menu_btn: Button = null
 var _bar: PanelContainer = null
 var _btn_prev: Button = null
 var _btn_play: Button = null
@@ -88,6 +96,13 @@ var _serial: int = 0
 
 func _init() -> void:
 	_shell = SpeakDrill.build_shell(self, go_back, "← 노래")
+	_menu_btn = UI.button("⋯", "flat", Pal.INK, SpeakDrill.TOUCH_H)
+	_menu_btn.name = "MenuBtn"
+	_menu_btn.accessibility_name = "곡 메뉴"
+	_menu_btn.custom_minimum_size.x = maxf(SpeakDrill.TOUCH_H, Ds.touch_min())
+	_menu_btn.visible = false
+	_menu_btn.pressed.connect(open_menu)
+	(_shell["head"] as Control).add_child(_menu_btn)
 	player = SongPlayer.new()
 	player.name = "SongPlayer"
 	add_child(player)
@@ -128,6 +143,7 @@ func open(l: String, args: Dictionary = {}) -> void:
 		return
 	song_id = str(song.get("id", ""))
 	lang = str(song.get("lang", lang))
+	_menu_btn.visible = true
 	SongPlayer.songs_root = SongStore.root
 	_read_prefs()
 	player.set_speed(speed)
@@ -155,12 +171,114 @@ func on_hide() -> void:
 ## 안드로이드 뒤로 가기 / 머리줄 버튼.
 func go_back() -> bool:
 	_leave()
+	if result == "":
+		result = "back"
 	closed.emit()
 	return true
 
 
 func page_title() -> String:
 	return (_shell["title"] as Label).text
+
+
+# ---------------------------------------------------------------- ⋯ menu (가사 확인·수정 · 곡 정보 · 곡 삭제)
+
+func _sheet_open() -> bool:
+	return last_sheet != null and is_instance_valid(last_sheet) and not last_sheet.is_closed()
+
+
+func open_menu() -> void:
+	if song.is_empty() or _sheet_open():
+		return
+	last_sheet = Sheet.choice(self, "곡 메뉴", [["check", "가사 확인·수정"], ["info", "곡 정보"], ["delete", "곡 삭제"]])
+	last_sheet.closed.connect(_on_menu_pick)
+
+
+func _on_menu_pick(v: Variant) -> void:
+	match str(v):
+		"check":
+			request_check()
+		"info":
+			show_info()
+		"delete":
+			request_delete()
+
+
+## 가사 확인·수정 화면으로 간다. 재생은 멈춘다. 연결된 곳이 없으면 안내만 한다.
+func request_check() -> void:
+	if song.is_empty():
+		return
+	if check_requested.get_connections().is_empty():
+		Toast.info("가사 확인 화면은 노래 목록에서 열 수 있어요")
+		return
+	_leave()
+	result = "check"
+	check_requested.emit(song_id)
+
+
+## 곡 정보 시트의 줄들: 제목 · 가수 · 언어 · 길이 · 줄 수 · 파일 크기 · 가사 출처.
+func info_lines() -> Array:
+	var out: Array = []
+	var title: String = SongView.clip(str(song.get("title", "")), SongView.TITLE_MAX)
+	out.append("제목: " + (title if title != "" else "(제목 없음)"))
+	var artist: String = SongView.clip(str(song.get("artist", "")), SongView.ARTIST_MAX)
+	if artist != "":
+		out.append("가수: " + artist)
+	out.append("언어: " + str(LANG_KO.get(str(song.get("lang", "")), "")))
+	out.append("길이: " + SongView.fmt_dur(float(song.get("duration", 0.0))))
+	out.append("가사: %d줄" % line_count())
+	var au: Variant = song.get("audio", {})
+	if au is Dictionary and int((au as Dictionary).get("bytes", 0)) > 0:
+		out.append("파일 크기: " + SongView.fmt_bytes(int((au as Dictionary).get("bytes", 0))))
+	var src: Variant = song.get("source", {})
+	if src is Dictionary:
+		var k: String = str(SOURCE_KO.get(str((src as Dictionary).get("lyrics", "")), ""))
+		if k != "":
+			out.append("가사 출처: " + k)
+	out.append(SongView.MSG_SAVED_HERE)
+	return out
+
+
+func show_info() -> void:
+	if song.is_empty() or _sheet_open():
+		return
+	var body := UI.vbox(6)
+	for t in info_lines():
+		body.add_child(UI.label(str(t)))
+	last_sheet = Sheet.open(self, "곡 정보", body, [{"id": "ok", "text": "닫기", "kind": "primary"}], {"max_h_frac": 0.85})
+
+
+## 곡 삭제: 확인 시트 -> delete_now().
+func request_delete() -> void:
+	if song.is_empty() or _sheet_open():
+		return
+	var t: String = SongView.clip(str(song.get("title", "")), 40)
+	last_sheet = Sheet.confirm(self, "곡을 지울까요?",
+		"'%s'의 음악과 가사, 이 곡의 학습 기록이 이 기기에서 지워져요. 되돌릴 수 없어요. 복습 카드는 그대로 남아요." % (t if t != "" else "(제목 없음)"),
+		"삭제", true)
+	last_sheet.closed.connect(func(r: Variant) -> void:
+		if str(r) == "ok":
+			delete_now())
+
+
+## 소리를 놓은 뒤 SongStore.delete. 못 지우면 안내하고 곡을 다시 불러 계속 쓸 수 있게 둔다.
+func delete_now() -> bool:
+	if song.is_empty() or song_id == "":
+		return false
+	var id: String = song_id
+	_leave()
+	player.unload()
+	audio_ok = false
+	if SongStore.delete(id):
+		Toast.ok("곡을 지웠어요")
+		result = "deleted"
+		deleted.emit(id)
+		closed.emit()
+		return true
+	Toast.error(MSG_DELETE_FAIL)
+	audio_ok = player.load_song(song)
+	_update_controls()
+	return false
 
 
 # ---------------------------------------------------------------- read helpers
@@ -457,6 +575,9 @@ func _reset() -> void:
 	tab = DEFAULT_TAB
 	song = {}
 	song_id = ""
+	result = ""
+	if _menu_btn != null:
+		_menu_btn.visible = false
 	cur_line = -1
 	audio_ok = false
 	open_error = ""
