@@ -14,6 +14,13 @@ extends RefCounted
 ##   - 모르는 level 은 "mid". 알 수 없는 키는 최상위·줄·단어에서 보존한다(보정하지 않음). 단 "_" 로 시작하는 키는
 ##     실행 중 내부 값(예: _audio_path)이라 디스크의 값을 믿지 않고 버린다.
 ##   - NaN/inf/문자열 같은 숫자 아닌 값은 0 (또는 기본값)으로 본다.
+##
+## 곡 종류(kind, docs/lyrics_memorize_design.md §5.1):
+##   - 최상위 "kind" 가 "lyrics" 이면 음원 없는 곡(가사 외우기용): duration 0, 모든 줄 t0 = t1 = 0 (줄 순서는 입력 순서 그대로),
+##     audio = {file "", bytes 0, sha256 "", orig_name ""}, source.timing "none", offset 0.
+##   - "kind" 가 없거나 "audio" 거나 알 수 없는 값이면 음원 곡이다. 이때 출력에는 "kind" 키를 넣지 않는다 (kind 가 없던 시절의
+##     정규화 결과와 한 바이트도 다르지 않다. 음원 곡의 source.timing "none" 은 예전처럼 "line" 으로 보정한다).
+##   - 불변식 0 <= t0 < t1 <= duration 은 음원 곡에만 적용된다 (가사 곡은 시간이 없다).
 
 const CURRENT_V := 1
 const MAX_LINES := 400
@@ -27,7 +34,8 @@ const OFFSET_LIM := 5.0
 const LEVELS := ["easy", "mid", "hard"]
 const LANGS := ["en", "ja"]
 const LYRICS_SOURCES := ["asr", "pasted", "lrclib"]
-const TIMINGS := ["line", "word", "est"]
+const TIMINGS := ["line", "word", "est", "none"] ## "none" 은 가사 곡(kind "lyrics")만
+const KINDS := ["audio", "lyrics"]
 ## 필드별 문자열 상한 (글자 수)
 const LEN_TITLE := 200
 const LEN_LINE := 200 ## 서버 MAX_LINE_CHARS 와 같다
@@ -113,9 +121,15 @@ static func is_read_only(song: Dictionary) -> bool:
 	return int(song.get("v", 1)) > CURRENT_V
 
 
+## 음원 없는 곡(kind "lyrics")인가. 정규화를 거친 곡이나 읽어 온 곡 사전에 쓴다.
+static func is_lyrics(song: Dictionary) -> bool:
+	var k: Variant = song.get("kind", "audio")
+	return k is String and k == "lyrics"
+
+
 # ---------------------------------------------------------------- normalize
 
-const _KNOWN_TOP := ["v", "id", "lang", "title", "artist", "created", "duration", "audio", "source", "offset", "lines",
+const _KNOWN_TOP := ["kind", "v", "id", "lang", "title", "artist", "created", "duration", "audio", "source", "offset", "lines",
 	"glossary", "marks", "stats", "warnings", "app"]
 const _KNOWN_LINE := ["i", "p", "t0", "t1", "text", "reading", "pron", "ko", "conf", "est", "stale", "words"]
 const _KNOWN_WORD := ["w", "lemma", "level", "zipf", "s", "e", "est", "content", "reading"]
@@ -139,7 +153,13 @@ static func normalize(raw: Variant) -> Dictionary:
 	out["title"] = clean_str(src.get("title", ""), LEN_TITLE)
 	out["artist"] = clean_str(src.get("artist", ""), LEN_TITLE)
 	out["created"] = int_of(src.get("created", 0), 0, 4102444800, 0)
+	var kind: Variant = src.get("kind", "audio")
+	var lyrics_only: bool = kind is String and kind == "lyrics"
+	if lyrics_only:
+		out["kind"] = "lyrics"
 	var dur: float = num(src.get("duration", 0.0), 0.0, MAX_DURATION, 0.0)
+	if lyrics_only:
+		dur = 0.0
 
 	# --- lines (positions in the input array are remembered for marks / best)
 	var raw_lines: Variant = src.get("lines", [])
@@ -155,13 +175,13 @@ static func normalize(raw: Variant) -> Dictionary:
 			if items.size() >= MAX_LINES:
 				break
 			var ln: Dictionary = _norm_line_raw(rl)
-			var t0: float = num(rl.get("t0", 0.0), 0.0, MAX_DURATION, 0.0)
-			var t1: float = num(rl.get("t1", 0.0), 0.0, MAX_DURATION, 0.0)
+			var t0: float = 0.0 if lyrics_only else num(rl.get("t0", 0.0), 0.0, MAX_DURATION, 0.0)
+			var t1: float = 0.0 if lyrics_only else num(rl.get("t1", 0.0), 0.0, MAX_DURATION, 0.0)
 			ln["t0"] = t0
 			ln["t1"] = t1
 			max_end = maxf(max_end, maxf(t0, t1))
 			items.append([t0, my_pos, ln])
-	if dur <= 0.0 and not items.is_empty():
+	if dur <= 0.0 and not items.is_empty() and not lyrics_only:
 		dur = maxf(max_end, MIN_LINE) ## no usable duration: the lines themselves define it
 	out["duration"] = dur
 	# stable sort by t0 (ties keep the original order)
@@ -179,17 +199,28 @@ static func normalize(raw: Variant) -> Dictionary:
 	for new_i in order.size():
 		var it: Array = items[order[new_i]]
 		var ln2: Dictionary = it[2]
-		_fix_times(ln2, dur)
+		if not lyrics_only:
+			_fix_times(ln2, dur)
 		ln2["i"] = new_i
 		_fix_words(ln2, dur)
 		remap[it[1]] = new_i
 		lines.append(ln2)
 	out["lines"] = lines
 
-	out["audio"] = _norm_audio(src.get("audio", null))
-	out["source"] = _norm_source(src.get("source", null))
-	var off: float = num(src.get("offset", 0.0), -OFFSET_LIM, OFFSET_LIM, 0.0)
-	out["offset"] = clampf(snappedf(off, 0.05), -OFFSET_LIM, OFFSET_LIM)
+	if lyrics_only:
+		out["audio"] = {"file": "", "bytes": 0, "sha256": "", "orig_name": ""}
+		var lsrc: Dictionary = _norm_source(src.get("source", null))
+		lsrc["timing"] = "none"
+		out["source"] = lsrc
+		out["offset"] = 0.0
+	else:
+		out["audio"] = _norm_audio(src.get("audio", null))
+		var asrc: Dictionary = _norm_source(src.get("source", null))
+		if asrc["timing"] == "none":
+			asrc["timing"] = "line" ## 예전 정규화와 같은 결과 (음원 곡에 "none" 은 없다)
+		out["source"] = asrc
+		var off: float = num(src.get("offset", 0.0), -OFFSET_LIM, OFFSET_LIM, 0.0)
+		out["offset"] = clampf(snappedf(off, 0.05), -OFFSET_LIM, OFFSET_LIM)
 	out["glossary"] = _norm_glossary(src.get("glossary", null))
 	out["marks"] = _norm_marks(src.get("marks", null), remap)
 	out["stats"] = _norm_stats(src.get("stats", null), remap)
