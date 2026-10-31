@@ -50,6 +50,7 @@ const DEFAULT_TAB := "listen"
 const DEFAULT_ATTRIBUTION := "가사: LRCLIB (lrclib.net) · 개인 학습용으로만 쓰세요"
 const MSG_OPEN_FAIL := "곡을 열 수 없어요. 곡 목록으로 돌아가 다시 열어 보세요."
 const MSG_RECORDING := "녹음하는 동안은 노래를 틀지 않아요."
+const MSG_DELETE_PARTIAL := "일부만 지워졌어요. 목록의 '복구할 수 없는 곡 정리'로 지워 주세요."
 const MSG_DELETE_FAIL := "곡을 지우지 못했어요. 파일이 다른 곳에서 열려 있는지 확인해 주세요."
 const SOURCE_KO := {"asr": "소리에서 받아 적음", "pasted": "붙여넣은 가사", "lrclib": "LRCLIB"}
 const LANG_KO := {"en": "영어", "ja": "일본어"}
@@ -72,7 +73,7 @@ var keep_pitch: bool = true
 var repeat: int = 1
 var audio_ok: bool = false ## 소리 파일을 읽었다
 var open_error: String = "" ## 곡을 못 열었을 때의 문구
-var result: String = "" ## 나간 이유: "" | "back" | "deleted" | "check"
+var result: String = "" ## 나간 이유: "" | "back" | "deleted" | "partial" (곡이 일부만 지워짐) | "check"
 var last_sheet: Sheet = null ## 마지막으로 연 시트 (시험용)
 
 var _shell: Dictionary = {}
@@ -275,6 +276,12 @@ func delete_now() -> bool:
 		deleted.emit(id)
 		closed.emit()
 		return true
+	# the folder could not be removed completely: SongStore.delete may already have taken song.json away and left the audio
+	if SongStore.load_song(id).is_empty():
+		Toast.error(MSG_DELETE_PARTIAL)
+		result = "partial"
+		closed.emit() # the hub reloads the list: the leftovers show up under '정리할 곡'
+		return false
 	Toast.error(MSG_DELETE_FAIL)
 	audio_ok = player.load_song(song)
 	_update_controls()

@@ -315,6 +315,8 @@ func _ready() -> void:
 		await _test_meaning_save()
 	if _want("lrclib") and _arg("--live=") == "":
 		await _test_lrclib_late()
+	if _want("delete") and _arg("--live=") == "":
+		await _test_delete_paths()
 	if _want("close") and _arg("--live=") == "":
 		await _test_close_cleanup()
 	if _want("main") and _arg("--live=") == "":
@@ -343,7 +345,7 @@ func _ready() -> void:
 	ok(JSON.stringify(after) == JSON.stringify(_before), "the user's prefs / progress / studylog / remote / sync files and user://songs are untouched: before == after")
 	ok(not DirAccess.dir_exists_absolute(_g(ROOT)) and not DirAccess.dir_exists_absolute(_g(DIR)), "test folders cleaned up")
 	ok(AudioServer.bus_count == buses0 and not _bus_exists(), "no audio bus is left over after the whole run")
-	ok(_reached.size() == 6 or _arg("--only=") != "" or _arg("--live=") != "", "ran to the end of every section (%s)" % ",".join(PackedStringArray(_reached.keys())))
+	ok(_reached.size() == 7 or _arg("--only=") != "" or _arg("--live=") != "", "ran to the end of every section (%s)" % ",".join(PackedStringArray(_reached.keys())))
 	print("== song_flow_test result: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -728,6 +730,101 @@ func _test_lrclib_late() -> void:
 	_reached["lrclib"] = true
 
 
+# ---------------------------------------------------------------- deleting a song from the study screen: order and failures
+
+## SongPlayer adapter that notes whether the song folder still existed when the audio was given back.
+class RecAdapter:
+	extends SongPlayer.Adapter
+	var dir: String = ""
+	var releases: int = 0
+	var dir_existed_at_release: bool = false
+
+	func load_audio(_path: String) -> float:
+		return 8.0
+
+	func release() -> void:
+		releases += 1
+		dir_existed_at_release = DirAccess.dir_exists_absolute(dir)
+
+
+func _test_delete_paths() -> void:
+	print("[delete from the study screen: audio is released first, failures are handled]")
+	_fresh()
+	_consent(true)
+	_disconnect_pc()
+	# --- (1) the order: the player lets go of the audio BEFORE SongStore.delete (an open audio file blocks the delete on Windows)
+	var id: String = _install_tone("Order Tune", 3)
+	var fake := RecAdapter.new()
+	fake.dir = _g(SongStore.song_dir(id))
+	var st := SongStudyScreen.new()
+	st.player.backend = fake
+	_stage(st)
+	st.open("en", {"id": id})
+	await _frames(2)
+	var rel0: int = fake.releases # open() itself lets go of the old audio once
+	ok(st.audio_ok, "study screen with a fake audio adapter is open")
+	ok(st.delete_now(), "delete_now() succeeds")
+	ok(fake.releases > rel0 and fake.dir_existed_at_release, "the audio was released while the song folder still existed (unload before SongStore.delete)")
+	ok(not DirAccess.dir_exists_absolute(fake.dir) and st.result == "deleted", "...and then the folder is deleted")
+	st.queue_free()
+	await _frames(2)
+	# --- (2) a delete that fails and leaves the song complete: the screen says so and keeps working
+	var id2: String = _install_tone("Locked Tune", 3)
+	var s2 := SongStudyScreen.new()
+	_stage(s2)
+	s2.open("en", {"id": id2})
+	await _frames(2)
+	var closed: Array = [0]
+	s2.closed.connect(func() -> void: closed[0] += 1)
+	ok(s2.audio_ok, "second song: audio loaded")
+	var lock_a: FileAccess = FileAccess.open(SongStore.audio_path(id2), FileAccess.READ) # an open file cannot be deleted on Windows
+	var lock_j: FileAccess = FileAccess.open(SongStore.song_dir(id2).path_join("song.json"), FileAccess.READ)
+	_toasts.clear()
+	var did: bool = s2.delete_now()
+	var held: bool = FileAccess.file_exists(SongStore.audio_path(id2))
+	ok(not did and held, "delete_now() with both files held open fails and the folder is still there")
+	ok(_toast_has("곡을 지우지 못했어요") and not _toast_has("일부만"), "the 'could not delete' notice is shown (not the partial one)")
+	ok(closed[0] == 0 and s2.result == "" and s2.audio_ok and s2.player.is_loaded(), "the screen stays open and the audio is loaded again (MSG_DELETE_FAIL -> player.load_song)")
+	ok(not SongStore.load_song(id2).is_empty(), "the song is still whole on disk")
+	lock_a = null
+	lock_j = null
+	s2.queue_free()
+	await _frames(2)
+	# --- (3) a delete that fails half way (song.json gone, audio left): the screen closes and the list offers the clean-up
+	var id3: String = _install_tone("Half Tune", 3)
+	var v := _make_view()
+	await _frames(2)
+	v.refresh()
+	await _wait_loaded(v)
+	v._on_song_tap(id3, true)
+	await _frames(3)
+	var st3: SongStudyScreen = v.screen as SongStudyScreen
+	ok(st3 != null and st3.audio_ok, "third song: opened from the list")
+	var lock_audio: FileAccess = FileAccess.open(SongStore.audio_path(id3), FileAccess.READ)
+	_toasts.clear()
+	st3.open_menu()
+	await _frames(2)
+	(st3.last_sheet.buttons["delete"] as Button).pressed.emit()
+	await _frames(3)
+	(st3.last_sheet.buttons["ok"] as Button).pressed.emit()
+	await _frames(3)
+	var half: bool = SongStore.load_song(id3).is_empty() and FileAccess.file_exists(SongStore.audio_path(id3))
+	ok(half, "the folder is half deleted (song.json gone, audio left)")
+	ok(_toast_has("일부만 지워졌어요") and _toast_has("복구할 수 없는 곡 정리"), "the half-deleted notice names the clean-up in the list")
+	ok(v.screen == null, "the study screen closed (it does not say 'keep using it')")
+	await _wait_loaded(v)
+	ok(v.orphans.has(id3) and v.cleanup_button() != null, "the list was refreshed and offers the clean-up for it")
+	lock_audio = null
+	await _frames(2)
+	v.cleanup_now()
+	await _wait_loaded(v)
+	ok(not DirAccess.dir_exists_absolute(_g(SongStore.song_dir(id3))) and v.orphans.is_empty(), "the clean-up removes what was left")
+	ok(not _bus_exists(), "no 'Song' bus is left")
+	v.queue_free()
+	await _frames(2)
+	_reached["delete"] = true
+
+
 # ---------------------------------------------------------------- closing screens gives everything back
 
 func _test_close_cleanup() -> void:
@@ -757,6 +854,12 @@ func _test_close_cleanup() -> void:
 	ok(Recorder.begin(sing.recorder.get_instance_id()) and Recorder.recording, "a recording is running for the sing tab")
 	await _frames(3)
 	ok(Recorder.recording and Recorder.owner_id == sing.recorder.get_instance_id(), "…and it is still running before the screen closes")
+	# the list tab is left (main.gd calls SongView.on_hide): the recording is cancelled, the screen stays
+	v.on_hide()
+	await _frames(2)
+	ok(not Recorder.recording and v.screen == st and not st.player.is_playing(), "on_hide (tab switch): the recording is cancelled and the sound stops, the screen stays")
+	ok(Recorder.begin(sing.recorder.get_instance_id()) and Recorder.recording, "a new recording can start again")
+	await _frames(3)
 	var ref: WeakRef = weakref(st)
 	ok(v.go_back(), "back closes the screen")
 	await _frames(3)
@@ -866,8 +969,19 @@ func _test_main_back() -> void:
 	st.play_line(0)
 	await _frames(2)
 	ok(st.player.is_playing(), "a line plays in the real app")
+	st.show_tab("sing")
+	await _frames(2)
+	var sing: SongSingTab = st.current_tab() as SongSingTab
+	Recorder.mode_override = "android"
+	Recorder.test_hooks = {"granted": func() -> bool: return true, "open": func() -> bool: return true, "close": func() -> void: pass,
+		"level": func() -> float: return 0.1, "recording": func() -> AudioStreamWAV: return null}
+	ok(sing != null and Recorder.begin(sing.recorder.get_instance_id()) and Recorder.recording, "a recording runs in the real app")
+	await _frames(3)
 	_main.show_view("lesson")
 	await _frames(3)
+	ok(not Recorder.recording, "switching the tab cancels the running recording")
+	Recorder.mode_override = ""
+	Recorder.test_hooks = {}
 	ok(not st.player.is_playing() and sv.screen == st, "leaving the tab stops the sound (on_hide) and keeps the screen")
 	_main.show_view("song")
 	await _frames(3)
