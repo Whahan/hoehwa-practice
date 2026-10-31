@@ -15,6 +15,15 @@ extends RefCounted
 ##   orphan_ids()          song.json 이 없는 폴더(깨져 .bad 로 옮겨진 곡)의 id. delete(id) 로 지운다. usage 에는 바이트가 들어간다.
 ##   max_songs/max_bytes/fake_used_bytes/write_hook   시험용 조절 장치
 ##   take_quarantined()    깨져서 .bad 로 옮긴 곡의 id 목록을 돌려주고 비운다 (화면이 토스트로 알린다)
+##
+## 가사 외우기(docs/lyrics_memorize_design.md §5.2): 음원 없는 곡 `kind:"lyrics"` 와 곡 폴더의 memo.json.
+##   install_lyrics(song)      음원 없는 곡 설치 (song.json 한 개). 곡 수·용량 한도는 음원 곡과 같이 쓴다
+##   load_memo / save_memo     memo.json 읽기(깨지면 .bad 로 격리)·원자적 쓰기
+##   memo_summary(id, now)     읽기 전용 요약 (격리·쓰기 없음)
+##   delete_memo(id)           외우기 기록만 지움 (진도 초기화)
+## memo.json 도 곡 폴더 안이라 usage() 에 들어가고 delete(id) 가 폴더째 지운다. 동기화·백업 대상이 아니다.
+## 새 경로에도 같은 방어를 쓴다: 시험 보호(_guard), 링크(junction / symlink)를 따라가지 않는 삭제, root 밖 삭제 거부.
+## 곡 폴더 자체가 링크이면 memo 함수는 그 폴더를 곡 폴더로 보지 않는다 (링크 너머에 쓰거나 지우지 않는다).
 
 const ROOT := "user://songs"
 const MAX_SONGS := 40
@@ -24,6 +33,8 @@ const MAX_JSON_BYTES := 8 * 1024 * 1024
 const KEEP_BAD := 3 ## song.json.bad, .bad.1, .bad.2
 const AUDIO_FILE := "audio.mp3"
 const SONG_FILE := "song.json"
+const MEMO_FILE := "memo.json"
+const MAX_MEMO_BYTES := 2 * 1024 * 1024
 const PENDING_FILE := "_pending.json"
 
 static var root: String = ROOT
@@ -92,6 +103,10 @@ static func song_dir(id: String) -> String:
 
 static func _song_file(id: String) -> String:
 	return song_dir(id).path_join(SONG_FILE)
+
+
+static func _memo_file(id: String) -> String:
+	return song_dir(id).path_join(MEMO_FILE)
 
 
 static func audio_path(id: String) -> String:
@@ -277,6 +292,8 @@ static func verify_audio(id: String) -> bool:
 
 
 static func _audio_ok(id: String, song: Dictionary) -> bool:
+	if SongModel.is_lyrics(song):
+		return true ## 음원 없는 곡: 확인할 오디오가 없다
 	var ap: String = audio_path(id)
 	if not FileAccess.file_exists(ap):
 		return false
@@ -339,6 +356,7 @@ static func list() -> Array:
 			"warnings": s["warnings"],
 			"ready": _audio_ok(id, s),
 			"read_only": SongModel.is_read_only(s),
+			"kind": "lyrics" if SongModel.is_lyrics(s) else "audio",
 		})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if a["last"] != b["last"]:
@@ -456,6 +474,42 @@ static func install(song: Dictionary, audio: PackedByteArray) -> Dictionary:
 	return {"ok": true, "id": id, "err_code": ""}
 
 
+## Installs a lyrics-only song (kind "lyrics", no audio). -> {ok, id, err_code}  err_code: bad_song (not a lyrics song, no lines, v > 1)
+## quota_songs quota_bytes disk_write. Same limits and the same staging-folder rename as install(): a failure leaves no partial folder.
+static func install_lyrics(song: Dictionary) -> Dictionary:
+	if _guard():
+		return {"ok": false, "id": "", "err_code": "disk_write"}
+	var clean: Dictionary = SongModel.normalize(song)
+	if clean.is_empty() or not SongModel.is_lyrics(clean) or SongModel.is_read_only(clean) or (clean["lines"] as Array).is_empty():
+		return _fail("bad_song")
+	if DirAccess.make_dir_recursive_absolute(_g(root)) != OK:
+		return _fail("disk_write")
+	var id: String = new_id()
+	if id == "":
+		return _fail("disk_write")
+	clean["id"] = id
+	if int(clean["created"]) <= 0:
+		clean["created"] = int(Time.get_unix_time_from_system())
+	var data: PackedByteArray = JSON.stringify(clean).to_utf8_buffer()
+	var u: Dictionary = usage()
+	if int(u["songs"]) >= max_songs:
+		return _fail("quota_songs")
+	if int(u["bytes"]) + data.size() > max_bytes:
+		return _fail("quota_bytes")
+	_clean_staging()
+	var stage: String = root.path_join("_tmp_" + id)
+	var ok := false
+	if DirAccess.make_dir_recursive_absolute(_g(stage)) == OK:
+		ok = _write_bytes(stage.path_join(SONG_FILE), data)
+		if ok:
+			ok = DirAccess.rename_absolute(_g(stage), _g(song_dir(id))) == OK
+	if not ok:
+		_rm_rf(stage)
+		return _fail("disk_write")
+	last_error = ""
+	return {"ok": true, "id": id, "err_code": ""}
+
+
 static func _fail(code: String) -> Dictionary:
 	last_error = code
 	return {"ok": false, "id": "", "err_code": code}
@@ -480,6 +534,124 @@ static func delete(id: String) -> bool:
 	_rm_rf(song_dir(id))
 	_sha_cache.erase(audio_path(id))
 	return not DirAccess.dir_exists_absolute(_g(song_dir(id)))
+
+
+# ---------------------------------------------------------------- memo (memo.json)
+
+## 곡 폴더가 있고 링크가 아닌가 (링크라면 그 너머에 읽거나 쓰지 않는다).
+static func _real_song_dir(id: String) -> bool:
+	var g: String = _g(song_dir(id))
+	return DirAccess.dir_exists_absolute(g) and not _is_link(g)
+
+
+static func _memo_now() -> int:
+	return int(Time.get_unix_time_from_system())
+
+
+## memo.json 을 읽는다. -> {"memo": 보정된 사전, "status": "ok"|"missing"|"bad"}. 읽기만 한다 (격리는 부른 쪽이).
+static func _peek_memo(id: String) -> Dictionary:
+	var p: String = _memo_file(id)
+	var gp: String = _g(p)
+	if _is_link(gp): ## 링크는 따라가지 않는다 (깨진 기록으로 본다)
+		return {"memo": {}, "status": "bad"}
+	if not FileAccess.file_exists(p):
+		return {"memo": {}, "status": "missing"}
+	var size: int = _file_size(p)
+	if size < 0 or size > MAX_MEMO_BYTES:
+		return {"memo": {}, "status": "bad"}
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(p)
+	if bytes.has(0): ## NUL 바이트: 텍스트 기록이 아니다
+		return {"memo": {}, "status": "bad"}
+	var js := JSON.new()
+	if js.parse(bytes.get_string_from_utf8()) != OK or not (js.data is Dictionary):
+		return {"memo": {}, "status": "bad"}
+	return {"memo": MemoModel.normalize(js.data, _memo_now()), "status": "ok"}
+
+
+## memo.json of `id`, normalized. Missing file -> a new memo. A broken one (cut JSON, not an object, NUL bytes, over
+## MAX_MEMO_BYTES, a link) is moved to memo.json.bad, a new memo is returned and last_error = "bad_memo"; song.json is untouched.
+## Bad id / no song folder -> a new memo with last_error "bad_id" / "not_found". `_song` is accepted for the caller's
+## convenience and not used (the records do not need the lyrics).
+static func load_memo(id: String, _song: Dictionary = {}) -> Dictionary:
+	last_error = ""
+	if _guard():
+		return MemoModel.new_memo()
+	if not SongModel.is_valid_id(id):
+		last_error = "bad_id"
+		return MemoModel.new_memo()
+	if not _real_song_dir(id):
+		last_error = "not_found"
+		return MemoModel.new_memo()
+	var r: Dictionary = _peek_memo(id)
+	if r["status"] == "ok":
+		return r["memo"]
+	if r["status"] == "bad":
+		_quarantine_file(_memo_file(id))
+		last_error = "bad_memo"
+	return MemoModel.new_memo()
+
+
+## Saves memo.json atomically (temp file, then rename). false: bad id, folder missing (not_found), read-only memo (v > 1:
+## read_only), or the write failed (disk_write, the old memo.json stays).
+static func save_memo(id: String, memo: Dictionary) -> bool:
+	if _guard():
+		return false
+	if not SongModel.is_valid_id(id):
+		last_error = "bad_id"
+		return false
+	if not _real_song_dir(id):
+		last_error = "not_found"
+		return false
+	var clean: Dictionary = MemoModel.normalize(memo, _memo_now())
+	if MemoModel.is_read_only(clean):
+		last_error = "read_only"
+		return false
+	var text: String = JSON.stringify(clean)
+	if text.to_utf8_buffer().size() > MAX_MEMO_BYTES:
+		last_error = "disk_write"
+		return false
+	if not _write_atomic(_memo_file(id), text):
+		last_error = "disk_write"
+		return false
+	return true
+
+
+## Read-only summary {total, memorized, learning, fresh, due, next_due} (MemoModel.summary) or {} (no such song, broken
+## song.json or memo.json). Never moves or writes a file, so a list screen can call it from a worker thread.
+static func memo_summary(id: String, now: int) -> Dictionary:
+	if _guard() or not SongModel.is_valid_id(id) or not _real_song_dir(id):
+		return {}
+	var sp: String = _song_file(id)
+	if not FileAccess.file_exists(sp):
+		return {}
+	var size: int = _file_size(sp)
+	if size < 0 or size > MAX_JSON_BYTES:
+		return {}
+	var js := JSON.new()
+	if js.parse(_read_text(sp)) != OK or not (js.data is Dictionary):
+		return {}
+	var song: Dictionary = SongModel.normalize(js.data)
+	var r: Dictionary = _peek_memo(id)
+	if r["status"] == "bad":
+		return {}
+	var memo: Dictionary = r["memo"] if r["status"] == "ok" else MemoModel.new_memo()
+	return MemoModel.summary(song, memo, now)
+
+
+## Removes only the memo records of `id` (memo.json and its temp file; song.json stays). true when memo.json is gone.
+## A link named memo.json is removed itself, never followed.
+static func delete_memo(id: String) -> bool:
+	if _guard():
+		return false
+	if not SongModel.is_valid_id(id):
+		last_error = "bad_id"
+		return false
+	if not _real_song_dir(id):
+		return not DirAccess.dir_exists_absolute(_g(song_dir(id))) ## no song folder: nothing to remove
+	_rm_rf(_memo_file(id))
+	_rm_rf(_memo_file(id) + ".tmp")
+	var gm: String = _g(_memo_file(id))
+	return not FileAccess.file_exists(gm) and not DirAccess.dir_exists_absolute(gm)
 
 
 # ---------------------------------------------------------------- pending jobs
