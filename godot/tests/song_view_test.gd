@@ -174,6 +174,7 @@ func _stage(c: Control) -> void:
 
 func _make_view() -> SongView:
 	var v := SongView.new()
+	v.host_screens = false # U5 wiring: this test is about the list and its signals; the hub opens real screens in song_flow_test
 	_stage(v)
 	return v
 
@@ -430,6 +431,7 @@ func _test_tap_and_delete() -> void:
 		row.gui_input.emit(ev)
 	ok(opened == [a, b], "a click / tap on the row opens the song")
 	var v_no_listener := SongView.new()
+	v_no_listener.host_screens = false # U5 wiring: without hosting and without a listener the old short notice is what happens
 	_stage(v_no_listener)
 	_toasts.clear()
 	v_no_listener._on_song_tap(a, true)

@@ -23,6 +23,9 @@ const MSG_NO_PC := "해석을 만들려면 PC에 연결해야 해요 (Tailscale)
 const MSG_NO_CONSENT := "해석은 가사를 AI 서비스로 보내 만들어요. 노래 목록에서 안내에 동의하면 쓸 수 있어요."
 const MSG_SWITCH_OFF := "이 곡의 AI 해석이 꺼져 있어요. 아래 스위치를 켜면 만들 수 있어요."
 const MSG_FAIL := "해석을 만들지 못했어요. 잠시 뒤 다시 시도해 주세요."
+const MSG_SAVE_FAIL := "해석을 만들었지만 저장하지 못했어요. 이 곡은 그대로 두었어요. 저장 공간을 확인한 뒤 다시 시도해 주세요."
+const MSG_SWITCH_FAIL := "저장하지 못해서 스위치를 바꾸지 못했어요. 저장 공간을 확인한 뒤 다시 시도해 주세요."
+const MSG_READONLY := "더 새로운 버전의 앱에서 만든 곡이라 여기서는 저장할 수 없어요. 그대로 두었어요."
 
 var song: Dictionary = {}
 var lang: String = "en"
@@ -175,6 +178,7 @@ func make_missing() -> bool:
 	_serial += 1
 	var serial: int = _serial
 	var total: int = ceili(float(todo.size()) / float(BATCH))
+	var snap: Dictionary = _snapshot() # 저장이 안 되면 받은 해석을 이 값으로 되돌린다 (다시 열면 사라지는 해석을 보이지 않는다)
 	var filled := 0
 	var failed_msg := ""
 	for b in total:
@@ -197,7 +201,14 @@ func make_missing() -> bool:
 		filled += apply_response(res.get("data", null), batch)
 	busy = false
 	progress_text = ""
-	if failed_msg != "":
+	var save_failed := false
+	if filled > 0 and not _save():
+		_restore(snap)
+		save_failed = true
+		filled = 0
+	if save_failed:
+		last_msg = MSG_READONLY if SongModel.is_read_only(song) else MSG_SAVE_FAIL
+	elif failed_msg != "":
 		last_msg = failed_msg if filled == 0 else "%s (%d줄은 만들었어요)" % [failed_msg, filled]
 	elif filled == 0:
 		last_msg = "해석을 받지 못했어요. 잠시 뒤 다시 시도해 주세요."
@@ -205,7 +216,6 @@ func make_missing() -> bool:
 		var left: int = missing_lines().size()
 		last_msg = "%d줄의 해석을 만들었어요." % filled + (" %d줄은 만들지 못했어요." % left if left > 0 else "")
 	if filled > 0:
-		_save()
 		song_changed.emit()
 	_render()
 	return filled > 0
@@ -286,10 +296,39 @@ func cancel_make(redraw: bool = true) -> void:
 
 ## 곡별 "해석 켬" 스위치. 곡에 저장한다.
 func set_translate(on: bool) -> void:
+	var had: bool = song.has("translate")
+	var old: Variant = song.get("translate", null)
 	song["translate"] = on
 	last_msg = ""
-	_save()
+	if not _save():
+		if had: # 저장이 안 됐으면 스위치도 예전 값으로 (다시 열면 사라질 값을 보이지 않는다)
+			song["translate"] = old
+		else:
+			song.erase("translate")
+		last_msg = MSG_READONLY if SongModel.is_read_only(song) else MSG_SWITCH_FAIL
 	_render()
+
+
+## 해석을 받기 전의 줄·용어집 (저장 실패 때 되돌리는 값).
+func _snapshot() -> Dictionary:
+	var ls: Variant = song.get("lines", [])
+	return {"lines": (ls as Array).duplicate(true) if ls is Array else [], "has_glossary": song.has("glossary"),
+		"glossary": (song["glossary"] as Dictionary).duplicate(true) if song.get("glossary", null) is Dictionary else null}
+
+
+## _snapshot 의 값으로 되돌린다. 줄 Dictionary 는 같은 객체를 그대로 두고 안을 바꾼다 (다른 탭이 같은 곡을 본다).
+func _restore(snap: Dictionary) -> void:
+	var ls: Variant = song.get("lines", [])
+	var old: Array = snap["lines"]
+	if ls is Array:
+		for i in mini((ls as Array).size(), old.size()):
+			if (ls as Array)[i] is Dictionary and old[i] is Dictionary:
+				((ls as Array)[i] as Dictionary).clear()
+				((ls as Array)[i] as Dictionary).merge(old[i] as Dictionary, true)
+	if bool(snap["has_glossary"]):
+		song["glossary"] = snap["glossary"]
+	else:
+		song.erase("glossary")
 
 
 func _save() -> bool:

@@ -17,7 +17,7 @@ extends Control
 ##
 ## 허브 계약(PracticeView 와 같은 모양):
 ##   signal closed                 화면을 떠난다(저장했든 아니든). 저장했으면 그 직전에 saved(song_id) 가 한 번 나가고 result == "saved".
-##   func open(lang, args)         args: {"song_id": "s_…"} (SongStore 에서 읽음) 또는 {"song": Dictionary}(시험용, id 필요)
+##   func open(lang, args)         args: {"id": "s_…"} (SongStore 에서 읽음, 옛 이름 "song_id" 도 받음) 또는 {"song": Dictionary}(시험용, id 필요)
 ##   func on_hide() / go_back()    on_hide: 재생을 멈춘다. go_back: 저장 안 한 변경이 있으면 확인을 묻고 true.
 ## 소리: `player`(SongPlayer). 시험은 open() 전에 `player = SongPlayer.new()` 에 가짜 어댑터(backend)를 달아 넣는다.
 ## 없으면 화면이 만들고, songs_root 는 SongStore.root 로 맞춘다.
@@ -106,8 +106,8 @@ func open(l: String, args: Dictionary = {}) -> void:
 	working = {}
 	original = {}
 	var song: Dictionary = {}
-	if args.has("song_id"):
-		song_id = str(args["song_id"])
+	if args.has("song_id") or args.has("id"): ## 곡 여는 인자 이름은 open(lang, {id}) 하나로 통일 (옛 이름 song_id 도 받는다)
+		song_id = str(args.get("id", args.get("song_id", "")))
 		song = SongStore.load_song(song_id)
 	elif args.get("song", null) is Dictionary:
 		song = SongModel.normalize(args["song"])
