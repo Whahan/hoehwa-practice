@@ -4,7 +4,8 @@
     python check_zip.py <zip> <config.default.json> [--allow-models] [--allow-progress]
 
 Fails (exit 1) when the zip contains dev files (tests, build scripts, .gitignore), secrets / personal data,
-installed or generated folders (models, data, cache, logs, tools, .venv), unsafe entry names, or when
+installed or generated folders (models, data, cache, logs, tools, .venv), song study files (songs/, song_jobs/,
+song.json, memo.json, *.lrc, audio files mp3 m4a ogg wav flac opus), unsafe entry names, or when
 backend/config.json is not byte-for-byte the shipped neutral default config.
 """
 import re
@@ -34,6 +35,13 @@ BAD_NAME = [
     (r"\.(pyc|log)$", "pyc/log"),
     (r"^backend/(data|cache|logs|tools|\.venv)/", "installed/generated folder"),
     (r"^(runtime|backup|backups|dist)/", "installed/generated folder"),
+    # song study / lyrics memorize: lyrics, audio and per-song records are the user's own files and never ship
+    (r"(^|/)songs/", "user songs folder (lyrics/audio)"),
+    (r"(^|/)song_jobs/", "song job cache"),
+    (r"song\.json$", "song record (lyrics)"),
+    (r"memo\.json$", "lyrics-memorize record (memo.json)"),
+    (r"\.lrc$", "lyrics file (.lrc)"),
+    (r"\.(mp3|m4a|ogg|wav|flac|opus)$", "audio file"),
 ]
 if not allow_models:
     BAD_NAME.append((r"^backend/models/", "models folder"))
