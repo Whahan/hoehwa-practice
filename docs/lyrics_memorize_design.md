@@ -372,7 +372,7 @@ M1·M2·M6은 서로 파일이 겹치지 않아 **동시에** 진행. M3은 M1·
 | M2-8 | `MemoModel.normalize`: 키가 12자리 hex가 아닌 항목 버림, `card`의 문자열·NaN·inf·음수 안정도·`state:9` → 카드 버림(새 줄), 숫자 한도 보정, 항목 401개 → 400개(오래된 `seen` 삭제), 알 수 없는 키 버림, `v:5` → 읽기 전용 표시 | 시험 |
 | M2-9 | `line_key`: `"The kettle hums."`와 `"the KETTLE hums"` 같은 키, 다른 줄은 다른 키, 일본어 구두점 차이 무시, 구두점·공백뿐인 줄은 빈 키 → `is_memo_line` false, `[Chorus]` 줄 false; `keys_of`는 곡 순서·중복 제거(같은 줄 3번 → 1개, 처음 위치) | 시험 |
 | M2-10 | `summary`: 카드 없음 → `fresh`, state 1·3 → `learning`, state 2 → `memorized`, `due ≤ now` 개수, `total`은 서로 다른 키 수(후렴 반복 제외). `build_queue`: 복습 줄이 `due` 오래된 순·상한 20, 새 줄이 곡 순서·상한 5, `only_line`은 그 줄 하나, 같은 키 두 번 안 나옴, `skip_new`로 새 줄 건너뛰기 | 시험 |
-| M2-11 | 동기화 비대상: `SyncDoc.SHARED_PREFS`에 `memo_*` 0개, `SyncDoc.from_progress` 결과에 가사 표식 `ZZSONGLINEZZ`·`"memo"` 0건, 외우기를 한 뒤에도 `Store.progress["review"]` 길이 불변 | 시험 |
+| M2-11 | 동기화 비대상: `SyncDoc.SHARED_PREFS`에 `memo_*` 0개, `SyncDoc.extract` 결과에 가사 표식 `ZZSONGLINEZZ`·`"memo"` 0건, 외우기를 한 뒤에도 `Store.progress["review"]` 길이 불변 | 시험 |
 | M2-금지 | 기본 `user://songs`·`prefs.json`·`progress.json` 접근 0(시험이 `root`를 `user://test_songs_*`로 바꾸고 전후 목록 비교), `store.gd` `progress.gd` `sync_doc.gd` `fsrs.gd` 수정 0, `song_store.gd`의 기존 함수 시그니처 불변 | 목록·해시 |
 
 ### M3 `MemoSession`
