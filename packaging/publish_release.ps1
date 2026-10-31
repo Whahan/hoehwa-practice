@@ -131,6 +131,9 @@ foreach ($c in @("backend\config.json", "packaging\defaults\config.default.json"
     if (-not (Test-Path -LiteralPath $cp)) { if ($c -like "*default*") { throw "$c is missing" } else { continue } }
     if ((Get-Content -LiteralPath $cp -Raw -Encoding UTF8) -match '(?i)"(api_key|apikey|token|secret)"\s*:') { throw "$c contains a key-like field" }
 }
+# lyrics / audio / song records must never be tracked (only the synthetic test tone under godot/tests/fixtures/song/)
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check_no_media.ps1") -RepoRoot $App
+if ($LASTEXITCODE -ne 0) { throw "check_no_media failed (lyrics, audio or song files are tracked)" }
 Write-Host "    OK: no secrets tracked ($(@($tracked).Count) tracked files scanned)"
 if ($ScanOnly) { Write-Host "SCAN OK" -ForegroundColor Green; exit 0 }
 
