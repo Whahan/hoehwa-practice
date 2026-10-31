@@ -386,6 +386,7 @@ func _ready() -> void:
 	if lr_up:
 		await _test_lrclib_budget()
 		await _test_lrclib_duration()
+		await _test_lrclib_new_song()
 		await _test_lrclib_failures()
 		await _test_lrclib_late()
 		await _test_lrclib_save()
@@ -825,7 +826,7 @@ d e f", "instrumental": false},
 	s.set_title("KETTLE   morning ")
 	ok(s.lr_get_calls == 1 and s.lr_search_calls == 1, "the same song typed with other case / spaces keeps the used budget")
 	s.set_title("Plain Boat")
-	ok(s.lr_get_calls == 0 and s.lr_search_calls == 0 and int(s.lr_record["id"]) == 1002, "another title is another song: budget back to 0 (the chosen lyrics stay until a new answer)")
+	ok(s.lr_get_calls == 0 and s.lr_search_calls == 0 and s.lr_record.is_empty() and s.lr_items.is_empty(), "another title is another song: budget back to 0 and the earlier song's candidates and chosen lyrics are cleared (M7 follow-up 2)")
 	await get_tree().create_timer(0.6).timeout
 	ok((await _lr_log()).size() == 2, "changing the title sent nothing by itself")
 	await _frames(2)
@@ -863,21 +864,37 @@ d e f", "instrumental": false},
 	await _lr_reset()
 	var s3 := _new_lr_screen("a", "Test Artist")
 	s3.find_lyrics()
-	s3.search_lyrics()
 	await _frames(2)
-	ok((await _lr_log()).is_empty() and s3.lr_get_calls == 0 and s3.lr_search_calls == 0 and s3.lr_message == SongLyricsAddScreen.MSG_TITLE_SHORT, "a 1 character title: find and search send nothing, 'at least two characters' hint")
-	s3.set_title("Kettle Morning")
+	ok((await _lr_log()).is_empty() and s3.lr_get_calls == 0 and s3.lr_message == SongLyricsAddScreen.MSG_TITLE_SHORT, "a 1 character title: find sends nothing, 'at least two characters' hint")
+	s3.set_title("a")
 	s3.set_artist("b")
 	s3.find_lyrics()
 	s3.search_lyrics()
 	await get_tree().create_timer(0.6).timeout
-	ok((await _lr_log()).is_empty(), "a 1 character artist: nothing sent either")
+	ok((await _lr_log()).is_empty() and s3.lr_get_calls == 0 and s3.lr_search_calls == 0 and s3.lr_message == SongLyricsAddScreen.MSG_TITLE_SHORT, "both title and artist 1 character: find and search send nothing, 'at least two characters' hint")
+	s3.set_title("Kettle Morning")
+	s3.set_artist("b")
+	s3.find_lyrics()
+	await get_tree().create_timer(0.6).timeout
+	ok((await _lr_log()).is_empty() and s3.lr_get_calls == 0, "a 1 character artist: find (get needs both) sends nothing")
 	s3.set_title("   ")
 	s3.set_artist("   ")
 	s3.find_lyrics()
+	s3.search_lyrics()
 	await get_tree().create_timer(0.3).timeout
 	ok((await _lr_log()).is_empty(), "blank title and artist: nothing sent")
 	_drop(s3)
+	# search needs only one of title / artist to have 2 characters (same rule as SongAddScreen); get still needs both
+	for case in [["a", "Test Artist"], ["Kettle Morning", "b"], ["Kettle Morning", ""], ["", "Test Artist"]]:
+		await _lr_reset()
+		var sc := _new_lr_screen(str(case[0]), str(case[1]))
+		sc.find_lyrics()
+		ok(sc.lr_get_calls == 0 and (await _lr_log()).is_empty(), "title [%s] artist [%s]: find sends nothing" % [case[0], case[1]])
+		sc.search_lyrics()
+		ok(await _until(func() -> bool: return not sc.lr_busy, 10.0), "title [%s] artist [%s]: search finished" % [case[0], case[1]])
+		var lg: Array = await _lr_log()
+		ok(lg.size() == 1 and str(lg[0]["path"]) == "/api/search" and sc.lr_search_calls == 1, "title [%s] artist [%s]: search sends exactly 1 request (%s)" % [case[0], case[1], _lr_paths(lg)])
+		_drop(sc)
 	# the real lrclib.net can never be reached from a test
 	var s4 := _new_lr_screen("Kettle Morning", "Test Artist")
 	s4.lrclib_base_url = "https://lrclib.net"
@@ -946,6 +963,48 @@ func _test_lrclib_duration() -> void:
 		_drop(s4)
 		await _frames(1)
 	ok(_toast_has(SongLyricsAddScreen.MSG_DURATION_BAD), "a wrong length is also told by a toast when the person taps")
+
+
+func _test_lrclib_new_song() -> void:
+	print("[LRCLIB: a different title / artist is a new song -- the earlier song's lyrics never get saved under the new name (M7 follow-up 2)]")
+	_fresh()
+	await _lr_reset()
+	var s := _new_lr_screen("Kettle Morning", "Test Artist")
+	_press(s, "BtnFind")
+	ok(await _until(func() -> bool: return not s.lr_busy, 10.0), "get finished")
+	await _frames(2)
+	ok(not s.lr_record.is_empty() and not s.lr_items.is_empty() and s.save_block_reason() == "", "the first song: lyrics chosen, saving would be allowed")
+	var first_lines: Array = (s.current_lyrics()["lines"] as Array).duplicate(true)
+	ok(first_lines.size() == 6, "the chosen lyrics have 6 lines")
+	s.set_title("Another Song Entirely")
+	ok(s.lr_record.is_empty() and s.lr_items.is_empty() and s.lr_status == "" and s.lr_message == "", "title changed: candidates, chosen lyrics, status and message are cleared")
+	ok(s.save_block_reason() == SongLyricsAddScreen.MSG_NEED_LRCLIB and (s.current_lyrics()["lines"] as Array).is_empty(), "title changed: nothing left to save, the screen asks to find lyrics again")
+	await _frames(2)
+	ok(_find(s, "Candidates") == null and _find(s, "Attribution") == null and (_find(s, "BtnSave") as Button).disabled, "title changed: the candidate list and attribution are gone, the save button is off")
+	var n0: int = SongStore.list().size()
+	ok(s.save() != "" and SongStore.list().size() == n0, "title changed: save() is refused and no song is written")
+	ok((await _lr_log()).size() == 1, "changing the title sent no request")
+	_drop(s)
+	await _frames(2)
+	# the artist works the same way; typing the same name with other case / spaces does not clear
+	await _lr_reset()
+	var s2 := _new_lr_screen("Kettle Morning", "Test Artist")
+	_press(s2, "BtnFind")
+	ok(await _until(func() -> bool: return not s2.lr_busy, 10.0), "get (second form) finished")
+	s2.set_artist("TEST   artist ")
+	ok(not s2.lr_record.is_empty() and not s2.lr_items.is_empty(), "the same artist with other case / spaces: the chosen lyrics stay")
+	s2.set_artist("Someone Else")
+	ok(s2.lr_record.is_empty() and s2.lr_items.is_empty() and s2.save_block_reason() == SongLyricsAddScreen.MSG_NEED_LRCLIB, "artist changed: the chosen lyrics are cleared")
+	_drop(s2)
+	# a late answer for the old song is dropped and cannot bring the old lyrics back
+	await _lr_reset()
+	var s3 := _new_lr_screen("Kettle Morning", "Test Artist")
+	s3.find_lyrics()
+	s3.set_title("Quick Change")
+	await get_tree().create_timer(1.0).timeout
+	ok(s3.lr_record.is_empty() and s3.lr_items.is_empty() and not s3.lr_busy, "an answer that arrives after the title changed is dropped")
+	_drop(s3)
+	await _frames(2)
 
 
 func _test_lrclib_failures() -> void:
@@ -1123,8 +1182,10 @@ func _test_lrclib_save() -> void:
 	s3.set_source("lrclib")
 	s3.search_lyrics()
 	ok(await _until(func() -> bool: return not s3.lr_busy, 10.0), "search (third form) finished")
+	var kept_items: Array = s3.lr_items.duplicate(true)
 	s3.set_artist("")
 	s3.set_title("")
+	s3.lr_items = kept_items # clearing the names cleared the candidates (new song): put them back to test the adoption
 	s3.lr_get_calls = 1
 	s3.lr_search_calls = 1
 	ok(s3.choose_candidate(0) and s3.title_text != "" and s3.artist_text != "", "choosing a candidate fills an empty title and artist from it (%s / %s)" % [s3.title_text, s3.artist_text])
