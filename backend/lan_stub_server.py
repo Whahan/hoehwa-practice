@@ -16,6 +16,8 @@
   --sync-dir             folder of the learning-record sync hub (sync_hub.py); without it every /sync/* answers 503 sync_off
   --song                 also serve /song/* (song.py) with a FAKE Whisper and fake readmode / LLM (no model, no network): the
                          job pipeline, the folders and the LAN gate are real. Needs the test hooks. /health then has song:true.
+                         POST /song/identify runs the real validation on a fake AI: q with "nothing" -> cands [], with "down" -> 503
+                         ai_unavailable, anything else -> [{"title": "Kettle Morning", "artist": "Test Artist"}] (a song in fake_lrclib.py).
   --song-dir             job folder of --song (default backend\cache\song_jobs; give a scratch folder in tests)
   --song-delay           seconds the fake Whisper "works" per 20 s window (default 0)
 
@@ -131,7 +133,7 @@ def health():
     return {"ok": True, "stub": True, "stt": True, "tts": {"en": True, "ja": True}, "tts_device": "cpu", "llm": True,
             "llm_model": "stub", "llm_provider": "opencode", "score": True, "phoneme": True, "tatoeba": True, "grammar": True,
             "llm_fallback": {"active": False, "until": None, "reason": ""},
-            **({"song": True, "song_v": song.SONG_V} if ARGS.song else {})}
+            **({"song": True, "song_v": song.SONG_V, "song_identify": True} if ARGS.song else {})}
 
 
 @app.get("/curriculum")
