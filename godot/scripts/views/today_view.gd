@@ -1,38 +1,78 @@
 class_name TodayView
 extends AppView
-## 오늘: progress overview, two language cards (docs/ui_redesign_design.md §7.1). The settings are a SettingsView
-## (views/settings_view.gd), a screen of its own (views["settings"] in main.gd): this screen carries no settings.
+## 홈 (키 "today", 이름만 "홈"): 선택한 언어 하나로 오늘 할 일 카드(링 + 큰 시작 버튼 + 할 일 줄) -> 이어하기 -> 연속 -> AI 자리 -> 바로가기.
+## 설계: docs/home_menu_design.md §7.1, §7.2, §7.7, §8.1~§8.5, §9.5, §9.6. 무엇을 보일지는 HomeModel(순수 계산)이 정하고
+## 이 화면은 그리기만 한다. 설정은 SettingsView 가 따로 맡는다(이 화면에는 설정이 없다).
 
-const WD := ["일", "월", "화", "수", "목", "금", "토"]
-const NATIVE := {"en": "English", "ja": "日本語"}
-const NAME_KO := {"en": "영어", "ja": "일본어"}
+const WIDE_MIN := 980.0 ## PC: 본문 폭이 이 이상이면 두 열
+const TICK_SEC := 30.0 ## 날짜 바뀜·변한 값 확인 주기
+const SONG_GAP_SEC := 60 ## 홈이 보이는 동안 노래 집계를 다시 읽는 간격
 
 var _scroll: PageScroll
-var _grid: GridContainer
+var _body: BoxContainer ## 좁으면 VBox, 넓으면(PC, 폭 >= 980) HBox(왼쪽 VBox, 오른쪽 VBox)
 var _built: bool = false
-var _header: Control = null ## big title block (see header_block)
+var _wide: bool = false
+var _header: Control = null ## PC 의 큰 제목 블록(폰은 null)
+var _lang_sw: Control = null
+var _cards: Dictionary = {}
+var _hero_btn: Button = null
+var _task_btns: Array = []
+var _ring: GoalRing = null
+var _snap: Dictionary = {}
+var _built_day: int = -1
+var _last_frac: float = -1.0
+var _song_due_shown: int = -1
+var _song_thread: Thread = null
+var _refresh_queued: bool = false
+var _timer: Timer
+## Tests only: (lang: String) -> Dictionary replaces HomeModel.snapshot(); anything that is not a Dictionary counts as {}.
+var snapshot_hook: Callable = Callable()
 
 
 func _ready() -> void:
-	_scroll = PageScroll.new(880.0)
+	_scroll = PageScroll.new(960.0)
 	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_scroll)
-	Store.curriculum_updated.connect(func() -> void:
-		if is_visible_in_tree():
-			refresh())
+	Store.curriculum_updated.connect(_queue_refresh)
+	Backend.status_changed.connect(_queue_refresh)
+	_timer = Timer.new()
+	_timer.wait_time = TICK_SEC
+	_timer.one_shot = false
+	_timer.autostart = true
+	_timer.timeout.connect(_on_tick)
+	add_child(_timer)
 	refresh()
+
+
+func _exit_tree() -> void:
+	if _song_thread != null:
+		_song_thread.wait_to_finish()
+		_song_thread = null
 
 
 func refresh() -> void:
 	if _scroll == null:
 		return
+	_start_song_scan(SongDue.MIN_GAP_SEC)
 	rebuild_keep_scroll(_scroll, _build)
+
+
+func _queue_refresh() -> void:
+	if _refresh_queued or _scroll == null:
+		return
+	_refresh_queued = true
+	_deferred_refresh.call_deferred()
+
+
+func _deferred_refresh() -> void:
+	_refresh_queued = false
+	if is_visible_in_tree():
+		refresh()
 
 
 # ---------------------------------------------------------------- app bar contract (AppView)
 
-# (page_title / page_actions stay at their defaults: the tab name "오늘" is the title, and the shell adds the
-# 설정 action of the app bar itself and opens its own settings screen.)
+# page_title() stays "" (the app bar shows the tab name "홈"); the shell adds the 설정 action itself.
 
 func scroll_host() -> ScrollContainer:
 	return _scroll
@@ -42,53 +82,205 @@ func header_block() -> Control:
 	return _header if _header != null and is_instance_valid(_header) else null
 
 
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED and _grid != null:
-		_grid.columns = 2 if size.x >= 980.0 else 1
+# ---------------------------------------------------------------- public composition (design §9.5)
 
+func is_wide() -> bool:
+	return (not Platform.is_phone()) and size.x >= WIDE_MIN
+
+
+## "tasks" | "resume" | "streak" | "ai" | "shortcuts"; null when that card is not shown.
+func card(id: String) -> Control:
+	var c: Variant = _cards.get(id, null)
+	return c if (c != null and is_instance_valid(c)) else null
+
+
+func hero_button() -> Button:
+	return _hero_btn if _hero_btn != null and is_instance_valid(_hero_btn) else null
+
+
+func task_buttons() -> Array:
+	var out: Array = []
+	for b in _task_btns:
+		if is_instance_valid(b):
+			out.append(b)
+	return out
+
+
+func lang_switch() -> Control:
+	return _lang_sw if _lang_sw != null and is_instance_valid(_lang_sw) else null
+
+
+func ring() -> GoalRing:
+	return _ring if _ring != null and is_instance_valid(_ring) else null
+
+
+## One row of the voice settings (kept here for the voice test; the settings screen builds it).
+func _voice_row(l: String) -> Control:
+	return SettingsView.voice_row(l)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _built and is_wide() != _wide:
+		_queue_refresh()
+	elif what == NOTIFICATION_APPLICATION_RESUMED and _built:
+		_queue_refresh()
+
+
+# ---------------------------------------------------------------- timer: day change, changed values, song scan
+
+## The local date changed since the page was drawn -> draw it again. Returns true when it did.
+func _check_day() -> bool:
+	if _built_day >= 0 and StudyLog.today() != _built_day:
+		refresh()
+		return true
+	return false
+
+
+func _on_tick() -> void:
+	if not is_visible_in_tree() or not _built:
+		return
+	if _check_day():
+		return
+	_start_song_scan(SONG_GAP_SEC)
+	var fresh: Dictionary = _take_snapshot(Store.lang())
+	var old: Dictionary = _snap.duplicate(true)
+	fresh.erase("now")
+	old.erase("now")
+	if fresh != old:
+		refresh()
+
+
+## SongDue.scan() on a thread (it only reads); the song row is drawn again when the number of lines changed.
+func _start_song_scan(min_gap: int) -> void:
+	if _song_thread != null or not is_inside_tree() or not is_visible_in_tree():
+		return
+	if not SongDue.needs_scan(int(Time.get_unix_time_from_system()), min_gap):
+		return
+	_song_thread = Thread.new()
+	_song_thread.start(_scan_in_thread)
+
+
+func _scan_in_thread() -> void:
+	SongDue.scan()
+	_song_scan_done.call_deferred()
+
+
+func _song_scan_done() -> void:
+	if _song_thread != null:
+		_song_thread.wait_to_finish()
+		_song_thread = null
+	if is_inside_tree() and _built and SongDue.due_lines() != _song_due_shown:
+		refresh()
+
+
+# ---------------------------------------------------------------- build
 
 func _build() -> void:
 	var c: VBoxContainer = _scroll.content
 	UI.clear(c)
+	_cards.clear()
+	_task_btns.clear()
+	_hero_btn = null
+	_ring = null
+	_header = null
+	var phone: bool = Platform.is_phone()
+	_wide = is_wide()
+	var lang: String = Store.lang()
+	_snap = _take_snapshot(lang)
+	_built_day = StudyLog.today()
+	_song_due_shown = int(_snap.get("song_due", 0))
 	var pos: Dictionary = Store.position()
-	_header = PageHeader.build("오늘", _subtitle(pos))
-	for k in ["title_label", "subtitle_label"]: # text only: the finger goes through to the page
-		if _header.has_meta(k):
-			(_header.get_meta(k) as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(_header)
-	var hero := UI.card("Card", 12)
-	hero.body.add_child(_hero(pos))
-	hero.body.add_child(GoalCard.compact(Store.lang()))
-	c.add_child(hero)
-	_grid = GridContainer.new()
-	_grid.columns = 2 if size.x >= 980.0 else 1
-	_grid.add_theme_constant_override("h_separation", Ds.S4)
-	_grid.add_theme_constant_override("v_separation", Ds.S3 if Platform.is_phone() else Ds.S4)
-	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.add_child(_grid)
-	for l in ["en", "ja"]:
-		_grid.add_child(_lang_card(l, pos))
-	if Platform.is_phone():
-		c.add_child(_shortcuts())
+
+	var greet: Control = _greeting()
+	_lang_sw = UI.lang_segmented(lang, func(v: String) -> void:
+		if v != Store.lang():
+			Store.set_lang(v)
+			refresh())
+	if phone:
+		c.add_child(greet)
+		c.add_child(_lang_sw)
+	else:
+		_header = PageHeader.build("홈", _subtitle(pos))
+		for k in ["title_label", "subtitle_label"]: # text only: the finger goes through to the page
+			if _header.has_meta(k):
+				(_header.get_meta(k) as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var top := UI.hbox(Ds.S4)
+		top.add_child(_header)
+		_lang_sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		top.add_child(_lang_sw)
+		c.add_child(top)
+		c.add_child(greet)
+
+	var tasks_card: Control = _tasks_card()
+	var resume_card: Control = null
+	var rs: Dictionary = HomeModel.resume(_snap)
+	if not rs.is_empty():
+		resume_card = HomeParts.resume_card(rs, func() -> void: _go(rs.get("target", {})))
+		_cards["resume"] = resume_card
+	var streak_card: Control = HomeParts.streak_card(lang, _snap, func() -> void:
+		Store.toggle_today(lang)
+		refresh())
+	_cards["streak"] = streak_card
+	var ai_card: Control = null
+	var slot: Dictionary = HomeAi.slot()
+	var ai_prominent: bool = bool(slot.get("prominent", false))
+	if bool(slot.get("show", false)) and (ai_prominent or not HomeAi.dismissed_today()):
+		ai_card = HomeParts.ai_card(slot, func() -> void: Store.request_ai_connect(), func() -> void:
+			HomeAi.dismiss_today()
+			refresh())
+		_cards["ai"] = ai_card
+	_cards["tasks"] = tasks_card
+	for k in _cards.keys():
+		(_cards[k] as Node).set_meta("card_id", k)
+
+	var gap: int = Ds.S3 if phone else Ds.S4
+	if _wide:
+		_body = HBoxContainer.new()
+		_body.add_theme_constant_override("separation", Ds.S4)
+		var left := UI.vbox(gap)
+		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var right := UI.vbox(gap)
+		right.custom_minimum_size.x = Ds.HOME_RIGHT_W
+		if ai_card != null and ai_prominent:
+			left.add_child(ai_card)
+		left.add_child(tasks_card)
+		if resume_card != null:
+			left.add_child(resume_card)
+		right.add_child(streak_card)
+		if ai_card != null and not ai_prominent:
+			right.add_child(ai_card)
+		_body.add_child(left)
+		_body.add_child(right)
+	else:
+		_body = VBoxContainer.new()
+		_body.add_theme_constant_override("separation", gap)
+		if ai_card != null and ai_prominent:
+			_body.add_child(ai_card)
+		_body.add_child(tasks_card)
+		if resume_card != null:
+			_body.add_child(resume_card)
+		_body.add_child(streak_card)
+		if ai_card != null and not ai_prominent:
+			_body.add_child(ai_card)
+		if phone:
+			var sc: Control = HomeParts.shortcut_tiles(func(view: String) -> void: Store.navigate.emit(view, Store.lang()))
+			_cards["shortcuts"] = sc
+			sc.set_meta("card_id", "shortcuts")
+			_body.add_child(sc)
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.add_child(_body)
 	UI.fix_cjk(c)
 	_built = true
 	bar_changed.emit() # the big title block was rebuilt
 
 
-## Phone: the 5-tab bar keeps 연습 and 읽기 behind 더보기, so 오늘 offers them as two rows (design §11 Q2).
-func _shortcuts() -> Control:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 0)
-	v.add_child(UI.section_header("바로가기"))
-	var g := UI.card("Group") as ListGroup
-	for t in [["연습", "practice"], ["읽기", "reading"]]:
-		var view: String = t[1]
-		g.add_value_row(String(t[0]), "", func() -> void: Store.navigate.emit(view, ""))
-	v.add_child(g)
-	return v
+func _take_snapshot(lang: String) -> Dictionary:
+	var v: Variant = snapshot_hook.call(lang) if snapshot_hook.is_valid() else HomeModel.snapshot(lang)
+	return (v as Dictionary).duplicate(true) if v is Dictionary else {}
 
 
-## One line under the big title: stage and week (nothing before the start day: the hero card says it).
+## One line under the big title (PC): stage and week (nothing before the start day: the greeting says it).
 func _subtitle(pos: Dictionary) -> String:
 	var phase: String = pos["phase"]
 	if phase == "before":
@@ -99,167 +291,95 @@ func _subtitle(pos: Dictionary) -> String:
 	return "%d단계 · %d개월차 %d주차" % [Plan.stage_of(n), n, int(pos["w"])]
 
 
-# ---------------------------------------------------------------- hero
-
-func _hero(pos: Dictionary) -> Control:
-	var v := UI.vbox(8)
-	var phase: String = pos["phase"]
-	var start: String = Store.start_iso()
-	if phase == "before":
-		v.add_child(UI.label("시작까지", "Eyebrow", false))
-		var line := UI.adaptive(14)
-		var big := UI.label("D-%d" % int(pos["days"]), "Big", false)
-		line.add_child(big)
-		var s := UI.label("%s 시작 · 아래는 첫 주 미리보기예요. 레슨과 원어민 대화는 지금 바로 써 볼 수 있어요." % start.replace("-", "."), "Muted")
-		s.size_flags_vertical = Control.SIZE_SHRINK_END
-		line.add_child(s)
-		v.add_child(line)
-		v.add_child(UI.progress_bar(0.0, Pal.INK, 8.0))
-	else:
-		var total: int = Plan.total_days(start)
-		var dn: int = mini(int(pos["day_no"]), total)
-		var line := UI.hbox(10)
-		line.add_child(UI.label("%d일째" % dn, "Big", false))
-		var of := UI.label("/ %d일" % total, "Muted", false)
-		of.size_flags_vertical = Control.SIZE_SHRINK_END
-		line.add_child(of)
-		v.add_child(line)
-		v.add_child(UI.progress_bar(float(dn) / float(total), Pal.INK, 8.0))
-	return v
+## The greeting line (HomeModel.message): a drawn mark in front (check / exclamation / dot) so the kind is not colour only.
+func _greeting() -> Control:
+	var m: Dictionary = HomeModel.message(_snap)
+	var kind: String = str(m.get("kind", "info"))
+	var row := UI.hbox(Ds.S2)
+	row.add_child(HomeParts.kind_mark(kind, 22.0))
+	var l := UI.label(str(m.get("text", "")), "Strong")
+	l.add_theme_color_override("font_color", {"warn": Pal.WARN_ON, "ok": Pal.OK_ON}.get(kind, Pal.INK))
+	row.add_child(l)
+	row.set_meta("kind", kind)
+	row.set_meta("text", l.text)
+	return row
 
 
-# ---------------------------------------------------------------- language card
+# ---------------------------------------------------------------- tasks card (ring + start button + rows)
 
-func _lang_card(l: String, pos: Dictionary) -> Control:
-	var acc: Color = Pal.accent(l)
-	var n: int = pos["n"]
-	var w: int = pos["w"]
-	var m: Dictionary = Store.month_data(l, n)
-	var wk: Dictionary = Store.week_data(l, n, w)
+func _tasks_card() -> Control:
 	var phone: bool = Platform.is_phone()
-	var card := UI.card("Card", 14)
+	var tasks: Array = HomeModel.tasks(_snap)
+	var hero: Dictionary = HomeModel.hero(_snap)
+	var card := UI.card("Card", Ds.S3)
 
-	var head: Container = UI.hbox(8)
-	if phone:
-		head = UI.flow(8, 4) # the XP chip drops under the name when the card is narrow
-	var nm := Label.new()
-	nm.text = NATIVE[l]
-	nm.theme_type_variation = &"H2"
-	nm.add_theme_color_override("font_color", Pal.on(l))
-	head.add_child(nm)
-	var ko := UI.label(NAME_KO[l], "Small", false)
-	ko.size_flags_vertical = Control.SIZE_SHRINK_END
-	head.add_child(ko)
-	if not phone:
-		head.add_child(UI.spacer())
-	var st: int = StudyLog.streak(l)
-	var chip_text := ("연속 %d일" % st) if st > 0 else "오늘부터 시작"
-	head.add_child(UI.chip_kind("%s · %d XP" % [chip_text, Store.xp(l)], "lang_" + l))
+	var head := UI.hbox(Ds.S4)
+	var ttl := UI.vbox(4)
+	ttl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ttl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ttl.add_child(UI.label("오늘 할 일", "H2"))
+	ttl.add_child(UI.label(HomeParts.summary_text(tasks), "Small"))
+	head.add_child(ttl)
+	head.add_child(_make_ring())
 	card.body.add_child(head)
 
-	var where := UI.vbox(2)
-	where.add_child(UI.label("%d개월차 · %s" % [n, str(wk.get("w", ""))], "Eyebrow", false))
-	where.add_child(UI.label(UI.plain(m.get("title", "")), "H3"))
-	card.body.add_child(where)
+	var hb := UI.button(str(hero.get("text", "")), "primary", Pal.PRIMARY, Ds.HOME_CTA_H_PHONE if phone else Ds.HOME_CTA_H_PC)
+	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_theme_font_size_override("font_size", Ds.fs(18))
+	var play := GlyphIcon.new("play", 22.0, Pal.ON_ACCENT)
+	play.anchor_top = 0.5
+	play.anchor_bottom = 0.5
+	play.offset_top = -11.0
+	play.offset_bottom = 11.0
+	play.offset_left = 18.0
+	play.offset_right = 40.0
+	hb.add_child(play)
+	var target: Dictionary = hero.get("target", {})
+	hb.pressed.connect(func() -> void: _go(target))
+	card.body.add_child(hb)
+	_hero_btn = hb
 
-	var box := UI.tinted_panel(Pal.soft(l), Color(0, 0, 0, 0), 0, Ds.R_S, 14, 12)
-	var bv := UI.vbox(4)
-	bv.add_child(UI.colored("이번 주", Pal.on(l), "Small", false))
-	bv.add_child(UI.label(UI.plain(wk.get("topic", "")), "Strong"))
-	bv.add_child(UI.label(UI.plain(wk.get("act", "")), "Small"))
-	box.add_child(bv)
-	card.body.add_child(box)
-
-	# one filled button per card (the lesson); everything else is tonal
-	var b1 := UI.button("오늘의 레슨", "primary", acc, 56.0 if phone else 46.0)
-	b1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b1.pressed.connect(func() -> void: Store.navigate.emit("lesson", l))
-	card.body.add_child(b1)
-
-	var btns := UI.flow(8, 8) # the second button drops to its own line when the text is large
-	var b2 := UI.button("원어민과 대화", "soft", acc, 46.0)
-	b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b2.custom_minimum_size.x = 140.0
-	b2.pressed.connect(func() -> void: Store.navigate.emit("talk", l))
-	btns.add_child(b2)
-
-	# FSRS: the button shows how many sentences are due now; hidden when nothing is due and nothing is stored.
-	var due_n: int = Store.due_count(l)
-	if due_n > 0 or not Store.review_for(l).is_empty():
-		var rb := UI.button("복습 %d개" % due_n, "soft", acc, 46.0)
-		rb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		rb.custom_minimum_size.x = 140.0
-		rb.pressed.connect(func() -> void: Store.navigate.emit("review", l))
-		btns.add_child(rb)
-	card.body.add_child(btns)
-
-	var wi: int = 0
-	var weeks: Array = m.get("weeks", [])
-	for i in weeks.size():
-		if weeks[i] == wk:
-			wi = i
-	var key: String = Store.check_key(l, n, "w", wi)
-	# a check only dims its own label: the page is not rebuilt (the box under the finger stays)
-	var holder: Array = []
-	var chk := UI.check_row("이번 주 활동 끝냄", Store.is_checked(key), func(on: bool) -> void:
-		Store.set_checked(key, on)
-		_dim_check_label(holder[0], on))
-	holder.append(chk)
-	card.body.add_child(chk)
-
-	# the day toggle: outlined when open, tonal with a check mark when done (never a second filled button)
-	var done: bool = Store.did_day(Plan.today_days(), l)
-	var db := UI.button(("오늘 %s 완료함  ✓" % NAME_KO[l]) if done else ("오늘 %s 공부 완료" % NAME_KO[l]), "soft" if done else "outline", acc, 46.0)
-	db.pressed.connect(func() -> void:
-		Store.toggle_today(l)
-		refresh())
-	card.body.add_child(db)
-
-	card.body.add_child(_week_dots(l))
+	var rows := UI.vbox(0)
+	for t in tasks:
+		var tt: Dictionary = t
+		var row: Control = HomeParts.task_row(tt, func() -> void: _go(tt.get("target", {})))
+		rows.add_child(row)
+		_task_btns.append(row.get_meta("button"))
+	card.body.add_child(rows)
 	return card
 
 
-## UI.check_row puts the text label first in its second child; a done item reads muted.
-func _dim_check_label(row: Control, on: bool) -> void:
-	if row == null or not is_instance_valid(row) or row.get_child_count() < 2:
+## The goal ring: hours of today against the daily goal (never the share of rows done). Off (goal 0) = text only.
+func _make_ring() -> Control:
+	var goal: int = int(_snap.get("goal_min", 0))
+	var sec: int = int(_snap.get("sec_today", 0))
+	var r := GoalRing.new()
+	_ring = r
+	if goal <= 0:
+		r.setup(0.0, "오늘 %d분" % (sec / 60), false, false, "오늘 공부 %d분" % (sec / 60))
+		_last_frac = -1.0
+		return r
+	var frac: float = clampf(float(sec) / float(goal * 60), 0.0, 1.0)
+	var reached: bool = HomeModel.goal_reached(_snap)
+	r.setup(frac, "%d/%d분" % [mini(sec / 60, goal), goal], reached, true, "오늘 목표 %d분 중 %d분" % [goal, sec / 60])
+	if reached and _last_frac >= 0.0 and _last_frac < 1.0:
+		r.animate_from(_last_frac) # the moment the goal was filled: one 400 ms sweep
+	_last_frac = frac
+	return r
+
+
+# ---------------------------------------------------------------- navigation
+
+## target = {"view", "args"}. Lesson: navigate_args (lang, n, w, start); the others: navigate(view, lang).
+func _go(target: Variant) -> void:
+	if not (target is Dictionary):
 		return
-	var col: Node = row.get_child(1)
-	if col.get_child_count() == 0 or not (col.get_child(0) is Label):
+	var view: String = str((target as Dictionary).get("view", ""))
+	var args: Variant = (target as Dictionary).get("args", {})
+	if view == "" or not (args is Dictionary):
 		return
-	var l: Label = col.get_child(0)
-	if on:
-		l.add_theme_color_override("font_color", Pal.MUTED)
+	var lang: String = str((args as Dictionary).get("lang", Store.lang()))
+	if view == "lesson":
+		Store.navigate_args.emit(view, (args as Dictionary).duplicate())
 	else:
-		l.remove_theme_color_override("font_color")
-
-
-## One row of the voice settings (kept here for the voice test; the settings screen builds it).
-func _voice_row(l: String) -> Control:
-	return SettingsView.voice_row(l)
-
-
-func _week_dots(l: String) -> Control:
-	var acc: Color = Pal.accent(l)
-	var row := UI.hbox(6)
-	var today: int = Plan.today_days()
-	var mon: int = Plan.monday_of(today)
-	for i in 7:
-		var d: int = mon + i
-		var col := UI.vbox(4)
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var dot := PanelContainer.new()
-		var on: bool = Store.did_day(d, l)
-		# done = filled, not done = an outline only: the shape differs, not just the colour
-		dot.add_theme_stylebox_override("panel", UI.style(acc, Color(0, 0, 0, 0), 0, 4, 0, 0) if on else UI.style(Color(0, 0, 0, 0), Pal.LINE_STRONG, 2, 4, 0, 0))
-		dot.custom_minimum_size = Vector2(0, 8)
-		col.add_child(dot)
-		var wl := Label.new()
-		wl.text = WD[Plan.weekday(d)]
-		wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		wl.add_theme_font_size_override("font_size", UI.fs(12))
-		wl.add_theme_color_override("font_color", Pal.INK if d == today else Pal.MUTED)
-		if d == today:
-			wl.add_theme_font_override("font", UI.bold_font())
-		col.add_child(wl)
-		row.add_child(col)
-	return row
+		Store.navigate.emit(view, lang)
