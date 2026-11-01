@@ -254,7 +254,7 @@ func _state_checks(state: String, main: Control) -> void:
 			ok(main.current == "settings" and bt._current == "menu", "settings: the shell shows the settings screen with the 메뉴 tab lit (TAB_PARENT)")
 			ok(tv0.find_children("*", "RemoteLinkPanel", true, false).size() == 1, "settings: RemoteLinkPanel is mounted on the phone")
 			ok(tv0.find_children("*", "PhoneLinkPanel", true, false).is_empty(), "settings: no PhoneLinkPanel on the phone")
-			ok(tv0._engine_ob == null, "settings: the AI engine section is hidden on the phone")
+			ok(tv0.find_children("*", "AiConnectCard", true, false).is_empty(), "settings: the AI connection card is not on the phone")
 			var rl: Node = tv0.find_children("*", "RemoteLinkPanel", true, false)[0]
 			var first_sec := ""
 			for sid in tv0.section_ids():
@@ -363,11 +363,11 @@ func _pc_state_checks(state: String, main: Control) -> void:
 			ok(main.current == "settings" and main._side_nav.current() == "settings", "L-06: the settings screen is the selected side-nav item")
 			ok(tv0.find_children("*", "PhoneLinkPanel", true, false).size() == 1, "L-06: PhoneLinkPanel is mounted in the PC settings")
 			ok(tv0.find_children("*", "RemoteLinkPanel", true, false).is_empty(), "L-06: no RemoteLinkPanel on the PC")
-			ok(tv0._engine_ob != null, "L-06: the AI engine section is still in the PC settings")
+			ok(tv0.find_children("*", "AiConnectCard", true, false).size() == 1, "L-06: the AI connection card (one AiConnectCard) is still in the PC settings")
 			ok(tv0.find_children("*", "CapabilityPanel", true, false).is_empty() and tv0.cap_panel == null and tv0.mode_box == null and tv0.tts_engine_box == null, "A6: no phone-standalone card (기능 현황, 처리 위치, 읽어 주는 목소리) in the PC settings")
 			var pl: Control = tv0.find_children("*", "PhoneLinkPanel", true, false)[0]
 			var ids: Array = tv0.section_ids()
-			ok(tv0.section_of(pl) == "connection" and tv0.section_of(tv0._engine_ob) == "engine", "L-06: PhoneLinkPanel is in the 'connection' section and the AI engine dropdown in the 'engine' section")
+			ok(tv0.section_of(pl) == "connection" and tv0.section_of(tv0.find_children("*", "AiConnectCard", true, false)[0] as Control) == "engine", "L-06: PhoneLinkPanel is in the 'connection' section and the AI connection card in the 'engine' section")
 			ok(ids.find("connection") < ids.find("engine") and tv0.section_visible("connection") and tv0.section_visible("engine"), "L-06: both sections show, the phone link above the AI engine")
 			# (a column is as wide as its content needs: with a text size above 100 % the settings rows may need more)
 			ok(Ds.font_scale > 1.0 or tv0._scroll.content.get_global_rect().size.x <= 720.5, "W4-2: the settings column is at most 720 px wide (%.0f)" % tv0._scroll.content.get_global_rect().size.x)

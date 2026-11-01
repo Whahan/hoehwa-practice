@@ -58,9 +58,6 @@ var _test_player: AudioStreamPlayer
 var _scheme_value: Label
 var _font_value: Label
 var _font_sample: Label
-## The AI connection card of the PC engine section (AiConnectCard). Kept under the old name `_engine_ob` because
-## settings_view_test still asks `sv._engine_ob != null` on the PC; there is no engine drop-down any more.
-var _engine_ob: Control
 var _reset_button: Button
 ## Phone standalone cards (null until built): the 처리 위치 card, the 기능 현황 table, the voice engine choice, the
 ## per-language voice lists.
@@ -259,8 +256,7 @@ func _build_default_content() -> void:
 			_build_processing()
 	else:
 		_build_status("engine", "AI 엔진 상태")
-		_engine_ob = AiConnectCard.build(self)
-		_add_custom("engine", _engine_ob)
+		_add_custom("engine", AiConnectCard.build(self))
 	_add_custom("learning", _start_block())
 	if standalone:
 		_add_custom("learning", _sources_block())

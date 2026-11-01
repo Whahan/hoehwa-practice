@@ -531,7 +531,7 @@ func _test_pc_hidden() -> void:
 	else:
 		ok(sv.cap_panel == null and sv.mode_box == null and sv.tts_engine_box == null, "PC: no cards were built, although standalone_panels is true")
 		ok(sv.find_children("*", "CapabilityPanel", true, false).is_empty(), "PC: no CapabilityPanel in the settings screen")
-		ok(not sv.section_visible("engine") or sv._engine_ob != null, "PC: the engine section is the AI engine one, not 처리 위치")
+		ok(not sv.section_visible("engine") or sv.find_children("*", "AiConnectCard", true, false).size() == 1, "PC: the engine section is the AI connection one (one AiConnectCard), not 처리 위치")
 		var t: String = _all_text(sv)
 		ok(not t.contains("처리 위치") and not t.contains("기능 현황") and not t.contains("읽어 주는 목소리") and not t.contains("PC 없이 시작") and not t.contains("데이터 출처"), "PC: none of the new texts appear")
 		ok(sv.find_children("*", "RemoteLinkPanel", true, false).is_empty(), "PC: still the PC's own panels (no phone link panel)")
