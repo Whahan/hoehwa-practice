@@ -642,6 +642,21 @@ func _test_search_card() -> void:
 	ok(got == ["Kettle Morning"] and not Sheet.is_open(), "two or more characters: search_requested('Kettle Morning'), no consent sheet, no PC needed")
 	ok(Api.sent_count == sent, "the card itself sent no request (Api.sent_count unchanged)")
 	ok(_overflow(v).is_empty(), "the card has nothing sticking out sideways (%s)" % [_overflow(v)])
+	# the card stays in every hub state: empty list + no-PC notice (above), a list with songs, PC connected (no notice)
+	ok(v.notice_label() != null and v.search_card().is_visible_in_tree(), "empty list with the no-PC notice: the card is shown")
+	_install("Card Song")
+	v.refresh()
+	await _wait_loaded(v)
+	ok(v.songs.size() == 1 and v.search_card().is_visible_in_tree() and v.search_button().is_visible_in_tree() and v.search_input().is_visible_in_tree(), "a list with a song: the card, its box and [찾기] are still shown")
+	var card_y: float = v.search_card().get_global_rect().position.y
+	ok(card_y < v.row_for(str(v.songs[0]["id"])).get_global_rect().position.y, "the card is above the song list")
+	_connect_pc(true)
+	await _frames(2)
+	ok(v.notice_label() == null and v.search_card().is_visible_in_tree() and v.search_button().is_visible_in_tree(), "PC connected (no notice): the card is still shown")
+	v.search_input().text = "Kettle"
+	v.search_button().pressed.emit()
+	ok(got.size() == 2 and got[1] == "Kettle", "PC connected: [찾기] still emits search_requested")
+	_disconnect_pc()
 	v.queue_free()
 	await _frames(2)
 
