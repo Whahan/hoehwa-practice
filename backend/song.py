@@ -21,7 +21,7 @@ Privacy: the server keeps music and lyrics only in song_jobs (backend/cache/song
 state names, error codes). Folders are only ever deleted by _rm_dir: a direct child of the job root with a fixed name pattern, and
 links / junctions inside it are removed themselves, never followed.
 
-server.py injects the helpers: song.init(log=, ApiError=, readmode=, ollama_json=, ko_ok=, ja_reading=, ja_pron=, ja_to_kata=,
+server.py injects the helpers: song.init(log=, ApiError=, readmode=, llm_json=, ko_ok=, ja_reading=, ja_pron=, ja_to_kata=,
 get_model=server.get_stt, run_lock=server._stt_run_lock, stt_info=server._stt_info). The module has no authentication code: the phone
 link (lan.py) gates /song/* per listener (ALLOW list) like every other route.
 
@@ -192,7 +192,7 @@ def init(**helpers):
     if "app_version" in helpers:
         APP_VERSION = str(helpers.pop("app_version") or "")
     H.update(helpers)
-    song_enrich.init(**{k: H[k] for k in ("readmode", "ollama_json", "ko_ok", "ja_reading", "ja_pron", "log", "ApiError") if H.get(k) is not None})
+    song_enrich.init(**{k: H[k] for k in ("readmode", "llm_json", "ko_ok", "ja_reading", "ja_pron", "log", "ApiError") if H.get(k) is not None})
     if _hooks():
         root = root or os.environ.get("HOEHWA_SONG_DIR") or None
         if ttl is None and os.environ.get("HOEHWA_SONG_TTL_SEC"):
@@ -1659,7 +1659,7 @@ def _identify(d):
     if lang not in ("en", "ja", ""):
         _fail(400, "bad_request")
     q = re.sub(r"\s+", " ", q).replace("<<<", "<").replace(">>>", ">")
-    llm = H.get("ollama_json")
+    llm = H.get("llm_json")
     if llm is None:
         _fail(503, "ai_unavailable")
     global _ident_pool
@@ -1728,11 +1728,11 @@ class FakeReadmode:
 
 
 def fake_helpers(fail_llm=False):
-    """the helper set for init() that needs neither models nor network. ollama_json answers with Korean."""
+    """the helper set for init() that needs neither models nor network. llm_json answers with Korean."""
     rm = FakeReadmode()
     calls = []
 
-    def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None, validate=None, **kw):
+    def llm_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None, validate=None, **kw):
         calls.append(cache_key_kind)
         text = messages[0]["content"] if messages else ""
         if text.startswith("IDENTIFY_SONG"):          # /song/identify stand-in: "nothing" -> no candidates, "down" -> the AI is down
@@ -1754,6 +1754,6 @@ def fake_helpers(fail_llm=False):
         def __init__(self, msg, status=400, format_error=False):
             Exception.__init__(self, msg)
             self.msg, self.status, self.format_error = msg, status, format_error
-    return dict(readmode=rm, ollama_json=ollama_json, ko_ok=lambda t, lang="en", required=True: bool(re.search("[가-힣]", t or "")),
+    return dict(readmode=rm, llm_json=llm_json, ko_ok=lambda t, lang="en", required=True: bool(re.search("[가-힣]", t or "")),
                 ja_reading=lambda t: "".join(chr(ord(c) - 0x60) if 0x30A1 <= ord(c) <= 0x30F6 else c for c in (t or "")),
                 ja_pron=to_kata, ja_to_kata=to_kata, ApiError=ApiErr, llm_calls=calls)

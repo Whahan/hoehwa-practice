@@ -2,7 +2,7 @@
 """Reading mode (LingQ/Lute style) + Tatoeba example sentences. Contract: ../API.md "읽기 모드 (/reading/*)".
 
   analyze(lang, text)   -> tokens / sentences / words  (spaCy for English, fugashi+unidic-lite for Japanese, wordfreq zipf)
-  gloss(lang, items)    -> Korean meanings in context, one batched LLM call (server's ollama_json), cached in cache/gloss.json
+  gloss(lang, items)    -> Korean meanings in context, one batched LLM call (server's llm_json), cached in cache/gloss.json
   examples(lang, q, n)  -> Tatoeba sentences from data/tatoeba.sqlite (built by tatoeba_build.py)
 
 server.py injects its helpers with init(); this module itself only imports light stdlib modules at import time so that
@@ -26,7 +26,7 @@ ATTRIBUTION = "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
 MAX_CHARS = 20000
 MAX_GLOSS = 30
 
-H = {}  # helpers injected by server.py: log, ApiError, ollama_json, ko_ok, ja_reading, patch_espeak
+H = {}  # helpers injected by server.py: log, ApiError, llm_json, ko_ok, ja_reading, patch_espeak
 
 
 def init(**helpers):
@@ -453,7 +453,7 @@ def _gloss_llm(lang, items):
     """one LLM call; returns {request position: gloss dict} for the entries that passed validation"""
     n = len(items)
     msgs = [{"role": "user", "content": _gloss_prompt(lang, items)}]
-    data = H["ollama_json"](msgs, _gloss_schema(lang, n), temperature=0.2, num_predict=max(1500, 140 * n + 300))
+    data = H["llm_json"](msgs, _gloss_schema(lang, n), temperature=0.2, num_predict=max(1500, 140 * n + 300))
     ko_ok = H["ko_ok"]
     got = {}
     for g in (data or {}).get("glosses") or []:

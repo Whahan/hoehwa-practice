@@ -645,7 +645,7 @@ def extra_tests(data):
                 raise o
             return o
 
-        M.init(ApiError=FakeApiError, log=log, ollama_json=fake_ai)
+        M.init(ApiError=FakeApiError, log=log, llm_json=fake_ai)
         hist = [{"role": "ai", "text": mission["opening"]}, {"role": "me", "text": said}]
 
         def judge(out, pending=None, history=None, mid=None, lang="en"):
@@ -698,10 +698,10 @@ def extra_tests(data):
         check("judge: pending 이 None 이면 400", _status(lambda: M.judge_goals("en", mission["id"], None, hist)) == 400)
         check("judge: 알 수 없는 미션이면 404", _status(lambda: M.judge_goals("en", "ghost_mission", [gid], hist)) == 404)
         check("judge: lang ja/xx 이면 400", _status(lambda: M.judge_goals("ja", mission["id"], [gid], hist)) == 400 and _status(lambda: M.judge_goals("xx", mission["id"], [gid], hist)) == 400)
-        M.init(ApiError=FakeApiError, log=log, ollama_json=None)
-        M.H.pop("ollama_json", None)
+        M.init(ApiError=FakeApiError, log=log, llm_json=None)
+        M.H.pop("llm_json", None)
         check("judge: AI 함수가 연결되지 않았으면 503", _status(lambda: M.judge_goals("en", mission["id"], [gid], hist)) == 503)
-        M.init(ollama_json=fake_ai)
+        M.init(llm_json=fake_ai)
 
         # ---- route level (HTTP status mapping) with the fake AI
         client = TestClient(_fake_app(), raise_server_exceptions=False)

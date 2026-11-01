@@ -295,7 +295,7 @@ def test_opencode():
     def local(msgs, schema, **kw):
         local_calls.append(1)
         return {"reply": "Hello, nice to meet you!", "ko": "안녕하세요, 만나서 반갑습니다!", "reading": "", "suggest": ["Me too.", "Thanks."]}
-    server.ollama_json = local
+    server.llm_json = local
     T = server.Turn
     r1 = server.run_chat(server.ChatReq(lang="en", month=1, week=1, conv_id="c3", skip_fix=True, history=[T(role="me", text="Hi")]))
     check("run_chat adopted the other engine's answer", r1["reply"] == "Hello, nice to meet you!" and local_calls, r1)

@@ -11,18 +11,18 @@ Tasks (only the keys of the requested tasks are present in each returned line):
               answer is not clean Korean (ko_ok) or is missing is retried ONCE on its own, then ko = "" + warning ko_missing [AI]
   "gloss"     `glossary`: Korean word meanings (readmode.gloss, at most 120 words per song, no easy / non-content words) [AI]
 
-Privacy (design 12.1a Q3, L8): lyrics leave the PC only through `ollama_json` (translate) and `readmode.gloss` (gloss).
+Privacy (design 12.1a Q3, L8): lyrics leave the PC only through `llm_json` (translate) and `readmode.gloss` (gloss).
 `allow_ai` defaults to False: without it neither is ever called (ko = "", warnings ko_missing / gloss_missing) and nothing is
 sent anywhere. Every LLM call passes cache_key_kind=None, so a lyric line is never put into the persistent LLM cache.
 Lyric text is never written to the log (only counts / indices).
 
-server.py / song.py inject the helpers with init(readmode=, ollama_json=, ko_ok=, ja_reading=, ja_pron=, log=, ApiError=).
+server.py / song.py inject the helpers with init(readmode=, llm_json=, ko_ok=, ja_reading=, ja_pron=, log=, ApiError=).
 This module imports only the standard library (readmode / the models are used through the injected objects).
 """
 import re
 import logging
 
-H = {}  # injected: readmode, ollama_json, ko_ok, ja_reading, ja_pron, log, ApiError
+H = {}  # injected: readmode, llm_json, ko_ok, ja_reading, ja_pron, log, ApiError
 
 TASKS = ("reading", "translate", "tokens", "gloss")
 BATCH_LINES = 12          # lines per translation call
@@ -279,7 +279,7 @@ def _clean_ko(v, lang):
 
 def _llm(messages, schema, num_predict, temperature):
     # cache_key_kind=None on purpose: lyrics never go into the persistent LLM cache (design L8)
-    return H["ollama_json"](messages, schema, temperature=temperature, num_predict=num_predict, cache_key_kind=None)
+    return H["llm_json"](messages, schema, temperature=temperature, num_predict=num_predict, cache_key_kind=None)
 
 
 def _translate_batch(lang, before, items, after):

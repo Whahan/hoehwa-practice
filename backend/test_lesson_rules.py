@@ -433,7 +433,7 @@ def test_ai_fallback():
         {"type": "build", "ko": "그는 의사예요.", "answer": ["He", "is", "a", "doctor"], "extra": ["are", "an"], "explain": "빌드"},
     ]}
     req = server.LessonReq(lang="en", month=1, week=1, source="ai")
-    saved = server.ollama_json
+    saved = server.llm_json
     saved_ready = server.readmode.tatoeba_ready
 
     def make_stub(verify):
@@ -454,7 +454,7 @@ def test_ai_fallback():
         return {"answers": out}
 
     def run(name, verify, want_fallback, ready=True, want_503=False):
-        server.ollama_json = make_stub(verify)
+        server.llm_json = make_stub(verify)
         server.readmode.tatoeba_ready = saved_ready if ready else (lambda: False)
         try:
             try:
@@ -463,7 +463,7 @@ def test_ai_fallback():
             except server.ApiError as e:
                 d, err = None, e
         finally:
-            server.ollama_json = saved
+            server.llm_json = saved
             server.readmode.tatoeba_ready = saved_ready
         if want_503:
             ok = err is not None and err.status == 503 and re.search(r"[가-힣]", err.msg)
