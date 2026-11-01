@@ -604,7 +604,7 @@ begin
   end;
 end;
 
-// 설치를 시작하기 전: 폴더가 괜찮은지 본다. 문자열을 돌려주면 Setup 이 아무것도 쓰지 않고 (종료 코드 8) 그 문장을 보여 주며 끝난다.
+// 설치를 시작하기 전: 폴더가 괜찮은지 본다. 문자열을 돌려주면 Setup 이 아무것도 쓰지 않고 (종료 코드 7) 그 문장을 보여 주며 끝난다.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := CheckTargetDir(ExpandConstant('{app}'));
