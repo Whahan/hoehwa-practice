@@ -3,8 +3,10 @@
 
 OpenCode Zen's free models answer only OpenCode itself, so the app talks to a local `opencode serve` child process
 (started on first use on a free 127.0.0.1 port, with a random HTTP basic-auth password, tied to this process by a
-job object and killed by PID at exit). OpenCode uses the login the person made with `opencode auth login`; this
-module never reads or handles that key.
+job object and killed by PID at exit). OpenCode uses its own stored login. The person gives the app an API key once
+("AI connect": connect(key) -> OpenCode's PUT /auth/opencode, OpenCode writes its auth.json); this module never reads
+auth.json, never stores the key and never writes it to a log, an argument list, an environment variable or an error text.
+Whether a login exists is read from the names `opencode auth list` prints (connected()).
 
 Working dir %LOCALAPPDATA%/hoehwa-practice/opencode/work (outside the app's folder and any git repository, so
 OpenCode's project scope never contains the app's files) holds an opencode.json with an agent "hoehwa": a short "language engine"
@@ -16,12 +18,14 @@ inside the empty working dir) stay available; the prompt tells the model not to 
   call_json(cfg, messages, schema, temperature)            one-shot JSON answer (temporary session, deleted after)
   chat_json(cfg, conv_id, system, history, last, schema)   chat turn on one session per conversation (only the new
                                                            message is sent once the session has seen the rest)
-Errors are llm_common.LlmError with .kind ("auth" for a refused/missing free model, "limit", "overload", None).
+Errors are llm_common.LlmError with .kind ("auth" for a refused/missing free model, "limit", "overload", "not_installed",
+"not_connected", None). ERROR_CODES maps a kind to the HTTP "code" the server sends.
 """
 import atexit
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -44,6 +48,8 @@ def _work_dir():
 
 WORK = _work_dir()
 LOG_DIR = os.path.join(BASE, "logs")
+if os.environ.get("HOEHWA_TEST_HOOKS") == "1" and os.environ.get("HOEHWA_LOG_DIR"):   # tests only
+    LOG_DIR = os.environ["HOEHWA_LOG_DIR"]
 NO_WINDOW = 0x08000000
 PROVIDER_ID = "opencode"
 DEFAULT_MODEL = "deepseek-v4.1-flash-free"
@@ -53,11 +59,23 @@ AGENT_PROMPT = ("You are the language engine of a language-learning app for Kore
                 "Never use tools. Answer only with what the instructions ask for, in the requested format.")
 DENY = ["edit", "write", "patch", "multiedit", "bash", "webfetch", "websearch", "codesearch", "task", "todowrite",
         "external_directory", "skill", "lsp", "doom_loop"]
+LOGIN_URL = "https://opencode.ai/auth"
+MSG_NOT_CONNECTED = "AI가 아직 연결되지 않았어요. 설정에서 [AI 연결하기]를 눌러 주세요. (폰이면 PC의 회화 연습에서)"
+MSG_NOT_INSTALLED = "AI 구성 요소가 없어요. [AI 연결하기]에서 받을 수 있어요."
+MSG_AUTH = "OpenCode 로그인이 만료됐거나 키가 맞지 않아요. [AI 연결하기]로 다시 연결해 주세요."
+# LlmError.kind -> the "code" of the HTTP answer (docs/onetouch_install_design.md 3.4.2)
+ERROR_CODES = {"not_connected": "ai_not_connected", "not_installed": "ai_not_installed", "auth": "ai_auth",
+               "limit": "ai_limit", "overload": "ai_overload"}
+CONN_TTL = 20.0          # seconds a `opencode auth list` answer is trusted
+CONN_FIRST_WAIT = 0.4    # the very first state() waits this long for the first answer (never longer: /health must not block)
 
 _log = None
 _state = {"proc": None, "port": None, "pw": None, "fail_t": 0.0, "job": None, "fail_msg": ""}
 _lock = threading.Lock()
 _http = requests.Session()
+# This session only talks to the local `opencode serve` on 127.0.0.1 and carries the API key (PUT /auth): it must never use a
+# proxy from HTTP(S)_PROXY / ALL_PROXY (the key would go to the proxy in plain text) nor read netrc / CA environment.
+_http.trust_env = False
 
 
 def init(log=None):
@@ -76,14 +94,26 @@ def _warn(msg, *a):
 
 
 def exe():
+    """Path of opencode.exe or None. Order: (test hooks only) HOEHWA_OPENCODE_EXE -> the app's own copy
+    backend/tools/opencode/opencode.exe -> the old npm install -> PATH."""
+    if os.environ.get("HOEHWA_TEST_HOOKS") == "1" and os.environ.get("HOEHWA_OPENCODE_EXE"):
+        p = os.environ["HOEHWA_OPENCODE_EXE"]
+        return p if os.path.isfile(p) else None      # a test never falls through to a real OpenCode
+    p = os.path.join(BASE, "tools", "opencode", "opencode.exe")
+    if os.path.isfile(p):
+        return p
     p = os.path.join(os.environ.get("APPDATA", ""), "npm", "node_modules", "opencode-ai", "bin", "opencode.exe")
     if os.path.isfile(p):
         return p
     return shutil.which("opencode.exe")
 
 
-def available():
+def installed():
     return exe() is not None
+
+
+def available():
+    return installed()
 
 
 def model(cfg):
@@ -141,6 +171,7 @@ def start(wait=60.0):
             _state.update(fail_t=time.time(), fail_msg="OpenCode가 설치되어 있지 않아요")
             return False
         _write_config()
+        _info("opencode exe: %s", e)
         _info("opencode work dir: %s", WORK)
         s = socket.socket()
         s.bind(("127.0.0.1", 0))
@@ -211,7 +242,8 @@ atexit.register(stop)
 
 
 def prestart():
-    if available():
+    if installed():
+        refresh_async()
         threading.Thread(target=start, daemon=True, name="opencode-start").start()
 
 
@@ -219,11 +251,247 @@ def running():
     return _alive()
 
 
+# ---------------------------------------------------------------------------------------------- login state
+# Whether a login exists is read from `opencode auth list` (it prints the NAMES of the stored logins, never the keys).
+# GET /provider is no help: it says connected:["opencode"] even without a login. auth.json is never opened here.
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
+_LOGIN_RE = re.compile(r"(?im)\bOpenCode(\s+Zen)?\s+(api|oauth|wellknown)\b")
+_conn = {"v": None, "t": 0.0, "thread": None}
+_conn_lock = threading.Lock()
+_connect_lock = threading.Lock()
+
+
+def _run_auth_list():
+    """True / False, or None when the answer is unknown (no exe, error, time-out). Never logs the output."""
+    e = exe()
+    if not e:
+        return None
+    try:
+        os.makedirs(WORK, exist_ok=True)
+    except OSError:
+        pass
+    try:
+        r = subprocess.run([e, "auth", "list"], cwd=WORK if os.path.isdir(WORK) else None, stdin=subprocess.DEVNULL,
+                           capture_output=True, timeout=10, creationflags=NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        _warn("opencode auth list: no answer within 10 s")
+        return None
+    except OSError as ex:
+        _warn("opencode auth list: could not run (%s)", type(ex).__name__)
+        return None
+    out = _ANSI.sub("", (r.stdout or b"").decode("utf-8", "replace"))
+    if _LOGIN_RE.search(out):
+        return True
+    return False if r.returncode == 0 else None
+
+
+def _store(v):
+    with _conn_lock:
+        if v is None:      # unknown: keep the old value and ask again in 5 s
+            _conn["t"] = time.time() - CONN_TTL + 5
+        else:
+            _conn["v"], _conn["t"] = v, time.time()
+    return v
+
+
+def _set_connected(v):
+    with _conn_lock:
+        _conn["v"], _conn["t"] = v, time.time()
+
+
+def refresh_async():
+    """Ask `opencode auth list` on a background thread (one at a time); connected() then sees the answer."""
+    with _conn_lock:
+        th = _conn["thread"]
+        if th is not None and th.is_alive():
+            return
+        th = threading.Thread(target=lambda: _store(_run_auth_list()), daemon=True, name="opencode-auth-list")
+        _conn["thread"] = th
+        th.start()
+
+
+def connected(force=False):
+    """True / False = a login exists / does not; None = not known yet.
+    force=False never blocks for long: it reads the cached answer (20 s) and refreshes in the background; only the very
+    first call waits up to 0.4 s for the first answer. force=True runs `opencode auth list` now (up to 10 s)."""
+    if not installed():
+        return None
+    if force:
+        return _store(_run_auth_list())
+    with _conn_lock:
+        v, t = _conn["v"], _conn["t"]
+    if v is not None and time.time() - t < CONN_TTL:
+        return v
+    refresh_async()
+    if v is None:
+        with _conn_lock:
+            th = _conn["thread"]
+        if th is not None:
+            th.join(CONN_FIRST_WAIT)
+        with _conn_lock:
+            v = _conn["v"]
+    return v
+
+
+def state():
+    """"ready" | "not_connected" | "not_installed". Never blocks (see connected()); an answer that is still unknown counts as
+    "ready" so that a person who is connected never sees a false "connect AI" hint during the first moments."""
+    if not installed():
+        return "not_installed"
+    c = connected()
+    return "not_connected" if c is False else "ready"
+
+
+def _ready_or_raise():
+    """Before a call: no server start when there is nothing to talk to."""
+    if not installed():
+        raise llm_common.LlmError(MSG_NOT_INSTALLED, 503, "not_installed", "opencode.exe missing")
+    c = connected()
+    if c is not True:
+        c = connected(force=True)     # the cache may be stale (the person may have logged in elsewhere): ask for real
+    if c is False:
+        raise llm_common.LlmError(MSG_NOT_CONNECTED, 503, "not_connected", "no OpenCode login")
+
+
+# ---------------------------------------------------------------------------------------------- connect / disconnect
+class _Secret(str):
+    """A str whose repr, str() and format() never show the value (keeps the key out of tracebacks, logs and f-strings).
+    The real text is still there for the code that must send it: json encoding and str.__str__(x) see the value."""
+    def __repr__(self):
+        return "<secret>"
+
+    def __str__(self):
+        return "<secret>"
+
+    def __format__(self, spec):
+        return "<secret>"
+
+
+TEST_SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
+TEST_MESSAGES = [{"role": "user", "content": 'Reply with the JSON object {"ok": true} and nothing else.'}]
+
+
+def _scrub(e, key):
+    """a copy of the LlmError without the key in any of its texts"""
+    k = str.__str__(key)      # the real value (str(key) is masked)
+
+    def clean(t):
+        return (t or "").replace(k, "***") if k else (t or "")
+    return llm_common.LlmError(clean(e.msg), e.status, e.kind, clean(e.raw))
+
+
+def _drop_sessions():
+    with _lock:
+        old = list(_sessions.values())
+        _sessions.clear()
+    for s in old:
+        _retire(s)
+
+
+def _dispose():
+    """OpenCode reads its login again only after this."""
+    try:
+        r = _http.post(_url("/instance/dispose"), auth=_auth(), timeout=30)
+    except requests.exceptions.RequestException as ex:
+        raise llm_common.LlmError("OpenCode가 응답하지 않아요. 다시 시도해 주세요.", 502, None, type(ex).__name__) from None
+    if r.status_code != 200:
+        _warn("opencode: dispose answered HTTP %d", r.status_code)
+
+
+def connect(key, cfg=None):
+    """Store the API key in OpenCode (PUT /auth/opencode) and make one test call.
+    Returns {"tested": bool, "seconds": float}. LlmError(kind="auth") when the test call says the key is refused,
+    kind="not_installed" without opencode.exe, other kinds for a server that cannot be reached.
+    Nothing here keeps the key: it goes to 127.0.0.1 in the request body and is forgotten; no log line, argument, environment
+    variable or error text contains it (a LlmError text is scrubbed of it anyway)."""
+    if not isinstance(key, str) or not key:
+        raise llm_common.LlmError("키 형식이 올바르지 않아요. 복사한 키를 그대로 붙여 넣어 주세요.", 400, "bad_key")
+    key = _Secret(key)
+    cfg = cfg if isinstance(cfg, dict) else {}
+    with _connect_lock:
+        if not installed():
+            raise llm_common.LlmError(MSG_NOT_INSTALLED, 503, "not_installed", "opencode.exe missing")
+        try:
+            _state["fail_t"] = 0.0     # the person asked for it: no waiting after an earlier failed start
+            if not start():
+                raise llm_common.LlmError((_state["fail_msg"] or "OpenCode를 켜지 못했어요") + ". 잠시 뒤에 다시 시도해 주세요.", 503, None,
+                                          _state["fail_msg"] or "opencode did not start")
+            try:
+                r = _http.put(_url("/auth/" + PROVIDER_ID), auth=_auth(), json={"type": "api", "key": key}, timeout=15)
+            except requests.exceptions.RequestException as ex:
+                raise llm_common.LlmError("OpenCode에 키를 전달하지 못했어요. 다시 시도해 주세요.", 502, None, type(ex).__name__) from None
+            code = r.status_code
+            r = None
+            if code in (400, 422):
+                raise llm_common.LlmError(MSG_AUTH, 503, "auth", "PUT /auth HTTP %d" % code)
+            if code != 200:
+                raise llm_common.LlmError("OpenCode가 키를 받지 않았어요 (HTTP %d)." % code, 502, None, "PUT /auth HTTP %d" % code)
+            _dispose()
+            _drop_sessions()
+            _set_connected(True)       # the login is stored now, whatever the test call says
+            t0 = time.time()
+            tested = True
+            try:
+                _call_json(cfg, TEST_MESSAGES, TEST_SCHEMA, 0, timeout=60)
+            except llm_common.LlmError as e:
+                if e.kind == "auth":
+                    raise llm_common.LlmError(MSG_AUTH, 503, "auth", e.raw) from None
+                if e.kind in ("limit", "overload") or llm_common.is_format_error(e) or e.status == 504:
+                    tested = False     # the key was stored; the test could not decide
+                else:
+                    raise
+            return {"tested": tested, "seconds": round(time.time() - t0, 2)}
+        except llm_common.LlmError as e:
+            raise _scrub(e, key) from None
+        except Exception as ex:
+            raise llm_common.LlmError("AI 연결에 실패했어요. 다시 시도해 주세요.", 502, None, type(ex).__name__) from None
+
+
+def disconnect():
+    """Delete OpenCode's stored login (DELETE /auth/opencode). It is OpenCode's global login: the terminal's OpenCode is logged out too."""
+    with _connect_lock:
+        if not installed():
+            _set_connected(None)
+            return
+        _state["fail_t"] = 0.0
+        if not start():
+            raise llm_common.LlmError((_state["fail_msg"] or "OpenCode를 켜지 못했어요") + ". 잠시 뒤에 다시 시도해 주세요.", 503, None,
+                                      _state["fail_msg"] or "opencode did not start")
+        try:
+            r = _http.delete(_url("/auth/" + PROVIDER_ID), auth=_auth(), timeout=15)
+        except requests.exceptions.RequestException as ex:
+            raise llm_common.LlmError("OpenCode가 응답하지 않아요. 다시 시도해 주세요.", 502, None, type(ex).__name__) from None
+        if r.status_code != 200:
+            raise llm_common.LlmError("OpenCode 로그인을 지우지 못했어요 (HTTP %d)." % r.status_code, 502, None, "DELETE /auth HTTP %d" % r.status_code)
+        try:
+            _dispose()
+        except llm_common.LlmError:
+            pass
+        _drop_sessions()
+        _set_connected(False)
+
+
+def reset_state():
+    """forget the cached login answer (after an install, or in tests)"""
+    with _conn_lock:
+        _conn["v"], _conn["t"] = None, 0.0
+
+
+def after_install():
+    """opencode.exe has just been installed: forget an earlier failed start and the cached login answer, ask again."""
+    _state["fail_t"] = 0.0
+    _state["fail_msg"] = ""
+    reset_state()
+    refresh_async()
+
+
 # ---------------------------------------------------------------------------------------------- calls
 def _need_server():
+    """before every call: something to talk to (not_installed / not_connected end it here, no server is started), then the server"""
+    _ready_or_raise()
     if not start():
-        raise llm_common.LlmError((_state["fail_msg"] or "OpenCode를 쓸 수 없어요") + ". 설정에서 다른 AI 엔진을 고를 수 있어요.",
-                               503, "auth", _state["fail_msg"] or "opencode unavailable")
+        raise llm_common.LlmError((_state["fail_msg"] or "OpenCode를 쓸 수 없어요") + ". 잠시 뒤에 다시 시도해 주세요.",
+                               503, None, _state["fail_msg"] or "opencode unavailable")
 
 
 def _new_session(title):
@@ -298,6 +566,10 @@ def call_json(cfg, messages, schema, temperature=0.7, timeout=180):
     """One-shot JSON answer on a temporary session. Returns (data, seconds, stats)."""
     if llm_common.SIMULATE_LIMIT:
         raise llm_common.LlmError("무료 모델의 사용 한도에 도달했어요.", 502, llm_fallback.classify(llm_common.SIMULATE_LIMIT), llm_common.SIMULATE_LIMIT)
+    return _call_json(cfg, messages, schema, temperature, timeout)
+
+
+def _call_json(cfg, messages, schema, temperature=0.7, timeout=180):
     _need_server()
     system, prompt = llm_common.split(messages)
     t0 = time.time()
