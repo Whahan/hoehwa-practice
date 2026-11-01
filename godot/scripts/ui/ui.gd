@@ -290,6 +290,8 @@ static func button(text: String, kind: String = "default", accent: Color = Pal.I
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if Platform.is_phone():
 		b.custom_minimum_size.y = maxf(min_h, Ds.btn_h())
+		if kind == "primary": # home_menu_design §5.6: a primary button is at least Ds.CTA_H high on the phone (other kinds keep 48)
+			b.custom_minimum_size.y = maxf(b.custom_minimum_size.y, Ds.CTA_H)
 	elif min_h > 0.0:
 		b.custom_minimum_size.y = min_h # PC: no forced height (phone_layout_test L-06); the padding keeps it >= 40
 	style_button(b, kind, accent)
@@ -311,6 +313,8 @@ static func soft_pair(accent: Color) -> Array:
 		return [Pal.WARN_SOFT, Pal.WARN_ON]
 	if accent.is_equal_approx(Pal.PRIMARY):
 		return [Pal.PRIMARY_SOFT, Pal.PRIMARY]
+	if accent.is_equal_approx(Pal.REWARD):
+		return [Pal.REWARD_SOFT, Pal.REWARD_ON]
 	if accent.is_equal_approx(Pal.INK):
 		return [Pal.SUNK, Pal.INK]
 	return [accent.lerp(Pal.SURFACE, 0.86), accent]

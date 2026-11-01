@@ -24,6 +24,24 @@ const S10 := 40
 const REC_BIG_PC := Vector2(190, 58)
 const REC_SMALL_PC := Vector2(96, 44)
 
+## Home / path sizes (docs/home_menu_design.md §5.5). Logical px, 1 px ~ 1 dp on the 412 px phone.
+const CTA_H := 56.0              ## phone: minimum height of a primary button (PC forces nothing, phone_layout_test L-06)
+const HOME_CTA_H_PHONE := 60.0   ## start button of home / path
+const HOME_CTA_H_PC := 52.0
+const RING_D_PHONE := 96.0       ## today's goal ring diameter
+const RING_D_PC := 120.0
+const RING_STROKE := 10.0
+const NODE_D := 56.0             ## path node diameter (touch target)
+const NODE_D_CUR := 72.0         ## the current node
+const NODE_STRIDE_PHONE := 112.0 ## vertical distance between node centres
+const NODE_STRIDE_PC := 120.0
+const NODE_AMP_MAX := 72.0       ## largest sideways swing
+const PATH_TRACK_W := 10.0       ## path line width
+const TASK_ROW_H := 56.0         ## minimum height of a to-do row (grows with two lines)
+const STONE_D := 28.0            ## weekly dot diameter (display only, not a touch target)
+const HOME_RIGHT_W := 340.0      ## PC home right column width
+const PATH_COL_W_PC := 520.0     ## PC path width
+
 const SCALES := [0.9, 1.0, 1.15, 1.3, 1.5]
 const MIN_FONT := 12
 

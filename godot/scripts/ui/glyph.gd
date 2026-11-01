@@ -4,7 +4,7 @@ extends Control
 ## fonts and turn into emoji on Android (docs/ui_redesign_design.md §5.6). Purely visual: mouse_filter IGNORE.
 ## An unknown `kind` draws nothing (an empty cell of the same size) and raises no error.
 
-const KINDS := ["back", "chevron_down", "chevron_up", "chevron_right", "check", "close", "play", "record", "more"]
+const KINDS := ["back", "chevron_down", "chevron_up", "chevron_right", "check", "close", "play", "record", "more", "sparkle", "star", "lock"]
 
 var kind: String = "chevron_right"
 var icon_color: Color = Color.BLACK
@@ -57,6 +57,42 @@ func _draw() -> void:
 		"more":
 			for i in 3:
 				draw_circle(o + Vector2(0.2 + 0.3 * i, 0.5) * s, maxf(1.6, s * 0.09), icon_color)
+		"sparkle":
+			# four-pointed star (streak symbol): long points up / down / left / right, short waist
+			var sp := PackedVector2Array()
+			for pt in [Vector2(0.5, 0.06), Vector2(0.61, 0.39), Vector2(0.94, 0.5), Vector2(0.61, 0.61),
+					Vector2(0.5, 0.94), Vector2(0.39, 0.61), Vector2(0.06, 0.5), Vector2(0.39, 0.39)]:
+				sp.append(o + (pt as Vector2) * s)
+			draw_colored_polygon(sp, icon_color)
+		"star":
+			# five-pointed star, filled
+			var st := PackedVector2Array()
+			var c := o + Vector2(0.5, 0.54) * s
+			for i in 10:
+				var r: float = (0.47 if i % 2 == 0 else 0.2) * s
+				var a: float = -PI * 0.5 + float(i) * PI / 5.0
+				st.append(c + Vector2(cos(a), sin(a)) * r)
+			draw_colored_polygon(st, icon_color)
+		"lock":
+			# body: rounded rectangle; shackle: an arch (half circle + two legs) above it
+			var bx0 := 0.2
+			var bx1 := 0.8
+			var by0 := 0.46
+			var by1 := 0.9
+			var rr := 0.1
+			var body := PackedVector2Array()
+			for k in [[bx1 - rr, by0 + rr, -PI * 0.5], [bx1 - rr, by1 - rr, 0.0], [bx0 + rr, by1 - rr, PI * 0.5], [bx0 + rr, by0 + rr, PI]]:
+				for j in 5:
+					var a2: float = float(k[2]) + float(j) * PI * 0.5 / 4.0
+					body.append(o + (Vector2(float(k[0]), float(k[1])) + Vector2(cos(a2), sin(a2)) * rr) * s)
+			draw_colored_polygon(body, icon_color)
+			var arch := PackedVector2Array()
+			arch.append(o + Vector2(0.32, 0.5) * s)
+			for j in range(0, 9):
+				var a3: float = PI + float(j) * PI / 8.0
+				arch.append(o + (Vector2(0.5, 0.34) + Vector2(cos(a3), sin(a3)) * 0.18) * s)
+			arch.append(o + Vector2(0.68, 0.5) * s)
+			draw_polyline(arch, icon_color, w * 1.1, true)
 		_:
 			pass
 
