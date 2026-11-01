@@ -555,6 +555,10 @@ def _main():
     keep = "--keep" in sys.argv
     backend_cfg = os.path.join(HERE, "config.json")
     cfg_hash0 = hashlib.sha256(open(backend_cfg, "rb").read()).hexdigest() if os.path.isfile(backend_cfg) else ""
+    # a developer checkout may already hold its own backend/secrets.json (gitignored): the test must not create or touch it
+    backend_secrets = os.path.join(HERE, "secrets.json")
+    secrets_sig = lambda: (os.stat(backend_secrets).st_size, os.stat(backend_secrets).st_mtime_ns) if os.path.isfile(backend_secrets) else None
+    secrets0 = secrets_sig()
     KEY = key_for("main")
     KEY2 = key_for("echo")
     KEY3 = key_for("lan")
@@ -930,7 +934,7 @@ def _main():
     leak = len(hits) + len(bodies) + (0 if cfgnow == cfg_hash0 else 1)
     print("SENTINEL_LEAK %d" % leak, flush=True)
     check("B1-5 SENTINEL_LEAK 0 (every file under the work folder, %d response bodies+headers, backend/config.json unchanged)" % len(RESPONSES), leak == 0, (hits[:5], bodies[:3]))
-    check("B1-5 no secrets.json anywhere (work folder or backend/)", not any(n == "secrets.json" for _, _, fn in os.walk(WORK) for n in fn) and not os.path.exists(os.path.join(HERE, "secrets.json")))
+    check("B1-5 no secrets.json in the work folder, backend/secrets.json not created or changed", not any(n == "secrets.json" for _, _, fn in os.walk(WORK) for n in fn) and secrets_sig() == secrets0)
     scanned = sum(len(fn) for _, _, fn in os.walk(WORK))
     check("B1-5 the scan looked at real files (server logs, fake state, opencode.log...)", scanned > 20 and os.path.exists(os.path.join(WORK, "main", "server.log")), scanned)
     log_text = open(os.path.join(WORK, "main", "server.log"), encoding="utf-8", errors="replace").read()
