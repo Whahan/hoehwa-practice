@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Makes this PC's prefs.json portable: drops mic_device, every *_consent choice (each user must agree
+"""Makes this PC's prefs.json portable: drops mic_device, lesson_cursor (the learning position), every *_consent choice (each user must agree
 themselves) and any value that looks like an absolute path.
 
     python sanitize_prefs.py <prefs.json in> <prefs.json out>
@@ -8,7 +8,7 @@ import json
 import re
 import sys
 
-DROP_KEYS = {"mic_device"}
+DROP_KEYS = {"mic_device", "lesson_cursor"}   # lesson_cursor = this PC's learning position in the lesson bank (personal)
 PATH_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|/)")
 
 
