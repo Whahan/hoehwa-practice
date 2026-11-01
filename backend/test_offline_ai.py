@@ -122,6 +122,7 @@ def main():
         return 2
     requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
     test_no_credential_reads()
+    test_import_writes_nothing()
     if "--no-ai-server" in sys.argv:   # server started without any usable AI engine: only sections 6 and 7
         test_no_ai()
         test_ollama_removed()
@@ -311,6 +312,66 @@ def test_no_credential_reads():
         except SyntaxError as e:
             bad.append("%s: cannot parse (%s)" % (base, e))
     check("backend code never touches auth.json / ~/.local/share / XDG_DATA_HOME", not bad, bad)
+
+
+def test_import_writes_nothing():
+    """`import server` (unit tests, tools) must not rewrite config.json or create files in the app folder, even when the config
+    is an old one that the migration changes in memory (the developer's real config.json is never touched by a unit test).
+    Also checked on a mutant whose save_config has no gate: it DOES rewrite the file, so the detector works."""
+    import glob
+    import hashlib
+    import shutil
+    import subprocess
+    import tempfile
+    print("\n== import server writes nothing (legacy config, copy of the backend in a temp folder)")
+    here = os.path.dirname(os.path.abspath(__file__))
+    legacy = {"port": 8770, "llm_provider": "ollama", "llm_model": "qwen3:8b", "ollama_url": "http://127.0.0.1:11434",
+              "keep_alive": "30m", "num_ctx": 6144, "stt": {"model": "small", "device": "cuda", "compute_type": "int8_float16"}}
+
+    def tree(root):
+        out = {}
+        for r, ds, fs in os.walk(root):
+            ds[:] = [d for d in ds if d != "__pycache__"]
+            for f in fs:
+                p = os.path.join(r, f)
+                out[os.path.relpath(p, root)] = hashlib.sha256(open(p, "rb").read()).hexdigest()
+        return out
+
+    def run(mutate, extra_env=None):
+        tmp = tempfile.mkdtemp(prefix="b2import_")
+        try:
+            for f in glob.glob(os.path.join(here, "*.py")):
+                if not os.path.basename(f).startswith("test_"):
+                    shutil.copy(f, tmp)
+            shutil.copytree(os.path.join(here, "content"), os.path.join(tmp, "content"))
+            shutil.copy(os.path.join(here, "curriculum.json"), tmp)
+            if mutate:
+                p = os.path.join(tmp, "server.py")
+                src = open(p, encoding="utf-8").read()
+                gate = "    if not PERSIST_CONFIG:\n        return"
+                assert gate in src
+                open(p, "w", encoding="utf-8", newline="\n").write(src.replace(gate, "    pass"))
+            with open(os.path.join(tmp, "config.json"), "w", encoding="utf-8") as f:
+                json.dump(legacy, f, indent=2)
+            before = tree(tmp)
+            env = dict(os.environ, **(extra_env or {}))
+            r = subprocess.run([sys.executable, "-X", "utf8", "-c", "import server; print(server.CFG.get('llm_provider'), server.PERSIST_CONFIG)"],
+                               cwd=tmp, env=env, capture_output=True, text=True, timeout=300)
+            after = tree(tmp)
+            return r, before, after
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    r, before, after = run(False)
+    check("import server (legacy config): imports fine, the migrated provider is in memory, PERSIST_CONFIG is false",
+          r.returncode == 0 and r.stdout.split() == ["opencode", "False"], (r.stdout + r.stderr)[-200:])
+    check("import server: config.json bytes unchanged", before.get("config.json") == after.get("config.json"))
+    check("import server: no file created or changed anywhere in the app folder", before == after,
+          {"new": sorted(set(after) - set(before)), "changed": [k for k in before if before[k] != after.get(k)]})
+    r, before, after = run(False, {"HOEHWA_TEST_MODE": "1"})
+    check("import server with HOEHWA_TEST_MODE=1: config.json bytes unchanged", before.get("config.json") == after.get("config.json"))
+    r, before, after = run(True)
+    check("mutant (save_config without the gate) rewrites config.json on import: the detector fails it",
+          r.returncode == 0 and before.get("config.json") != after.get("config.json"), (r.stdout + r.stderr)[-200:])
 
 
 def test_lt_guard():

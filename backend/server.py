@@ -66,6 +66,10 @@ if ARG_PORT and _arg("--config"):   # test servers only: read this config file i
 ARG_TAG = _arg("--tag")
 ARG_STT_CPU = "--stt-cpu" in sys.argv
 LOG_NAME = "server-%s.log" % ARG_TAG if ARG_TAG else "server.log"
+# Only a server process (python server.py ...) writes into the app folder: its log file, and config.json (and never a --port test
+# server, never HOEHWA_TEST_MODE=1). `import server` (unit tests, tools) may change CFG in memory, but touches no file of the app.
+IS_SERVER_PROCESS = __name__ == "__main__"
+PERSIST_CONFIG = IS_SERVER_PROCESS and not ARG_PORT and os.environ.get("HOEHWA_TEST_MODE") != "1"
 if not PREFETCH:
     os.environ["HF_HUB_OFFLINE"] = "1"  # models are local after setup; never wait on the network
 
@@ -117,7 +121,9 @@ import sync_hub   # learning-record sync hub: /sync/pull, /sync/push (docs/sync_
 # ----------------------------------------------------------------------------------------------
 log = logging.getLogger("backend")
 log.setLevel(logging.INFO)
-if not log.handlers:
+if not log.handlers and not IS_SERVER_PROCESS:
+    log.addHandler(logging.NullHandler())   # imported by a test: no log file in the app folder
+elif not log.handlers:
     _h = RotatingFileHandler(os.path.join(LOG_DIR, LOG_NAME), maxBytes=2_000_000, backupCount=3, encoding="utf-8")
     _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     log.addHandler(_h)
@@ -198,6 +204,8 @@ def _persistable(cfg):
 
 
 def save_config(cfg):
+    if not PERSIST_CONFIG:
+        return   # imported (unit test), a --port test server, or HOEHWA_TEST_MODE=1: config.json is never written
     with _cfg_lock:
         out, disk = _persistable(cfg)
         if out == disk:
@@ -219,10 +227,9 @@ if (CFG.get("openai_api") or {}).get("key_source") == "opencode":  # migration: 
     if not ARG_PORT:
         save_config(CFG)
 # the app no longer runs a local model: an old config.json with the "ollama" engine is moved to "opencode" here (llm_config.py);
-# a test server (--port) only changes the copy in memory, the file stays as it is
+# the change reaches config.json only in a real server start (save_config: PERSIST_CONFIG); an import or a --port test server keeps it in memory
 CFG = llm_config.migrate(CFG)[0]   # (new cfg, notice): the notice is read back from CFG["llm_migrated_from"] by GET /llm
-if not ARG_PORT:
-    save_config(CFG)   # no-op when nothing changed
+save_config(CFG)   # no-op when nothing changed or when not persisting
 if ARG_PORT:
     _cli_override(("port",), int(ARG_PORT))
 if ARG_STT_CPU:
@@ -3064,9 +3071,8 @@ import song   # song study (/song/*): upload, job queue, result, enrich (docs/so
 practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, ja_pron=ja_pron, readmode=readmode, lesson_rules=lesson_rules, features=features)
 missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)
 def _persist_config(cfg):
-    """save_config for the llm routes: a test server (--port) changes its in-memory copy only and never writes config.json"""
-    if not ARG_PORT:
-        save_config(cfg)
+    """save_config for the llm routes (a test server or an import changes its in-memory copy only: save_config does not write)"""
+    save_config(cfg)
 
 
 # POST /llm/connect, /llm/disconnect, /llm/install, GET /llm/install, POST /llm/notice/ack (llm_routes.py, local only)
