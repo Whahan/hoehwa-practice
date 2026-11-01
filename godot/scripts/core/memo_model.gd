@@ -24,7 +24,8 @@ const REVIEW_CAP := 20
 const NEW_CAP := 5
 const KEY_LEN := 12
 
-static var _rx_letter: RegEx = null
+## Compiled at declaration (script load) so no code path assigns it lazily: memo_summary reaches _letters() from worker threads.
+static var _rx_letter: RegEx = _make_letters()
 
 
 # ---------------------------------------------------------------- memo document
@@ -141,10 +142,13 @@ static func clean_card(raw: Variant, now: int) -> Dictionary:
 
 # ---------------------------------------------------------------- line keys
 
+static func _make_letters() -> RegEx:
+	var rx := RegEx.new()
+	rx.compile("[\\p{L}\\p{N}]")
+	return rx
+
+
 static func _letters() -> RegEx:
-	if _rx_letter == null:
-		_rx_letter = RegEx.new()
-		_rx_letter.compile("[\\p{L}\\p{N}]")
 	return _rx_letter
 
 
