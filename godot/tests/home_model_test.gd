@@ -108,7 +108,7 @@ func _tasks_table() -> void:
 	eq(titles(HomeModel.tasks(S({"lesson_today": 1})))[0], "오늘의 레슨 완료", "lesson done title")
 	var all_done: Array = HomeModel.tasks(S({"lesson_today": 2, "due": 0, "reviews_today": 3}))
 	eq(line(all_done), "lesson:done,review:done,talk:optional", "everything done")
-	eq(titles(all_done)[1], "복습 끝!", "due 0 and reviews today: 복습 끝!")
+	eq(titles(all_done)[1], "오늘 복습 끝!", "due 0 and reviews today: 오늘 복습 끝!")
 
 	var no_rev: Array = HomeModel.tasks(S({"due": 0, "reviews_today": 0}))
 	var has_rev_text := false
@@ -177,7 +177,8 @@ func _robustness() -> void:
 	HomeModel.resume(s)
 	HomeModel.message(s)
 	eq(s, copy, "functions do not modify the snapshot they are given")
-	eq(HomeModel.snapshot("en"), {}, "snapshot() is only a stub in this task (returns {})")
+	var snap: Variant = HomeModel.snapshot("en")
+	ok(snap is Dictionary and (snap as Dictionary).has("lang") and (snap as Dictionary).has("path") and (snap as Dictionary).has("due"), "snapshot() returns a Dictionary with lang, path and due")
 
 
 func _messages() -> void:

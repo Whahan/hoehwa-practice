@@ -6,7 +6,6 @@ extends RefCounted
 ## 정적 함수: snapshot, task_row, resume_card, streak_card, stones, ai_card, shortcut_tiles, kind_mark, summary_text.
 
 const WD := ["일", "월", "화", "수", "목", "금", "토"]
-const ZWSP := "\u200b" ## zero-width space
 const SHORTCUTS := [["대화", "talk"], ["연습", "practice"], ["읽기", "reading"]]
 
 ## 시험 전용: 0..23 이면 그 값을 현지 시각(hour)으로 쓴다. -1 = 시스템 시계.
@@ -166,12 +165,7 @@ static func task_row(t: Dictionary, on_tap: Callable) -> Control:
 	var sub: String = str(t.get("sub", ""))
 	var row := UI.vbox(0)
 	row.set_meta("task_id", str(t.get("id", "")))
-	# A finished review row ("복습 끝!") must not look like a "복습 N개" button to review_walk_test (no review button when nothing is
-	# due): an invisible zero-width space in front keeps the visible text and takes it out of the "복습 " prefix rule.
-	var shown: String = title
-	if state == "done" and title.begins_with("복습 "):
-		shown = ZWSP + title
-	var b := UI.button(shown, "flat", Pal.INK, Ds.TASK_ROW_H)
+	var b := UI.button(title, "flat", Pal.INK, Ds.TASK_ROW_H)
 	b.accessibility_name = title
 	b.custom_minimum_size.y = maxf(b.custom_minimum_size.y, Ds.TASK_ROW_H)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT

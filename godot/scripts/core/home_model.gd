@@ -153,7 +153,7 @@ static func _tasks(n: Dictionary) -> Array:
 	if due > 0:
 		review = {"id": "review", "title": "복습 %d개" % due, "sub": "잊기 전에 짧게 복습해요", "state": "todo", "target": _target("review", lang)}
 	elif int(n["reviews_today"]) > 0:
-		review = {"id": "review", "title": "복습 끝!", "sub": "", "state": "done", "target": _target("review", lang)}
+		review = {"id": "review", "title": "오늘 복습 끝!", "sub": "", "state": "done", "target": _target("review", lang)}
 	var song: Dictionary = {}
 	if int(n["song_due"]) > 0:
 		song = {"id": "song", "title": "노래 외우기 %d줄" % int(n["song_due"]), "sub": "", "state": "todo", "target": _target("song", lang)}

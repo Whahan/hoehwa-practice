@@ -283,7 +283,7 @@ func _selfchecks() -> void:
 	var ov: Array = _overflow(fake, Vector2(412, 915))
 	print("selfcheck %s overflow detector on a 3000 px control (%d)" % ["FAIL-as-expected" if not ov.is_empty() else "UNEXPECTED-PASS", ov.size()])
 	ok(not ov.is_empty(), "self-check: the overflow detector reports a 3000 px wide control")
-	var rv := UI.button("복습 끝!", "soft", Pal.PRIMARY)
+	var rv := UI.button("복습 확인", "soft", Pal.PRIMARY)
 	fake.add_child(rv)
 	ok(_button_starting(fake, "복습 ") != null, "self-check: a button starting with '복습 ' is found (the rule of review_walk_test can fail)")
 	fake.queue_free()
