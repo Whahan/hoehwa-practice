@@ -719,14 +719,14 @@ func _test_snapshot_threads() -> void:
 
 # ---------------------------------------------------------------- source check: nothing reachable from a worker thread writes shared state
 
-const SRC_STORE := "res://scripts/local/song_store.gd"
-const SRC_DUE := "res://scripts/core/song_due.gd"
-const SRC_VIEW := "res://scripts/views/song_view.gd"
-## Functions that write a static, move / write a file or call something that does. A worker thread must never reach them.
+const SCRIPTS_DIR := "res://scripts"
+## Functions (of SongStore / SongDue) that write a static, move / write a file or call something that does. A worker thread must never reach them.
 const FORBIDDEN_CALLS := ["_guard", "_read_song", "_quarantine_file", "_rm_rf", "_write_atomic", "_write_bytes", "apply_snapshot",
 	"take_quarantined", "clear_cache", "load_song", "load_memo", "verify_audio", "_audio_ok", "list", "save_song", "save_memo",
 	"delete", "delete_memo", "install", "install_lyrics", "orphan_ids", "usage", "scan", "store", "pending_put", "pending_remove"]
+const FORBIDDEN_CLASSES := ["SongStore", "SongDue"]
 const FORBIDDEN_FILE_OPS := ["rename_absolute", "remove_absolute", "make_dir", "copy_absolute", "store_string", "store_buffer", "store_8"]
+const MUTATORS := "erase|clear|merge|append|append_array|push_back|push_front|pop_back|pop_front|insert|remove_at|sort|compile|resize|fill|assign"
 
 
 ## {function name: body text (code only, comments stripped)} of a script's top-level (static) functions.
@@ -742,7 +742,7 @@ func _functions_of(src: String) -> Dictionary:
 			var head: String = line.substr(line.find("func ") + 5)
 			cur = head.split("(")[0].strip_edges()
 			body = ""
-		elif cur != "" and (line.begins_with("class ") or line.begins_with("static var ") or line.begins_with("var ") or line.begins_with("const ")):
+		elif cur != "" and (line.begins_with("class ") or line.begins_with("static var ") or line.begins_with("var ") or line.begins_with("const ") or line.begins_with("enum ") or line.begins_with("signal ") or line.begins_with("@")):
 			out[cur] = body
 			cur = ""
 		if cur != "":
@@ -752,96 +752,166 @@ func _functions_of(src: String) -> Dictionary:
 	return out
 
 
-## Names of `static var X` / `var X` declared at the top of a script.
-func _statics_of(src: String) -> Array:
+## Names of the script's top-level `static var X` (instance `var X` too when include_instance: for the SongView entry).
+func _statics_of(src: String, include_instance: bool = false) -> Array:
 	var out: Array = []
 	var re := RegEx.new()
-	re.compile("(?m)^(?:static )?var\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	re.compile("(?m)^" + ("(?:static )?" if include_instance else "static ") + "var\\s+([A-Za-z_][A-Za-z0-9_]*)")
 	for m in re.search_all(src):
 		out.append(m.get_string(1))
 	return out
 
 
-## Problems found in the functions reachable from `entry` (name in `own`), following calls into the other tables.
-## tables = {"SongStore": {...}, "SongDue": {...}, "": own table of the entry}; statics = names whose assignment is forbidden.
-func _thread_problems(entry: String, tables: Dictionary, statics: Array) -> Array:
+func _gd_files(dir: String, out: Array) -> void:
+	var d := DirAccess.open(dir)
+	if d == null:
+		return
+	for sub in d.get_directories():
+		_gd_files(dir.path_join(sub), out)
+	for fn in d.get_files():
+		if fn.ends_with(".gd"):
+			out.append(dir.path_join(fn))
+
+
+## Every `class_name` script under res://scripts: {ClassName: {"fns": {...}, "statics": [...], "path": String}}.
+func _class_table() -> Dictionary:
+	var files: Array = []
+	_gd_files(SCRIPTS_DIR, files)
+	var re := RegEx.new()
+	re.compile("(?m)^class_name\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	var out := {}
+	for f in files:
+		var src: String = FileAccess.get_file_as_string(f)
+		var m: RegExMatch = re.search(src)
+		if m != null:
+			out[m.get_string(1)] = {"fns": _functions_of(src), "statics": _statics_of(src), "path": f}
+	return out
+
+
+## Problems on every function reachable from `entry_class.entry_fn`. Follows `Name.func(` into any class of `table`, bare calls
+## inside the same class and `Name.new(` into `_init`. Flags: assignment to (or a mutating call on) a static variable of the
+## own class or `Class.static`, a lazy `if _x == null: _x = ...` (it is an assignment), file moves / writes, and calls to the
+## FORBIDDEN_CALLS of SongStore / SongDue. Returns [] and fills `visited` (class.function names) when clean.
+func _thread_problems(entry_class: String, entry_fn: String, table: Dictionary, visited: Array = []) -> Array:
 	var problems: Array = []
 	var seen := {}
-	var queue: Array = [["", entry]]
+	var queue: Array = [[entry_class, entry_fn]]
 	var call_re := RegEx.new()
-	call_re.compile("(?:(SongStore|SongDue)\\.)?\\b([a-z_][A-Za-z0-9_]*)\\(")
-	var asg_re := RegEx.new()
-	asg_re.compile("(?<![A-Za-z0-9_.])(?:SongStore\\.|SongDue\\.)?(" + "|".join(statics) + ")\\s*(?:\\[[^\\]]*\\]\\s*)*(?:=(?!=)|\\+=|-=)")
-	var mut_re := RegEx.new()
-	mut_re.compile("(?:SongStore\\.|SongDue\\.)?(" + "|".join(statics) + ")\\.(?:erase|clear|merge|append|push_back|pop_back|pop_front|insert|remove_at|sort)\\(")
+	call_re.compile("(?:\\b([A-Z][A-Za-z0-9_]*)\\.)?\\b([A-Za-z_][A-Za-z0-9_]*)\\(")
+	var own_asg := {}
+	var own_mut := {}
+	var qual_asg: Array = []
+	var qual_mut: Array = []
+	for cname in table.keys():
+		var st: Array = table[cname]["statics"]
+		if st.is_empty():
+			continue
+		var alt: String = "|".join(st)
+		var r1 := RegEx.new()
+		r1.compile("(?<![A-Za-z0-9_.])(?<!var )(" + alt + ")\\s*(?:\\[[^\\]]*\\]\\s*)*(?:=(?!=)|\\+=|-=|\\*=|/=)")
+		own_asg[cname] = r1
+		var r2 := RegEx.new()
+		r2.compile("(?<![A-Za-z0-9_.])(" + alt + ")(?:\\[[^\\]]*\\])*\\.(?:" + MUTATORS + ")\\(")
+		own_mut[cname] = r2
+		var q1 := RegEx.new()
+		q1.compile("\\b" + cname + "\\.(" + alt + ")\\s*(?:\\[[^\\]]*\\]\\s*)*(?:=(?!=)|\\+=|-=|\\*=|/=)")
+		qual_asg.append([cname, q1])
+		var q2 := RegEx.new()
+		q2.compile("\\b" + cname + "\\.(" + alt + ")(?:\\[[^\\]]*\\])*\\.(?:" + MUTATORS + ")\\(")
+		qual_mut.append([cname, q2])
 	while not queue.is_empty():
 		var item: Array = queue.pop_back()
-		var owner: String = item[0]
+		var cname: String = item[0]
 		var fname: String = item[1]
-		var key: String = "%s.%s" % [owner, fname]
+		var key: String = "%s.%s" % [cname, fname]
 		if seen.has(key):
 			continue
 		seen[key] = true
-		var table: Dictionary = tables.get(owner, {})
-		if not table.has(fname):
+		if not table.has(cname) or not (table[cname]["fns"] as Dictionary).has(fname):
 			problems.append("%s: function not found in the source" % key)
 			continue
-		var body: String = table[fname]
-		if asg_re.search(body) != null:
-			problems.append("%s assigns a static (%s)" % [key, asg_re.search(body).get_string().strip_edges()])
-		if mut_re.search(body) != null:
-			problems.append("%s mutates a static (%s)" % [key, mut_re.search(body).get_string()])
+		visited.append(key)
+		var body: String = table[cname]["fns"][fname]
+		if own_asg.has(cname):
+			var m1: RegExMatch = (own_asg[cname] as RegEx).search(body)
+			if m1 != null:
+				problems.append("%s assigns a static (%s)" % [key, m1.get_string().strip_edges()])
+			var m2: RegExMatch = (own_mut[cname] as RegEx).search(body)
+			if m2 != null:
+				problems.append("%s mutates a static (%s)" % [key, m2.get_string()])
+		for qa in qual_asg:
+			var m3: RegExMatch = (qa[1] as RegEx).search(body)
+			if m3 != null:
+				problems.append("%s assigns a static (%s)" % [key, m3.get_string().strip_edges()])
+		for qm in qual_mut:
+			var m4: RegExMatch = (qm[1] as RegEx).search(body)
+			if m4 != null:
+				problems.append("%s mutates a static (%s)" % [key, m4.get_string()])
 		for op in FORBIDDEN_FILE_OPS:
-			if body.contains("." + op + "(") or body.contains("FileAccess.open") and body.contains("WRITE"):
+			if body.contains("." + op + "("):
 				problems.append("%s writes or moves a file (%s)" % [key, op])
-				break
+		if body.contains("FileAccess.open") and body.contains("WRITE"):
+			problems.append("%s opens a file for writing" % key)
 		for m in call_re.search_all(body):
 			var q: String = m.get_string(1)
 			var callee: String = m.get_string(2)
-			var tbl_owner: String = q if q != "" else owner
-			if q == "" and owner == "" and not (tables[""] as Dictionary).has(callee):
-				continue # a built-in or an engine class method on the entry's own script
-			var target: Dictionary = tables.get(tbl_owner, {})
-			if FORBIDDEN_CALLS.has(callee) and (q != "" or target.has(callee)):
-				problems.append("%s calls %s%s" % [key, (q + ".") if q != "" else "", callee])
-			elif target.has(callee):
-				queue.append([tbl_owner, callee])
+			var target_class: String = q if q != "" else cname
+			if q != "" and not table.has(q):
+				continue # an engine class or an autoload (Time, FileAccess, JSON, ...)
+			if q == "" and not (table[cname]["fns"] as Dictionary).has(callee):
+				continue # a built-in / method of some object
+			if callee == "new":
+				if (table[target_class]["fns"] as Dictionary).has("_init"):
+					queue.append([target_class, "_init"])
+				continue
+			if FORBIDDEN_CLASSES.has(target_class) and FORBIDDEN_CALLS.has(callee):
+				problems.append("%s calls %s.%s" % [key, target_class, callee])
+				continue
+			if (table[target_class]["fns"] as Dictionary).has(callee):
+				queue.append([target_class, callee])
 	return problems
 
 
 func _test_thread_source() -> void:
-	print("[worker-thread entry points reach no static write or file move]")
-	var store_src: String = FileAccess.get_file_as_string(SRC_STORE)
-	var due_src: String = FileAccess.get_file_as_string(SRC_DUE)
-	var view_src: String = FileAccess.get_file_as_string(SRC_VIEW)
-	ok(store_src != "" and due_src != "" and view_src != "", "the three sources are readable")
-	var store_fn: Dictionary = _functions_of(store_src)
-	var due_fn: Dictionary = _functions_of(due_src)
-	var view_fn: Dictionary = _functions_of(view_src)
-	var statics: Array = _statics_of(store_src) + _statics_of(due_src)
-	ok(statics.has("_sha_cache") and statics.has("last_error") and statics.has("_quarantined") and statics.has("_warned") and statics.has("cache"), "the static list includes _sha_cache, last_error, _quarantined, _warned, cache (%d)" % statics.size())
-	# entry 1: SongDue.compute (the home's scan thread); entry 2: SongView._default_load (the song list thread)
-	var t_due := {"SongStore": store_fn, "SongDue": due_fn, "": due_fn}
-	var p1: Array = _thread_problems("compute", t_due, statics)
+	print("[worker-thread entry points reach no static write or file move (any class under scripts)]")
+	var table: Dictionary = _class_table()
+	ok(table.size() > 50 and table.has("SongStore") and table.has("SongDue") and table.has("SongView") and table.has("MemoModel") and table.has("SongModel"), "the class table covers the scripts (%d classes)" % table.size())
+	var statics_all: Array = []
+	for c in table.keys():
+		for st in table[c]["statics"]:
+			statics_all.append("%s.%s" % [c, st])
+	ok(statics_all.has("SongStore._sha_cache") and statics_all.has("SongStore.last_error") and statics_all.has("SongStore._quarantined") and statics_all.has("SongStore._warned") and statics_all.has("SongDue.cache"), "the static list includes the SongStore / SongDue statics (%d statics)" % statics_all.size())
+	ok(table["MemoModel"]["statics"].has("_rx_letter"), "MemoModel._rx_letter is in the static list (the static the checker must watch)")
+	var v1: Array = []
+	var p1: Array = _thread_problems("SongDue", "compute", table, v1)
 	ok(p1.is_empty(), "SongDue.compute: no static write / file move reachable %s" % str(p1))
-	var t_view := {"SongStore": store_fn, "SongDue": due_fn, "": view_fn}
-	var p2: Array = _thread_problems("_default_load", t_view, statics)
+	var v2: Array = []
+	var p2: Array = _thread_problems("SongView", "_default_load", table, v2)
 	ok(p2.is_empty(), "SongView._default_load: no static write / file move reachable %s" % str(p2))
-	ok(store_fn.has("list_snapshot") and store_fn.has("_audio_ok_ro") and store_fn.has("_peek_song"), "the read-only functions exist")
-	# the analyzer can fail: fake sources that break the rule, hidden at different depths
-	var fake_store := {
-		"list_snapshot": "\tvar x = _helper()\n\treturn x\n",
-		"_helper": "\t_sha_cache[\"a\"] = [1, 2]\n\treturn 1\n"}
-	var f1: Array = _thread_problems("list_snapshot", {"SongStore": fake_store, "": fake_store}, statics)
-	print("selfcheck %s analyzer on a helper that writes _sha_cache two calls deep (%d problems)" % ["FAIL-as-expected" if not f1.is_empty() else "UNEXPECTED-PASS", f1.size()])
-	ok(not f1.is_empty(), "self-check: a static write one call below the entry is found")
-	var fake_a := {"entry": "\tSongStore.list()\n"}
-	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_a}, statics).is_empty(), "self-check: calling SongStore.list() from the entry is found")
-	var fake_b := {"entry": "\tlast_error = \"x\"\n"}
-	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_b}, statics).is_empty(), "self-check: assigning last_error is found")
-	var fake_c := {"entry": "\t_quarantined.append(1)\n"}
-	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_c}, statics).is_empty(), "self-check: _quarantined.append is found")
-	var fake_d := {"entry": "\tDirAccess.rename_absolute(a, b)\n"}
-	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_d}, statics).is_empty(), "self-check: a file move is found")
-	var fake_e := {"entry": "\tvar a = last_error == \"x\"\n\tvar b = _sha_cache.get(1)\n"}
-	ok(_thread_problems("entry", {"SongStore": store_fn, "": fake_e}, statics).is_empty(), "self-check: reading a static (== / .get) is not a problem")
+	print("  reached from compute: %d functions, from _default_load: %d functions" % [v1.size(), v2.size()])
+	var classes := {}
+	for k in v1 + v2:
+		classes[str(k).split(".")[0]] = true
+	print("  classes reached: %s" % str(classes.keys()))
+	ok(v1.has("MemoModel.summary") and v1.has("MemoModel._letters") and v2.has("MemoModel._letters") and v2.has("SongModel.normalize"), "the walk really reaches MemoModel.summary -> _letters and SongModel.normalize (not just SongStore)")
+	ok(table["SongStore"]["fns"].has("list_snapshot") and table["SongStore"]["fns"].has("_audio_ok_ro") and table["SongStore"]["fns"].has("_peek_song"), "the read-only functions exist")
+	# the checker can fail: fake classes that break the rule, hidden at different depths and in other classes
+	var fake := {
+		"FakeEntry": {"fns": {"go": "\tvar x = FakeMid.step()\n\treturn x\n"}, "statics": []},
+		"FakeMid": {"fns": {"step": "\treturn FakeLazy.rx()\n"}, "statics": []},
+		"FakeLazy": {"fns": {"rx": "\tif _rx == null:\n\t\t_rx = RegEx.new()\n\treturn _rx\n"}, "statics": ["_rx"]}}
+	var f1: Array = _thread_problems("FakeEntry", "go", fake)
+	print("selfcheck %s lazy static two classes deep (%d problems: %s)" % ["FAIL-as-expected" if not f1.is_empty() else "UNEXPECTED-PASS", f1.size(), str(f1)])
+	ok(f1.size() == 1 and str(f1[0]).begins_with("FakeLazy.rx assigns a static"), "self-check: a lazy `if _rx == null: _rx = ...` two classes below the entry is found")
+	var fake_q := {"E": {"fns": {"go": "\tFakeStat.cache = {}\n"}, "statics": []}, "FakeStat": {"fns": {}, "statics": ["cache"]}}
+	ok(not _thread_problems("E", "go", fake_q).is_empty(), "self-check: a qualified `Class.static = ...` is found")
+	var fake_m := {"E": {"fns": {"go": "\t_q.append(1)\n"}, "statics": ["_q"]}}
+	ok(not _thread_problems("E", "go", fake_m).is_empty(), "self-check: a mutating call on an own static is found")
+	var fake_n := {"E": {"fns": {"go": "\tvar b = FakeStat.new()\n"}, "statics": []}, "FakeStat": {"fns": {"_init": "\t_count += 1\n"}, "statics": ["_count"]}}
+	ok(not _thread_problems("E", "go", fake_n).is_empty(), "self-check: a static written in `_init` of a class built with .new() is found")
+	var fake_f := {"E": {"fns": {"go": "\tDirAccess.rename_absolute(a, b)\n"}, "statics": []}}
+	ok(not _thread_problems("E", "go", fake_f).is_empty(), "self-check: a file move is found")
+	var fake_l := {"E": {"fns": {"go": "\tSongStore.list()\n"}, "statics": []}, "SongStore": table["SongStore"]}
+	ok(not _thread_problems("E", "go", fake_l).is_empty(), "self-check: calling SongStore.list() is found")
+	var fake_ok := {"E": {"fns": {"go": "\tvar a = _cfg == \"x\"\n\tvar b = _cfg.get(1)\n\tvar _cfg2 = 3\n\tvar s := Other.val\n"}, "statics": ["_cfg"]}, "Other": {"fns": {}, "statics": ["val"]}}
+	ok(_thread_problems("E", "go", fake_ok).is_empty(), "self-check: reading a static (==, .get, a same-named local) is not a problem")
