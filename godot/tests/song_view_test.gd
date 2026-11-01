@@ -591,10 +591,9 @@ func _test_add_gate() -> void:
 	await _frames(3)
 	ok(added[0] == 2 and not Sheet.is_open(), "after consent: [+ 곡 추가] goes straight to the add screen")
 	ok(Api.sent_count == sent2, "the consent and add steps sent no request themselves (Api.sent_count unchanged)")
-	# a local AI says nothing leaves the PC
-	_connect_pc(true, "ollama")
-	ok(SongView.consent_text().contains("밖으로 나가지 않아요") and SongView.consent_text().contains("AI 서비스"), "with a local AI (Ollama) the sheet says nothing leaves the PC")
+	# the only AI is the online one: the sheet always says the lyrics go to the AI service (there is no "stays on this PC" line)
 	_connect_pc(true)
+	ok(SongView.consent_text().contains("AI 서비스") and not SongView.consent_text().contains("밖으로 나가지 않아요"), "the consent text names the AI service and has no 'nothing leaves the PC' line")
 	# full: 40 songs
 	v.loader = func() -> Dictionary:
 		return {"list": [], "orphans": [], "usage": {"songs": 40, "bytes": 5 * 1048576, "max_songs": 40, "max_bytes": 400 * 1048576}, "quarantined": []}

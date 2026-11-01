@@ -58,9 +58,6 @@ var _test_player: AudioStreamPlayer
 var _scheme_value: Label
 var _font_value: Label
 var _font_sample: Label
-var _engine_ob: OptionButton
-var _engine_ids: Array = []
-var _engine_note: Label
 var _reset_button: Button
 ## Phone standalone cards (null until built): the 처리 위치 card, the 기능 현황 table, the voice engine choice, the
 ## per-language voice lists.
@@ -259,7 +256,7 @@ func _build_default_content() -> void:
 			_build_processing()
 	else:
 		_build_status("engine", "AI 엔진 상태")
-		_add_custom("engine", _engine_section())
+		_add_custom("engine", AiConnectCard.build(self))
 	_add_custom("learning", _start_block())
 	if standalone:
 		_add_custom("learning", _sources_block())
@@ -736,14 +733,13 @@ func _update_status() -> void:
 			parts.append("일본어 음성 " + ("✓" if tts.get("ja", false) else "✗"))
 			parts.append("채점 " + ("✓" if h.get("score", false) else "✗"))
 			var llm_ok: bool = bool(h.get("llm", false))
-			var llm_name: String = str(h.get("llm_model", "")) if Backend.llm_provider() == "ollama" else Backend.llm_label()
-			parts.append("AI %s %s" % [llm_name, "✓" if llm_ok else "✗"])
+			parts.append("AI %s %s" % [Backend.llm_label(), "✓" if llm_ok else "✗"])
 			text = " · ".join(parts)
 			dot_color = Pal.OK if llm_ok else Pal.WARN
-			if not llm_ok:
+			if Backend.llm_missing():
 				hint = Backend.llm_missing_text()
-			elif h.get("llm_fallback") is Dictionary and bool((h["llm_fallback"] as Dictionary).get("active", false)):
-				hint = str((h["llm_fallback"] as Dictionary).get("reason", ""))  # e.g. limit reached -> local AI answers
+			elif Backend.llm_state() == "blocked" or (h.get("llm_fallback") is Dictionary and bool((h["llm_fallback"] as Dictionary).get("active", false))):
+				hint = Backend.llm_missing_text()  # limit / busy: the reason and the time to try again
 		Backend.Status.FAILED:
 			text = Backend.message
 			dot_color = Pal.BAD
@@ -754,97 +750,6 @@ func _update_status() -> void:
 	_status_dot.add_theme_stylebox_override("panel", UI.style(dot_color, Color(0, 0, 0, 0), 0, 99, 0, 0))
 	if _llm_hint != null and is_instance_valid(_llm_hint):
 		_llm_hint.text = hint
-
-
-# -------- AI engine choice (PC)
-
-func _engine_section() -> Control:
-	var box := UI.vbox(6)
-	box.add_child(UI.label("AI 엔진", "ListMain"))
-	box.add_child(UI.label("레슨 만들기, 원어민 대화, 교정에 쓰는 AI예요. 음성 인식·발음 채점·목소리·문법 검사는 어느 쪽이든 이 PC에서 무료로 돌아가요.", "Small"))
-	var row := UI.flow(12, 8) # the test button drops to a second line in a narrow window
-	_engine_ob = UI.option_button(["불러오는 중…"], 0)
-	_engine_ob.custom_minimum_size = Vector2(320, 0)
-	_engine_ob.disabled = true
-	_engine_ob.item_selected.connect(_on_engine_selected)
-	row.add_child(_engine_ob)
-	var tb := UI.button("연결 시험", "soft", Pal.PRIMARY)
-	tb.pressed.connect(_on_engine_test)
-	row.add_child(tb)
-	box.add_child(row)
-	_engine_note = UI.label("", "Small")
-	box.add_child(_engine_note)
-	_load_engines()
-	return box
-
-
-func _load_engines() -> void:
-	var req = Api.get_json("/llm", 10.0, false)
-	var res: Dictionary = await req.wait()
-	if _engine_ob == null or not is_instance_valid(_engine_ob):
-		return
-	if not res["ok"] or not (res["data"] is Dictionary):
-		_engine_ob.set_item_text(0, "AI 엔진 목록을 불러오지 못했어요")
-		return
-	var d: Dictionary = res["data"]
-	_engine_ob.clear()
-	_engine_ids = []
-	var sel := 0
-	for o in d.get("options", []):
-		var od: Dictionary = o
-		var id: String = str(od.get("id", ""))
-		if id != "opencode" and id != "ollama":  # the app offers exactly these two engines
-			continue
-		var label: String = str(od.get("label", id))
-		if not bool(od.get("available", false)):
-			label += " · 설치 안 됨"
-		_engine_ob.add_item(label)
-		_engine_ids.append(id)
-		if id == str(d.get("provider", "opencode")):
-			sel = _engine_ids.size() - 1
-	_engine_ob.select(sel)
-	_engine_ob.disabled = false
-	_engine_note.text = _engine_note_text(str(d.get("provider", "opencode")))
-	var fb = d.get("llm_fallback", {})
-	if fb is Dictionary and bool((fb as Dictionary).get("active", false)) and str((fb as Dictionary).get("reason", "")) != "":
-		_engine_note.text += "\n" + str((fb as Dictionary)["reason"])  # e.g. "AI 엔진을 쓸 수 없어요: …" when no AI answers at all
-	UI.fix_cjk(_engine_ob)
-
-
-func _engine_note_text(p: String) -> String:
-	if p == "ollama":
-		return "인터넷 없이 이 PC에서만 돌아가요. 무료이지만 작은 모델이라 가끔 어색한 답이나 애매한 문제가 나와요."
-	return "무료 DeepSeek V4.1 Flash를 OpenCode로 써요. 대화 한 턴에 3~4초쯤 걸리고, 쓸 수 없을 때는 자동으로 오프라인 로컬 AI가 대신 답해요."
-
-
-func _on_engine_selected(idx: int) -> void:
-	if idx < 0 or idx >= _engine_ids.size():
-		return
-	var p: String = _engine_ids[idx]
-	_engine_ob.disabled = true
-	var req = Api.post_json("/llm", {"provider": p}, 15.0, true)
-	var res: Dictionary = await req.wait()
-	if _engine_ob == null or not is_instance_valid(_engine_ob):
-		return
-	_engine_ob.disabled = false
-	if res["ok"]:
-		Toast.ok("AI 엔진을 %s(으)로 바꿨어요." % str(Backend.LLM_LABELS.get(p, p)))
-		_engine_note.text = _engine_note_text(p)
-		Backend.refresh_health()
-	else:
-		_load_engines()
-
-
-func _on_engine_test() -> void:
-	_engine_note.text = "연결을 시험하는 중이에요…"
-	var req = Api.post_json("/llm/test", {}, 120.0, false)
-	var res: Dictionary = await req.wait()
-	if _engine_note == null or not is_instance_valid(_engine_note):
-		return
-	if res["ok"] and res["data"] is Dictionary:
-		_engine_note.text = "연결 성공 · %s · %.1f초 걸렸어요." % [Backend.llm_label(), float((res["data"] as Dictionary).get("seconds", 0.0))]
-	else:
-		_engine_note.text = "연결 실패: " + str(res["error"])
 
 
 # -------- danger: wipe the record

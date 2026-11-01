@@ -39,6 +39,15 @@ func _size_window(want: Vector2i) -> void:
 		await _frames(3)
 
 
+## PC: the "engine" section holds exactly one AiConnectCard and no OptionButton. Phone: no AiConnectCard anywhere.
+func _ai_section_ok(sv: SettingsView) -> bool:
+	var cards: Array = sv.find_children("*", "AiConnectCard", true, false)
+	if _phone:
+		return cards.is_empty()
+	var grp: Control = sv._secs["engine"]["group"]
+	return cards.size() == 1 and grp.is_ancestor_of(cards[0] as Node) and grp.find_children("*", "OptionButton", true, false).is_empty()
+
+
 func _ready() -> void:
 	_phone = Platform.is_phone()
 	print("== settings_view test start (%s) ==" % ("phone" if _phone else "pc"))
@@ -193,7 +202,7 @@ func _test_standalone() -> void:
 	ok(sv.find_children("*", "SyncPanel", true, false).size() == 1 and not sv.section_visible("sync"), "standalone: the SyncPanel is mounted and, without a SyncManager, empty and hidden")
 	ok(sv.section_visible("danger") and sv.section_visible("display") and sv.section_visible("voice") and sv.section_visible("learning"), "standalone: learning, voice, display and danger show")
 	ok(sv.section_visible("engine") == (not _phone), "the engine section shows on the PC only (%s)" % str(sv.section_visible("engine")))
-	ok((sv._engine_ob != null) == (not _phone), "the AI engine dropdown exists on the PC only")
+	ok(_ai_section_ok(sv), "the AI section holds exactly one AiConnectCard and no OptionButton (PC); the phone has no AiConnectCard")
 	sv.queue_free()
 	await _frames(2)
 
@@ -224,7 +233,7 @@ func _test_standalone_panels() -> void:
 	else:
 		ok(sv.cap_panel == null and sv.mode_box == null and sv.tts_engine_box == null, "PC: standalone_panels=true builds nothing")
 		ok(sv.find_children("*", "CapabilityPanel", true, false).is_empty(), "PC: no CapabilityPanel")
-		ok(sv._engine_ob != null and sv.section_visible("engine"), "PC: the engine section is the AI engine one")
+		ok(_ai_section_ok(sv) and sv.section_visible("engine"), "PC: the engine section is the AI connection one (one AiConnectCard, no OptionButton)")
 		ok(not text.contains("처리 위치") and not text.contains("기능 현황") and not text.contains("읽어 주는 목소리") and not text.contains("데이터 출처"), "PC: none of the new headings is on the screen")
 	sv.queue_free()
 	await _frames(2)
@@ -453,7 +462,7 @@ func _test_today_settings() -> void:
 	var sv := SettingsView.new()
 	_stage(sv)
 	await _frames(4)
-	ok((sv._engine_ob != null) == (not _phone), "_engine_ob: set on the PC, null on the phone")
+	ok(_ai_section_ok(sv), "the AI section: one AiConnectCard and no OptionButton on the PC, no AiConnectCard on the phone")
 	var link_cls := "RemoteLinkPanel" if _phone else "PhoneLinkPanel"
 	ok(sv.find_children("*", link_cls, true, false).size() == 1, "the %s is mounted once" % link_cls)
 	ok(sv.find_children("*", "SyncPanel", true, false).size() == 1, "the SyncPanel is mounted once (by the settings screen)")

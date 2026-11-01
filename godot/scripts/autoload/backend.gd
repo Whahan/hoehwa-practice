@@ -45,12 +45,20 @@ func is_ready() -> bool:
 	return status == Status.READY
 
 
-## True when the server answers but its LLM is not up (Ollama not running).
+## True when the server answers but its AI cannot be used yet: no login (`not_connected`), no OpenCode (`not_installed`)
+## or an old PC program that says `llm: false`. `blocked` (limit / busy, still tried on every call) is not "missing".
 func llm_missing() -> bool:
-	return status == Status.READY and not bool(health.get("llm", false))
+	if status != Status.READY:
+		return false
+	if not bool(health.get("llm", false)):
+		return true
+	var st: String = llm_state()
+	return st == "not_connected" or st == "not_installed"
 
 
-const LLM_LABELS := {"opencode": "DeepSeek V4.1 Flash (무료 · OpenCode)", "ollama": "오프라인 로컬 (qwen3:8b)", "openai_api": "API 키 엔진"}
+const LLM_LABELS := {"opencode": "DeepSeek V4.1 Flash (무료 · OpenCode)", "openai_api": "API 키 엔진"}
+const LLM_STATES := ["ready", "not_connected", "not_installed", "blocked"]
+const NOT_CONNECTED_PHONE_TEXT := "AI가 아직 연결되지 않았어요. PC의 회화 연습 설정에서 'AI 연결하기'를 눌러 주세요."
 
 
 func llm_provider() -> String:
@@ -61,14 +69,28 @@ func llm_label() -> String:
 	return str(LLM_LABELS.get(llm_provider(), llm_provider()))
 
 
-## What to tell the person when the selected AI engine is not usable.
-func llm_missing_text() -> String:
-	if llm_provider() == "ollama":
-		return "Ollama를 실행해 주세요. 오프라인 로컬 AI로 레슨을 만들고 대화하려면 Ollama 앱이 켜져 있어야 해요."
-	if llm_provider() == "openai_api":
-		return "API 키가 없어요. 설정 → AI 엔진에서 다른 엔진을 골라 주세요."
-	return "무료 DeepSeek(OpenCode)를 쓸 수 없고 오프라인 로컬 AI(Ollama)도 꺼져 있어요. OpenCode를 설치한 뒤 터미널에서 opencode auth login 으로 로그인하거나, Ollama를 실행해 주세요."
+## `ready | not_connected | not_installed | blocked` from /health. An old PC program (no `llm_state`) is derived from `llm`.
+func llm_state() -> String:
+	var v: Variant = health.get("llm_state", "")
+	if v is String and (v as String) in LLM_STATES:
+		return v
+	return "ready" if bool(health.get("llm", false)) else "not_connected"
 
+
+## What to tell the person when the AI cannot be used (by `llm_state`). The phone is only told to use the PC.
+func llm_missing_text() -> String:
+	var st: String = llm_state()
+	if st == "blocked":
+		var fb: Variant = health.get("llm_fallback", {})
+		var why: String = str((fb as Dictionary).get("reason", "")) if fb is Dictionary else ""
+		return why if why != "" else "AI를 잠시 쓸 수 없어요. 잠시 뒤 다시 시도해 주세요."
+	if llm_provider() == "openai_api" and st != "ready":
+		return "API 키가 없어요. backend 폴더의 config.json 에서 openai_api 설정을 확인해 주세요."
+	if remote_mode or Platform.is_phone():
+		return NOT_CONNECTED_PHONE_TEXT
+	if st == "not_installed":
+		return "AI 구성 요소가 없어요. [AI 연결하기]에서 받을 수 있어요."
+	return "AI가 아직 연결되지 않았어요. [AI 연결하기]에서 한 번만 연결하면 대화와 AI 레슨을 쓸 수 있어요."
 
 
 func _set_status(s: Status, msg: String = "") -> void:
