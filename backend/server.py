@@ -2860,7 +2860,7 @@ def health():
             "llm": llm_available(), "llm_model": CFG["llm_model"], "llm_provider": llm_provider(), "score": _stt_model is not None and _ojt is not None,
             "phoneme": features.phoneme_ready(), "tatoeba": readmode.tatoeba_ready(),
             "grammar": grammar.installed(), "llm_fallback": _fallback_status(),
-            "song": song.available(), "song_v": song.SONG_V}
+            "song": song.available(), "song_v": song.SONG_API_V}
 
 
 def _fallback_status():
