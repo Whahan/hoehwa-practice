@@ -8,6 +8,7 @@ installed or generated folders (models, data, cache, logs, tools, .venv), song s
 song.json, memo.json, *.lrc, audio files mp3 m4a ogg wav flac opus), unsafe entry names, or when
 backend/config.json is not byte-for-byte the shipped neutral default config.
 """
+import json
 import re
 import sys
 import zipfile
@@ -71,6 +72,25 @@ if cfg_name not in names:
     bad.append("backend/config.json missing")
 elif z.read(cfg_name) != open(default_cfg, "rb").read():
     bad.append("backend/config.json is not identical to %s" % default_cfg)
+# the shipped default prefs come from the build PC: personal choices (consents, mic) must never ship
+prefs_name = root + "defaults/prefs.json"
+if prefs_name in names:
+    def _personal_keys(v, path=""):
+        out = []
+        if isinstance(v, dict):
+            for k, x in v.items():
+                if k == "mic_device" or k.endswith("_consent"):
+                    out.append(path + k)
+                out += _personal_keys(x, path + k + ".")
+        elif isinstance(v, list):
+            for x in v:
+                out += _personal_keys(x, path)
+        return out
+    try:
+        for k in _personal_keys(json.loads(z.read(prefs_name).decode("utf-8"))):
+            bad.append("defaults/prefs.json: personal setting %s" % k)
+    except ValueError:
+        bad.append("defaults/prefs.json is not valid JSON")
 for b in bad:
     print("VIOLATION", b)
 print("ZIPCHECK_RESULT %s (%d files in %s)" % ("FAIL" if bad else "OK", len(names), zpath))

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Makes this PC's prefs.json portable: drops mic_device and any value that looks like an absolute path.
+"""Makes this PC's prefs.json portable: drops mic_device, every *_consent choice (each user must agree
+themselves) and any value that looks like an absolute path.
 
     python sanitize_prefs.py <prefs.json in> <prefs.json out>
 """
@@ -15,7 +16,7 @@ def clean(v, key=""):
     if isinstance(v, dict):
         out = {}
         for k, x in v.items():
-            if k in DROP_KEYS:
+            if k in DROP_KEYS or k.endswith("_consent"):
                 print("  dropped key", k)
                 continue
             c = clean(x, k)
