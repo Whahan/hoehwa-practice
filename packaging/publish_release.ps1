@@ -1,4 +1,6 @@
-﻿# Publishes a GitHub release: builds the full installer + update zip, writes SHA256SUMS.txt and uploads them.
+﻿# Publishes a GitHub release: builds setup.exe (Inno Setup) + update zip, writes SHA256SUMS.txt and uploads them.
+# Assets: hoehwa-practice-setup.exe (a version-less name = a permanent .../releases/latest/download/ link), hoehwa-practice-update-<v>.zip,
+# SHA256SUMS.txt (+ the APK with -WithApk). The old setup zip is not published any more.
 #   powershell -ExecutionPolicy Bypass -File packaging\publish_release.ps1 -Version 1.0.0 -Notes "바뀐 점 ..."
 #   add -DryRun to run every check and the build but stop before anything is pushed or uploaded,
 #   add -ScanOnly to run just the secret/personal-data scan of the tracked files.
@@ -155,7 +157,7 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "build_dist.ps1 failed" }
 }
 $prefix = if ($rel.asset_prefix) { $rel.asset_prefix } else { "app" }
-$names = @("$prefix-setup-$Version.zip", "$prefix-update-$Version.zip")
+$names = @("$prefix-setup.exe", "$prefix-update-$Version.zip")
 if ($WithApk) {
     $apkName = "$prefix-android-$Version.apk"
     $apkInRel = Join-Path $RelDir $apkName
@@ -194,7 +196,45 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $RelDir "SHA256SUMS.txt"))
     $h, $n = $line.Trim() -split "\s+", 2
     if ((Get-FileHash -LiteralPath (Join-Path $RelDir $n) -Algorithm SHA256).Hash.ToLower() -ne $h) { throw "checksum mismatch: $n" }
 }
+# the files about to be published are checked again here, whether they were just built or came from -SkipBuild:
+#  - the update zip goes through check_zip.py (secrets / personal data / dev files / manifest version / required installer files)
+#  - the setup.exe must be a real Windows program of a sane size (its payload was checked by build_dist.ps1 before it was compiled)
+#  - the old setup zip must not be in the release folder's asset list
+$VenvPy = Join-Path $App "backend\.venv\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $VenvPy)) { throw "dev venv python not found (needed for check_zip.py): $VenvPy" }
+$updZip = Join-Path $RelDir "$prefix-update-$Version.zip"
+$zc = Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "check_zip.py"), $updZip, (Join-Path $App "packaging\defaults\config.default.json")) -AllowFail
+$zc[0] | Select-Object -Last 3 | ForEach-Object { Write-Host "    $_" }
+if ($zc[1] -ne 0) { throw "check_zip.py failed on $updZip" }
+$setupPath = Join-Path $RelDir "$prefix-setup.exe"
+$sf = Get-Item -LiteralPath $setupPath
+if ($sf.Length -lt 60MB -or $sf.Length -gt 130MB) { throw ("setup.exe has an odd size ({0:N1} MB, expected 60-130 MB): $setupPath" -f ($sf.Length / 1MB)) }
+$fs = [System.IO.File]::OpenRead($setupPath); try { $mz = New-Object byte[] 2; [void]$fs.Read($mz, 0, 2) } finally { $fs.Dispose() }
+if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) { throw "setup.exe is not a Windows program (no MZ header): $setupPath" }
+$oldSetup = Get-ChildItem -LiteralPath $RelDir -Filter "$prefix-setup-*.zip" -ErrorAction SilentlyContinue
+if ($oldSetup) { throw ("the old setup zip must not be published any more: " + ($oldSetup.Name -join ", ")) }
+$sumTxt = Get-Content -LiteralPath (Join-Path $RelDir "SHA256SUMS.txt") -Raw -Encoding UTF8
+foreach ($n in $names) { if ($sumTxt -notmatch ("(?m)^[0-9a-f]{64}\s+" + [regex]::Escape($n) + "\s*$")) { throw "SHA256SUMS.txt has no line for $n" } }
 Write-Host "    OK: assets and checksums verified ($RelDir)"
+
+# release notes: the install text (also written next to the assets in a dry run, so it can be read before a real release)
+function Get-ReleaseBody([string]$notes) {
+    $b = $notes + "`n`n## 설치 / 업데이트`n" +
+        "- 처음 설치: ``$prefix-setup.exe`` 를 받아 더블클릭하세요. 질문 없이 진행 막대만 보이고, 끝나면 바탕화면 바로가기가 생기고 앱이 열려요. 인터넷이 필요하고 10~15분쯤 걸려요.`n" +
+        "- 이미 설치한 경우: 시작 메뉴의 '회화 연습 업데이트' (또는 프로그램 폴더의 ``업데이트.bat``)를 실행하세요. 이 릴리스의 update zip 을 자동으로 받습니다. (옛 zip 으로 설치한 폴더도 그대로 업데이트돼요.)`n" +
+        "- 폴더를 바꾸려면: ``$prefix-setup.exe /DIR=""D:\회화연습""``  (경로는 95자 이하)`n" +
+        "- 제거: Windows 설정 > 앱 에서 '회화 연습'을 제거하세요. 학습 기록은 지우지 않고 남겨 둬요.`n" +
+        "- 처음 AI 대화·AI 레슨을 쓸 때 앱에서 [AI 연결하기]를 한 번 하면 돼요 (무료 DeepSeek).`n`n" +
+        "## Windows 경고가 뜰 때 (서명이 없는 프로그램)`n" +
+        "Windows가 ""Windows의 PC 보호"" 창을 띄우면 **[추가 정보]** 를 누른 뒤 **[실행]** 을 누르세요. 서명이 없는 새 프로그램이라 나오는 경고예요. 브라우저가 ""흔히 다운로드되지 않는 파일""이라고 하면 **[유지]** 를 고르세요. 안심하려면 받은 파일의 해시를 이 릴리스의 ``SHA256SUMS.txt`` 와 비교하세요: ``certutil -hashfile $prefix-setup.exe SHA256```n"
+    return $b
+}
+if ($DryRun) {
+    $previewNotes = if ($Notes.Trim()) { $Notes } else { "회화 연습 $Tag" }
+    $previewPath = Join-Path $RelDir "release_body_preview.md"
+    [System.IO.File]::WriteAllText($previewPath, (Get-ReleaseBody $previewNotes), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "    release body preview: $previewPath"
+}
 if ($DryRun) {
     Write-Host ""
     Write-Host "DRY RUN OK - stopped before git/gh. A real run would now create release $Tag on $Repo with:" -ForegroundColor Green
@@ -206,7 +246,7 @@ if ($DryRun) {
 Write-Host "== GitHub release $Tag" -ForegroundColor Cyan
 if (-not $Notes.Trim()) { $Notes = "회화 연습 $Tag" }
 $notesTmp = Join-Path $env:TEMP ("hoehwa_release_notes_{0}.md" -f $PID)
-$body = $Notes + "`n`n## 설치 / 업데이트`n- 처음 설치: ``$prefix-setup-$Version.zip`` 을 받아 압축을 풀고 ``설치.bat`` 실행`n- 이미 설치한 경우: 프로그램 폴더의 ``업데이트.bat`` 실행 (이 릴리스의 update zip 을 자동으로 받습니다)`n"
+$body = Get-ReleaseBody $Notes
 if ($WithApk) {
     $body += "`n## 휴대폰(안드로이드) 앱`n" +
         "- ``$apkName`` 을 휴대폰에서 받아 설치합니다. PC 앱도 같은 버전($Version) 이상이어야 휴대폰이 붙습니다.`n" +

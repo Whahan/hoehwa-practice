@@ -3,6 +3,9 @@
 
     python check_zip.py <zip> <config.default.json> [--allow-models] [--allow-progress]
 
+Also fails when vendor/install_tools.py, vendor/tools.lock.json, vendor/update_helper.py or stop_app.ps1 are missing, or manifest.json has no
+x.y.z version / installer_version, or defaults/prefs.json still has lesson_cursor (the learning position), mic_device or a *_consent choice.
+
 Fails (exit 1) when the zip contains dev files (tests, build scripts, .gitignore), secrets / personal data,
 installed or generated folders (models, data, cache, logs, tools, .venv), song study files (songs/, song_jobs/,
 song.json, memo.json, *.lrc, audio files mp3 m4a ogg wav flac opus), unsafe entry names, or when
@@ -79,7 +82,7 @@ if prefs_name in names:
         out = []
         if isinstance(v, dict):
             for k, x in v.items():
-                if k == "mic_device" or k.endswith("_consent"):
+                if k in ("mic_device", "lesson_cursor") or k.endswith("_consent"):
                     out.append(path + k)
                 out += _personal_keys(x, path + k + ".")
         elif isinstance(v, list):
@@ -91,6 +94,29 @@ if prefs_name in names:
             bad.append("defaults/prefs.json: personal setting %s" % k)
     except ValueError:
         bad.append("defaults/prefs.json is not valid JSON")
+# files the installer and updater need (install.ps1 step 1 exits 10 without them, update.ps1 skips the tools refresh)
+for need in ("vendor/install_tools.py", "vendor/tools.lock.json", "vendor/update_helper.py", "stop_app.ps1"):
+    if root + need not in names:
+        bad.append("%s is missing from the package" % need)
+if root == "":
+    pass  # update zip: same files at the zip root
+elif root + "install.ps1" not in names:
+    bad.append("install.ps1 is missing from the package")
+# manifest.json must carry a version (update.ps1 and install.ps1 both read it) and the installer generation
+man_name = root + "manifest.json"
+if man_name not in names:
+    bad.append("manifest.json missing")
+else:
+    try:
+        man = json.loads(z.read(man_name).decode("utf-8-sig"))
+        if not isinstance(man.get("version"), str) or not re.match(r"^\d+\.\d+\.\d+$", man.get("version", "")):
+            bad.append("manifest.json: version is missing or not x.y.z")
+        if not isinstance(man.get("installer_version"), int):
+            bad.append("manifest.json: installer_version is missing")
+        if not isinstance(man.get("files"), dict) or not man["files"]:
+            bad.append("manifest.json: no files list")
+    except ValueError:
+        bad.append("manifest.json is not valid JSON")
 for b in bad:
     print("VIOLATION", b)
 print("ZIPCHECK_RESULT %s (%d files in %s)" % ("FAIL" if bad else "OK", len(names), zpath))

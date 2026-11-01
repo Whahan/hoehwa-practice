@@ -1,5 +1,12 @@
-﻿# Builds the one-click install package:  app\packaging\out\회화연습_설치패키지_<yyyyMMdd>.zip
-#   powershell -ExecutionPolicy Bypass -File build_dist.ps1 [-IncludeModels] [-IncludeProgress] [-SkipExport] [-Release 1.2.3 [-NotesFile notes.md]]
+﻿# Builds the one-click installer:  setup.exe (Inno Setup, packaging\setup\hoehwa.iss) + the update zip.
+#   powershell -ExecutionPolicy Bypass -File build_dist.ps1 [-SkipExport] [-Release 1.2.3 [-NotesFile notes.md]] [-TestSetup] [-OutDir <dir>]
+#   Without -Release : <OutDir>\hoehwa-practice-setup.exe (version 0.0.0, a local/dev build).
+#   With    -Release : also <OutDir>\회화연습_update_<v>.zip and <OutDir>\release_<v>\ (hoehwa-practice-setup.exe, hoehwa-practice-update-<v>.zip,
+#                      SHA256SUMS.txt, latest.json). The old setup zip is no longer published. The payload zip is built only to run check_zip.py on
+#                      exactly the files that go into setup.exe, then deleted.
+#   -TestSetup : also compiles <OutDir>\hoehwa-practice-setup-test.exe (/DTestBuild=1: another AppId, test hooks; never published).
+#   -IncludeModels / -IncludeProgress (a personal copy for your own PC): no setup.exe, the old-style zip stays in <OutDir>.
+# Needs Inno Setup 6.7.4 (packaging\get_build_tools.ps1 installs it; or -Iscc <path> / HOEHWA_ISCC).
 # Re-runnable: everything (exe, backend source, pip lock, model lock) is regenerated from the live state of this PC.
 param(
     [switch]$IncludeModels,    # also pack backend\models\hf (about 2 GB more, fully offline model install)
@@ -10,7 +17,10 @@ param(
     [string]$Release,          # x.y.z : also build the update zip + out\release_<x.y.z>\ (GitHub assets, SHA256SUMS.txt)
     [string]$Notes = "",       # release notes (only written into the local latest.json used for testing)
     [string]$NotesFile,        # same, read from a UTF-8 file (publish_release.ps1 uses this: no quoting problems, no empty argument)
-    [string]$TestRequirementsLock  # (tests only) ship this file as vendor\requirements.lock.txt instead of the real lock
+    [string]$TestRequirementsLock,  # (tests only) ship this file as vendor\requirements.lock.txt instead of the real lock
+    [switch]$TestSetup,        # also compile hoehwa-practice-setup-test.exe (test hooks, other AppId) next to the real one
+    [string]$Iscc = $(if ($env:HOEHWA_ISCC) { $env:HOEHWA_ISCC } else { "" }),   # Inno Setup compiler (default: the version pinned in tools.lock.json under %LOCALAPPDATA%\hoehwa-practice\buildtools)
+    [string]$SetupLzma = "lzma2/max"   # Inno compression (tests may use lzma2/fast)
 )
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
@@ -36,7 +46,8 @@ if ($Release) {
     $Version = "0.0.0"   # local/dev build: any published release counts as newer
     $Tag = $Date
 }
-$ZipName = if ($IncludeModels) { "회화연습_설치패키지_${Tag}_모델포함.zip" } else { "회화연습_설치패키지_${Tag}.zip" }
+$Personal = ($IncludeModels -or $IncludeProgress)   # a copy for your own PC: keep the zip, build no setup.exe
+$ZipName = if ($IncludeModels) { "회화연습_설치패키지_${Tag}_모델포함.zip" } elseif ($IncludeProgress) { "회화연습_설치패키지_${Tag}_개인용.zip" } else { "payload_check_${Tag}.zip" }
 $ZipPath = Join-Path $OutDir $ZipName
 $utf8Bom = New-Object System.Text.UTF8Encoding($true)
 if ($NotesFile) { $Notes = (Get-Content -LiteralPath $NotesFile -Raw -Encoding UTF8) }
@@ -55,7 +66,16 @@ function Copy-WithBom([string]$src, [string]$dst) {
     [System.IO.File]::WriteAllText($dst, $text, $utf8Bom)
 }
 
+function Resolve-Iscc {
+    if ($Iscc) { if (Test-Path -LiteralPath $Iscc) { return (Resolve-Path -LiteralPath $Iscc).Path } throw "Inno Setup compiler not found: $Iscc" }
+    $lock = Get-Content -LiteralPath (Join-Path $Pkg "tools.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $c = Join-Path $env:LOCALAPPDATA ("hoehwa-practice\buildtools\innosetup-" + $lock.buildtools.innosetup.version + "\ISCC.exe")
+    if (-not (Test-Path -LiteralPath $c)) { throw "Inno Setup $($lock.buildtools.innosetup.version) is not installed ($c). Run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\get_build_tools.ps1" }
+    return $c
+}
 if (-not (Test-Path $VenvPy)) { throw "dev venv python not found: $VenvPy" }
+$IsccExe = $null
+if (-not $Personal) { $IsccExe = Resolve-Iscc }   # fail before the long steps, not after
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -Force }
 New-Item -ItemType Directory -Force $Dest | Out-Null
@@ -145,8 +165,13 @@ try {
         Copy-Item -LiteralPath $f $vdst
     }
     Copy-Item (Join-Path $Pkg "vendor\vendor.json") $vdst
-    foreach ($f in @("install_models.py", "check_env.py", "update_helper.py")) { Copy-Item (Join-Path $Pkg "installer\$f") $vdst }
+    foreach ($f in @("install_models.py", "check_env.py", "update_helper.py", "install_tools.py")) { Copy-Item (Join-Path $Pkg "installer\$f") $vdst }
+    # install.ps1 step 1 (exit 10) and update.ps1 need these two next to the other vendor files
+    Copy-Item -LiteralPath (Join-Path $Pkg "tools.lock.json") (Join-Path $vdst "tools.lock.json")
+    $tl = Get-Content -LiteralPath (Join-Path $vdst "tools.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not ($tl.schema -eq 1 -and $tl.opencode.variants.x64.sha256 -and $tl.jre.sha256)) { throw "vendor\tools.lock.json is not a valid tools lock" }
     foreach ($f in @("install.ps1", "uninstall.ps1", "update.ps1")) { Copy-WithBom (Join-Path $Pkg "installer\$f") (Join-Path $Dest $f) }
+    Copy-WithBom (Join-Path $Pkg "setup\stop_app.ps1") (Join-Path $Dest "stop_app.ps1")   # setup.exe / the uninstaller stop the app with it (only processes under the install folder, by PID)
     Copy-WithBom (Join-Path $Pkg "installer\사용법.txt") (Join-Path $Dest "사용법.txt")
     foreach ($f in @("설치.bat", "제거.bat", "업데이트.bat")) { Copy-Item -LiteralPath (Join-Path $Pkg "installer\$f") (Join-Path $Dest $f) }
     Copy-Item -LiteralPath (Join-Path $Pkg "release.json") (Join-Path $Dest "release.json")
@@ -184,17 +209,46 @@ try {
     $code = Run-Native $VenvPy (@("-X", "utf8", (Join-Path $Pkg "installer\update_helper.py"), "manifest", $Dest, $Version,
         "$($RelCfg.min_installer_version)", "$($RelCfg.installer_version)", (Join-Path $Dest "manifest.json"), "--exclude-from-update") + $notInUpdate)
     if ($code -ne 0) { throw "manifest failed" }
+    $mfCheck = Get-Content -LiteralPath (Join-Path $Dest "manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not $mfCheck.version -or [string]$mfCheck.version -ne $Version) { throw "manifest.json has no version or the wrong one (expected $Version)" }
+    if ([int]$mfCheck.installer_version -ne [int]$RelCfg.installer_version) { throw "manifest.json installer_version does not match release.json" }
     # last safety net: nothing secret / personal in the package
     $bad = Get-ChildItem -LiteralPath $Dest -Recurse -File | Where-Object { $_.Name -match '^(secrets\.json.*|auth\.json|\.env|lan_devices.*\.json.*|remote\.json|studylog\.json)$' -or ($_.Name -eq "progress.json" -and -not $IncludeProgress) }
     if ($bad) { throw ("secret/personal file in package: " + ($bad.FullName -join ", ")) }
     $code = Run-Native $VenvPy @("-X", "utf8", (Join-Path $Pkg "make_zip.py"), $Stage, $RootName, $ZipPath)
     if ($code -ne 0) { throw "zip failed" }
     $z = Get-Item -LiteralPath $ZipPath
-    Write-Host ("    full installer: {0} ({1:N1} MB)" -f $z.Name, ($z.Length / 1MB))
+    Write-Host ("    payload zip (check only): {0} ({1:N1} MB)" -f $z.Name, ($z.Length / 1MB))
     $zcArgs = @("-X", "utf8", (Join-Path $Pkg "check_zip.py"), $ZipPath, $DefaultCfg)
     if ($IncludeModels) { $zcArgs += "--allow-models" }
     if ($IncludeProgress) { $zcArgs += "--allow-progress" }
-    if ((Run-Native $VenvPy $zcArgs) -ne 0) { throw "setup zip check failed" }
+    if ((Run-Native $VenvPy $zcArgs) -ne 0) { throw "setup payload check failed" }
+
+    # ---------------------------------------------------------------- 7. setup.exe (Inno Setup) from the very files the zip check just passed
+    $SetupExe = $null
+    if (-not $Personal) {
+        Step "7/7 setup.exe (Inno Setup)"
+        $prefix0 = if ($RelCfg.asset_prefix) { $RelCfg.asset_prefix } else { "app" }
+        $iss = Join-Path $Pkg "setup\hoehwa.iss"
+        function Invoke-Iscc([int]$testBuild, [string]$outBase) {
+            $a = @("/Q", "/DStageDir=$Dest", "/DAppVersion=$Version", "/DOutDir=$OutDir", "/DOutBase=$outBase", "/DTestBuild=$testBuild", "/DLzma=$SetupLzma", $iss)
+            $c = Run-Native $IsccExe $a
+            if ($c -ne 0) { throw "ISCC failed ($c)" }
+            $f = Join-Path $OutDir ($outBase + ".exe")
+            if (-not (Test-Path -LiteralPath $f)) { throw "setup exe was not produced: $f" }
+            return $f
+        }
+        $SetupExe = Invoke-Iscc 0 "$prefix0-setup"
+        $sz = (Get-Item -LiteralPath $SetupExe).Length
+        Write-Host ("    setup.exe: {0} ({1:N1} MB)" -f (Split-Path $SetupExe -Leaf), ($sz / 1MB))
+        if ($sz -lt 60MB -or $sz -gt 130MB) { Write-Warning ("setup.exe is {0:N1} MB (expected 60-130 MB): check the payload" -f ($sz / 1MB)) }
+        if ($TestSetup) {
+            $te = Invoke-Iscc 1 "$prefix0-setup-test"
+            Write-Host ("    test setup: {0} (never publish this one)" -f $te)
+        }
+    } else {
+        Write-Host "    (personal copy: no setup.exe; the zip stays in $OutDir)" -ForegroundColor Yellow
+    }
 
     if ($Release) {
         # update package: only app files (manifest in_update), at the zip root, plus manifest.json
@@ -221,7 +275,10 @@ try {
         if (Test-Path -LiteralPath $RelDir) { Remove-Item -LiteralPath $RelDir -Recurse -Force }
         New-Item -ItemType Directory -Force $RelDir | Out-Null
         $prefix = if ($RelCfg.asset_prefix) { $RelCfg.asset_prefix } else { "app" }
-        $assets = [ordered]@{ ("$prefix-setup-$Version.zip") = $ZipPath; ("$prefix-update-$Version.zip") = $UZip }
+        if (-not $SetupExe) { throw "-Release needs the setup.exe (not a personal -IncludeModels/-IncludeProgress build)" }
+        # assets: a version-less setup name (a permanent .../releases/latest/download/<prefix>-setup.exe link) and the update zip.
+        # The old setup zip is not published any more. The update zip keeps the name the old update.ps1 looks for.
+        $assets = [ordered]@{ ("$prefix-setup.exe") = $SetupExe; ("$prefix-update-$Version.zip") = $UZip }
         $sumLines = @(); $assetList = @()
         foreach ($name in $assets.Keys) {
             $dst = Join-Path $RelDir $name
@@ -239,6 +296,7 @@ try {
         Get-Content -LiteralPath (Join-Path $RelDir "SHA256SUMS.txt") | ForEach-Object { Write-Host "      $_" }
     }
 } finally {
+    if (-not $Personal -and $ZipPath -and (Test-Path -LiteralPath $ZipPath)) { Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue }   # check-only payload zip
     foreach ($leftover in @($Stage, (Join-Path $OutDir "staging_update"))) {
         if (Test-Path -LiteralPath $leftover) {
             try { Remove-Item -LiteralPath $leftover -Recurse -Force -ErrorAction Stop }
@@ -247,4 +305,5 @@ try {
     }
 }
 Write-Host ""
-Write-Host ("DONE: {0}  ({1:N1} MB)  [{2:N0}s]" -f $z.FullName, ($z.Length / 1MB), $sw.Elapsed.TotalSeconds) -ForegroundColor Green
+if ($SetupExe) { $doneItem = Get-Item -LiteralPath $SetupExe } else { $doneItem = Get-Item -LiteralPath $ZipPath }
+Write-Host ("DONE: {0}  ({1:N1} MB)  [{2:N0}s]" -f $doneItem.FullName, ($doneItem.Length / 1MB), $sw.Elapsed.TotalSeconds) -ForegroundColor Green
