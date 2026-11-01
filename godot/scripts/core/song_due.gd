@@ -26,17 +26,29 @@ static func _count(v: Variant) -> int:
 	return 0
 
 
-## 곡 목록을 세어 `cache` 에 넣고 같은 값을 돌려준다. 스레드에서 불러도 된다(읽기만 한다).
+## 곡 목록을 세어 결과를 돌려준다. **공유 상태(`cache`)를 쓰지 않는다**: 작업 스레드에서 불러도 된다(읽기만 한다).
+## 결과를 `cache` 에 넣는 것은 메인 스레드의 몫이다(store). 정적 변수 대입은 스레드에 안전하지 않다.
 ## lister 가 비어 있으면 SongStore.list() + memo_summary. 시험 보호가 실제 곡 폴더를 막고 있으면 폴더를 열지 않고 0.
-static func scan(lister: Callable = Callable()) -> Dictionary:
+static func compute(lister: Callable = Callable()) -> Dictionary:
 	var now: int = int(Time.get_unix_time_from_system())
 	var raw: Variant = null
 	if lister.is_valid():
 		raw = lister.call()
 	elif not SongStore.blocked():
 		raw = _default_list(now)
-	var res: Dictionary = _tally(raw, now)
-	cache = res
+	return _tally(raw, now)
+
+
+## 메인 스레드 전용: compute() 결과를 `cache` 에 넣는다. 사전이 아니면 아무것도 바꾸지 않는다.
+static func store(res: Variant) -> void:
+	if res is Dictionary:
+		cache = (res as Dictionary).duplicate()
+
+
+## compute() + store(): 메인 스레드에서 바로 부르는 경우(시험·직접 호출). 스레드에서 부르지 말 것(compute 를 쓴다).
+static func scan(lister: Callable = Callable()) -> Dictionary:
+	var res: Dictionary = compute(lister)
+	store(res)
 	return res.duplicate()
 
 
