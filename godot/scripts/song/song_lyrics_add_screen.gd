@@ -20,7 +20,7 @@ extends Control
 ## 허브 계약:
 ##   signal closed                  화면을 떠난다.
 ##   signal song_added(song_id)     곡 저장이 끝났다. (closed 는 따로 나가지 않는다 — 허브가 화면을 바꾼다)
-##   func open(lang, args)          args: {"lang": "en"|"ja"}
+##   func open(lang, args)          args: {"lang": "en"|"ja", "title": 미리 채울 제목(선택), "artist": 미리 채울 가수(선택)}
 ##   func go_back()                 안드로이드 뒤로 가기 / 머리줄 버튼. 항상 true.
 ##   func on_hide()                 날아가는 LRCLIB 요청의 결과를 버린다.
 ## 시험용 장치: lrclib_base_url, lrclib_factory.
@@ -109,8 +109,8 @@ func open(l: String = "", args: Dictionary = {}) -> void:
 	var want: String = str(args.get("lang", l))
 	lang = want if want == "ja" else "en"
 	phase = "form"
-	title_text = ""
-	artist_text = ""
+	title_text = SongView.clip(str(args.get("title", "")), SongModel.LEN_TITLE) ## 제목으로 가사 찾기에서 넘어오면 제목이 채워져 있다
+	artist_text = SongView.clip(str(args.get("artist", "")), SongModel.LEN_TITLE)
 	duration_text = ""
 	source = "pasted"
 	pasted_text = ""

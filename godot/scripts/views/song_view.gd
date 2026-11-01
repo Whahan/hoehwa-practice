@@ -12,6 +12,8 @@ extends AppView
 ##   [가사만 추가] -> (처음이면 동의 시트) -> SongLyricsAddScreen (PC 없어도 됨, song_added(id)) -> SongMemoScreen (closed -> 목록)
 ##   곡 탭: kind "lyrics" -> SongMemoScreen, 음원 곡 -> SongStudyScreen ; 학습 화면 ⋯ 메뉴 "가사 외우기" (memo_requested(id)) -> SongMemoScreen (closed -> 목록)
 ##   목록 행의 "외운 줄 N/M" 은 SongStore.memo_summary 를 목록 스레드 안에서 읽는다 (화면 스레드는 파일을 읽지 않는다).
+## 제목으로 가사 찾기 (1.4.1, 설계 §2): 허브 맨 위의 검색 카드 [찾기] -> SongSearchScreen (PC 없어도 됨, song_added(id)) -> SongMemoScreen (closed -> 목록)
+##   검색 화면의 [가사 붙여넣기] -> 제목이 채워진 SongLyricsAddScreen. 카드는 LRCLIB 검색만 하므로 곡 추가와 달리 PC 연결·동의를 막지 않는다.
 ## 화면을 닫을 때는 on_hide() -> remove_child -> queue_free 로 해제한다 (Song 버스·녹음·요청이 그 자리에서 정리된다).
 ## 안드로이드 뒤로 가기: 시트가 열려 있으면 시트 먼저(main.gd 가 Sheet.handle_back 을 먼저 부르고, go_back 도 같은 순서를 지킨다), 그다음 화면.
 ## 화면을 여는 것과 같은 신호도 그대로 낸다 (시험 · 다른 연결용):
@@ -27,6 +29,7 @@ extends AppView
 signal add_requested
 signal lyrics_add_requested
 signal song_open_requested(song_id: String)
+signal search_requested(query: String) ## 검색 카드 [찾기] (두 글자 이상): 제목으로 가사 찾기 화면을 열어 달라
 
 const NAME_KO := {"en": "영어", "ja": "일본어"}
 const CONSENT_PREF := "song_consent"
@@ -44,9 +47,10 @@ const MSG_SAVED_HERE := "곡과 가사는 이 기기에만 저장돼요. 동기�
 var loader: Callable = Callable() ## () -> {"list","orphans","usage","quarantined","memo"(선택: id -> memo_summary)}; 비어 있으면 SongStore. 스레드에서 불린다.
 var use_thread: bool = true
 
+var lrclib_base_url: String = "" ## 시험: 제목으로 가사 찾기 화면이 쓸 LRCLIB 주소 (비어 있으면 실제 주소)
 var host_screens: bool = true ## false: 신호만 내고 하위 화면은 열지 않는다 (시험)
 var screen: Control = null ## 열려 있는 하위 화면 (SongAddScreen | SongCheckScreen | SongStudyScreen | SongLyricsAddScreen | SongMemoScreen), 없으면 null
-var screen_kind: String = "" ## "add" | "check" | "study" | "lyrics_add" | "memo"
+var screen_kind: String = "" ## "add" | "check" | "study" | "lyrics_add" | "memo" | "search"
 
 var state: String = "idle" ## idle | loading | ready | error
 var songs: Array = [] ## SongStore.list() 항목
@@ -58,6 +62,9 @@ var last_sheet: Sheet = null ## 마지막으로 연 시트 (시험용)
 
 var _page: PageScroll
 var _header: Control = null
+var _search_card: Control = null
+var _search_edit: LineEdit = null
+var _search_btn: Button = null
 var _add_btn: Button = null
 var _lyrics_btn: Button = null
 var _notice_box: VBoxContainer
@@ -89,6 +96,7 @@ func _ready() -> void:
 		]
 	_header = PageHeader.build("노래", "내 음악과 가사로 영어·일본어를 공부해요", actions)
 	c.add_child(_header)
+	_build_search_card(c)
 	if phone:
 		_add_btn = UI.button("+ 곡 추가", "primary", Pal.PRIMARY, 56.0)
 		_add_btn.pressed.connect(request_add)
@@ -109,6 +117,29 @@ func _ready() -> void:
 	set_process(false)
 	_render_notice()
 	_render_body()
+
+
+## 맨 위 검색 카드: 제목(가수도 적으면 더 정확해요) + [찾기]. 기존 [+ 곡 추가]·[가사만 추가]는 그 아래 보조 단추다.
+func _build_search_card(c: VBoxContainer) -> void:
+	var card: CardBox = UI.card("Card", 10)
+	card.name = "SearchCard"
+	card.body.add_child(UI.label("제목으로 가사 찾기", "Eyebrow", false))
+	var row := UI.hbox(8)
+	_search_edit = LineEdit.new()
+	_search_edit.name = "SearchInput"
+	_search_edit.max_length = SongModel.LEN_TITLE
+	_search_edit.placeholder_text = "곡 제목 (가수도 적으면 더 정확해요)"
+	_search_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_search_edit.custom_minimum_size.y = Ds.field_h()
+	_search_edit.text_submitted.connect(func(t: String) -> void: request_search(t))
+	row.add_child(_search_edit)
+	_search_btn = UI.button("찾기", "primary", Pal.PRIMARY, 56.0 if Platform.is_phone() else 44.0)
+	_search_btn.name = "BtnSearch"
+	_search_btn.pressed.connect(func() -> void: request_search(_search_edit.text))
+	row.add_child(_search_btn)
+	card.body.add_child(row)
+	_search_card = card
+	c.add_child(card)
 
 
 func refresh() -> void:
@@ -243,6 +274,17 @@ func notice_text() -> String:
 		"full":
 			return MSG_FULL % [int(usage.get("songs", 0)), fmt_bytes(int(usage.get("bytes", 0)))]
 	return ""
+
+
+## 검색 카드 [찾기]: 제목이 두 글자 이상이면 제목으로 가사 찾기 화면을 연다 (PC 가 없어도 된다).
+func request_search(q: String) -> void:
+	var t: String = q.strip_edges()
+	if t.length() < LrclibClient.MIN_QUERY_CHARS:
+		Toast.info(SongSearchScreen.MSG_SHORT)
+		return
+	search_requested.emit(t)
+	if host_screens:
+		open_screen("search", {"lang": Store.lang(), "q": t, "lrclib_base_url": lrclib_base_url})
 
 
 ## [+ 곡 추가]: 안내(PC 없음) → 동의 시트(처음 한 번) → add_requested.
@@ -528,7 +570,7 @@ func _song_row(list: ListGroup, s: Dictionary) -> void:
 
 const MSG_LOADING := "곡 목록을 읽는 중이에요. 잠시 뒤에 다시 눌러 주세요."
 
-## kind: "add" {lang} | "check" {id} | "study" {id, tab} | "lyrics_add" {lang} | "memo" {id}. 하나만 열린다 (열려 있으면 먼저 닫는다). 열었으면 true.
+## kind: "add" {lang} | "check" {id} | "study" {id, tab} | "lyrics_add" {lang, title?, artist?} | "memo" {id} | "search" {lang, q}. 하나만 열린다 (열려 있으면 먼저 닫는다). 열었으면 true.
 ## 목록을 읽는 동안에는 열지 않는다 (SongStore 를 두 곳에서 쓰지 않는다).
 func open_screen(kind: String, args: Dictionary = {}) -> bool:
 	if not host_screens:
@@ -552,6 +594,9 @@ func open_screen(kind: String, args: Dictionary = {}) -> bool:
 			s.connect("memo_requested", _on_memo_requested)
 		"lyrics_add":
 			s.connect("song_added", _on_lyrics_added)
+		"search":
+			s.connect("song_added", _on_lyrics_added)
+			s.connect("paste_requested", _on_search_paste)
 	_page.visible = false
 	add_child(s)
 	s.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -572,6 +617,8 @@ func _make_screen(kind: String) -> Control:
 			return SongLyricsAddScreen.new()
 		"memo":
 			return SongMemoScreen.new()
+		"search":
+			return SongSearchScreen.new()
 	return null
 
 
@@ -655,7 +702,21 @@ func _open_check_deferred(id: String, from_screen: Control) -> void:
 
 ## 가사만 곡을 저장했다 -> 외우기 화면으로 (화면을 바꾸는 일은 신호가 끝난 뒤에).
 func _on_lyrics_added(id: String) -> void:
+	if screen_kind == "search" and _search_edit != null:
+		_search_edit.text = "" # 찾은 가사를 저장했다: 다음에 올 때 같은 제목이 남아 있지 않게
 	_open_memo_deferred.call_deferred(id, screen)
+
+
+## 검색 화면의 [가사 붙여넣기]: 제목이 채워진 가사만 추가 화면으로 (화면을 바꾸는 일은 신호가 끝난 뒤에).
+func _on_search_paste(title: String, artist: String) -> void:
+	_open_paste_deferred.call_deferred(title, artist, screen)
+
+
+func _open_paste_deferred(title: String, artist: String, from_screen: Control) -> void:
+	if from_screen != screen or not is_instance_valid(from_screen): # the person left that screen first
+		return
+	if not open_screen("lyrics_add", {"lang": Store.lang(), "title": title, "artist": artist}):
+		_close_screen()
 
 
 ## 학습 화면 ⋯ 메뉴 "가사 외우기": 같은 곡을 외우기 화면으로 연다. 닫으면 목록으로 돌아간다.
@@ -760,6 +821,18 @@ func add_button() -> Button:
 
 func lyrics_button() -> Button:
 	return _lyrics_btn
+
+
+func search_card() -> Control:
+	return _search_card
+
+
+func search_input() -> LineEdit:
+	return _search_edit
+
+
+func search_button() -> Button:
+	return _search_btn
 
 
 func row_for(id: String) -> Control:

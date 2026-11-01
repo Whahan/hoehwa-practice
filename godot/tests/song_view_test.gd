@@ -250,6 +250,7 @@ func _ready() -> void:
 	ok(Api.sent_count == _sent0, "listing, opening, deleting and cleaning up sent no request to any server (Api.sent_count %d -> %d)" % [_sent0, Api.sent_count])
 	await _test_add_gate()
 	await _test_m7_hub()
+	await _test_search_card()
 	await _test_layout()
 	await _test_load_edges()
 	await _test_real_folder_untouched()
@@ -604,6 +605,43 @@ func _test_add_gate() -> void:
 	ok(added[0] == 2, "full: no add screen")
 	_close_sheets()
 	_disconnect_pc()
+	v.queue_free()
+	await _frames(2)
+
+
+# ---------------------------------------------------------------- 제목으로 가사 찾기 (hub search card)
+
+func _test_search_card() -> void:
+	print("[title search: the card at the top of the hub, first screen, signal, short title]")
+	_fresh()
+	_toasts.clear()
+	_disconnect_pc()
+	var sent: int = Api.sent_count
+	var v := _make_view() # host_screens false: signals only
+	await _frames(2)
+	v.refresh()
+	await _wait_loaded(v)
+	ok(v.search_card() != null and v.search_input() != null and v.search_button() != null, "the hub has a search card with a title box and [찾기]")
+	ok(v.search_input().placeholder_text == "곡 제목 (가수도 적으면 더 정확해요)" and v.search_button().text == "찾기", "the box says '곡 제목 (가수도 적으면 더 정확해요)' and the button '찾기'")
+	var win := Rect2(Vector2.ZERO, Vector2(get_window().size))
+	var r: Rect2 = v.search_card().get_global_rect()
+	ok(win.encloses(r), "the search card is fully inside the first screen (%s in %s)" % [r, win.size])
+	var first_btn: Button = v.add_button()
+	if _phone: # on the phone the add buttons are full-width rows under the card; on the PC they sit in the title row
+		ok(first_btn != null and r.position.y < first_btn.get_global_rect().position.y, "the search card is above [+ 곡 추가] / [가사만 추가] (card y %d, add y %d)" % [int(r.position.y), int(first_btn.get_global_rect().position.y)])
+	else:
+		ok(first_btn != null and r.position.y >= v.header_block().get_global_rect().position.y, "the search card comes right after the title row")
+	ok(v.add_button() != null and v.lyrics_button() != null, "[+ 곡 추가] and [가사만 추가] are still there")
+	var got: Array = []
+	v.search_requested.connect(func(q: String) -> void: got.append(q))
+	v.search_input().text = "a"
+	v.search_button().pressed.emit()
+	ok(got.is_empty() and _toast_has("두 글자 이상"), "one character: no signal, a '두 글자 이상' notice")
+	v.search_input().text = "  Kettle Morning "
+	v.search_button().pressed.emit()
+	ok(got == ["Kettle Morning"] and not Sheet.is_open(), "two or more characters: search_requested('Kettle Morning'), no consent sheet, no PC needed")
+	ok(Api.sent_count == sent, "the card itself sent no request (Api.sent_count unchanged)")
+	ok(_overflow(v).is_empty(), "the card has nothing sticking out sideways (%s)" % [_overflow(v)])
 	v.queue_free()
 	await _frames(2)
 

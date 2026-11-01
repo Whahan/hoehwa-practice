@@ -1,6 +1,6 @@
 ﻿# 가사 외우기 시험 전체 러너 (docs/lyrics_memorize_design.md §8 M8-1).
 #   powershell -NoProfile -ExecutionPolicy Bypass -File godot\tests\run_memo_tests.ps1
-# 시험(memo_mask, memo_grade, memo_model, memo_session, song_memo_drill, song_memo_screen, song_lyrics_add, song_lyrics_store, memo_flow)을
+# 시험(memo_mask, memo_grade, memo_model, memo_session, song_memo_drill, song_memo_screen, song_lyrics_add, song_lyrics_store, song_search, memo_flow)을
 # PC(인자 없음)와 `-- --phone` 각각 하나씩 차례로 돌린다 (포트가 겹치지 않게 순차).
 # memo_flow 시험에는 이 러너가 띄운 가짜 LRCLIB(fixtures/song/fake_lrclib.py, 127.0.0.1:18798)를 `--lrclib=` 로 넘긴다.
 # 요약 표: 이름 / passed / failed / SCRIPT ERROR / TEST_GUARD / 판정. 하나라도 실패면 종료 코드 1, 마지막 줄 `MEMO_E2E_RESULT PASS|FAIL`.
@@ -26,9 +26,9 @@ $timeoutSec = if ($env:MEMO_TIMEOUT) { [int]$env:MEMO_TIMEOUT } else { 900 }
 $only = @(); if ($env:MEMO_ONLY) { $only = $env:MEMO_ONLY.Split(',') | ForEach-Object { $_.Trim() } }
 
 $godotTests = @('memo_mask_test', 'memo_grade_test', 'memo_model_test', 'memo_session_test', 'song_memo_drill_test',
-    'song_memo_screen_test', 'song_lyrics_add_test', 'song_lyrics_store_test', 'memo_flow_test')
+    'song_memo_screen_test', 'song_lyrics_add_test', 'song_lyrics_store_test', 'song_search_test', 'memo_flow_test')
 $lrPort = 18798                     # the runner's fake LRCLIB (memo_flow_test)
-$ports = @(18797, $lrPort)          # 18797: song_lyrics_add_test starts its own fake server there
+$ports = @(18797, 18781, 18782, $lrPort) # 18797: song_lyrics_add_test starts its own fake server there; 18781 / 18782: song_search_test (fake LRCLIB / fake identify)
 $lrBase = "http://127.0.0.1:$lrPort"
 
 foreach ($p in @($godot, $py, $fakeScript)) {
