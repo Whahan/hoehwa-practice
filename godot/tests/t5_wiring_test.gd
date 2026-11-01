@@ -138,13 +138,6 @@ func _test_tabs() -> void:
 		ok(not _main.views.has("menu") and not (_main._side_nav.item_buttons() as Dictionary).has("menu"), "PC: no 메뉴 screen and no 메뉴 item")
 
 
-func _class_exists(cls: String) -> bool:
-	for d in ProjectSettings.get_global_class_list():
-		if str((d as Dictionary).get("class", "")) == cls:
-			return true
-	return false
-
-
 func _test_navigation() -> void:
 	# every tab can be shown; no script error may appear in the output (the runner counts "SCRIPT ERROR")
 	for k in _main.tab_keys():
@@ -167,13 +160,9 @@ func _test_navigation() -> void:
 	await _frames(4)
 	_main.show_view("today")
 	await _frames(3)
-	# home_menu_design §13: the home shows one GoalRing (a layout without it yet -- before the home work is merged -- still has the one GoalCard)
-	if _class_exists("GoalRing"):
-		var gr := (_main.views["today"] as Control).find_children("*", "GoalRing", true, false)
-		ok(gr.size() == 1, "홈: one GoalRing (%d)" % gr.size())
-	else:
-		var gc := (_main.views["today"] as Control).find_children("*", "GoalCard", true, false)
-		ok(gc.size() == 1, "오늘: one compact GoalCard (%d)" % gc.size())
+	# home_menu_design §13: the home shows one GoalRing
+	var gr := (_main.views["today"] as Control).find_children("*", "GoalRing", true, false)
+	ok(gr.size() == 1, "홈: one GoalRing (%d)" % gr.size())
 
 
 func _test_layout() -> void:

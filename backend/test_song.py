@@ -887,7 +887,7 @@ ok("a request holding the lock first: the job waits (stage asr, not failed), the
 slow_started = threading.Event()
 slow_release = threading.Event()
 helpers2 = song.fake_helpers()
-orig_llm = helpers2["ollama_json"]
+orig_llm = helpers2["llm_json"]
 
 
 def slow_llm(*a, **k):
@@ -896,7 +896,7 @@ def slow_llm(*a, **k):
     return orig_llm(*a, **k)
 
 
-rig = Rig(tag="conc2", delay=0.0, extra={"run_lock": lock, "ollama_json": slow_llm})
+rig = Rig(tag="conc2", delay=0.0, extra={"run_lock": lock, "llm_json": slow_llm})
 uid, r = rig.upload(small_b, "a.mp3")
 jid = rig.job(uid, "en", lyric_lines(3), "pasted", {"translate": True, "gloss": False, "ai_ok": True}).json()["job"]
 ok("the job reaches the (slow) AI call", slow_started.wait(10))
@@ -1018,7 +1018,7 @@ ok("enrich: a very long line is cut to 200 characters inside, request still fine
 real_to = song.ENRICH_TIMEOUT
 song.ENRICH_TIMEOUT = 0.6
 helpers3 = song.fake_helpers()
-oj3 = helpers3["ollama_json"]
+oj3 = helpers3["llm_json"]
 slow_gate = threading.Event()
 
 
@@ -1027,7 +1027,7 @@ def slow2(*a, **k):
     return oj3(*a, **k)
 
 
-rig = Rig(tag="enr2", delay=0.0, extra={"ollama_json": slow2})
+rig = Rig(tag="enr2", delay=0.0, extra={"llm_json": slow2})
 t0 = time.time()
 r = rig.post("/song/enrich", {"lang": "en", "lines": [{"i": 0, "text": "slow line"}], "tasks": ["translate"], "ai_ok": True})
 dt = time.time() - t0
@@ -1040,7 +1040,7 @@ ok("after a timeout the worker slot is freed again (the next request works)", r.
 ok("source constant ENRICH_TIMEOUT is 60 and ENRICH_MAX_LINES is 20", real_to == 60.0 and song.ENRICH_MAX_LINES == 20)
 rig.helpers["llm_calls"].clear()
 res_conc = []
-rig3 = Rig(tag="enr3", delay=0.0, extra={"ollama_json": slow2})
+rig3 = Rig(tag="enr3", delay=0.0, extra={"llm_json": slow2})
 slow_gate.clear()
 
 

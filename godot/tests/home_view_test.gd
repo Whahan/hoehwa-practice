@@ -80,6 +80,7 @@ func _ready() -> void:
 	await _test_ai()
 	await _test_songs()
 	await _test_lifecycle()
+	await _test_scan_concurrency()
 	await _test_direct_mark()
 	await _test_garbage()
 	_test_file_rules()
@@ -760,6 +761,43 @@ func _test_lifecycle() -> void:
 	_set_songs(0)
 
 
+# ---------------------------------------------------------------- scan thread vs. main thread reads
+
+## Several real scan threads of the view while the main thread keeps calling due_lines() / HomeParts.snapshot().
+func _test_scan_concurrency() -> void:
+	print("[scan thread vs. main-thread reads]")
+	_reset()
+	var tv := TodayView.new()
+	tv.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(tv)
+	await _frames(3)
+	var reads := 0
+	var bad := 0
+	var started := 0
+	for round in 6:
+		SongDue.cache = {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "at": 0}
+		tv._start_song_scan(30)
+		if tv._song_thread != null:
+			started += 1
+		for i in 40:
+			var snap: Dictionary = HomeParts.snapshot("en")
+			var d: int = SongDue.due_lines()
+			reads += 1
+			if d != 0 or int(snap["song_due"]) != 0 or int(snap["song_count"]) != 0:
+				bad += 1
+			await get_tree().process_frame
+		var waited := 0
+		while tv._song_thread != null and waited < 300:
+			await get_tree().process_frame
+			waited += 1
+		ok(tv._song_thread == null, "round %d: the scan thread was joined by the view" % round)
+	ok(started == 6, "6 scan threads were started (%d)" % started)
+	ok(reads == 240 and bad == 0, "240 main-thread reads during 6 scans: always the empty-folder value (%d bad)" % bad)
+	ok(int(SongDue.cache["at"]) > 0 and SongDue.due_lines() == 0, "final cache comes from the main-thread store: at set, due 0")
+	await _drop(tv)
+	_set_songs(0)
+
+
 # ---------------------------------------------------------------- T4-19 direct mark
 
 func _test_direct_mark() -> void:
@@ -839,6 +877,57 @@ func _test_file_rules() -> void:
 	for p in ["res://scripts/views/today_view.gd", "res://scripts/ui/home_parts.gd", "res://scripts/ui/goal_ring.gd"]:
 		var t: String = FileAccess.get_file_as_string(p)
 		ok(t != "" and not t.contains("Color(\"#"), "%s: no Color(\"#...\") literal" % p.get_file())
+	_test_thread_sources()
 	var fake: String = "var c = Color(\"" + "#FF0000\")"
 	print("selfcheck %s literal scan on a fake source" % ("FAIL-as-expected" if fake.contains("Color(\"#") else "UNEXPECTED-PASS"))
 	ok(fake.contains("Color(\"#"), "self-check: the literal scan flags a fake source")
+
+
+## Body of `func <name>(...)` (also `static func`) up to the next top-level func.
+func _func_body(src: String, name: String) -> String:
+	var a: int = src.find("func %s(" % name)
+	if a < 0:
+		return ""
+	var b: int = src.length()
+	for nxt in ["
+func ", "
+static func "]:
+		var k: int = src.find(nxt, a + 5)
+		if k > 0:
+			b = mini(b, k)
+	return src.substr(a, b - a)
+
+
+## A worker-thread function must not write shared state: no SongDue.cache assignment, no SongDue.scan() (it assigns the cache).
+func _thread_func_is_clean(body: String) -> bool:
+	if body == "":
+		return false
+	for line in body.split("
+"):
+		var code: String = line.split("#")[0]
+		if code.contains("SongDue.cache") or code.contains("SongDue.scan(") or code.contains("SongDue.store("):
+			return false
+	return true
+
+
+func _test_thread_sources() -> void:
+	var tsrc: String = FileAccess.get_file_as_string("res://scripts/views/today_view.gd")
+	var body: String = _func_body(tsrc, "_scan_in_thread")
+	ok(body != "" and _thread_func_is_clean(body), "T-thread: _scan_in_thread does not touch SongDue.cache (computes and returns only)")
+	ok(_func_body(tsrc, "_song_scan_done").contains("SongDue.store(") and _func_body(tsrc, "_exit_tree").contains("SongDue.store("), "T-thread: the cache is stored on the main thread (_song_scan_done, _exit_tree)")
+	var csrc: String = FileAccess.get_file_as_string("res://scripts/core/song_due.gd")
+	var cbody: String = _func_body(csrc, "compute")
+	var cclean: bool = cbody != "" and not cbody.contains("cache =") and not cbody.contains("cache[")
+	ok(cclean, "T-thread: SongDue.compute() does not write the cache")
+	var fake_thread: String = "func _scan_in_thread() -> Dictionary:
+	var r = SongDue.compute()
+	SongDue.cache = r
+	return r
+"
+	var fake_ok: bool = _thread_func_is_clean(_func_body(fake_thread, "_scan_in_thread"))
+	print("selfcheck %s thread-function check on a fake that assigns SongDue.cache" % ("FAIL-as-expected" if not fake_ok else "UNEXPECTED-PASS"))
+	ok(not fake_ok, "self-check: the thread-function check rejects a function that assigns SongDue.cache")
+	var fake2: String = "func _scan_in_thread() -> void:
+	SongDue.scan()
+"
+	ok(not _thread_func_is_clean(_func_body(fake2, "_scan_in_thread")), "self-check: ... and one that calls SongDue.scan()")

@@ -241,7 +241,7 @@ class ApiError(Exception):
     def __init__(self, msg, status=400, format_error=False, code=""):
         self.msg = msg
         self.status = status
-        self.format_error = format_error   # the AI answered, but not with a usable JSON object (ollama_json asks once more)
+        self.format_error = format_error   # the AI answered, but not with a usable JSON object (llm_json asks once more)
         self.code = code                   # machine-readable reason added to the error body ("ai_not_connected", ...)
 
 
@@ -1678,9 +1678,8 @@ STRICT_JSON_NOTE = ("(Your previous answer could not be read as JSON. Answer aga
                     "it starts with { and ends with }, no code fences, no text before or after it, no comments, double quotes around every key and string.)")
 
 
-def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None, validate=None):
+def llm_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None, validate=None):
     """The single LLM entry point: the selected remote engine (OpenCode's free DeepSeek, or the developer API engine).
-    (The name is kept until the rename to llm_json, docs/onetouch_install_design.md task G.)
     cache_key_kind: e.g. "fix", "translate", "verify", "gloss" -> the result is cached persistently (backend/cache/
     llm_cache.sqlite) by (kind, provider, model, schema, messages, options). Only for deterministic tasks; default off.
     validate: optional callback(data) -> bool; with cache_key_kind, the answer is cached only when it returns True.
@@ -1688,7 +1687,7 @@ def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False
     stricter instruction; if that fails too, ApiError 502 (Korean message). Engine problems raise ApiError with a code
     (AI_ERRORS: ai_not_connected, ai_not_installed, ai_auth, ai_limit, ai_overload); nothing answers in its place."""
     try:
-        return _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate)
+        return _llm_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate)
     except ApiError as e:
         if not e.format_error:
             raise
@@ -1698,10 +1697,10 @@ def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False
         msgs[-1]["content"] = msgs[-1]["content"] + "\n\n" + STRICT_JSON_NOTE
     else:
         msgs.append({"role": "user", "content": STRICT_JSON_NOTE})
-    return _ollama_json_once(msgs, schema, min(temperature, 0.3), num_predict, think, cache_key_kind, validate)
+    return _llm_json_once(msgs, schema, min(temperature, 0.3), num_predict, think, cache_key_kind, validate)
 
 
-def _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate=None):
+def _llm_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate=None):
     opts = {"temperature": temperature, "num_predict": num_predict, "think": think}
     try:
         return _with_cache(cache_key_kind, llm_provider(), _remote_model(), messages, schema, opts,
@@ -1840,7 +1839,7 @@ def translate_ko(text, lang):
               '\n\nReply with JSON: {"ko": "..."}')
     for attempt in range(2):
         try:
-            d = ollama_json([{"role": "user", "content": prompt}], KO_SCHEMA, temperature=0.2 if attempt == 0 else 0.4, num_predict=400,
+            d = llm_json([{"role": "user", "content": prompt}], KO_SCHEMA, temperature=0.2 if attempt == 0 else 0.4, num_predict=400,
                             cache_key_kind="translate",
                             validate=lambda d: isinstance(d, dict) and ko_ok(str(d.get("ko", "") or "").strip(), lang))
         except ApiError:
@@ -1915,7 +1914,7 @@ def _llm_correct(lang, stage, text, prev_ai, lt_fix=""):
 
     fix = ""
     for attempt in range(2):
-        d = ollama_json([{"role": "user", "content": prompt}], FIX_SCHEMA, temperature=0.2 if attempt == 0 else 0.5, num_predict=2500, think=True,
+        d = llm_json([{"role": "user", "content": prompt}], FIX_SCHEMA, temperature=0.2 if attempt == 0 else 0.5, num_predict=2500, think=True,
                         cache_key_kind="fix", validate=fix_valid)
         fix = str(d.get("fix", "") or "").strip()
         fix_ko = str(d.get("fix_ko", "") or "").strip()
@@ -1930,7 +1929,7 @@ def _llm_correct(lang, stage, text, prev_ai, lt_fix=""):
 
 
 def _chat_opencode(req, lang, sys_prompt):
-    """Chat turn on one `opencode serve` session per conversation (llm_opencode.chat_json); None = ask again through ollama_json."""
+    """Chat turn on one `opencode serve` session per conversation (llm_opencode.chat_json); None = ask again through llm_json."""
     hist = clean_hist(req.history, limit=400)  # the session keeps its own context; only the new message is sent
     note = ""
     if hist and hist[-1]["role"] == "me":
@@ -1987,7 +1986,7 @@ def run_chat(req):
         data = _chat_opencode(req, lang, sys_prompt) if (oc_session and attempt == 0) else None
         from_oc = data is not None
         if data is None:  # other engines, or the retry after a malformed OpenCode answer
-            data = ollama_json(msgs, CHAT_SCHEMA, temperature=0.6 if attempt == 0 else 0.45, num_predict=600)
+            data = llm_json(msgs, CHAT_SCHEMA, temperature=0.6 if attempt == 0 else 0.45, num_predict=600)
         reply = str(data.get("reply", "")).strip()
         ko = str(data.get("ko", "") or "").strip()
         bad = (not reply) or len(reply) < 2 or re.match(r"(?i)\s*fix", reply) is not None
@@ -2043,7 +2042,7 @@ def run_feedback(req):
     )
     prompt += "IMPORTANT: \"summary\", every \"ko\" and every \"why\" MUST be written in Korean (한국어), not English.\n"
     for attempt in range(2):
-        data = ollama_json([{"role": "user", "content": prompt}], FEEDBACK_SCHEMA, temperature=0.4 if attempt == 0 else 0.2, num_predict=1500)
+        data = llm_json([{"role": "user", "content": prompt}], FEEDBACK_SCHEMA, temperature=0.4 if attempt == 0 else 0.2, num_predict=1500)
         if isinstance(data, dict) and ko_ok(str(data.get("summary", "")), "en"):
             break
         log.info("feedback attempt %d: summary not Korean", attempt + 1)
@@ -2223,7 +2222,7 @@ def run_lesson(req):
     good = []
     for attempt in range(2):
         try:
-            data = ollama_json([{"role": "user", "content": prompt}], LESSON_SCHEMA, temperature=0.6 if attempt == 0 else 0.4, num_predict=3200)
+            data = llm_json([{"role": "user", "content": prompt}], LESSON_SCHEMA, temperature=0.6 if attempt == 0 else 0.4, num_predict=3200)
         except ApiError as e:
             if attempt == 1 or e.status in (503, 504):
                 raise
@@ -2404,7 +2403,7 @@ def verify_answers(lang, exs):
         return all(i in ids for i in range(len(exs)))
 
     try:
-        data = ollama_json([{"role": "user", "content": prompt}], VERIFY_SCHEMA, temperature=0.0, num_predict=4000, think=True,
+        data = llm_json([{"role": "user", "content": prompt}], VERIFY_SCHEMA, temperature=0.0, num_predict=4000, think=True,
                            cache_key_kind="verify", validate=verify_valid)
     except Exception as e:
         log.warning("answer check failed: %s", getattr(e, "msg", e))
@@ -2466,7 +2465,7 @@ llm_opencode.init(log=log)
 
 import reading as readmode  # reading mode (/reading/*) + Tatoeba examples (/examples)
 
-readmode.init(log=log, ApiError=ApiError, ollama_json=ollama_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
+readmode.init(log=log, ApiError=ApiError, llm_json=llm_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
              patch_espeak=_patch_espeak_for_nonascii_path)
 
 
@@ -3069,7 +3068,7 @@ import missions
 import song   # song study (/song/*): upload, job queue, result, enrich (docs/song_study_design.md)
 
 practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, ja_pron=ja_pron, readmode=readmode, lesson_rules=lesson_rules, features=features)
-missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)
+missions.init(log=log, ApiError=ApiError, llm_json=llm_json)
 def _persist_config(cfg):
     """save_config for the llm routes (a test server or an import changes its in-memory copy only: save_config does not write)"""
     save_config(cfg)
@@ -3077,7 +3076,7 @@ def _persist_config(cfg):
 
 # POST /llm/connect, /llm/disconnect, /llm/install, GET /llm/install, POST /llm/notice/ack (llm_routes.py, local only)
 llm_routes.init(CFG, log, ApiError, lan._local_only, _fallback_status, _persist_config)
-song.init(log=log, ApiError=ApiError, readmode=readmode, ollama_json=ollama_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
+song.init(log=log, ApiError=ApiError, readmode=readmode, llm_json=llm_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
           ja_to_kata=ja_to_kata, get_model=get_stt, run_lock=_stt_run_lock, stt_info=_stt_info)
 app.include_router(practice.router)
 app.include_router(missions.router)

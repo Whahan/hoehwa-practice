@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Tests of POST /song/identify (song.py: title typed by the user -> up to 3 {title, artist} candidates). In-process: no server, no
-port, no model, no network. The AI is a fake injected as `ollama_json`; nothing real is ever called.
+port, no model, no network. The AI is a fake injected as `llm_json`; nothing real is ever called.
 
   .venv\\Scripts\\python.exe -I test_song_identify.py
   .venv\\Scripts\\python.exe -I test_song_identify.py --stub PORT --lrclib PORT2
@@ -77,7 +77,7 @@ class FormatErr(Exception):
 
 
 class Fake:
-    """scripted ollama_json: `answer` is the data to return, or a callable(messages) -> data (it may raise)."""
+    """scripted llm_json: `answer` is the data to return, or a callable(messages) -> data (it may raise)."""
 
     def __init__(self, answer):
         self.answer = answer
@@ -94,8 +94,8 @@ def good(title="Kettle Morning", artist="Test Artist"):
 
 
 fake = Fake({"cands": [good()]})
-song.init(log=LOG, ollama_json=fake, root=tempfile.mkdtemp(prefix="ident_"), fake_asr=True,
-          **{k: v for k, v in song.fake_helpers().items() if k not in ("ollama_json", "llm_calls")})
+song.init(log=LOG, llm_json=fake, root=tempfile.mkdtemp(prefix="ident_"), fake_asr=True,
+          **{k: v for k, v in song.fake_helpers().items() if k not in ("llm_json", "llm_calls")})
 app = FastAPI()
 app.include_router(song.router)
 client = TestClient(app)
@@ -150,10 +150,10 @@ def boom(_m):
 with_ai(boom)
 st, j = ask({"q": "x"})
 ok("503 ai_unavailable when the AI fails", st == 503 and j == {"error": "ai_unavailable", "code": "ai_unavailable"}, (st, j))
-saved = song.H.pop("ollama_json")
+saved = song.H.pop("llm_json")
 st, j = ask({"q": "x"})
 ok("503 ai_unavailable when there is no AI engine at all", st == 503 and j.get("error") == "ai_unavailable", (st, j))
-song.H["ollama_json"] = saved
+song.H["llm_json"] = saved
 
 
 def api502(_m):
@@ -324,8 +324,8 @@ ok("lan.ALLOW has (POST, /song/identify)", ("POST", "/song/identify") in lan.ALL
 ok("only POST is allowed for it (no GET)", ("GET", "/song/identify") not in lan.ALLOW)
 ok("song.SONG_V stays 1 (/health song_v and the song JSON v; an old app must not see app_old)", song.SONG_V == 1 and not hasattr(song, "SONG_API_V"), song.SONG_V)
 srv = open(os.path.join(HERE, "server.py"), encoding="utf-8").read()
-ok("server.py /health has song_v from song.SONG_V and song_identify true, and injects ollama_json into song.init", '"song_v": song.SONG_V, "song_identify": True}' in srv
-   and "song.init(log=log, ApiError=ApiError, readmode=readmode, ollama_json=ollama_json" in srv)
+ok("server.py /health has song_v from song.SONG_V and song_identify true, and injects llm_json into song.init", '"song_v": song.SONG_V, "song_identify": True}' in srv
+   and "song.init(log=log, ApiError=ApiError, readmode=readmode, llm_json=llm_json" in srv)
 
 # ---- 6. stub over real HTTP (optional) ---------------------------------------------------------------------------------------------------------
 def nobody_listens(p):

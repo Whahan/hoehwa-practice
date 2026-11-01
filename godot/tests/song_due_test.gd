@@ -22,6 +22,7 @@ func _ready() -> void:
 	_blocked_guard()
 	_real_read_path()
 	_gap()
+	_threads()
 	var after: Array = _user_listing()
 	ok(JSON.stringify(_before) == JSON.stringify(after), "user:// listing unchanged after the test (temp folder removed)")
 	print("== song_due result: %d passed, %d failed ==" % [passed, failed])
@@ -153,6 +154,44 @@ func _real_read_path() -> void:
 	SongStore.root = saved_root
 	_rm_rf(TMP)
 	ok(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(TMP)), "temp songs folder removed")
+
+
+## compute() writes nothing shared; the stress below reads the shared cache on the main thread while worker threads compute.
+func _threads() -> void:
+	print("[threads: compute() on a worker, store() on the main thread]")
+	SongDue.cache = {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "at": 0}
+	var lister := func() -> Variant:
+		OS.delay_usec(300)
+		return {"list": [{"id": "a", "kind": "lyrics"}, {"id": "b", "kind": "audio"}], "memo": {"a": {"due": 3, "fresh": 1}}}
+	var before: String = JSON.stringify(SongDue.cache)
+	var direct: Dictionary = SongDue.compute(lister)
+	ok(JSON.stringify(SongDue.cache) == before and int(direct["due"]) == 3, "compute() returns the counts and leaves SongDue.cache alone")
+	var reads := 0
+	var bad := 0
+	for round in 6:
+		var th := Thread.new()
+		th.start(func() -> Dictionary: return SongDue.compute(lister))
+		for i in 40:
+			var d: int = SongDue.due_lines()
+			var songs: int = int(SongDue.cache.get("songs", 0))
+			var gap: bool = SongDue.needs_scan(2000000000)
+			reads += 1
+			if (d != 0 and d != 3) or (songs != 0 and songs != 2) or (round == 0 and not gap):
+				bad += 1
+			OS.delay_usec(150)
+		var res: Variant = th.wait_to_finish()
+		ok(res is Dictionary and int((res as Dictionary)["due"]) == 3, "round %d: the thread returned a dictionary with due 3" % round)
+		SongDue.store(res)
+	ok(reads == 240 and bad == 0, "240 main-thread reads during 6 thread scans: always a whole old or new value (%d bad)" % bad)
+	ok(SongDue.due_lines() == 3 and int(SongDue.cache["songs"]) == 2 and int(SongDue.cache["at"]) > 0, "final cache: due 3, songs 2, at set")
+	var keep: String = JSON.stringify(SongDue.cache)
+	SongDue.store("not a dictionary")
+	SongDue.store(null)
+	ok(JSON.stringify(SongDue.cache) == keep, "store() ignores a result that is not a dictionary")
+	var mine: Dictionary = {"songs": 1, "lyrics": 1, "due": 9, "fresh": 0, "at": 5}
+	SongDue.store(mine)
+	mine["due"] = 0
+	ok(SongDue.due_lines() == 9, "store() keeps its own copy")
 
 
 func _gap() -> void:

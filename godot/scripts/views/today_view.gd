@@ -46,7 +46,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	if _song_thread != null:
-		_song_thread.wait_to_finish()
+		SongDue.store(_song_thread.wait_to_finish())
 		_song_thread = null
 
 
@@ -150,7 +150,8 @@ func _on_tick() -> void:
 		refresh()
 
 
-## SongDue.scan() on a thread (it only reads); the song row is drawn again when the number of lines changed.
+## SongDue.compute() on a thread (it only reads and returns a new dictionary; it writes no shared state). The result is
+## stored into SongDue.cache here on the main thread, and the song row is drawn again when the number of lines changed.
 func _start_song_scan(min_gap: int) -> void:
 	if _song_thread != null or not is_inside_tree() or not is_visible_in_tree():
 		return
@@ -160,14 +161,15 @@ func _start_song_scan(min_gap: int) -> void:
 	_song_thread.start(_scan_in_thread)
 
 
-func _scan_in_thread() -> void:
-	SongDue.scan()
+func _scan_in_thread() -> Dictionary:
+	var res: Dictionary = SongDue.compute()
 	_song_scan_done.call_deferred()
+	return res
 
 
 func _song_scan_done() -> void:
 	if _song_thread != null:
-		_song_thread.wait_to_finish()
+		SongDue.store(_song_thread.wait_to_finish())
 		_song_thread = null
 	if is_inside_tree() and _built and SongDue.due_lines() != _song_due_shown:
 		refresh()

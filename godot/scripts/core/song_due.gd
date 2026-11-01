@@ -1,7 +1,8 @@
 class_name SongDue
 extends RefCounted
 ## 홈의 "노래 외우기 N줄" 줄이 쓰는 집계. 순수 계산 + 읽기 전용 파일 읽기(곡 폴더를 옮기거나 쓰지 않는다).
-## 홈은 보일 때마다 Thread 로 scan() 을 돌리고, 끝나면 `cache` 를 읽어 노래 줄만 다시 그린다.
+## 홈은 보일 때마다 Thread 로 compute() 를 돌리고, 끝나면 메인 스레드가 store() 로 `cache` 를 채워 노래 줄만 다시 그린다.
+## compute() 는 SongStore.list_snapshot()/memo_summary() 만 쓴다(정적 변수 대입·파일 이동 없음).
 ##
 ## lister 계약 (시험이 가짜를 넣는다): () -> {"list": [곡 사전...], "memo": {곡 id: memo_summary 사전}}
 ##   SongView._default_load() 가 돌려주는 모양과 같다. 곡 사전은 "id", "kind"("lyrics"|"audio") 만 쓴다.
@@ -26,22 +27,36 @@ static func _count(v: Variant) -> int:
 	return 0
 
 
-## 곡 목록을 세어 `cache` 에 넣고 같은 값을 돌려준다. 스레드에서 불러도 된다(읽기만 한다).
+## 곡 목록을 세어 결과를 돌려준다. **공유 상태(`cache`)를 쓰지 않는다**: 작업 스레드에서 불러도 된다(읽기만 한다).
+## 결과를 `cache` 에 넣는 것은 메인 스레드의 몫이다(store). 정적 변수 대입은 스레드에 안전하지 않다.
 ## lister 가 비어 있으면 SongStore.list() + memo_summary. 시험 보호가 실제 곡 폴더를 막고 있으면 폴더를 열지 않고 0.
-static func scan(lister: Callable = Callable()) -> Dictionary:
+static func compute(lister: Callable = Callable()) -> Dictionary:
 	var now: int = int(Time.get_unix_time_from_system())
 	var raw: Variant = null
 	if lister.is_valid():
 		raw = lister.call()
 	elif not SongStore.blocked():
 		raw = _default_list(now)
-	var res: Dictionary = _tally(raw, now)
-	cache = res
+	return _tally(raw, now)
+
+
+## 메인 스레드 전용: compute() 결과를 `cache` 에 넣는다. 사전이 아니면 아무것도 바꾸지 않는다.
+static func store(res: Variant) -> void:
+	if res is Dictionary:
+		cache = (res as Dictionary).duplicate()
+
+
+## compute() + store(): 메인 스레드에서 바로 부르는 경우(시험·직접 호출). 스레드에서 부르지 말 것(compute 를 쓴다).
+static func scan(lister: Callable = Callable()) -> Dictionary:
+	var res: Dictionary = compute(lister)
+	store(res)
 	return res.duplicate()
 
 
 static func _default_list(now: int) -> Dictionary:
-	var l: Array = SongStore.list()
+	# SongStore.list_snapshot() is the read-only listing: it assigns no SongStore static and moves no file (a broken
+	# song.json is only ignored here; the song screen moves it when it loads the list on the main thread).
+	var l: Array = SongStore.list_snapshot(false, {}, false)["list"]
 	var memo: Dictionary = {}
 	for s in l:
 		if s is Dictionary and str((s as Dictionary).get("kind", "audio")) == "lyrics":

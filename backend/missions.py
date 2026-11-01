@@ -5,7 +5,7 @@
   POST /missions/check      -> which goals does this sentence reach?  Rules only, no AI, 50 ms or less
   POST /missions/judge      -> optional: ask the AI about the goals the rules missed; its evidence must be quoted from the learner's lines
 
-server.py injects its helpers with init(log=, ApiError=, ollama_json=) and mounts `router`; this module has no
+server.py injects its helpers with init(log=, ApiError=, llm_json=) and mounts `router`; this module has no
 authentication code and imports only light modules (no models, no network at import time).
 
 Rules: the sentence is normalised (NFKC, lower case, curly quotes -> ', everything but [a-z0-9' ] -> space, spaces merged,
@@ -28,7 +28,7 @@ try:  # Python 3.11+
 except ImportError:  # 3.10
     import sre_parse as _sp
 
-H = {}  # injected by server.py: log, ApiError, ollama_json
+H = {}  # injected by server.py: log, ApiError, llm_json
 router = APIRouter()
 
 MISSIONS_VERSION = 1
@@ -376,7 +376,7 @@ def judge_goals(lang, mission_id, pending, history):
     me_texts = [h["text"] for h in hist if h["role"] == "me"]
     if not me_texts:
         return {"ai": False, "goals": [{"id": g["id"], "done": False, "evidence": ""} for g in want]}
-    fn = H.get("ollama_json")
+    fn = H.get("llm_json")
     if fn is None:
         raise _err("AI를 쓸 수 없어서 판정할 수 없어요.", 503)
     try:

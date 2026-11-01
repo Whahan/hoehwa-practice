@@ -224,7 +224,7 @@ func _state_checks(state: String, main: Control) -> void:
 	match state:
 		"today":
 			var tv: TodayView = main.views["today"]
-			ok(not _tv_wide(tv), "L: the home cards are one column on the phone")
+			ok(not tv.is_wide(), "L: the home cards are one column on the phone")
 			ok(bt.visible and bt.get_global_rect().end.y >= SCREEN_H - 0.5, "bottom tab bar is at the bottom of the screen")
 			var cells: Array = bt.cell_buttons()
 			ok(cells.size() == 4, "T3-2: the bottom bar has 4 cells here (홈, 레슨, 복습, 메뉴: no 노래 in this scene) (%d)" % cells.size())
@@ -326,23 +326,14 @@ func _state_checks(state: String, main: Control) -> void:
 			ok(mrows_ok, "T3-4: every 메뉴 row is at least 56 px high")
 
 
-## The home screen is one column (phone / narrow window) or two. The new home (TodayView.is_wide / card) answers directly; a
-## screen that is not merged yet still has the old `_grid`, which keeps the same check until then.
-func _tv_wide(tv: Control) -> bool:
-	if tv.has_method("is_wide"):
-		return bool(tv.call("is_wide"))
-	return int(tv.get("_grid").columns) == 2
-
-
-func _tv_cards(tv: Control) -> Array:
-	if tv.has_method("card"):
-		var out: Array = []
-		for id in ["tasks", "resume", "streak", "ai", "shortcuts"]:
-			var c: Variant = tv.call("card", id)
-			if c != null:
-				out.append(c)
-		return out
-	return (tv.get("_grid") as Node).get_children()
+## The home cards that exist right now (TodayView.card(id) is null for a card that is not shown).
+func _tv_cards(tv: TodayView) -> Array:
+	var out: Array = []
+	for id in ["tasks", "resume", "streak", "ai", "shortcuts"]:
+		var c: Control = tv.card(id)
+		if c != null:
+			out.append(c)
+	return out
 
 
 func _has_button(root: Node, text: String) -> bool:
@@ -374,7 +365,7 @@ func _pc_state_checks(state: String, main: Control) -> void:
 		"today":
 			var tv: TodayView = main.views["today"]
 			var nav: SideNav = main._side_nav
-			ok(_tv_wide(tv), "W4-2: the home cards are two columns at 1280 (the side nav included)")
+			ok(tv.is_wide(), "W4-2: the home cards are two columns at 1280 (the side nav included)")
 			ok(nav.current() == "today" and (nav.item_buttons()["today"] as Button).text == "홈", "T3-8: the side nav has 홈 selected")
 			ok(main._bottom_tabs == null and main._app_bar == null, "W4-2: no bottom tab bar and no app bar on the PC")
 			ok(nav != null and nav.size.x >= 223.0 and nav.size.x <= 225.0, "W4-2: the side nav is 224 px wide (%.1f)" % nav.size.x)
@@ -807,7 +798,7 @@ func _test_pc_narrow(main: Control) -> void:
 	main.show_view("today")
 	await _frames(5)
 	var tv: TodayView = main.views["today"]
-	ok(not _tv_wide(tv), "W4-2: at 900 the content is %.0f px wide: one column of cards" % tv.size.x)
+	ok(not tv.is_wide(), "W4-2: at 900 the content is %.0f px wide: one column of cards" % tv.size.x)
 	var cards: Array = _tv_cards(tv)
 	var overlap := false
 	for i in cards.size():
@@ -818,7 +809,7 @@ func _test_pc_narrow(main: Control) -> void:
 	ok(main._status_text.get_global_rect().end.x <= nav.get_global_rect().end.x + 0.5, "W4-2: at 900 the engine chip text stays inside the side nav")
 	win.size = Vector2i(1280, 800)
 	await _frames(6)
-	ok(_tv_wide(tv), "W4-2: back at 1280 the cards are two columns")
+	ok(tv.is_wide(), "W4-2: back at 1280 the cards are two columns")
 
 
 # ---------------------------------------------------------------- W4-3..W4-5 (both platforms)

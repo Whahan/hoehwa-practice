@@ -243,9 +243,9 @@ static func take_quarantined() -> Array:
 
 # ---------------------------------------------------------------- read
 
-## Reads song.json of `id`. -> {"song": Dictionary (normalized, id set) or {}, "status": "ok"|"missing"|"bad"}.
-## A broken file (cut JSON, not an object, too big) is moved to `.bad`.
-static func _read_song(id: String) -> Dictionary:
+## Reads song.json of `id` WITHOUT touching anything: no file is moved, no static is written (safe on a worker thread).
+## -> {"song": Dictionary (normalized, id set) or {}, "status": "ok"|"missing"|"bad"}. "bad" = the caller should quarantine it.
+static func _peek_song(id: String) -> Dictionary:
 	var p: String = _song_file(id)
 	if not FileAccess.file_exists(p):
 		return {"song": {}, "status": "missing"}
@@ -256,12 +256,20 @@ static func _read_song(id: String) -> Dictionary:
 		if js.parse(_read_text(p)) == OK:
 			parsed = js.data
 	if not (parsed is Dictionary):
-		_quarantine_file(p)
-		_quarantined.append(id)
 		return {"song": {}, "status": "bad"}
 	var song: Dictionary = SongModel.normalize(parsed)
 	song["id"] = id
 	return {"song": song, "status": "ok"}
+
+
+## Reads song.json of `id`. -> {"song": Dictionary (normalized, id set) or {}, "status": "ok"|"missing"|"bad"}.
+## A broken file (cut JSON, not an object, too big) is moved to `.bad`. Main thread only (moves a file, appends `_quarantined`).
+static func _read_song(id: String) -> Dictionary:
+	var r: Dictionary = _peek_song(id)
+	if r["status"] == "bad":
+		_quarantine_file(_song_file(id))
+		_quarantined.append(id)
+	return r
 
 
 static func load_song(id: String) -> Dictionary:
@@ -315,6 +323,33 @@ static func _audio_ok(id: String, song: Dictionary) -> bool:
 	return true
 
 
+## Same check as _audio_ok(), but writes no static: `known` is a copy of the verified-file cache (audio path -> [size, mtime]),
+## newly verified files go into `fresh` and files that no longer match into `dropped`; the main thread applies them
+## (apply_snapshot). Safe on a worker thread.
+static func _audio_ok_ro(id: String, song: Dictionary, known: Dictionary, fresh: Dictionary, dropped: Array) -> bool:
+	if SongModel.is_lyrics(song):
+		return true
+	var ap: String = audio_path(id)
+	if not FileAccess.file_exists(ap):
+		return false
+	var size: int = _file_size(ap)
+	var meta: Dictionary = song.get("audio", {})
+	if size <= 0 or size != int(meta.get("bytes", -1)):
+		return false
+	var want: String = str(meta.get("sha256", ""))
+	if want == "":
+		return false
+	var mt: int = FileAccess.get_modified_time(ap)
+	var cached: Variant = known.get(ap, null)
+	if cached is Array and cached[0] == size and cached[1] == mt:
+		return true
+	if FileAccess.get_sha256(ap).to_lower() != want:
+		dropped.append(ap)
+		return false
+	fresh[ap] = [size, mt]
+	return true
+
+
 ## sha256 of a byte array as lower-case hex.
 static func sha256_hex(data: PackedByteArray) -> String:
 	var h := HashingContext.new()
@@ -327,51 +362,115 @@ static func clear_cache() -> void:
 	_sha_cache.clear()
 
 
-static func list() -> Array:
+## Read-only listing for a worker thread. Assigns no static, moves and writes no file.
+##   check_audio: false skips the (slow) audio sha256 check ("ready" is then false).
+##   known: copy of the verified-audio cache taken on the main thread (the static `_sha_cache` is never read here).
+##   extras: also compute "orphans" and "usage".
+## -> {"list": rows (sorted like list()), "bad": [ids whose song.json is broken: NOT moved], "sha_new": {audio path: [size, mtime]},
+##     "sha_drop": [audio paths that no longer match], "orphans": Array, "usage": Dictionary, "blocked": bool}
+## The main thread then calls apply_snapshot() (quarantine moves, `_quarantined`, `last_error`, sha cache).
+static func list_snapshot(check_audio: bool = true, known: Dictionary = {}, extras: bool = false) -> Dictionary:
+	var snap := {"list": [], "bad": [], "sha_new": {}, "sha_drop": [], "orphans": [], "usage": {"songs": 0, "bytes": fake_used_bytes, "max_songs": max_songs, "max_bytes": max_bytes}, "blocked": false}
+	if blocked():
+		snap["blocked"] = true
+		return snap
 	var out: Array = []
-	if _guard():
-		return out
-	for id in _song_ids():
-		var r: Dictionary = _read_song(id)
+	var ids: Array = _song_ids()
+	for id in ids:
+		var r: Dictionary = _peek_song(id)
 		if r["status"] == "bad":
-			last_error = "bad_json"
+			(snap["bad"] as Array).append(id)
 			continue
 		if r["status"] != "ok":
 			continue
-		var s: Dictionary = r["song"]
-		var st: Dictionary = s.get("stats", {})
-		var created: int = int(s.get("created", 0))
-		var last: int = int(st.get("last", 0))
-		var ap: String = audio_path(id)
-		out.append({
-			"id": id,
-			"title": s["title"],
-			"artist": s["artist"],
-			"lang": s["lang"],
-			"duration": s["duration"],
-			"lines": (s["lines"] as Array).size(),
-			"bytes": maxi(0, _file_size(ap)) + maxi(0, _file_size(_song_file(id))),
-			"created": created,
-			"last": last if last > 0 else created,
-			"warnings": s["warnings"],
-			"ready": _audio_ok(id, s),
-			"read_only": SongModel.is_read_only(s),
-			"kind": "lyrics" if SongModel.is_lyrics(s) else "audio",
-		})
+		var ready: bool = false
+		if check_audio:
+			ready = _audio_ok_ro(id, r["song"], known, snap["sha_new"], snap["sha_drop"])
+		out.append(_row(id, r["song"], ready))
+	_sort_rows(out)
+	snap["list"] = out
+	if extras:
+		snap["orphans"] = _orphans_ro(ids)
+		snap["usage"] = _usage_ro(ids)
+	return snap
+
+
+## Main thread only: applies what list_snapshot() found. A song.json reported broken is read again here (it may have been
+## replaced meanwhile) and moved to `.bad` + appended to `_quarantined` if it is still broken; `last_error` = "bad_json" then.
+## The verified-audio cache gets the new entries and loses the dropped ones.
+static func apply_snapshot(snap: Variant) -> void:
+	if not (snap is Dictionary):
+		return
+	var sn: Dictionary = snap
+	var bad: Variant = sn.get("bad", [])
+	if bad is Array:
+		for id in (bad as Array):
+			if id is String and SongModel.is_valid_id(id) and _read_song(id)["status"] == "bad":
+				last_error = "bad_json"
+	var drop: Variant = sn.get("sha_drop", [])
+	if drop is Array:
+		for k in (drop as Array):
+			_sha_cache.erase(k)
+	var fresh: Variant = sn.get("sha_new", {})
+	if fresh is Dictionary:
+		for k in (fresh as Dictionary):
+			_sha_cache[k] = (fresh as Dictionary)[k]
+
+
+## A copy of the verified-audio cache for a worker thread (call on the main thread).
+static func sha_known() -> Dictionary:
+	return _sha_cache.duplicate(true)
+
+
+static func _row(id: String, s: Dictionary, ready: bool) -> Dictionary:
+	var st: Dictionary = s.get("stats", {})
+	var created: int = int(s.get("created", 0))
+	var last: int = int(st.get("last", 0))
+	var ap: String = audio_path(id)
+	return {
+		"id": id,
+		"title": s["title"],
+		"artist": s["artist"],
+		"lang": s["lang"],
+		"duration": s["duration"],
+		"lines": (s["lines"] as Array).size(),
+		"bytes": maxi(0, _file_size(ap)) + maxi(0, _file_size(_song_file(id))),
+		"created": created,
+		"last": last if last > 0 else created,
+		"warnings": s["warnings"],
+		"ready": ready,
+		"read_only": SongModel.is_read_only(s),
+		"kind": "lyrics" if SongModel.is_lyrics(s) else "audio",
+	}
+
+
+static func _sort_rows(out: Array) -> void:
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if a["last"] != b["last"]:
 			return a["last"] > b["last"]
 		if a["created"] != b["created"]:
 			return a["created"] > b["created"]
 		return str(a["id"]) < str(b["id"]))
-	return out
+
+
+## The songs of the root, newest first. Main thread (a broken song.json is moved to `.bad` right away).
+static func list() -> Array:
+	if _guard():
+		return []
+	var snap: Dictionary = list_snapshot(true, _sha_cache)
+	apply_snapshot(snap)
+	return snap["list"]
 
 
 static func orphan_ids() -> Array:
-	var out: Array = []
 	if _guard():
-		return out
-	for id in _song_ids():
+		return []
+	return _orphans_ro(_song_ids())
+
+
+static func _orphans_ro(ids: Array) -> Array:
+	var out: Array = []
+	for id in ids:
 		if not FileAccess.file_exists(_song_file(id)):
 			out.append(id)
 	return out
@@ -380,13 +479,18 @@ static func orphan_ids() -> Array:
 ## {songs, bytes, max_songs, max_bytes}. songs counts folders with a song.json; bytes counts every file in the song
 ## folders (a folder whose song.json was moved to .bad still takes room until delete(id)) plus fake_used_bytes.
 static func usage() -> Dictionary:
+	if _guard():
+		return {"songs": 0, "bytes": fake_used_bytes, "max_songs": max_songs, "max_bytes": max_bytes}
+	return _usage_ro(_song_ids())
+
+
+static func _usage_ro(ids: Array) -> Dictionary:
 	var songs: int = 0
 	var total: int = fake_used_bytes
-	if not _guard():
-		for id in _song_ids():
-			if FileAccess.file_exists(_song_file(id)):
-				songs += 1
-			total += _dir_bytes(song_dir(id))
+	for id in ids:
+		if FileAccess.file_exists(_song_file(id)):
+			songs += 1
+		total += _dir_bytes(song_dir(id))
 	return {"songs": songs, "bytes": total, "max_songs": max_songs, "max_bytes": max_bytes}
 
 
@@ -617,9 +721,10 @@ static func save_memo(id: String, memo: Dictionary) -> bool:
 
 
 ## Read-only summary {total, memorized, learning, fresh, due, next_due} (MemoModel.summary) or {} (no such song, broken
-## song.json or memo.json). Never moves or writes a file, so a list screen can call it from a worker thread.
+## song.json or memo.json). Never moves or writes a file and assigns no static (blocked() only reads), so a list screen
+## or the home can call it from a worker thread. With the test guard on it returns {} without setting last_error.
 static func memo_summary(id: String, now: int) -> Dictionary:
-	if _guard() or not SongModel.is_valid_id(id) or not _real_song_dir(id):
+	if blocked() or not SongModel.is_valid_id(id) or not _real_song_dir(id):
 		return {}
 	var sp: String = _song_file(id)
 	if not FileAccess.file_exists(sp):
