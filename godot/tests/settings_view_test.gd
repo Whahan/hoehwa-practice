@@ -403,24 +403,23 @@ func _filled_count(card: Node, accent: Color) -> int:
 
 
 func _test_today_cards() -> void:
-	print("[오늘: primary buttons]")
+	print("[홈: primary buttons]")
 	Store.progress = Progress.blank()
 	Store.add_review([{"lang": "en", "target": "Can I have a menu?", "ko": "메뉴판 좀 주실래요?", "note": ""}])
 	var tv := TodayView.new()
 	_stage(tv)
 	await _frames(4)
-	ok(tv._grid != null and tv._grid.get_child_count() == 2, "two language cards")
+	# the home shows one language: exactly one filled button on the whole page (the start button, PRIMARY), and it is the lesson
 	for state in ["open", "done"]:
 		if state == "done":
 			Store.toggle_today("en")
-			Store.toggle_today("ja")
+			tv.refresh()
 			await _frames(4)
-		var i := 0
-		for l in ["en", "ja"]:
-			var card: Node = tv._grid.get_child(i)
-			i += 1
-			ok(_filled_count(card, Pal.accent(l)) == 1, "%s card (%s day): exactly one accent-filled button" % [l, state])
-			ok(_find_button(card, "오늘의 레슨") != null, "%s card: the lesson button is there" % l)
+		ok(_filled_count(tv, Pal.PRIMARY) == 1, "home (%s day): exactly one PRIMARY-filled button" % state)
+		ok(_filled_count(tv, Pal.EN) == 0 and _filled_count(tv, Pal.JA) == 0, "home (%s day): no language-colour filled button" % state)
+		ok(tv.hero_button() != null and tv.hero_button().text.begins_with("오늘의 레슨"), "home (%s day): the start button is the lesson ('%s')" % [state, tv.hero_button().text if tv.hero_button() != null else ""])
+		ok(_find_button(tv, "복습 1개") != null, "home (%s day): the due review is a row" % state)
+		ok(tv.card("tasks") != null and tv.lang_switch() != null, "home (%s day): tasks card and language switch are there" % state)
 	# the detector can fail: a card with two filled buttons counts 2
 	var fake := VBoxContainer.new()
 	fake.add_child(UI.button("a", "primary", Pal.EN))
@@ -429,10 +428,12 @@ func _test_today_cards() -> void:
 	add_child(fake)
 	ok(_filled_count(fake, Pal.EN) == 2, "self-check: two filled buttons are counted as 2")
 	fake.queue_free()
-	ok(tv._grid.columns == (1 if _phone else 2), "grid columns %d (phone 1, PC 2)" % tv._grid.columns)
-	# the big title and the app bar contract
-	ok(tv.header_block() != null and tv.scroll_host() == tv._scroll and tv.page_title() == "", "app bar contract: scroll host and big title block, the tab name is the title")
-	ok(tv.header_block().find_children("*", "Label", true, false).all(func(l: Node) -> bool: return (l as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE), "the big title's labels are not touch targets")
+	ok(tv.is_wide() == (not _phone), "wide layout %s (phone: one column, PC: two columns)" % str(tv.is_wide()))
+	# the app bar contract: the page scrolls inside scroll_host(); the phone has no big title block (the app bar says 홈), the PC has one
+	ok(tv.scroll_host() == tv._scroll and tv.page_title() == "", "app bar contract: scroll host, the tab name is the title")
+	ok((tv.header_block() == null) == _phone, "big title block: none on the phone, a PageHeader on the PC")
+	if tv.header_block() != null:
+		ok(tv.header_block().find_children("*", "Label", true, false).all(func(l: Node) -> bool: return (l as Label).mouse_filter == Control.MOUSE_FILTER_IGNORE), "the big title's labels are not touch targets")
 	Store.progress = Progress.blank()
 	tv.queue_free()
 	await _frames(2)
