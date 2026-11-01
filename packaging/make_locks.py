@@ -7,7 +7,7 @@ Run it with the dev venv python (read-only use: nothing is installed into the ve
 Writes into --out:
     requirements.lock.txt   pip freeze of the venv (local-path entries dropped, URL entries kept)
     bootstrap.lock.txt      pip / setuptools / wheel versions of the venv (pinned by the installer)
-    models.lock.json        every HF repo in backend\\models\\hf (commit, files, size, sha256) + Ollama model digest
+    models.lock.json        every HF repo in backend\\models\\hf (commit, files, size, sha256) + the LanguageTool zip entry
     wheels\\                 locally built wheels for packages that are sdist-only on PyPI
 """
 import argparse
@@ -208,24 +208,6 @@ def scan_hf(hf_dir, hash_cache_path):
     return repos
 
 
-def ollama_info(cfg, previous):
-    tag = cfg.get("llm_model", "qwen3:8b")
-    url = cfg.get("ollama_url", "http://127.0.0.1:11434").rstrip("/")
-    try:
-        with urllib.request.urlopen(url + "/api/tags", timeout=5) as r:
-            data = json.load(r)
-        for m in data.get("models", []):
-            if m.get("name") == tag or m.get("model") == tag:
-                return {"model": tag, "digest": m["digest"], "size": m["size"]}
-        print("  [warn] Ollama is running but model %s is not pulled" % tag)
-    except Exception as e:
-        print("  [warn] Ollama not reachable (%s)" % e)
-    if previous and previous.get("model") == tag:
-        print("  [warn] reusing previously recorded Ollama digest")
-        return previous
-    raise SystemExit("cannot determine the Ollama digest for %s (start Ollama and pull the model)" % tag)
-
-
 def languagetool_info(backend, previous):
     """LanguageTool zip (official URL + sha256) from backend\\tools\\languagetool\\lt.json, written when it was installed.
     The installer downloads it (about 250 MB) instead of shipping it in the package zip."""
@@ -275,24 +257,20 @@ def main():
     print("  prebuilt wheels:", built or "none")
 
     print("== models")
-    cfg = json.load(open(os.path.join(backend, "config.json"), encoding="utf-8"))
     prev_path = os.path.join(out, "models.lock.json")
-    previous = prev_lt = None
+    prev_lt = None
     if os.path.isfile(prev_path):
         try:
-            prev_lock = json.load(open(prev_path, encoding="utf-8"))
-            previous, prev_lt = prev_lock.get("ollama"), prev_lock.get("languagetool")
+            prev_lt = json.load(open(prev_path, encoding="utf-8")).get("languagetool")
         except Exception:
-            previous = prev_lt = None
+            prev_lt = None
     repos = scan_hf(os.path.join(backend, "models", "hf"), os.path.join(out, ".hashcache.json"))
-    ollama = ollama_info(cfg, previous)
     lt = languagetool_info(backend, prev_lt)
-    lock = {"generated": time.strftime("%Y-%m-%d %H:%M:%S"), "python": pyver, "hf": repos, "ollama": ollama}
+    lock = {"generated": time.strftime("%Y-%m-%d %H:%M:%S"), "python": pyver, "hf": repos}
     if lt:
         lock["languagetool"] = lt
     with open(prev_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(lock, f, ensure_ascii=False, indent=1)
-    print("  ollama %s digest %s" % (ollama["model"], ollama["digest"][:12]))
     if lt:
         print("  languagetool %s sha256 %s (%.0f MB, downloaded by the installer)" % (lt["version"], lt["sha256"][:12], lt["size"] / 1e6))
     print("OK")
