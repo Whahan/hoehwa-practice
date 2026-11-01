@@ -1000,7 +1000,7 @@ func node_button(w: int) -> Button          # w = 1..4
 | `tts_test.gd`, `smoke.gd`, `ui_nav_test.gd` | `TodayView.new()`, `_voice_row`, `BottomTabs`/`SideNav` API | 변경 없음 | - |
 | `phone_layout_test.gd` (구현 중 추가) | W4-2 | 홈 본문 폭 ≤ 880 | 홈만 ≤ 960(§7.2 PC 본문 960) | T4 |
 | `phone_layout_test.gd` (구현 중 추가) | 레슨 홈 바 제목 | 큰 제목이 보이는 동안 바 제목 흐림 | 폰: 바 제목 "레슨"이 보이는지만(§7.3 폰은 큰 제목 없음) | T5 |
-| `ui_perf_test.gd` (구현 중 추가) | lesson | 기준선 2.0배 | 레슨 길(48칸)은 절대 상한: 노드 ≤ 600, build_ms ≤ 150 | T5 |
+| `ui_perf_test.gd` (구현 중 추가) | lesson | 기준선 2.0배 | 레슨 길(48칸)은 절대 상한: 노드 ≤ 600, build_ms ≤ 150, res ≤ 800 | T5 |
 | `touch_scroll_test.gd` (구현 중 추가) | 레슨 홈 시작점 | 128 | 126 허용(복습 카드·범위 고르기 삭제로 시작점 종류 감소) | T5 |
 
 ---
