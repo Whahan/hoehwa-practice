@@ -151,6 +151,9 @@ func _ready() -> void:
 	_test_traversal()
 	_test_links()
 	_test_guard()
+	_test_readonly_snapshot()
+	_test_snapshot_threads()
+	_test_thread_source()
 
 	_fresh()
 	SongStore.root = old_root
@@ -618,3 +621,227 @@ func _test_guard() -> void:
 	SongStore.root = "user://songs_other"
 	ok(SongStore.blocked() == false, "user://songs_other is a different folder")
 	SongStore.root = saved
+
+
+# ---------------------------------------------------------------- read-only listing for worker threads
+
+## Installs an audio song and a lyrics-less broken one; returns [audio id, broken id].
+func _fixture_audio_and_broken() -> Array:
+	_fresh()
+	var ida: String = _install("Snap A", 1500)["id"]
+	var idb: String = _install("Snap B", 900)["id"]
+	var pb: String = ROOT + "/" + idb + "/song.json"
+	var full: String = _read(pb)
+	_write(pb, full.substr(0, full.length() / 2))
+	return [ida, idb]
+
+
+func _test_readonly_snapshot() -> void:
+	print("[list_snapshot: read-only, side effects only in apply_snapshot]")
+	var ids: Array = _fixture_audio_and_broken()
+	var ida: String = ids[0]
+	var idb: String = ids[1]
+	var pb: String = ROOT + "/" + idb + "/song.json"
+	SongStore.last_error = "marker"
+	var snap: Dictionary = SongStore.list_snapshot(true, {}, true)
+	ok((snap["list"] as Array).size() == 1 and snap["list"][0]["id"] == ida and snap["list"][0]["ready"] == true, "snapshot lists the good audio song as ready")
+	ok(snap["bad"] == [idb], "snapshot reports the broken song.json in `bad`")
+	ok(FileAccess.file_exists(pb) and not FileAccess.file_exists(pb + ".bad"), "snapshot did NOT move the broken song.json")
+	ok(SongStore.take_quarantined().is_empty() and SongStore.last_error == "marker" and SongStore.sha_known().is_empty(), "snapshot wrote no static: _quarantined empty, last_error unchanged, sha cache empty")
+	ok((snap["sha_new"] as Dictionary).size() == 1 and (snap["sha_drop"] as Array).is_empty(), "the newly verified audio is reported in sha_new (not cached by the snapshot)")
+	ok(snap["orphans"] == [] and snap["usage"]["songs"] == 2, "extras: usage counts both song.json files before the move, no orphan yet")
+	var snap2: Dictionary = SongStore.list_snapshot(false, {}, false)
+	ok(snap2["list"][0]["ready"] == false and (snap2["sha_new"] as Dictionary).is_empty(), "check_audio=false skips the audio check")
+	# main thread applies
+	SongStore.apply_snapshot(snap)
+	ok(FileAccess.file_exists(pb + ".bad") and not FileAccess.file_exists(pb), "apply_snapshot moved the broken song.json to .bad")
+	ok(SongStore.last_error == "bad_json" and SongStore.sha_known().size() == 1, "apply_snapshot set last_error and filled the sha cache")
+	ok(SongStore.take_quarantined() == [idb] and SongStore.take_quarantined().is_empty(), "quarantined exactly once")
+	SongStore.apply_snapshot(snap) # the same snapshot again: nothing left to move
+	ok(SongStore.take_quarantined().is_empty(), "applying the same snapshot twice quarantines nothing the second time")
+	# the old entry point still behaves as before
+	var ids2: Array = _fixture_audio_and_broken()
+	var l: Array = SongStore.list()
+	ok(l.size() == 1 and l[0]["ready"] == true and SongStore.take_quarantined() == [ids2[1]] and SongStore.last_error == "bad_json" and SongStore.orphan_ids() == [ids2[1]], "list() on the main thread: same result and side effects as before")
+	# a stale `known` entry that no longer matches is dropped by apply
+	var ap: String = SongStore.audio_path(ids2[0])
+	var stale := {ap: [1, 1]}
+	var snap3: Dictionary = SongStore.list_snapshot(true, stale, false)
+	ok(snap3["list"][0]["ready"] == true and (snap3["sha_new"] as Dictionary).has(ap), "a stale cache entry is not trusted: the file is checked again")
+	SongStore.apply_snapshot("not a dictionary")
+	SongStore.apply_snapshot({"bad": ["../x", 5, null], "sha_drop": [3], "sha_new": "x"})
+	ok(true, "apply_snapshot ignores malformed input")
+	_fresh()
+
+
+func _test_snapshot_threads() -> void:
+	print("[list_snapshot on a worker thread while the main thread touches the same statics]")
+	var ids: Array = _fixture_audio_and_broken()
+	var ida: String = ids[0]
+	var idb: String = ids[1]
+	var pb: String = ROOT + "/" + idb + "/song.json"
+	var known: Dictionary = SongStore.sha_known()
+	var th := Thread.new()
+	th.start(func() -> Array:
+		var outs: Array = []
+		for i in 6:
+			outs.append(SongStore.list_snapshot(true, known, true))
+			OS.delay_usec(500)
+		return outs)
+	var main_loops := 0
+	var leaked := 0
+	for i in 200:
+		if not SongStore.take_quarantined().is_empty():
+			leaked += 1
+		SongStore.clear_cache()
+		var le: String = SongStore.last_error
+		main_loops += 1
+		OS.delay_usec(300)
+	var outs: Variant = th.wait_to_finish()
+	ok(outs is Array and (outs as Array).size() == 6 and main_loops == 200, "6 snapshots on the thread, 200 main-thread take_quarantined / clear_cache / last_error rounds, no crash")
+	var good := true
+	for sn in (outs as Array):
+		good = good and (sn["list"] as Array).size() == 1 and sn["list"][0]["id"] == ida and sn["list"][0]["ready"] == true and sn["bad"] == [idb]
+	ok(good, "every snapshot is correct (good song ready, broken one reported)")
+	ok(leaked == 0 and FileAccess.file_exists(pb) and not FileAccess.file_exists(pb + ".bad"), "the thread quarantined nothing and moved no file")
+	SongStore.apply_snapshot((outs as Array)[0])
+	for sn in (outs as Array):
+		SongStore.apply_snapshot(sn) # six more applies of the same finding
+	ok(FileAccess.file_exists(pb + ".bad") and not FileAccess.file_exists(pb), "the main thread moved the broken file")
+	ok(SongStore.take_quarantined() == [idb] and SongStore.take_quarantined().is_empty(), "the quarantine was applied exactly once, on the main thread")
+	var bads: int = 0
+	for fn in _files(ROOT + "/" + idb):
+		if fn.begins_with("song.json.bad"):
+			bads += 1
+	ok(bads == 1, "exactly one .bad file exists (%d)" % bads)
+	_fresh()
+
+
+# ---------------------------------------------------------------- source check: nothing reachable from a worker thread writes shared state
+
+const SRC_STORE := "res://scripts/local/song_store.gd"
+const SRC_DUE := "res://scripts/core/song_due.gd"
+const SRC_VIEW := "res://scripts/views/song_view.gd"
+## Functions that write a static, move / write a file or call something that does. A worker thread must never reach them.
+const FORBIDDEN_CALLS := ["_guard", "_read_song", "_quarantine_file", "_rm_rf", "_write_atomic", "_write_bytes", "apply_snapshot",
+	"take_quarantined", "clear_cache", "load_song", "load_memo", "verify_audio", "_audio_ok", "list", "save_song", "save_memo",
+	"delete", "delete_memo", "install", "install_lyrics", "orphan_ids", "usage", "scan", "store", "pending_put", "pending_remove"]
+const FORBIDDEN_FILE_OPS := ["rename_absolute", "remove_absolute", "make_dir", "copy_absolute", "store_string", "store_buffer", "store_8"]
+
+
+## {function name: body text (code only, comments stripped)} of a script's top-level (static) functions.
+func _functions_of(src: String) -> Dictionary:
+	var out := {}
+	var cur := ""
+	var body := ""
+	for line in src.split("\n"):
+		var is_func: bool = line.begins_with("func ") or line.begins_with("static func ")
+		if is_func:
+			if cur != "":
+				out[cur] = body
+			var head: String = line.substr(line.find("func ") + 5)
+			cur = head.split("(")[0].strip_edges()
+			body = ""
+		elif cur != "" and (line.begins_with("class ") or line.begins_with("static var ") or line.begins_with("var ") or line.begins_with("const ")):
+			out[cur] = body
+			cur = ""
+		if cur != "":
+			body += line.split("#")[0] + "\n"
+	if cur != "":
+		out[cur] = body
+	return out
+
+
+## Names of `static var X` / `var X` declared at the top of a script.
+func _statics_of(src: String) -> Array:
+	var out: Array = []
+	var re := RegEx.new()
+	re.compile("(?m)^(?:static )?var\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	for m in re.search_all(src):
+		out.append(m.get_string(1))
+	return out
+
+
+## Problems found in the functions reachable from `entry` (name in `own`), following calls into the other tables.
+## tables = {"SongStore": {...}, "SongDue": {...}, "": own table of the entry}; statics = names whose assignment is forbidden.
+func _thread_problems(entry: String, tables: Dictionary, statics: Array) -> Array:
+	var problems: Array = []
+	var seen := {}
+	var queue: Array = [["", entry]]
+	var call_re := RegEx.new()
+	call_re.compile("(?:(SongStore|SongDue)\\.)?\\b([a-z_][A-Za-z0-9_]*)\\(")
+	var asg_re := RegEx.new()
+	asg_re.compile("(?<![A-Za-z0-9_.])(?:SongStore\\.|SongDue\\.)?(" + "|".join(statics) + ")\\s*(?:\\[[^\\]]*\\]\\s*)*(?:=(?!=)|\\+=|-=)")
+	var mut_re := RegEx.new()
+	mut_re.compile("(?:SongStore\\.|SongDue\\.)?(" + "|".join(statics) + ")\\.(?:erase|clear|merge|append|push_back|pop_back|pop_front|insert|remove_at|sort)\\(")
+	while not queue.is_empty():
+		var item: Array = queue.pop_back()
+		var owner: String = item[0]
+		var fname: String = item[1]
+		var key: String = "%s.%s" % [owner, fname]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		var table: Dictionary = tables.get(owner, {})
+		if not table.has(fname):
+			problems.append("%s: function not found in the source" % key)
+			continue
+		var body: String = table[fname]
+		if asg_re.search(body) != null:
+			problems.append("%s assigns a static (%s)" % [key, asg_re.search(body).get_string().strip_edges()])
+		if mut_re.search(body) != null:
+			problems.append("%s mutates a static (%s)" % [key, mut_re.search(body).get_string()])
+		for op in FORBIDDEN_FILE_OPS:
+			if body.contains("." + op + "(") or body.contains("FileAccess.open") and body.contains("WRITE"):
+				problems.append("%s writes or moves a file (%s)" % [key, op])
+				break
+		for m in call_re.search_all(body):
+			var q: String = m.get_string(1)
+			var callee: String = m.get_string(2)
+			var tbl_owner: String = q if q != "" else owner
+			if q == "" and owner == "" and not (tables[""] as Dictionary).has(callee):
+				continue # a built-in or an engine class method on the entry's own script
+			var target: Dictionary = tables.get(tbl_owner, {})
+			if FORBIDDEN_CALLS.has(callee) and (q != "" or target.has(callee)):
+				problems.append("%s calls %s%s" % [key, (q + ".") if q != "" else "", callee])
+			elif target.has(callee):
+				queue.append([tbl_owner, callee])
+	return problems
+
+
+func _test_thread_source() -> void:
+	print("[worker-thread entry points reach no static write or file move]")
+	var store_src: String = FileAccess.get_file_as_string(SRC_STORE)
+	var due_src: String = FileAccess.get_file_as_string(SRC_DUE)
+	var view_src: String = FileAccess.get_file_as_string(SRC_VIEW)
+	ok(store_src != "" and due_src != "" and view_src != "", "the three sources are readable")
+	var store_fn: Dictionary = _functions_of(store_src)
+	var due_fn: Dictionary = _functions_of(due_src)
+	var view_fn: Dictionary = _functions_of(view_src)
+	var statics: Array = _statics_of(store_src) + _statics_of(due_src)
+	ok(statics.has("_sha_cache") and statics.has("last_error") and statics.has("_quarantined") and statics.has("_warned") and statics.has("cache"), "the static list includes _sha_cache, last_error, _quarantined, _warned, cache (%d)" % statics.size())
+	# entry 1: SongDue.compute (the home's scan thread); entry 2: SongView._default_load (the song list thread)
+	var t_due := {"SongStore": store_fn, "SongDue": due_fn, "": due_fn}
+	var p1: Array = _thread_problems("compute", t_due, statics)
+	ok(p1.is_empty(), "SongDue.compute: no static write / file move reachable %s" % str(p1))
+	var t_view := {"SongStore": store_fn, "SongDue": due_fn, "": view_fn}
+	var p2: Array = _thread_problems("_default_load", t_view, statics)
+	ok(p2.is_empty(), "SongView._default_load: no static write / file move reachable %s" % str(p2))
+	ok(store_fn.has("list_snapshot") and store_fn.has("_audio_ok_ro") and store_fn.has("_peek_song"), "the read-only functions exist")
+	# the analyzer can fail: fake sources that break the rule, hidden at different depths
+	var fake_store := {
+		"list_snapshot": "\tvar x = _helper()\n\treturn x\n",
+		"_helper": "\t_sha_cache[\"a\"] = [1, 2]\n\treturn 1\n"}
+	var f1: Array = _thread_problems("list_snapshot", {"SongStore": fake_store, "": fake_store}, statics)
+	print("selfcheck %s analyzer on a helper that writes _sha_cache two calls deep (%d problems)" % ["FAIL-as-expected" if not f1.is_empty() else "UNEXPECTED-PASS", f1.size()])
+	ok(not f1.is_empty(), "self-check: a static write one call below the entry is found")
+	var fake_a := {"entry": "\tSongStore.list()\n"}
+	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_a}, statics).is_empty(), "self-check: calling SongStore.list() from the entry is found")
+	var fake_b := {"entry": "\tlast_error = \"x\"\n"}
+	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_b}, statics).is_empty(), "self-check: assigning last_error is found")
+	var fake_c := {"entry": "\t_quarantined.append(1)\n"}
+	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_c}, statics).is_empty(), "self-check: _quarantined.append is found")
+	var fake_d := {"entry": "\tDirAccess.rename_absolute(a, b)\n"}
+	ok(not _thread_problems("entry", {"SongStore": store_fn, "": fake_d}, statics).is_empty(), "self-check: a file move is found")
+	var fake_e := {"entry": "\tvar a = last_error == \"x\"\n\tvar b = _sha_cache.get(1)\n"}
+	ok(_thread_problems("entry", {"SongStore": store_fn, "": fake_e}, statics).is_empty(), "self-check: reading a static (== / .get) is not a problem")

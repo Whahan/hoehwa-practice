@@ -1,7 +1,8 @@
 class_name SongDue
 extends RefCounted
 ## 홈의 "노래 외우기 N줄" 줄이 쓰는 집계. 순수 계산 + 읽기 전용 파일 읽기(곡 폴더를 옮기거나 쓰지 않는다).
-## 홈은 보일 때마다 Thread 로 scan() 을 돌리고, 끝나면 `cache` 를 읽어 노래 줄만 다시 그린다.
+## 홈은 보일 때마다 Thread 로 compute() 를 돌리고, 끝나면 메인 스레드가 store() 로 `cache` 를 채워 노래 줄만 다시 그린다.
+## compute() 는 SongStore.list_snapshot()/memo_summary() 만 쓴다(정적 변수 대입·파일 이동 없음).
 ##
 ## lister 계약 (시험이 가짜를 넣는다): () -> {"list": [곡 사전...], "memo": {곡 id: memo_summary 사전}}
 ##   SongView._default_load() 가 돌려주는 모양과 같다. 곡 사전은 "id", "kind"("lyrics"|"audio") 만 쓴다.
@@ -53,7 +54,9 @@ static func scan(lister: Callable = Callable()) -> Dictionary:
 
 
 static func _default_list(now: int) -> Dictionary:
-	var l: Array = SongStore.list()
+	# SongStore.list_snapshot() is the read-only listing: it assigns no SongStore static and moves no file (a broken
+	# song.json is only ignored here; the song screen moves it when it loads the list on the main thread).
+	var l: Array = SongStore.list_snapshot(false, {}, false)["list"]
 	var memo: Dictionary = {}
 	for s in l:
 		if s is Dictionary and str((s as Dictionary).get("kind", "audio")) == "lyrics":

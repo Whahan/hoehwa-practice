@@ -22,7 +22,8 @@ extends AppView
 ##   song_open_requested(song_id)       곡을 눌렀다 (음원 곡은 학습 화면, 가사만 곡은 외우기 화면. 오디오가 깨진 음원 곡은 제외)
 ## host_screens == false 이면 화면을 직접 열지 않는다 (신호만). 그때 신호에 연결된 곳이 없으면 "준비 중" 안내만 한다.
 ##
-## SongStore.list() 는 처음 부를 때 오디오 sha256 을 최대 400 MiB 계산하므로 느리다 → 다른 스레드에서 부르고(use_thread),
+## 목록 읽기는 처음엔 오디오 sha256 을 최대 400 MiB 계산하므로 느리다 → 다른 스레드에서 읽고(use_thread, 읽기 전용 SongStore.list_snapshot:
+## 정적 변수를 쓰지 않고 파일을 옮기지 않는다. 깨진 파일 격리 등은 끝난 뒤 메인 스레드가 apply_snapshot 으로 한다),
 ## 그동안 화면은 "불러오는 중" 을 보이며 계속 움직인다. 스레드를 못 쓰면 두 프레임 뒤에 부른다(화면을 먼저 그린다).
 ## 시험은 SongStore.root 를 user://test_* 로 바꾸고, `loader` 로 느린 목록을 흉내 낸다.
 
@@ -345,18 +346,21 @@ func _go_lyrics() -> void:
 
 # ---------------------------------------------------------------- loading the list
 
-func _default_load() -> Dictionary:
+## Runs on the list thread, so it uses read-only SongStore calls only (list_snapshot, memo_summary): no SongStore static is
+## assigned and no file is moved here. The result carries the "snap"; _finish_load applies it on the main thread
+## (quarantine moves, `_quarantined`, `last_error`, verified-audio cache). `known` = SongStore.sha_known() taken on the main thread.
+func _default_load(known: Dictionary = {}) -> Dictionary:
 	if SongStore.blocked(): # a test run must not look into the real songs folder (and must not log an error either)
 		return {"list": [], "orphans": [], "usage": {"songs": 0, "bytes": 0, "max_songs": SongStore.max_songs, "max_bytes": SongStore.max_bytes}, "quarantined": [], "memo": {}}
-	var l: Array = SongStore.list()
-	var q: Array = SongStore.take_quarantined()
+	var snap: Dictionary = SongStore.list_snapshot(true, known, true)
+	var l: Array = snap["list"]
 	var memo: Dictionary = {}
 	var now: int = int(Time.get_unix_time_from_system())
 	for s in l: # read-only, never moves a file: safe in this thread
 		if str((s as Dictionary).get("kind", "audio")) == "lyrics":
 			var sid: String = str((s as Dictionary)["id"])
 			memo[sid] = SongStore.memo_summary(sid, now)
-	return {"list": l, "orphans": SongStore.orphan_ids(), "usage": SongStore.usage(), "quarantined": q, "memo": memo}
+	return {"list": l, "orphans": snap["orphans"], "usage": snap["usage"], "quarantined": [], "memo": memo, "snap": snap}
 
 
 func is_loading() -> bool:
@@ -371,7 +375,7 @@ func _start_load() -> void:
 	if not _loaded_once:
 		state = "loading"
 		_render_body()
-	var ld: Callable = loader if loader.is_valid() else Callable(self, "_default_load")
+	var ld: Callable = loader if loader.is_valid() else Callable(self, "_default_load").bind(SongStore.sha_known())
 	if use_thread:
 		var th := Thread.new()
 		if th.start(ld) == OK:
@@ -392,7 +396,7 @@ func _process(_delta: float) -> void:
 	elif _defer_frames > 0:
 		_defer_frames -= 1
 		if _defer_frames == 0:
-			var ld: Callable = loader if loader.is_valid() else Callable(self, "_default_load")
+			var ld: Callable = loader if loader.is_valid() else Callable(self, "_default_load").bind(SongStore.sha_known())
 			_finish_load(ld.call())
 	if _thread == null and _defer_frames == 0:
 		set_process(false)
@@ -401,6 +405,14 @@ func _process(_delta: float) -> void:
 func _finish_load(res: Variant) -> void:
 	load_count += 1
 	var quarantined: Array = []
+	if res is Dictionary and (res as Dictionary).get("snap", null) is Dictionary:
+		# main thread: the side effects the read-only list thread left for us
+		SongStore.apply_snapshot((res as Dictionary)["snap"])
+		(res as Dictionary)["quarantined"] = SongStore.take_quarantined()
+		var bad: Variant = ((res as Dictionary)["snap"] as Dictionary).get("bad", [])
+		if bad is Array and not (bad as Array).is_empty(): # a moved song.json changes what is an orphan and what counts as a song
+			(res as Dictionary)["orphans"] = SongStore.orphan_ids()
+			(res as Dictionary)["usage"] = SongStore.usage()
 	if res is Dictionary and (res as Dictionary).get("list", null) is Array:
 		var r: Dictionary = res
 		songs = []
