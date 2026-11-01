@@ -1099,24 +1099,26 @@ func _test_main_wiring() -> void:
 	m.add_v11_tabs()
 	await _frames(4)
 	var keys: Array = m.tab_keys()
-	ok(keys == ["today", "lesson", "talk", "review", "practice", "reading", "song", "stats", "roadmap", "settings"], "tab order: 노래 right after 읽기 (%s)" % [keys])
+	var want_keys: Array = ["today", "lesson", "review", "song", "menu", "talk", "practice", "reading", "stats", "roadmap", "settings"] if _phone else ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "roadmap", "settings"]
+	ok(keys == want_keys, "tab order: 노래 right after 복습 (the phone adds 메뉴 behind it) (%s)" % [keys])
 	ok(m.views.get("song", null) is SongView, "views['song'] is a SongView")
 	var labels := {}
 	for t in m._tabs:
 		labels[str(t[0])] = str(t[1])
 	ok(labels.get("song", "") == "노래", "tab label is 노래")
-	ok(m.NAV_LEARN.has("song") and m.NAV_LEARN.find("song") == m.NAV_LEARN.find("reading") + 1 and m.OWN_HEADER.has("song"), "NAV_LEARN has song right after reading, OWN_HEADER has song")
+	var study_keys: Array = (m.NAV_GROUPS[0] as Dictionary)["keys"]
+	ok((m.NAV_GROUPS[0] as Dictionary)["title"] == "공부" and study_keys.has("song") and study_keys.find("song") == study_keys.find("review") + 1 and m.OWN_HEADER.has("song"), "NAV_GROUPS: 공부 has song right after review, OWN_HEADER has song")
 	if _phone:
 		var bt: BottomTabs = m._bottom_tabs
-		ok(bt.direct_keys() == ["today", "lesson", "talk", "review"] and bt.overflow_keys().has("song") and bt.cell_buttons().size() == 5, "phone: the bottom bar keeps its 4 cells + 더보기, 노래 is inside 더보기 (%s)" % [bt.overflow_keys()])
+		ok(m.bar_keys() == ["today", "lesson", "review", "song", "menu"] and bt.direct_keys() == m.bar_keys() and bt.overflow_keys().is_empty() and bt.cell_buttons().size() == 5, "phone: 노래 is the 4th cell of the bottom bar (홈 레슨 복습 노래 메뉴, no 더보기) (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
 	else:
 		var btns: Dictionary = m._side_nav.item_buttons()
 		ok(btns.has("song") and (btns["song"] as Button).text.contains("노래"), "PC: the side nav has a 노래 item")
 		var ys := {}
-		for k in ["practice", "reading", "song", "review", "stats"]:
+		for k in ["review", "song", "talk", "practice", "reading", "stats"]:
 			ys[k] = (btns[k] as Control).get_global_rect().position.y
-		ok(ys["reading"] < ys["song"] and ys["song"] < ys["review"] and ys["practice"] < ys["reading"], "PC: 학습 section order ... 읽기, 노래, 복습")
-		ok(ys["song"] < ys["stats"], "PC: 노래 is in the 학습 section (above 기록)")
+		ok(ys["review"] < ys["song"] and ys["song"] < ys["talk"] and ys["talk"] < ys["practice"] and ys["practice"] < ys["reading"], "PC: 공부 group order ... 복습, 노래; then 말하기·읽기 (대화, 연습, 읽기)")
+		ok(ys["song"] < ys["stats"] and ys["reading"] < ys["stats"], "PC: 노래 is in the 공부 group (above 기록)")
 	_toasts.clear()
 	await _frames(10) # the shell's own start-up requests (health ...) are done
 	var sent_shell: int = Api.sent_count
