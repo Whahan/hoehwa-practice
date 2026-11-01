@@ -693,7 +693,7 @@ func _test_ja_fields() -> void:
 	ok(mid_ok and plan.size() >= 3, "middle stages: reading hidden, Korean translation still shown")
 	d.render()
 	var tfin: String = "\n".join(_strings(d))
-	ok(bool(s.current()["final"]) and not tfin.contains(JA_READING) and not tfin.contains("해석 0"), "blank stage: reading and Korean translation are hidden")
+	ok(bool(s.current()["final"]) and not tfin.contains(JA_READING) and tfin.contains("해석 0") and not tfin.contains(str(s.current()["text"])), "blank stage: reading is hidden; the Korean meaning (not the answer) stays above the blank (1.5.1 meaning view)")
 	d.set_typed(str(s.current()["text"]))
 	_press(d, "SubmitBtn")
 	await _frames(1)

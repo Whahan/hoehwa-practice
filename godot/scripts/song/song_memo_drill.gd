@@ -24,6 +24,8 @@ extends VBoxContainer
 ##   next_line {pos}               다음 줄을 열었다          queue_end {summary}   큐가 끝났다 (MemoSession.finish 까지 불렀다)
 ##   answer_mode {mode}            입력/말하기 전환          stt_error {text}   /stt 오류 -> 자가 평가로 전환
 ##   silent {via}                  무음 (시도로 세지 않음)   listen {text_len}   읽어 주기를 눌렀다
+## 한국어 해석(뜻): 지금 줄 위에 작게(KoLabel, MUTED, 최대 2줄, 넘으면 …) 보인다 — 읽기·가림·빈 화면·결과 모두, 후렴 묶음·복습 카드도.
+##   해석이 없거나 고친 줄(stale)이면 자리도 만들지 않는다. 설정 memo_show_ko(기본 켬)가 꺼져 있으면 숨긴다. 정답 글자는 아니라서 빈 화면에서도 보인다.
 ## 노드 이름 (시험용): LineBox CueBox AnswerEdit SubmitBtn RecordBox RevealBtn LaterBtn ListenBtn ResultBox
 ##   그 밖: ReadBtn NextBtn NextLineBtn RetryBtn RetrySaveBtn SelfPassBtn ModeBtn CancelBtn ListenNote LineText AnswerLine Verdict
 
@@ -38,6 +40,8 @@ const MSG_SAVE_FAIL := "저장하지 못했어요. 저장 공간을 확인한 �
 const MSG_LATER_FAIL := "저장하지 못해서 아직 나가지 않았어요. 저장 공간을 확인한 뒤 다시 눌러 주세요."
 const MSG_END := "오늘 할 줄을 모두 했어요."
 const MSG_NONE := "외울 줄이 없어요."
+const PREF_SHOW_KO := "memo_show_ko"
+const KO_MAX_LINES := 2
 
 var session: MemoSession = null
 var lang: String = "en"
@@ -202,6 +206,9 @@ func _render() -> void:
 	var cue: Control = _cue_box(cur)
 	if cue != null:
 		card.body.add_child(cue)
+	var kol: Control = _ko_label(cur)
+	if kol != null:
+		card.body.add_child(kol)
 	card.body.add_child(_line_box(cur))
 	card.body.add_child(_listen_row(cur, acc))
 	match phase:
@@ -270,12 +277,57 @@ func _line_box(cur: Dictionary) -> Control:
 	if _answer_visible(cur) and phase != "result":
 		var rd: String = str(cur.get("reading", ""))
 		ReadingLine.add(lb, rd, lang, rd != "", 0.0, _line_field(cur, "pron"))
-	var ko: String = str(cur.get("ko", ""))
-	if ko != "" and (_answer_visible(cur) or not bool(cur["final"])):
-		var kl := UI.label(ko, "Muted")
-		kl.name = "KoLabel"
-		lb.add_child(kl)
 	return lb
+
+
+## "뜻 보기" 설정 (기본 켬). 켜짐이 아닌 값(잘못된 타입 포함)은 기본 켬으로 본다.
+static func show_ko_pref() -> bool:
+	var v: Variant = Store.prefs.get(PREF_SHOW_KO, true)
+	return v if v is bool else true
+
+
+## 줄 위에 작게 보일 한국어 해석. 없거나 stale 이거나 설정이 꺼져 있으면 null (자리도 만들지 않는다).
+func _ko_label(cur: Dictionary) -> Control:
+	if not show_ko_pref() or session == null:
+		return null
+	var ko: String = ko_text(session.song, int(cur.get("line_i", -1)), lang)
+	if ko == "":
+		return null
+	var kl := UI.colored(ko, Pal.MUTED, "Small")
+	kl.name = "KoLabel"
+	kl.max_lines_visible = KO_MAX_LINES
+	kl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	return kl
+
+
+## 곡의 i 번째 줄에 보일 해석 (정적: 시험도 쓴다). 그 줄의 ko 가 비었거나 stale 이면, 글자가 같은 줄(후렴 반복)의 해석을 쓴다. 없으면 "".
+static func ko_text(song_d: Dictionary, i: int, lang_in: String = "en") -> String:
+	var ls: Variant = song_d.get("lines", [])
+	if not (ls is Array) or i < 0 or i >= (ls as Array).size() or not ((ls as Array)[i] is Dictionary):
+		return ""
+	var ln: Dictionary = (ls as Array)[i]
+	var own: String = _valid_ko(ln)
+	if own != "":
+		return own
+	var key: String = MemoModel.line_key(str(ln.get("text", "")), lang_in)
+	if key == "":
+		return ""
+	for j in (ls as Array).size():
+		if j == i or not ((ls as Array)[j] is Dictionary):
+			continue
+		var other: Dictionary = (ls as Array)[j]
+		var k: String = _valid_ko(other)
+		if k != "" and MemoModel.line_key(str(other.get("text", "")), lang_in) == key:
+			return k
+	return ""
+
+
+## 줄 하나의 쓸 수 있는 해석: 글자가 있고 stale(고친 줄)이 아니다. 아니면 "".
+static func _valid_ko(ln: Dictionary) -> String:
+	if bool(ln.get("stale", false)):
+		return ""
+	var v: Variant = ln.get("ko", "")
+	return (v as String).strip_edges() if v is String else ""
 
 
 # ---- 읽어 주기

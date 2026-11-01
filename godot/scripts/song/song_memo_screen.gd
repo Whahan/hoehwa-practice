@@ -17,6 +17,15 @@ extends Control
 ##   진도 초기화: 확인 시트 -> SongStore.delete_memo (가사는 그대로). 복습 탭 카드(Store.progress)는 건드리지 않는다.
 ##   해석 칸: SongMeaningTab 을 그대로 넣는다 (ai_ok = 동의 AND 곡별 해석 켬, PC 가 있을 때만, 버튼을 눌러야만 요청).
 ## 이 화면은 SongView 에 연결하지 않는다 (M7 몫). `closed` 만 낸다.
+##
+## 뜻 보기(한국어 해석) 1.5.1:
+##   - 연습 화면(SongMemoDrill)이 줄 위에 해석을 작게 보인다. 설정 칩 [뜻 보기](memo_show_ko, 기본 켬)로 끈다.
+##   - 해석이 하나도 없거나 일부만 있는 곡(ko 가 비었거나 stale 인 줄이 있는 곡)은 집 화면 맨 위에 안내 카드(KoHintCard)를 둔다.
+##     ko_card_state(song): none · nopc(폰 단독 등 PC 없음: "PC에 연결하면…") · noai(AI 미연결: [AI 연결하기] = Store.request_ai_connect) ·
+##     blocked(AI 를 잠시 못 씀) · consent(동의 전: [해석 만들기]가 동의 시트를 거친다) · off(곡별 해석 끔) · ready(PC + ai_ok + AI 준비: 만들 수 있음).
+##   - ready 이면 화면을 열 때 자동으로 한 번 시작한다(곡마다 한 번, 앱이 켜져 있는 동안; 실패해도 자동 재시도 없음). 동의 전에는 어떤 경우에도 보내지 않는다.
+##   - 만들기는 SongMeaningTab.make_missing 을 그대로 쓴다(화면 없이: quiet=true) — 요청·ai_ok·20줄씩·저장(SongStore.save_song)이 한 곳이다.
+##     저장된 해석은 다음에 PC 없이도 보인다. 화면을 닫으면 요청을 취소하고 늦은 응답은 버린다.
 
 signal closed
 
@@ -35,6 +44,13 @@ const MSG_EDIT_LONG := "가사가 너무 길어요. 한 줄 %d자, %d줄, 모두
 const MSG_EDIT_SAVE_FAIL := "가사를 저장하지 못했어요. 저장 공간을 확인한 뒤 다시 눌러 주세요."
 const MSG_EDIT_READONLY := "이 곡은 더 새 버전으로 만들어져서 고칠 수 없어요."
 const MSG_EDIT_AUDIO := "음악이 있는 곡은 가사 확인 화면에서 고쳐 주세요."
+const MSG_KO_TITLE := "뜻을 보면서 외우면 더 잘 외워져요"
+const MSG_KO_NO_PC := "PC에 연결하면 해석을 만들 수 있어요"
+const MSG_KO_NO_AI := "AI를 연결하면 해석을 만들 수 있어요"
+const MSG_KO_CONSENT := "해석은 가사를 AI 서비스로 보내 만들어요. 버튼을 누르면 안내를 보여 드려요."
+const MSG_KO_BUSY := "해석을 만드는 중이에요…"
+const MSG_KO_DONE := "해석을 만들었어요. 이제 줄 위에 뜻이 보여요."
+const PREF_SHOW_KO := "memo_show_ko"
 const BACK_HOME := "← 노래"
 const BACK_INNER := "← 집"
 const EXTRA_STEP := 5
@@ -71,6 +87,17 @@ var _edit: TextEdit = null
 var _edit_orig: String = ""
 var _edit_msg_box: VBoxContainer = null
 var _gone: bool = false
+var _maker: SongMeaningTab = null ## 화면 없는 해석 만들기 (quiet). 같은 요청 로직(make_missing)을 쓴다
+var _ko_box: VBoxContainer = null
+var _ko_msg: String = ""
+var _ko_working: bool = false
+var _make_serial: int = 0
+var make_calls: int = 0 ## 이 화면이 make_missing 을 부른 횟수 (시험 확인용)
+var consent_asks: int = 0 ## 동의 시트를 연 횟수 (시험 확인용)
+var auto_calls: int = 0 ## 그중 화면을 열 때 자동으로 시작한 횟수 (시험 확인용)
+
+## 곡 id -> true: 이미 해석 만들기를 시작한(자동이든 버튼이든) 곡. 같은 곡을 다시 열어도 자동으로는 다시 안 보낸다. 시험은 reset_auto() 로 비운다.
+static var _auto_done: Dictionary = {}
 
 
 func _init() -> void:
@@ -82,6 +109,7 @@ func _init() -> void:
 
 
 func _exit_tree() -> void:
+	_gone = true
 	_leave_all(true)
 
 
@@ -115,6 +143,7 @@ func open(l: String, args: Dictionary = {}) -> void:
 		_notes.append(MSG_NEWER_MEMO)
 	_build_footer()
 	show_home()
+	_maybe_auto_make()
 
 
 ## 다른 곳으로 갈 때: 진행 중인 줄을 저장하고(도달 단계), 녹음·읽어 주기·요청을 멈춘다.
@@ -191,6 +220,10 @@ func pref_answer() -> String:
 	return "speak" if (v is String and v == "speak") else "type"
 
 
+func pref_show_ko() -> bool:
+	return SongMemoDrill.show_ko_pref()
+
+
 ## 집 화면의 숫자. MemoModel.summary + today_new(오늘 새 줄) + today_review(오늘 복습).
 func home_stats() -> Dictionary:
 	var st: Dictionary = MemoModel.summary(song, memo, _now())
@@ -257,6 +290,12 @@ func set_prev_cue(on: bool) -> void:
 	_rebuild_chips()
 
 
+func set_show_ko(on: bool) -> void:
+	if Store.prefs.get(PREF_SHOW_KO, null) != on:
+		Store.set_pref(PREF_SHOW_KO, on)
+	_rebuild_chips()
+
+
 func set_answer(mode: String) -> void:
 	var m: String = "speak" if mode == "speak" else "type"
 	if Store.prefs.get("memo_answer", null) != m:
@@ -288,6 +327,12 @@ func _reset() -> void:
 	_edit_orig = ""
 	_chips = null
 	_meaning_count = null
+	_ko_box = null
+	_ko_msg = ""
+	make_calls = 0
+	auto_calls = 0
+	consent_asks = 0
+	_drop_maker()
 	_close_sheet()
 	_clear_body()
 	SpeakDrill.hide_footer(_shell)
@@ -301,6 +346,7 @@ func _leave_all(quiet: bool) -> void:
 		drill.on_hide()
 	if meaning != null and is_instance_valid(meaning):
 		meaning.on_hide()
+	_cancel_make()
 	if not quiet and view == "session":
 		view = "home"
 
@@ -318,6 +364,7 @@ func _clear_body() -> void:
 	meaning = null
 	_chips = null
 	_meaning_count = null
+	_ko_box = null
 	_edit = null
 	_edit_msg_box = null
 	if _body != null:
@@ -369,6 +416,10 @@ func show_home() -> void:
 	var st: Dictionary = home_stats()
 	_set_header(_song_title(), artist if artist != "" else "%d줄" % int(st["total"]))
 	var acc: Color = _acc()
+	_ko_box = UI.vbox(0)
+	_ko_box.name = "KoBox"
+	_body.add_child(_ko_box)
+	_fill_ko_card()
 	for n in _notes:
 		var nb := SpeakDrill.notice(str(n), false)
 		nb.name = "Note"
@@ -460,6 +511,9 @@ func _rebuild_chips() -> void:
 	var c2 := UI.filter_chip("앞 줄 힌트", pref_prev_cue(), func() -> void: set_prev_cue(not pref_prev_cue()))
 	c2.name = "ChipCue"
 	_chips.add_child(c2)
+	var ck := UI.filter_chip("뜻 보기", pref_show_ko(), func() -> void: set_show_ko(not pref_show_ko()))
+	ck.name = "ChipKo"
+	_chips.add_child(ck)
 	var c3 := UI.filter_chip("입력으로 답하기", pref_answer() == "type", func() -> void: set_answer("type"))
 	c3.name = "ChipType"
 	_chips.add_child(c3)
@@ -534,6 +588,249 @@ func toggle_meaning() -> void:
 
 func _on_meaning_changed() -> void:
 	_refresh_meaning_count()
+
+
+# ---------------------------------------------------------------- 뜻 보기 안내 카드 · 해석 만들기
+
+## 시험: 곡마다 한 번 자동 규칙의 기억을 비운다.
+static func reset_auto() -> void:
+	_auto_done = {}
+
+
+## 해석이 필요한 줄 수: 글자가 있고(구간 표시 제외) ko 가 비었거나 stale. SongMeaningTab.missing_lines 와 같은 기준.
+static func ko_missing(song_d: Dictionary) -> int:
+	var n := 0
+	var ls: Variant = song_d.get("lines", [])
+	if ls is Array:
+		for d in (ls as Array):
+			if d is Dictionary and SongMeaningTab.is_translatable(d):
+				if str((d as Dictionary).get("ko", "")).strip_edges() == "" or bool((d as Dictionary).get("stale", false)):
+					n += 1
+	return n
+
+
+## AI 가 준비됐나: PC 엔진이 떠 있고 /health 의 llm_state 가 ready (HomeAi / Backend 와 같은 기준).
+static func ai_ready() -> bool:
+	return Backend.is_ready() and Backend.llm_state() == "ready"
+
+
+## 안내 카드의 상태 (집 화면이 그릴 것과 자동 시작 여부를 정한다).
+##   none    해석이 다 있다(또는 읽기 전용 곡) -> 카드 없음
+##   nopc    PC 에 연결돼 있지 않다 (폰 단독 등) -> "PC에 연결하면 해석을 만들 수 있어요", 요청 없음
+##   noai    PC 는 있는데 AI 가 연결되지 않았다 -> [AI 연결하기]
+##   blocked AI 를 잠시 쓸 수 없다 (한도·바쁨)
+##   consent 동의 전 -> [해석 만들기]가 동의 시트를 먼저 보여 준다 (동의 없이는 아무것도 보내지 않는다)
+##   off     이 곡의 AI 해석이 꺼져 있다
+##   ready   PC 연결 + ai_ok(동의 AND 곡별 켬) + AI 준비 -> 만들 수 있다 (자동 시작 대상)
+static func ko_card_state(song_d: Dictionary) -> String:
+	if song_d.is_empty() or ko_missing(song_d) == 0 or SongModel.is_read_only(song_d):
+		return "none"
+	if not SongMeaningTab.pc_available():
+		return "nopc" if Route.is_phone() else "noai"
+	if not ai_ready():
+		return "blocked" if (Backend.is_ready() and Backend.llm_state() == "blocked") else "noai"
+	if not Store.pref_bool(SongMeaningTab.PREF_CONSENT):
+		return "consent"
+	if not SongMeaningTab.translate_on(song_d):
+		return "off"
+	return "ready"
+
+
+func ko_working() -> bool:
+	return _ko_working
+
+
+## 화면을 열 때: ready 이고 이 곡을 아직 한 번도 시작하지 않았다면 자동으로 한 번 시작한다 (실패해도 자동 재시도 없음).
+func _maybe_auto_make() -> void:
+	if song.is_empty() or view != "home" or _ko_working:
+		return
+	if song_id != "" and _auto_done.has(song_id):
+		return
+	if ko_card_state(song) != "ready":
+		return
+	auto_calls += 1
+	_run_make()
+
+
+## [해석 만들기]. 동의 전이면 동의 시트를 먼저 연다 (동의하면 이어서 만든다). 요청을 보냈고 해석이 채워졌으면 true.
+func request_make() -> bool:
+	if view != "home" or song.is_empty() or _ko_working:
+		return false
+	match ko_card_state(song):
+		"consent":
+			_ask_consent()
+			return false
+		"ready":
+			return await _run_make()
+	return false
+
+
+func _ensure_maker() -> void:
+	if _maker == null or not is_instance_valid(_maker):
+		_maker = SongMeaningTab.new()
+		_maker.name = "KoMaker"
+		_maker.quiet = true
+		_maker.visible = false
+		add_child(_maker)
+	_maker.setup(song, {"player": null, "line": -1})
+
+
+func _drop_maker() -> void:
+	_make_serial += 1
+	_ko_working = false
+	if _maker != null and is_instance_valid(_maker):
+		_maker.cancel_make(false)
+		if _maker.get_parent() != null:
+			_maker.get_parent().remove_child(_maker)
+		_maker.queue_free()
+	_maker = null
+
+
+## 요청을 멈추고 늦게 오는 응답을 버린다. 화면을 떠날 때·닫을 때·[취소].
+func _cancel_make(redraw: bool = false) -> void:
+	_make_serial += 1
+	var was: bool = _ko_working
+	_ko_working = false
+	if _maker != null and is_instance_valid(_maker):
+		_maker.cancel_make(false)
+	if was and redraw:
+		_fill_ko_card()
+
+
+func _run_make() -> bool:
+	_ensure_maker()
+	if _maker.busy:
+		return false
+	if song_id != "":
+		_auto_done[song_id] = true
+	make_calls += 1
+	_make_serial += 1
+	var ser: int = _make_serial
+	var m: SongMeaningTab = _maker
+	_ko_msg = ""
+	_ko_working = true
+	_fill_ko_card()
+	var filled: bool = await m.make_missing()
+	if ser != _make_serial or _gone:
+		return false # 화면을 닫았거나 취소했다: 늦은 응답은 버렸다
+	_ko_working = false
+	_after_make(filled, m.last_msg)
+	return filled
+
+
+func _after_make(filled: bool, msg: String) -> void:
+	if filled and ko_missing(song) == 0:
+		_ko_msg = MSG_KO_DONE
+	else:
+		_ko_msg = msg
+	if filled:
+		_sync_session_ko()
+		_refresh_meaning_count()
+		if meaning != null and is_instance_valid(meaning) and not meaning.busy:
+			meaning.on_show()
+	_fill_ko_card()
+
+
+## 만든 해석을 진행 중인 세션의 곡(복사본)에도 넣는다 (다음 줄부터 바로 보인다). 글자가 같은 줄만.
+func _sync_session_ko() -> void:
+	if session == null:
+		return
+	var sl: Variant = session.song.get("lines", [])
+	var l: Variant = song.get("lines", [])
+	if not (sl is Array) or not (l is Array):
+		return
+	for i in mini((sl as Array).size(), (l as Array).size()):
+		var a: Variant = (sl as Array)[i]
+		var b: Variant = (l as Array)[i]
+		if a is Dictionary and b is Dictionary and str((a as Dictionary).get("text", "")) == str((b as Dictionary).get("text", "")):
+			(a as Dictionary)["ko"] = (b as Dictionary).get("ko", "")
+			(a as Dictionary)["stale"] = bool((b as Dictionary).get("stale", false))
+
+
+func _ask_consent() -> void:
+	if last_sheet != null and is_instance_valid(last_sheet) and not last_sheet.is_closed():
+		return
+	consent_asks += 1
+	var body := UI.vbox(10)
+	for para in SongView.consent_text().split("\n\n"):
+		body.add_child(UI.label(para))
+	last_sheet = Sheet.open(self, "노래 공부를 시작하기 전에", body, [
+		{"id": "agree", "text": "동의하고 시작", "kind": "primary"},
+		{"id": "cancel", "text": "취소", "kind": "flat"},
+	], {"max_h_frac": 0.85})
+	last_sheet.closed.connect(_on_consent_closed)
+
+
+func _on_consent_closed(result: Variant) -> void:
+	if str(result) != "agree" or _gone or song.is_empty():
+		return # 취소·닫기: 아무것도 저장하지 않고 아무것도 보내지 않는다
+	Store.set_pref(SongMeaningTab.PREF_CONSENT, true)
+	_fill_ko_card()
+	request_make()
+
+
+func _fill_ko_card() -> void:
+	if _ko_box == null or not is_instance_valid(_ko_box):
+		return
+	UI.clear(_ko_box)
+	var st: String = ko_card_state(song)
+	if st == "none" and not _ko_working and _ko_msg == "":
+		return
+	var acc: Color = _acc()
+	var card := UI.card("BigCard", 8)
+	card.name = "KoHintCard"
+	var t := UI.label(MSG_KO_TITLE, "H3")
+	t.name = "KoHintTitle"
+	card.body.add_child(t)
+	var c: Vector2i = _meaning_counts()
+	if c.y > 0:
+		var cl := UI.label("%d줄 중 %d줄에 해석이 있어요" % [c.y, c.x], "Muted")
+		cl.name = "KoHintCount"
+		card.body.add_child(cl)
+	if _ko_working:
+		var w := UI.label(MSG_KO_BUSY, "Strong")
+		w.name = "KoHintBusy"
+		card.body.add_child(w)
+		card.body.add_child(UI.progress_indeterminate(acc))
+		var cb := SpeakDrill.touch_button("취소", "outline", acc)
+		cb.name = "KoCancelBtn"
+		cb.pressed.connect(func() -> void: _cancel_make(true))
+		card.body.add_child(cb)
+	else:
+		var note := ""
+		match st:
+			"nopc":
+				note = MSG_KO_NO_PC
+			"noai":
+				note = MSG_KO_NO_AI
+			"blocked":
+				note = Backend.llm_missing_text()
+			"off":
+				note = SongMeaningTab.MSG_SWITCH_OFF
+			"consent":
+				note = MSG_KO_CONSENT
+		if note != "":
+			var nb := SpeakDrill.notice(note, false)
+			nb.name = "KoHintNote"
+			card.body.add_child(nb)
+		if st != "none":
+			var mb := SpeakDrill.touch_button("해석 만들기", "primary", acc)
+			mb.name = "KoMakeBtn"
+			mb.disabled = st != "ready" and st != "consent"
+			mb.pressed.connect(func() -> void: request_make())
+			card.body.add_child(mb)
+		if st == "noai":
+			var ab := SpeakDrill.touch_button("AI 연결하기", "soft", acc)
+			ab.name = "KoAiBtn"
+			ab.pressed.connect(func() -> void: Store.request_ai_connect())
+			card.body.add_child(ab)
+		if _ko_msg != "":
+			var ml := UI.label(_ko_msg, "Strong")
+			ml.name = "KoHintMsg"
+			card.body.add_child(ml)
+	_ko_box.add_child(card)
+	UI.fix_cjk(_ko_box)
+	SpeakDrill.fit_touch(_ko_box)
 
 
 # ---------------------------------------------------------------- 세션
