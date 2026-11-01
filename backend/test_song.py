@@ -1170,7 +1170,7 @@ ok("song.py never calls log.exception (tracebacks may carry request text)", "exc
 print("== wiring (source) ==")
 srv = open(os.path.join(HERE, "server.py"), encoding="utf-8").read()
 ok("server.py: import song, song.init(...), include_router(song.router), /health song + song_v", "import song" in srv and re.search(r"song\.init\(log=log", srv) and "app.include_router(song.router)" in srv
-   and '"song": song.available(), "song_v": song.SONG_API_V' in srv)
+   and '"song": song.available(), "song_v": song.SONG_V, "song_identify": True}' in srv)
 ok("server.py wires get_stt and the SAME _stt_run_lock object (not a new lock)", "get_model=get_stt, run_lock=_stt_run_lock" in srv)
 ok("song.py itself never imports server / reading / faster_whisper at module level", not re.search(r"^(import|from)\s+(server|reading|faster_whisper|torch)\b", src, re.M))
 ok("song.py never takes the model lock itself (it is only handed to transcribe_song, which takes it per window)", not re.search(r"^\s*with\s+(lock|H\[|.*run_lock)", src, re.M) and "_stt_run_lock" not in re.sub(r'"""[\s\S]*?"""', "", src))
@@ -1210,7 +1210,7 @@ if arg("--stub"):
             ok("stub --song is up", up)
             if up:
                 h = httpx.get(base + "/health").json()
-                ok("stub /health: song true, song_v 2", h.get("song") is True and h.get("song_v") == 2, h)
+                ok("stub /health: song true, song_v 1, song_identify true", h.get("song") is True and h.get("song_v") == 1 and h.get("song_identify") is True, h)
                 hdr = {"content-type": "application/json"}
                 u = new_uid()
                 r = httpx.post(base + "/song/upload", json={"upload_id": u, "index": 0, "total": 1, "name": "a.mp3", "data_b64": b64(small_b)}, headers=hdr, timeout=30)
@@ -1243,7 +1243,7 @@ if arg("--base"):
         sys.exit("refusing the app's real ports")
     hdr = {"content-type": "application/json"}
     h = httpx.get(base + "/health", timeout=10).json()
-    ok("live /health: song true and song_v 2", h.get("song") is True and h.get("song_v") == 2, {k: h.get(k) for k in ("song", "song_v", "stt")})
+    ok("live /health: song true, song_v 1 and song_identify true", h.get("song") is True and h.get("song_v") == 1 and h.get("song_identify") is True, {k: h.get(k) for k in ("song", "song_v", "song_identify", "stt")})
     if not sf or not os.path.exists(sf):
         skip("live job", "give --song-file")
     else:

@@ -56,7 +56,6 @@ import song_enrich
 
 # ---- limits (design 5.1) ---------------------------------------------------------------------------------------------
 SONG_V = 1                              # version of the song JSON ("v" in /song/result) - unchanged
-SONG_API_V = 2                          # /health song_v: 2 = + POST /song/identify (title -> candidates); the app shows the AI search only when >= 2
 MAX_SONG_BYTES = 64 * 1024 * 1024
 MAX_SONG_SEC = 600
 CHUNK_BYTES = 3 * 1024 * 1024

@@ -322,9 +322,9 @@ ok("the log has the length of q", ("q %d chars" % len(q_secret)) in logged, logg
 print("== lan / health ==")
 ok("lan.ALLOW has (POST, /song/identify)", ("POST", "/song/identify") in lan.ALLOW)
 ok("only POST is allowed for it (no GET)", ("GET", "/song/identify") not in lan.ALLOW)
-ok("song.SONG_API_V == 2 (the /health song_v) and the song JSON version SONG_V stays 1", song.SONG_API_V == 2 and song.SONG_V == 1, (song.SONG_API_V, song.SONG_V))
+ok("song.SONG_V stays 1 (/health song_v and the song JSON v; an old app must not see app_old)", song.SONG_V == 1 and not hasattr(song, "SONG_API_V"), song.SONG_V)
 srv = open(os.path.join(HERE, "server.py"), encoding="utf-8").read()
-ok("server.py reports song_v from song.SONG_V and injects ollama_json into song.init", '"song_v": song.SONG_API_V' in srv
+ok("server.py /health has song_v from song.SONG_V and song_identify true, and injects ollama_json into song.init", '"song_v": song.SONG_V, "song_identify": True}' in srv
    and "song.init(log=log, ApiError=ApiError, readmode=readmode, ollama_json=ollama_json" in srv)
 
 # ---- 6. stub over real HTTP (optional) ---------------------------------------------------------------------------------------------------------
@@ -381,7 +381,7 @@ if arg("--stub") and arg("--lrclib"):
             ok("stub and fake LRCLIB are up", up == 2)
             if up == 2:
                 h = httpx.get(base + "/health").json()
-                ok("stub /health: song true, song_v 2", h.get("song") is True and h.get("song_v") == 2, h)
+                ok("stub /health: song true, song_v 1, song_identify true", h.get("song") is True and h.get("song_v") == 1 and h.get("song_identify") is True, h)
                 H = {"content-type": "application/json"}
                 r = httpx.post(base + "/song/identify", content=b'{"q": "this is nothing", "lang": "en"}', headers=H)
                 ok("stub: q with 'nothing' -> 200 cands []", r.status_code == 200 and r.json() == {"ok": True, "cands": []}, r.text)

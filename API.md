@@ -29,7 +29,7 @@ app/
 ## 엔드포인트
 
 ### GET /health
-`{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "qwen3:8b", "llm_provider": "opencode"|"ollama", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}, "song": bool, "song_v": 2}`
+`{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "qwen3:8b", "llm_provider": "opencode"|"ollama", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}, "song": bool, "song_v": 1, "song_identify": bool}`
 각 기능이 준비됐는지. Godot는 시작할 때 이것으로 서버 기동을 확인한다.
 - `grammar`: LanguageTool(오프라인 문법 검사기)과 Java 17+가 있어 쓸 수 있는지.
 - `llm_fallback.active`: 선택한 엔진(무료 DeepSeek)이 한도·권한 문제로 막혀서 `until`까지 로컬 AI가 대신 답하는 중인지. `reason`은 화면에 그대로 보여 줄 한국어 (예: "DeepSeek V4.1 Flash (무료 · OpenCode) 사용 한도에 도달해서 23:21까지 로컬 AI로 답해요."). 로컬 AI(Ollama)도 연결되지 않으면 `active`는 true이지만 `reason`은 "AI 엔진을 쓸 수 없어요: …"로 시작한다.
@@ -457,7 +457,7 @@ backend/data/sync/
 한도(`song.py` 상단): 파일 ≤ 64 MiB(`MAX_SONG_BYTES`), 길이 ≤ 600초(`MAX_SONG_SEC`, 1초 미만도 거절), 업로드 조각 원본 ≤ 3 MiB(`CHUNK_BYTES`), 가사 ≤ 400줄(`MAX_LINES`)·한 줄 200자(`MAX_LINE_CHARS`, 넘으면 잘라서 `lyrics_truncated`)·합계 20000자(`MAX_LYRIC_CHARS`), 대기열 3(`QUEUE_MAX`), 작업 폴더 합계 1 GiB(`FOLDER_MAX`)와 디스크 여유 1 GiB.
 
 ### GET /health 추가 필드
-`"song": bool`(PyAV·numpy가 있어 곡 처리를 할 수 있음), `"song_v": 2`(1 = 곡 업로드·작업·해석, 2 = `POST /song/identify` 추가. 앱은 `song_v` ≥ 2일 때만 "제목으로 찾기"의 AI 버튼을 보인다. `/song/result`의 곡 JSON `v`는 그대로 1이다).
+`"song": bool`(PyAV·numpy가 있어 곡 처리를 할 수 있음), `"song_v": 1`(곡 업로드·작업·해석의 계약 버전. 올리면 옛 앱이 `app_old`로 막으므로 그대로 둔다), `"song_identify": true`(이 PC 프로그램에 `POST /song/identify`가 있음 — 없거나 false/없는 키면 앱은 "제목으로 찾기"의 AI 버튼을 숨긴다. `/song/result`의 곡 JSON `v`도 1).
 
 ### POST /song/upload — 음악 파일 한 조각
 요청 `{"upload_id": "<hex32>", "index": 0, "total": 3, "name": "x.m4a", "data_b64": "…"}` (`name`의 확장자는 mp3 ogg wav m4a flac aac opus 중 하나, 조각 원본 ≤ 3 MiB). 조각은 0번부터 순서대로.

@@ -133,7 +133,7 @@ def health():
     return {"ok": True, "stub": True, "stt": True, "tts": {"en": True, "ja": True}, "tts_device": "cpu", "llm": True,
             "llm_model": "stub", "llm_provider": "opencode", "score": True, "phoneme": True, "tatoeba": True, "grammar": True,
             "llm_fallback": {"active": False, "until": None, "reason": ""},
-            **({"song": True, "song_v": song.SONG_API_V} if ARGS.song else {})}
+            **({"song": True, "song_v": song.SONG_V, "song_identify": True} if ARGS.song else {})}
 
 
 @app.get("/curriculum")
