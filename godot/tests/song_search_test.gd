@@ -415,6 +415,7 @@ func _ready() -> void:
 		await _test_ai_flow()
 		await _test_ai_edges()
 		await _test_ai_gate()
+		await _test_button_matrix()
 		await _test_hub()
 		await _test_phone_only()
 		await _test_lifetime()
@@ -895,6 +896,98 @@ func _test_ai_gate() -> void:
 	_consent_clear()
 	_disconnect_pc()
 	ok(Api.sent_count >= sent0, "(gate section ended)")
+
+
+## 화면 상태마다 어떤 단추가 보여야 하는지 한 번에 비교한다 (보이는 단추 이름 목록 == 기대값).
+func _btns(s: Control) -> String:
+	var out: Array = []
+	for n in ["BtnSearch", "BtnAi", "BtnPaste", "BtnUse"]:
+		if _has(s, n):
+			out.append(n)
+	return ",".join(PackedStringArray(out))
+
+
+func _hint(s: Control) -> String:
+	var h: Node = _find(s, "AiHint")
+	return (h as Label).text if h != null and (h as Label).is_visible_in_tree() else ""
+
+
+func _test_button_matrix() -> void:
+	print("[which buttons show in each state: new / busy / found / none / error / after AI / no PC / old PC]")
+	_fresh()
+	_toasts.clear()
+	_consent_clear()
+	Store.set_pref("song_consent", true) # the consent sheet is not what is tested here
+	await _lr_reset()
+	_fake.reset()
+	# --- a new screen
+	_connect_pc(true)
+	var s := _new_screen()
+	ok(_btns(s) == "BtnSearch", "new screen: only [찾기] (got %s)" % _btns(s))
+	# --- busy: the answer is slow
+	await _search(s, "__slow__ m", false)
+	await get_tree().create_timer(0.3).timeout
+	ok(s.is_busy() and _btns(s) == "BtnSearch", "busy: only [찾기] (shown disabled), no AI / paste / save button (got '%s')" % _btns(s))
+	ok(_find(s, "BtnSearch") is Button and (_find(s, "BtnSearch") as Button).disabled, "busy: [찾기] is shown disabled")
+	await _until(func() -> bool: return not s.is_busy(), 10.0)
+	await _frames(2)
+	# --- found + PC with song_identify: search, AI and paste, nothing chosen yet
+	await _search(s, "Kettle Morning")
+	ok(s.status == "found" and _btns(s) == "BtnSearch,BtnAi,BtnPaste" and _hint(s) == "", "found + PC with song_identify: [찾기] [AI로 다시 찾기] [가사 붙여넣기], no hint, no save button (got %s)" % _btns(s))
+	ok(s.choose(0), "a candidate is chosen")
+	await _frames(2)
+	ok(_btns(s) == "BtnSearch,BtnAi,BtnPaste,BtnUse", "found + chosen: all four buttons (got %s)" % _btns(s))
+	# --- none + PC with song_identify
+	await _search(s, "zzqq nothing")
+	ok(s.status == "none" and _btns(s) == "BtnSearch,BtnAi,BtnPaste" and _hint(s) == "", "none + PC with song_identify: [찾기] [AI로 다시 찾기] [가사 붙여넣기] (got %s)" % _btns(s))
+	# --- after the AI step: found and none
+	await _search(s, "케틀 모닝")
+	_press(s, "BtnAi")
+	await _until(func() -> bool: return not s.is_busy() and s.ai_calls == 1, 20.0)
+	await _frames(2)
+	ok(s.status == "found" and _btns(s) == "BtnSearch,BtnPaste" and _hint(s) == "", "found after the AI step: no AI button any more, paste stays (got %s)" % _btns(s))
+	await _search(s, "nothing here")
+	_press(s, "BtnAi")
+	await _until(func() -> bool: return not s.is_busy() and s.ai_calls == 1, 20.0)
+	await _frames(2)
+	ok(s.status == "none" and _btns(s) == "BtnSearch,BtnPaste", "none after the AI step: no AI button, paste stays (got %s)" % _btns(s))
+	await _search(s, "down song")
+	_press(s, "BtnAi")
+	await _until(func() -> bool: return not s.is_busy() and s.ai_calls == 1, 20.0)
+	await _frames(2)
+	ok(s.status == "error" and _btns(s) == "BtnSearch,BtnPaste", "AI error: no AI button, paste stays (got %s)" % _btns(s))
+	# --- LRCLIB error
+	await _search(s, "__500__ x")
+	ok(s.status == "error" and _btns(s) == "BtnSearch,BtnPaste", "LRCLIB error: [찾기] and [가사 붙여넣기] only (got %s)" % _btns(s))
+	_drop(s)
+	await _frames(2)
+	# --- no PC: found / none / error
+	_disconnect_pc()
+	var want: String = SongSearchScreen.MSG_NEED_PC if _phone else SongSearchScreen.MSG_NEED_PC_PC
+	var s2 := _new_screen()
+	await _search(s2, "Kettle Morning")
+	ok(s2.status == "found" and _btns(s2) == "BtnSearch,BtnPaste" and _hint(s2) == want, "found, no PC: no AI button, paste stays, hint '%s' (got %s)" % [want, _btns(s2)])
+	ok(s2.choose(0), "no PC: a candidate is chosen")
+	await _frames(2)
+	ok(_btns(s2) == "BtnSearch,BtnPaste,BtnUse", "found + chosen, no PC: [찾기] [가사 붙여넣기] [이 가사로 외우기] (got %s)" % _btns(s2))
+	await _search(s2, "zzqq nothing")
+	ok(s2.status == "none" and _btns(s2) == "BtnSearch,BtnPaste" and _hint(s2) == want, "none, no PC: no AI button, paste stays, hint (got %s)" % _btns(s2))
+	await _search(s2, "__500__ y")
+	ok(s2.status == "error" and _btns(s2) == "BtnSearch,BtnPaste" and _hint(s2) == "", "LRCLIB error, no PC: paste only, no hint (got %s)" % _btns(s2))
+	_drop(s2)
+	await _frames(2)
+	# --- PC without song_identify
+	_connect_pc(false)
+	var s3 := _new_screen()
+	await _search(s3, "Kettle Morning")
+	ok(s3.status == "found" and _btns(s3) == "BtnSearch,BtnPaste" and _hint(s3).contains("최신으로 업데이트"), "found, PC without song_identify: no AI button, paste stays, update hint (got %s)" % _btns(s3))
+	await _search(s3, "zzqq nothing")
+	ok(s3.status == "none" and _btns(s3) == "BtnSearch,BtnPaste" and _hint(s3).contains("최신으로 업데이트"), "none, PC without song_identify: no AI button, paste stays, update hint (got %s)" % _btns(s3))
+	_drop(s3)
+	await _frames(2)
+	ok(_fake.count() == 3, "the matrix made exactly 3 AI calls (the three AI steps), none from the no-PC / old-PC screens (%d)" % _fake.count())
+	_disconnect_pc()
+	_consent_clear()
 
 
 ## 허브: 맨 위 검색 카드 -> 검색 화면 -> 저장 -> SongMemoScreen. 붙여넣기는 제목이 채워진 SongLyricsAddScreen.
