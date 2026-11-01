@@ -29,9 +29,9 @@ const TAB_SHORT := {"talk": "대화"}
 const SETTINGS_KEY := "settings"
 const MENU_KEY := "menu"
 const BACK_EXIT_MSEC := 2000
-## Phone bottom bar: the tabs that have a cell, in this order (only the registered ones show: `bar_keys()`).
 ## Phone bottom bar: at most this many cells (BottomTabs shows no "더보기" cell up to this many tabs).
 const PHONE_MAX_DIRECT := 5
+## Phone bottom bar: the tabs that have a cell, in this order (only the registered ones show: `bar_keys()`).
 const BAR_PHONE := ["today", "lesson", "review", "song", "menu"]
 ## Phone: the bottom-bar tab that is lit while a screen outside the bar is open.
 const TAB_PARENT := {"talk": "menu", "practice": "menu", "reading": "menu", "stats": "menu", "roadmap": "menu", "settings": "menu"}
