@@ -46,7 +46,7 @@ class FakeApiError(Exception):
 
 
 class FakeLLM:
-    """ollama_json(messages, schema, temperature=, num_predict=, cache_key_kind=, ...) -> scripted answers.
+    """llm_json(messages, schema, temperature=, num_predict=, cache_key_kind=, ...) -> scripted answers.
     `batch_fn(calls_index, items)` returns the data for a batch prompt, `one_fn(text)` for a single-line prompt."""
 
     def __init__(self, batch_fn=None, one_fn=None):
@@ -116,7 +116,7 @@ def fake_ja_pron(t):
 def install(llm=None, rm=None, **over):
     llm = llm or FakeLLM()
     rm = rm or FakeReadmode()
-    helpers = dict(readmode=rm, ollama_json=llm, ja_reading=fake_ja_reading, ja_pron=fake_ja_pron, log=logging.getLogger("backend"),
+    helpers = dict(readmode=rm, llm_json=llm, ja_reading=fake_ja_reading, ja_pron=fake_ja_pron, log=logging.getLogger("backend"),
                    ApiError=FakeApiError)
     helpers.update(over)
     se.H.clear()
@@ -493,7 +493,7 @@ samples = ["", "안녕", "hello", "안녕 世界", "你好", "你好吗 안녕",
 same = all(se._ko_ok_fallback(s, lg) == ns["ko_ok"](s, lg) for s in samples for lg in ("en", "ja"))
 ok("fallback ko_ok matches server.ko_ok on %d samples x 2 langs" % len(samples), "ko_ok" in ns and same)
 install(ko_ok=lambda t, lang: False)
-llm = se.H["ollama_json"]
+llm = se.H["llm_json"]
 res = run("en", mk_lines(2), ["translate"], allow_ai=True)
 ok("an injected ko_ok is the one used", all(o["ko"] == "" for o in res["lines"]) and res["warnings"] == ["ko_missing"])
 

@@ -107,7 +107,7 @@ def test_values():
 
 
 def stub_engine():
-    server.llm_provider = lambda: "openai_api"   # not "opencode": no per-conversation OpenCode session, ollama_json (stubbed below) answers
+    server.llm_provider = lambda: "openai_api"   # not "opencode": no per-conversation OpenCode session, llm_json (stubbed below) answers
     server.translate_ko = lambda text, lang: ""
     server.correct_learner = lambda *a, **k: ("", "")
 
@@ -124,23 +124,23 @@ def test_chat():
                     "phrases": [{"phrase": "駅はどこですか。", "reading": "", "ko": "역은 어디예요?"}, {"phrase": "水をください。", "reading": "", "ko": "물 주세요."},
                                 {"phrase": "お願いします。", "reading": "", "ko": "부탁해요."}]}
         return {"reply": "私は学生です。あなたは?", "ko": "저는 학생이에요. 당신은요?", "reading": "", "suggest": ["はい。", "いいえ。"]}
-    server.ollama_json = local
+    server.llm_json = local
     r = server.run_chat(server.ChatReq(lang="ja", month=1, week=1, conv_id="p1", skip_fix=True, history=[T(role="me", text="こんにちは")]))
     check("chat ja: reply/reading/pron present", r["reply"] and r["reading"] and r["pron"], r)
     check("chat ja: pron is the pronunciation form of the reply", r["pron"].startswith("ワタシワガクセーデス"), r["pron"])
     check("chat ja: reading is still hiragana only", re.fullmatch(r"[ぁ-ゖー、。！？\s]+", r["reading"]) is not None, r["reading"])
     check("chat ja: key set", set(r) == {"reply", "reading", "pron", "ko", "fix", "fix_ko", "suggest"}, sorted(r))
-    server.ollama_json = lambda msgs, schema, **kw: {"reply": "Nice to meet you.", "ko": "만나서 반갑습니다.", "reading": "", "suggest": ["Me too.", "Thanks."]}
+    server.llm_json = lambda msgs, schema, **kw: {"reply": "Nice to meet you.", "ko": "만나서 반갑습니다.", "reading": "", "suggest": ["Me too.", "Thanks."]}
     r = server.run_chat(server.ChatReq(lang="en", month=1, week=1, conv_id="p2", skip_fix=True, history=[T(role="me", text="Hi")]))
     check("chat en: pron is '' and reading is ''", r["pron"] == "" and r["reading"] == "", r)
-    server.ollama_json = local
+    server.llm_json = local
     f = server.run_feedback(server.FeedbackReq(lang="ja", stage=1, history=[T(role="ai", text="こんにちは"), T(role="me", text="わたしは学生だです")]))
     check("feedback ja: corrections carry reading + pron", f["corrections"] and all(c["reading"] and c["pron"] for c in f["corrections"]), f["corrections"])
     check("feedback ja: phrases carry reading + pron", f["phrases"] and all(c["reading"] and c["pron"] for c in f["phrases"]), f["phrases"])
     check("feedback ja: a correction's pron matches ja_pron(better)", f["corrections"][0]["pron"] == server.ja_pron(f["corrections"][0]["better"]))
     check("feedback ja: exact key sets", all(set(c) == {"you", "better", "reading", "pron", "ko", "why"} for c in f["corrections"])
           and all(set(c) == {"phrase", "reading", "pron", "ko"} for c in f["phrases"]))
-    server.ollama_json = lambda msgs, schema, **kw: {"scores": {"fluency": 3, "accuracy": 3, "vocabulary": 3}, "summary": "Good job. Keep going.",
+    server.llm_json = lambda msgs, schema, **kw: {"scores": {"fluency": 3, "accuracy": 3, "vocabulary": 3}, "summary": "Good job. Keep going.",
         "corrections": [{"you": "I has", "better": "I have a pen.", "reading": "", "ko": "나는 펜이 있어요.", "why": "have 를 써요."}],
         "phrases": [{"phrase": "Nice to meet you.", "reading": "", "ko": "만나서 반가워요."}]}
     f = server.run_feedback(server.FeedbackReq(lang="en", stage=1, history=[T(role="ai", text="Hello"), T(role="me", text="I has")]))
@@ -191,14 +191,14 @@ def test_gloss():
     def fake(msgs, schema, **kw):
         return {"glosses": [{"i": 1, "lemma": "学校", "pos": "명사", "ko": "학교", "ipa": "", "note": ""},
                             {"i": 2, "lemma": "行く", "pos": "동사", "ko": "가다", "ipa": "", "note": ""}]}
-    readmode.H["ollama_json"] = fake
+    readmode.H["llm_json"] = fake
     readmode.H["ko_ok"] = server.ko_ok
     out = readmode.gloss("ja", [{"lemma": "学校", "sentence": "学校へ行きます。"}, {"lemma": "行く", "sentence": "学校へ行きます。"}])
     gl = out["glosses"]
     check("ja gloss: ipa (hiragana) and pron (katakana) per word", len(gl) == 2 and gl[0]["ipa"] == "がっこう" and gl[0]["pron"] == "ガッコー"
           and gl[1]["ipa"] == "いく" and gl[1]["pron"] == "イク", gl)
     check("ja gloss: fields", all(set(g) == {"i", "lemma", "pos", "ko", "ipa", "note", "pron"} for g in gl))
-    readmode.H["ollama_json"] = lambda msgs, schema, **kw: {"glosses": [{"i": 1, "lemma": "run", "pos": "verb", "ko": "달리다", "ipa": "rʌn", "note": ""}]}
+    readmode.H["llm_json"] = lambda msgs, schema, **kw: {"glosses": [{"i": 1, "lemma": "run", "pos": "verb", "ko": "달리다", "ipa": "rʌn", "note": ""}]}
     out = readmode.gloss("en", [{"lemma": "run", "sentence": "I run."}])
     check("en gloss: pron ''", out["glosses"][0]["pron"] == "", out)
 
