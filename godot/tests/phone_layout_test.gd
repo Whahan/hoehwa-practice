@@ -268,7 +268,7 @@ func _state_checks(state: String, main: Control) -> void:
 			ok(caps_panels.size() == 1 and (caps_panels[0] as CapabilityPanel).rows.size() == 16, "A6 settings: one CapabilityPanel with its 16 rows is in the phone settings")
 			ok(tv0.section_visible("engine") and tv0.section_of(caps_panels[0] as Control) == "engine" and tv0.mode_box != null and tv0.tts_engine_box != null, "A6 settings: 처리 위치 and 기능 현황 sit in the 'engine' section, the voice engine choice is there")
 		"lesson_home":
-			ok(bar.title_label().text == "레슨" and bar.title_label().modulate.a < 0.5, "lesson home: the bar title is the tab name, faded while the big title shows")
+			ok(bar.title_label().text == "레슨" and bar.title_label().modulate.a > 0.5, "lesson home: the bar title is the tab name and visible (the phone lesson path has no big title, home_menu_design 7.3)")
 		"talk_setup":
 			ok(bar.title_label().text == "원어민 대화" and not bar.back_button().visible, "talk setup: the bar says the tab name")
 		"talk_chat_en":
