@@ -246,8 +246,6 @@ static func consent_text() -> String:
 	var t: String = "내가 가진 음악과 가사를 이 기기에서 공부하는 데만 써요. 가사와 음악은 앱에 들어 있지 않고, 다른 곳에 올리거나 공유할 수 없어요."
 	t += "\n\n가사 찾기는 lrclib.net에 곡 제목·가수·길이를 보내요. 버튼을 누를 때만 보내요."
 	t += "\n\n해석을 만들 때 가사가 AI 서비스(현재: %s)로 전송돼요. 곡마다 해석 만들기를 끌 수 있어요." % ai
-	if ready and Backend.llm_provider() == "ollama":
-		t += "\n\n지금은 오프라인 로컬 AI(Ollama)를 쓰고 있어서 가사가 밖으로 나가지 않아요."
 	return t
 
 

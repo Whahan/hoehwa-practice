@@ -72,6 +72,7 @@ var _content: Control
 var _banner: PanelContainer
 var _banner_label: Label
 var _banner_btn: Button
+var _banner_ai: bool = false     ## the banner's button is [AI 연결하기] (PC, AI not connected) instead of [다시 확인]
 var _conn_chip: ConnChip        ## engine / PC connection (phone: in the app bar, PC: at the bottom of the SideNav)
 var _link_chip: ConnChip        ## PC: "폰 연결 켜짐"
 var _status_dot: Panel          ## the dot and the text of _conn_chip (kept as handles for tests / tools)
@@ -227,6 +228,8 @@ func _ready() -> void:
 	Store.navigate.connect(_on_navigate)
 	Store.navigate_args.connect(_on_navigate_args)
 	Store.ai_connect_requested.connect(_on_ai_connect)
+	Api.ai_not_connected.connect(AiConnectSheet.auto_open.bind(self)) # 503 ai_not_connected: the sheet opens once per run
+	HomeAi.provider = AiConnectSheet.home_slot # the home / menu "AI 연결" slot follows /health llm_state
 	Store.changed.connect(_update_review_badge)
 	Store.prefs_changed.connect(_update_review_badge)
 	Backend.status_changed.connect(_on_status_for_menu)
@@ -516,11 +519,17 @@ func _on_navigate_args(view: String, args: Dictionary) -> void:
 	(views[view] as AppView).open_target(args)
 
 
-## [AI 연결하기] on the home screen / the menu (Store.ai_connect_requested): the phone opens the connect screen, the PC the
-## settings (its first section is the connection). The install work replaces this body.
+## [AI 연결하기] on the home screen / the menu / the banner (Store.ai_connect_requested): the PC opens the AI connect
+## sheet (settings when the engine itself is not up, where "다시 확인" is). A phone that is not paired opens the PC connect
+## screen; a paired phone cannot connect the AI (the PC does that): it only gets the sentence, no sheet, no request.
 func _on_ai_connect() -> void:
 	if _phone:
-		_open_connect_view()
+		if Backend.status == Backend.Status.READY:
+			AiConnectSheet.open(self)
+		else:
+			_open_connect_view()
+	elif Backend.status == Backend.Status.READY:
+		AiConnectSheet.open(self)
 	else:
 		show_view(SETTINGS_KEY)
 
@@ -602,7 +611,9 @@ func _build_banner() -> PanelContainer:
 	row.add_child(msg)
 	_banner_btn = UI.button("다시 확인", "outline", Pal.WARN)
 	_banner_btn.pressed.connect(func() -> void:
-		if Backend.status == Backend.Status.READY:
+		if _banner_ai:
+			Store.request_ai_connect() # the AI is not connected: the same road as the home screen's button
+		elif Backend.status == Backend.Status.READY:
 			Backend.refresh_health()
 		else:
 			_splash_dismissed = false
@@ -621,7 +632,7 @@ func _on_backend_status() -> void:
 		Backend.Status.READY:
 			if Backend.llm_missing():
 				dot = Pal.WARN
-				text = "LLM 꺼짐"
+				text = "AI 연결 필요"
 			else:
 				dot = Pal.OK
 				text = "PC 연결됨" if _phone else "AI 엔진 준비됨"
@@ -644,14 +655,19 @@ func _on_backend_status() -> void:
 
 	# banner
 	var down_text: String = "PC에 연결되어 있지 않아요. " if _phone else "AI 엔진에 연결되어 있지 않아요. "
+	_banner_ai = false
 	if st == Backend.Status.READY and Backend.llm_missing():
 		_banner.visible = true
 		_banner_label.text = Backend.llm_missing_text()
+		_banner_ai = not _phone and Backend.llm_provider() != "openai_api" # the phone cannot connect the AI: it keeps [다시 확인]
 	elif st == Backend.Status.FAILED and _splash_dismissed:
 		_banner.visible = true
 		_banner_label.text = down_text + Backend.message
 	else:
 		_banner.visible = false
+	_banner_btn.text = "AI 연결하기" if _banner_ai else "다시 확인"
+	if st == Backend.Status.READY:
+		AiConnectSheet.check_notice() # once per run: the "오프라인 AI는 이제 쓰지 않아요" notice of a migrated install
 
 	# splash
 	if st == Backend.Status.READY:

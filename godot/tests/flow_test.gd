@@ -38,7 +38,7 @@ func _ready() -> void:
 	ok(Backend.status == Backend.Status.READY, "Backend.start() -> READY (health ok)")
 	ok(not Backend.launched_by_us, "server was already running, so Backend does not own/kill it")
 	ok(Backend.health.get("stt", false) and (Backend.health.get("tts", {}) as Dictionary).get("ja", false), "health fields parsed")
-	print("  llm_missing = ", Backend.llm_missing(), " (true -> the Ollama hint banner shows)")
+	print("  llm_missing = ", Backend.llm_missing(), " (true -> the AI connect banner shows)")
 	await wait_until(func() -> bool: return Store.curriculum_from_backend, 5.0)
 	ok(Store.curriculum_from_backend and Store.months("ja").size() == 12, "GET /curriculum loaded into Store")
 

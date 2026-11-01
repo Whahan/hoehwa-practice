@@ -18,8 +18,13 @@ extends Node
 
 ## Emitted once per paired session when the PC says the token is missing or revoked (HTTP 401).
 signal auth_failed(code: String)
+## Emitted when the PC says the AI is not usable yet: error code "ai_not_connected" (no login) or "ai_not_installed" (no
+## OpenCode). The shell opens the [AI 연결하기] sheet from it (docs/onetouch_install_design.md §3.2). Never for /llm/* itself.
+signal ai_not_connected(code: String)
 
 const BASE_URL := "http://127.0.0.1:8770"
+## Error codes of the backend that mean "the AI needs to be connected first" (-> `ai_not_connected`).
+const AI_SETUP_CODES := ["ai_not_connected", "ai_not_installed"]
 
 const TIMEOUT_SHORT := 60.0
 const TIMEOUT_SHORT_PHONE := 90.0
@@ -313,6 +318,8 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, body: Pa
 		if code == 401 and req_call.use_auth and token != "" and (err_code == "token_missing" or err_code == "token_invalid") and not _auth_failed_sent:
 			_auth_failed_sent = true
 			auth_failed.emit(err_code)
+		if err_code in AI_SETUP_CODES and not req_call.path.begins_with("/llm"):
+			ai_not_connected.emit(err_code)
 	if report and not res["ok"] and res["error"] != "":
 		Toast.error(res["error"])
 	req_call._complete(res)

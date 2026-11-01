@@ -1,5 +1,5 @@
 extends Node
-## Live end-to-end test against the REAL backend (Whisper, Kokoro, Ollama) on 127.0.0.1:8770:
+## Live end-to-end test against the REAL backend (Whisper, Kokoro, OpenCode AI) on 127.0.0.1:8770:
 ##   godot --headless --path <project> res://tests/live_test.tscn
 ## Uses Kokoro speech as the "learner's voice", so the mic path is exercised with real audio.
 
