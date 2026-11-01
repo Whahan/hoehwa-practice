@@ -108,7 +108,7 @@ Godot (화면)                                      Python 서버 (같은 PC 또
  │   ├ DictationScreen ──GET /practice/sentences            │
  │   ├ PhonemeScreen   ──GET /practice/phonemes, /phoneme ──►   └ content/phoneme_drills.json
  │   └ MissionScreen   ──GET /missions, POST /missions/check ► missions.py (신규 라우터)
- │                       POST /chat, /feedback, /stt (기존)      └ content/missions.json, (선택) ollama_json
+ │                       POST /chat, /feedback, /stt (기존)      └ content/missions.json, (선택) llm_json
  ├ SpeakDrill(듣기→녹음→/score→/prosody) ── 기존 /tts /score /prosody
  ├ StatsView (기록 탭) ◄── StudyLog (user://studylog.json)
  └ 기존 뷰 ──(한 줄 연결)──► StudyLog.add_score / add_lesson, FixCards.add
@@ -209,7 +209,7 @@ PC                                                  폰 세로 (412)
 ```
 - `evidence`가 `history`의 `me` 발화 안에 **그대로 들어 있어야** `done:true`로 인정(없으면 서버가 `false`로 고침 = AI 환각 방지). `pending` 비면 400, `history`는 마지막 24개만.
 - AI 사용 불가/오류: 502·503 + 한국어 `error`(기존 `ApiError` 규칙). 화면은 규칙 결과를 그대로 두고 안내만 표시.
-- 호출은 `server.py`의 `ollama_json`을 `missions.init(...)`으로 주입받는다(`reading.init` 패턴). 캐시 안 함.
+- 호출은 `server.py`의 `llm_json`을 `missions.init(...)`으로 주입받는다(`reading.init` 패턴). 캐시 안 함.
 
 `GET /practice/ping` (practice.py와 공용 상태 확인) → `{"ok": true, "practice": 1, "missions": 1, "tatoeba": true|false}`. 화면은 404면 "PC 프로그램을 최신 버전으로 업데이트해 주세요"를 보인다(폰 앱과 PC 서버 버전이 다를 수 있음, 추측).
 
@@ -431,7 +431,7 @@ PC                                                  폰 세로 (412)
 | C1 | `godot/scripts/main.gd` | `TABS` 상수 | `["practice","연습"]`을 `talk` 다음에, `["stats","기록"]`을 `review` 다음에 추가 | 높음(안드로이드가 탭/하단 내비 변경) |
 | C2 | 〃 | `views = {...}` 딕셔너리 | `"practice": PracticeView.new(), "stats": StatsView.new(),` 두 줄 | 높음 |
 | C3 | 〃 | `_ready()`에서 `_build_toast()` 앞 | `add_child(StudyClock.new())` 한 줄 | 중간 |
-| C4 | `backend/server.py` | `app = FastAPI(...)` 정의와 `/examples` 라우트 뒤 | `import practice, missions` + `practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, readmode=readmode, lesson_rules=lesson_rules, features=features)` + `missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)` + `app.include_router(practice.router); app.include_router(missions.router)` | 높음(페어링 라우터/인증 미들웨어 근처). 새 라우터는 안드로이드의 인증 미들웨어 아래에 있어야 하며(추측) 라우터 자체에 인증 코드를 넣지 않았다 |
+| C4 | `backend/server.py` | `app = FastAPI(...)` 정의와 `/examples` 라우트 뒤 | `import practice, missions` + `practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, readmode=readmode, lesson_rules=lesson_rules, features=features)` + `missions.init(log=log, ApiError=ApiError, llm_json=llm_json)` + `app.include_router(practice.router); app.include_router(missions.router)` | 높음(페어링 라우터/인증 미들웨어 근처). 새 라우터는 안드로이드의 인증 미들웨어 아래에 있어야 하며(추측) 라우터 자체에 인증 코드를 넣지 않았다 |
 | C5 | `godot/scripts/views/lesson_view.gd` | `_on_recorded`의 `speak_result = res["data"]` 바로 뒤(약 911행) | `StudyLog.add_score(lang, speak_result, "lesson")` | 중간(세로 레이아웃 수정) |
 | C6 | 〃 | `finish_lesson()`의 `ok_count = ok` 뒤(약 330행) | `StudyLog.add_lesson(lang, ok, results.size())` | 중간 |
 | C7 | `godot/scripts/views/review_view.gd` | `_on_recorded`의 `score_result = res["data"]` 뒤(약 419행) | `StudyLog.add_score(lang, score_result, "review")` | 중간 |

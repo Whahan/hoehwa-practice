@@ -87,7 +87,7 @@
 | 9 | 읽기 뜻풀이 | `POST /reading/gloss` | **LLM 한 번에 30개**, 결과를 `cache\gloss.json`에 캐시, IPA는 espeak-ng (`reading.gloss`) | LLM 필요 | 미리 만든 대표 뜻 사전 + 미리 만든 IPA 표 + (키 있으면) 문맥 뜻은 AI | A/C |
 | 10 | 예문 검색 | `GET /examples` | `data\tatoeba.sqlite`(영어 60.9만·일본어 18.0만 문장, 90 MB). 한국어 번역이 있는 것은 영어 8,672·일본어 2,132문장뿐 | 90 MB | 한국어 번역 있는 약 1.08만 문장만 싣는다(축소판) | A(축소) |
 | 11 | 문법 교정 | `POST /fix` | LanguageTool 6.6(Java 자식 프로세스, 390 MB) → AI가 다듬기(`correct_learner`, `grammar.py`) | Java+390 MB | 폰에서 불가. AI 키로 대체(`_llm_correct`만) | C |
-| 12 | AI 대화 | `POST /chat` | OpenCode `opencode serve` + 무료 DeepSeek V4.1 Flash(기본) / Ollama qwen3:8b / OpenAI 호환 API 키(`llm_opencode.py`, `llm_api.py`, `server.py ollama_json`). 일본어 읽기는 pyopenjtalk로 로컬 생성 | LLM 필요 | AI 키(OpenAI 호환 직접 호출) | C |
+| 12 | AI 대화 | `POST /chat` | OpenCode `opencode serve` + 무료 DeepSeek V4.1 Flash(기본) / Ollama qwen3:8b / OpenAI 호환 API 키(`llm_opencode.py`, `llm_api.py`, `server.py llm_json`). 일본어 읽기는 pyopenjtalk로 로컬 생성 | LLM 필요 | AI 키(OpenAI 호환 직접 호출) | C |
 | 13 | 대화 피드백 | `POST /feedback` | LLM 1회 | | AI 키 | C |
 | 14 | 미션 | `GET /missions`, `POST /missions/check`, `POST /missions/judge` | 8개 영어 미션(`content\missions.json` 76 KB). 판정은 정규식 규칙(`match.any/all`, 50 ms 이하), 놓친 목표만 AI(`judge`). **대본 모드는 이미 Godot 안에서 AI 없이 돈다**(`mission_screen.gd` 8행 주석) | 작음 | 규칙은 GDScript `RegEx`로 이식(데이터에 `pos`/`neg` 예문이 있어 자동 시험 가능). judge는 AI 키 | A/C |
 | 15 | 연습 | `GET /practice/ping|sentences|phonemes|phoneme` | Tatoeba 문장 선택(`_pick`), 약한 소리 드릴(`content\phoneme_drills.json` 13 KB). AI 없음 | 작음 | 이식 | A |

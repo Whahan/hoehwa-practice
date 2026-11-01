@@ -295,7 +295,7 @@ install.ps1 [-ProgressFile <path>] [-Gpu auto|nvidia|cpu] [-DryRun] [-TestPort 8
 | 7 | models | 음성 모델 | 28 | 지금과 같음 (파일 단위로 진행률) |
 | 8 | prefetch | 데이터 준비 | 5 | 지금과 같음 |
 | 9 | languagetool | 문법 검사기 | 8 | 질문 없음 (Java는 6단계가 보장) |
-| 10 | prefs | 설정 | 1 | config.json: `llm_provider=opencode`, 비 NVIDIA면 `stt.device=cpu, compute_type=int8`. 학습 기록 기본값 복사(있으면 그대로) |
+| 10 | prefs | 설정 | 1 | config.json: `llm_provider=opencode`, 비 NVIDIA면 `stt.device=cpu, compute_type=int8`. 학습 기록 기본값 복사: `%APPDATA%\Godot\app_userdata\회화 연습`의 `prefs.json`·`progress.json`을 **없을 때만** `defaults\`에서 복사(있으면 그대로). 이 복사만이 설치 스크립트가 `%APPDATA%`에 쓰는 유일한 곳이다(D15). 시험은 `HOEHWA_USERDATA_DIR` |
 | 11 | verify | 동작 확인 | 7 | 임시 서버 `/health`: ok, stt, tts en/ja, score. **AI(llm)는 요구하지 않음** (로그인 전이 정상) |
 
 - 삭제: Node.js, npm, winget, `opencode auth login`, Ollama 전부, 바탕화면 질문, 엔진 선택, `engine.txt`·`engine-config.ok`·`engine-pending.ok` (있으면 지움).
@@ -307,10 +307,11 @@ UTF-8(BOM 없음) JSON 한 객체. 임시 파일에 쓰고 이름 바꾸기로 �
 ```json
 {"v":1,"state":"running","pct":37,"step":4,"steps":11,
  "title":"파이썬 패키지 설치 중","detail":"torch 받는 중 (12/150)",
- "error":"","code":0,"log":"C:\\...\\install.log","t":"2026-11-01T14:03:11+09:00"}
+ "error":"","code":0,"log":"C:\\...\\install.log","warn":"","t":"2026-11-01T14:03:11+09:00"}
 ```
 - `state`: `running` | `done` | `error`. `pct` 0~100 정수, **줄어들지 않는다.** 단계 시작·끝, 긴 단계 안에서는 2초마다 이내 갱신.
 - `state=done`은 11단계가 통과하고 `version.txt`를 쓴 뒤에만. 그때 `pct=100`.
+- `warn`: 설치를 막지 않는 경고(5·6단계의 OpenCode·JRE 받기 실패 등)를 한국어로 이어 붙인 문자열(300자까지, 넘으면 `…`). 없으면 `""`. 한 번 생기면 끝(`state=done`)까지 지워지지 않는다. 자세한 원인(해시·zip 등)은 `install.log`에만 있다. setup.exe는 `state=done`일 때 `warn`이 비어 있지 않으면 "설치는 끝났어요. 참고해 주세요" 안내를 한 번 보인다. 읽는 쪽이 이 키를 몰라도 된다(`v`는 1 그대로).
 - `state=error`: `error`는 한국어 120자 이하 한 줄, `code`는 아래 종료 코드. 키·토큰·비밀 문자열은 넣지 않는다.
 
 종료 코드: 0 성공 / 10 점검 실패(OS·경로·디스크) / 20 인터넷 / 30 받은 파일 해시 불일치 / 40 파이썬 패키지 / 50 모델 / 60 동작 확인 / 1 그 밖.
@@ -323,6 +324,10 @@ UTF-8(BOM 없음) JSON 한 객체. 임시 파일에 쓰고 이름 바꾸기로 �
 | `HOEHWA_USERDATA_DIR=<폴더>` | 10단계의 학습 기록 기본값 복사 위치를 바꿈 (실제 `%APPDATA%` 보호) |
 | `HOEHWA_FREEZE_FILE=<파일>` | `check_env.py`가 `pip freeze` 대신 이 파일을 읽음 |
 | `HOEHWA_PIP_DRYRUN=1` | (기존) pip 실행 안 함 |
+| `HOEHWA_TEST_LONGPATHS=0\|1` | 1단계가 윈도우 긴 경로 지원 값(레지스트리 `LongPathsEnabled`) 대신 이 값을 쓴다 (경로 95자 규칙 시험, D6) |
+| `HOEHWA_TEST_FREE_GB=<숫자>` | 1단계가 설치·임시 드라이브의 여유 공간 대신 이 값(GB)을 쓴다 (디스크 부족 시험) |
+| `HOEHWA_TEST_NET=skip` | 1단계의 인터넷 점검을 건너뛰고 모두 연결된 것으로 본다 |
+| `HOEHWA_TEST_NET_FAIL=<호스트,호스트>` | 점검 대상 호스트(`pypi.org`, `github.com`, `huggingface.co`) 중 이름이 든 것을 안 되는 것으로 본다 (종료 20 시험) |
 
 #### 3.3.4 vendor\tools.lock.json (스키마 1)
 ```json
@@ -649,7 +654,7 @@ POST /llm/connect       POST /llm/disconnect       POST /llm/install      GET /l
 | D12 | 옛 상태 파일(`engine.txt`, `engine-config.ok`, `engine-pending.ok`)이 있는 폴더에서 실행해도 지우고 정상 진행 | 단언 |
 | D13 | `uninstall.ps1`: `unins000.exe`가 있으면 "설정 > 앱에서 제거" 안내만 출력하고 아무것도 지우지 않음 (종료 0). 없으면 지금처럼 동작하되 Ollama 문구 삭제 | 가짜 폴더 2종으로 단언 |
 | D14 | 금지: `auth.json` 문자열 없음, `opencode auth login` 안내 없음, 로그에 비밀값 없음 | `Grep -n "auth\.json" packaging\installer\install.ps1` → 0건 |
-| D15 | 실제 PC의 `%APPDATA%`·바탕화면·시작 메뉴·레지스트리에 쓰지 않음 (바로가기는 이 스크립트가 만들지 않음, F가 함) | `Grep -n "CreateShortcut\|Desktop" packaging\installer\install.ps1` → 0건 |
+| D15 | 바탕화면·시작 메뉴·레지스트리에 쓰지 않음 (바로가기는 이 스크립트가 만들지 않음, F가 함). `%APPDATA%`는 **10단계의 학습 기록 기본값 복사(`prefs.json`·`progress.json`, 대상 파일이 이미 있으면 건드리지 않음)만** 허용하고, 시험·시뮬레이션은 `HOEHWA_USERDATA_DIR`로 임시 폴더에 돌려 실제 `%APPDATA%`를 쓰지 않는다 | `Grep -n "CreateShortcut\|Desktop" packaging\installer\install.ps1` → 0건, 코드에서 `APPDATA`를 쓰는 곳이 10단계 한 군데뿐이고 `Get-Hook "HOEHWA_USERDATA_DIR"`로 바뀜 |
 
 ### E. update.ps1·helper 정리
 
@@ -736,6 +741,8 @@ POST /llm/connect       POST /llm/disconnect       POST /llm/install      GET /l
 | 설치를 빨리 흉내 | `HOEHWA_TEST_MODE=1` + `HOEHWA_SETUP_SIMULATE=1` (3.3.3). 1분 안에 끝남 |
 | 단계 실패·이어하기 | `HOEHWA_SETUP_FAIL_STEP=N` |
 | 실제 학습 기록 보호 | `HOEHWA_USERDATA_DIR=<임시>` |
+| 점검 단계(1단계)의 환경 흉내 | `HOEHWA_TEST_LONGPATHS=0\|1`(긴 경로 지원), `HOEHWA_TEST_FREE_GB=<숫자>`(디스크 여유), `HOEHWA_TEST_NET=skip`(인터넷 점검 건너뜀), `HOEHWA_TEST_NET_FAIL=pypi.org,github.com`(안 되는 호스트). 모두 `HOEHWA_TEST_MODE=1`일 때만 읽음 (3.3.3) |
+| 도구 받기 시험 | `install_tools.py`: `HOEHWA_TEST_MODE=1`에서만 `file:///` 주소 허용, `HOEHWA_TOOLS_AVX2=0\|1`(변형 고르기), `HOEHWA_TOOLS_MAXUNZIP=<바이트>`(압축 해제 상한) |
 | 가짜 설치 폴더 | 빌드의 staging 폴더를 `$W\fake`로 복사해 쓰기 (`runtime\python` 없이도 시뮬레이션은 통과) |
 | 가짜 opencode | `HOEHWA_TEST_HOOKS=1` + `HOEHWA_OPENCODE_EXE=<.cmd 래퍼>` + `backend/test_fake_opencode.py` |
 | 업데이트 시험 | 기존 `-Source <폴더>` + `latest.json` (build_dist가 `release_<v>\`에 만듦) + `HOEHWA_PIP_DRYRUN=1`, `HOEHWA_UPDATE_FAIL=after_apply\|after_packages` |
@@ -796,8 +803,10 @@ POST /llm/connect       POST /llm/disconnect       POST /llm/install      GET /l
 부록: **허용되는 "ollama" 글자** (G2 기준)
 - `backend/llm_config.py`의 이전 코드와 그 시험(`test_llm_connect.py`의 마이그레이션 시험).
 - 값 `"ollama_removed"`, 설정 키 `llm_migrated_from`.
+- 거절 코드 `"engine_removed"`(`POST /llm {"provider":"ollama"}`의 400)와 그 시험의 입력 문자열 `ollama`, 그리고 "ollama 없음"을 확인하는 시험이 검색하는 문자열(`test_offline_ai.py`의 Ollama 접속 0회·코드 없음 단언, `packaging/installer/test_progress_contract.ps1`의 설치 스크립트에 ollama 없음 단언 등).
 - 앱·문서의 이전 사용자 안내 한 줄(Ollama를 지우면 5GB를 비울 수 있다는 문구).
 - 릴리스 노트·WORKLOG·ROADMAP 같은 역사 기록.
+- 이름 `ollama_json`은 이 문서의 작업 G 설명(옛 이름 → `llm_json`)에만 남긴다. 다른 `docs/*.md` 설계 문서는 `llm_json`으로 고쳤다(WORKLOG는 역사 기록이라 그대로).
 
 ---
 
