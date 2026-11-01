@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Persistent cache of AI results for deterministic tasks, so the same request never costs twice.
 
-Used by server.ollama_json(..., cache_key_kind="fix"). Only callers that pass a kind are cached
+Used by server.ollama_json(..., cache_key_kind="fix"). The key holds the provider, so answers stored by the removed local
+engine are never read again. Only callers that pass a kind are cached
 (fix, translate, verify, gloss, ...); chat turns and feedback never are.
 Key = sha256 of (kind, provider, model, schema, messages, options). Value = the parsed JSON object.
 Storage: backend/cache/llm_cache.sqlite (one table; oldest rows pruned beyond MAX_ROWS).

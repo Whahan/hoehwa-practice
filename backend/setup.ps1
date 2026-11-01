@@ -1,10 +1,9 @@
 # Idempotent setup for the speaking-practice backend. Safe to re-run.
 #   powershell -ExecutionPolicy Bypass -File setup.ps1
-# Creates .venv, installs packages, downloads models into .\models\hf, pulls the Ollama LLM and
-# records the working STT device / LLM tag in config.json.
+# Creates .venv, installs packages, downloads models into .\models\hf and records the working STT device in config.json.
+# (The AI is the free DeepSeek through OpenCode: connect it inside the app with the AI connect button. No local model is installed.)
 param(
-    [string]$Python = "C:\Users\rtyu6\AppData\Local\Programs\Python\Python310\python.exe",
-    [string[]]$LlmTags = @("qwen3:8b", "qwen2.5:7b")
+    [string]$Python = "C:\Users\rtyu6\AppData\Local\Programs\Python\Python310\python.exe"
 )
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
@@ -72,10 +71,7 @@ Step "config.json"
 if (-not (Test-Path $Cfg)) {
     $default = [ordered]@{
         port = 8770
-        llm_model = $LlmTags[0]
-        ollama_url = "http://127.0.0.1:11434"
-        keep_alive = "30m"
-        num_ctx = 6144
+        llm_provider = "opencode"
         stt = [ordered]@{ model = "small"; device = "cuda"; compute_type = "int8_float16" }
         tts = [ordered]@{ voice_en = "af_heart"; voice_ja = "jf_alpha"; device = "cpu" }
     }
@@ -83,39 +79,7 @@ if (-not (Test-Path $Cfg)) {
     Write-Host "created config.json"
 } else { Write-Host "config.json exists" }
 
-# --- 4. Ollama LLM -------------------------------------------------------------------------------
-Step "Ollama model"
-$ollama = (Get-Command ollama -ErrorAction SilentlyContinue).Source
-if (-not $ollama) { $ollama = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe" }
-if (-not (Test-Path $ollama)) { throw "Ollama not found. Install it first: winget install Ollama.Ollama" }
-# make sure the Ollama service answers
-$up = $false
-try { Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 3 | Out-Null; $up = $true } catch {}
-if (-not $up) {
-    Write-Host "starting ollama serve ..."
-    Start-Process -FilePath $ollama -ArgumentList "serve" -WindowStyle Hidden
-    for ($i = 0; $i -lt 30 -and -not $up; $i++) {
-        Start-Sleep -Seconds 1
-        try { Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 2 | Out-Null; $up = $true } catch {}
-    }
-}
-if (-not $up) { throw "Ollama server is not reachable on 127.0.0.1:11434" }
-$have = (Invoke-RestMethod "http://127.0.0.1:11434/api/tags").models | ForEach-Object { $_.name }
-$chosen = $null
-foreach ($tag in $LlmTags) {
-    if ($have -contains $tag) { $chosen = $tag; Write-Host "$tag already pulled"; break }
-    Write-Host "ollama pull $tag"
-    & $ollama pull $tag
-    if ($LASTEXITCODE -eq 0) { $chosen = $tag; break }
-    Write-Host "pull of $tag failed, trying next" -ForegroundColor Yellow
-}
-if (-not $chosen) { throw "no LLM tag could be pulled" }
-$c = Read-Cfg
-$c.llm_model = $chosen
-Write-Cfg $c
-Write-Host "LLM tag: $chosen"
-
-# --- 5. speech models (Whisper small, Kokoro-82M + voices) and STT device check ---------------------
+# --- 4. speech models (Whisper small, Kokoro-82M + voices) and STT device check ---------------------
 Step "Whisper / Kokoro / pyopenjtalk (downloads into models\hf, picks CUDA or CPU)"
 Run-Native $VPy @((Join-Path $Root "server.py"), "--prefetch")
 
@@ -124,5 +88,5 @@ if (Test-Path $env:PIP_CACHE_DIR) { Remove-Item -Recurse -Force $env:PIP_CACHE_D
 
 Step "Done"
 $c = Read-Cfg
-Write-Host ("STT device: {0}/{1}   LLM: {2}   port: {3}" -f $c.stt.device, $c.stt.compute_type, $c.llm_model, $c.port) -ForegroundColor Green
+Write-Host ("STT device: {0}/{1}   port: {2}" -f $c.stt.device, $c.stt.compute_type, $c.port) -ForegroundColor Green
 Write-Host "Start the server with run_backend.bat"

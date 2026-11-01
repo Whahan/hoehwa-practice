@@ -1,10 +1,6 @@
 {
   "port": 8770,
   "llm_provider": "opencode",
-  "llm_model": "qwen3:8b",
-  "ollama_url": "http://127.0.0.1:11434",
-  "keep_alive": "30m",
-  "num_ctx": 6144,
   "stt": {
     "model": "small",
     "device": "cuda",

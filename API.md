@@ -29,21 +29,36 @@ app/
 ## 엔드포인트
 
 ### GET /health
-`{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "qwen3:8b", "llm_provider": "opencode"|"ollama", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}, "song": bool, "song_v": 1, "song_identify": bool}`
-각 기능이 준비됐는지. Godot는 시작할 때 이것으로 서버 기동을 확인한다.
+`{"ok": true, "stt": bool, "tts": {"en": bool, "ja": bool}, "llm": bool, "llm_model": "deepseek-v4.1-flash-free", "llm_provider": "opencode"|"openai_api", "llm_state": "ready"|"not_connected"|"not_installed"|"blocked", "score": bool, "phoneme": bool, "tatoeba": bool, "grammar": bool, "llm_fallback": {"active": bool, "until": "ISO 8601"|null, "reason": "한국어 안내"}, "song": bool, "song_v": 1, "song_identify": bool}`
+각 기능이 준비됐는지. Godot는 시작할 때 이것으로 서버 기동을 확인한다. PC와 폰이 같이 쓴다. 이 응답은 기다리지 않는다(OpenCode 로그인 여부는 서버가 캐시해 둔 값만 읽는다).
 - `grammar`: LanguageTool(오프라인 문법 검사기)과 Java 17+가 있어 쓸 수 있는지.
-- `llm_fallback.active`: 선택한 엔진(무료 DeepSeek)이 한도·권한 문제로 막혀서 `until`까지 로컬 AI가 대신 답하는 중인지. `reason`은 화면에 그대로 보여 줄 한국어 (예: "DeepSeek V4.1 Flash (무료 · OpenCode) 사용 한도에 도달해서 23:21까지 로컬 AI로 답해요."). 로컬 AI(Ollama)도 연결되지 않으면 `active`는 true이지만 `reason`은 "AI 엔진을 쓸 수 없어요: …"로 시작한다.
+- `llm_state`: AI 엔진 상태. `ready` 쓸 수 있음 / `not_connected` 설치돼 있지만 로그인(키 연결)이 안 됨 / `not_installed` OpenCode(opencode.exe)가 없음 / `blocked` 연결돼 있지만 한도·서버 혼잡·키 거절을 최근에 겪어 `llm_fallback`이 안내 중(그래도 호출은 막지 않고 매번 시도한다).
+- `llm`: `llm_state`가 `ready` 또는 `blocked`이면 true (AI를 물어볼 수 있다). `llm_model`은 선택한 엔진의 모델 id.
+- `llm_fallback`: 이름은 옛 클라이언트 때문에 유지한다. `active`는 한도·서버 혼잡·키 거절 **안내**가 떠 있는 동안만 true이고 `until`까지다. `reason`은 화면에 그대로 보여 줄 한국어 (예: "무료 DeepSeek 사용 한도에 도달했어요. 23:21 이후 다시 시도해요."). 로컬 AI(Ollama)는 더 이상 없어서 대신 답해 주는 것은 없다. 연결·설치가 안 된 것은 안내가 아니라 `llm_state`로 알린다.
 
 ### AI 엔진 (GET/POST /llm, POST /llm/test)
-엔진은 두 가지다. `opencode`(기본): 무료 DeepSeek V4.1 Flash를 OpenCode의 로컬 서버(`opencode serve`, 서버가 필요할 때 자식 프로세스로 띄움)로 쓴다. 로그인은 `opencode auth login`. `ollama`: 오프라인 로컬 qwen3:8b.
-- `GET /llm` → `{"provider", "options": [{"id": "opencode"|"ollama", "label", "available"}], "llm_fallback": {...}, "openai_api": {...}}`
-- `POST /llm` `{"provider": "opencode"|"ollama"}` → GET /llm과 같은 응답 (config.json에 저장)
-- `POST /llm/test` → `{"ok", "provider", "seconds", "reply"}` (선택한 엔진 자체를 시험, 로컬 대체 없이)
-- 자동 대체: 무료 모델이 한도(429 등)·권한(무료 모델 거절)·서버 혼잡으로 실패하면 그 요청을 로컬 모델로 다시 처리하고, 오류 문구의 재시도 시각(없으면 30분, 혼잡은 5분)까지 이후 요청도 바로 로컬로 보낸다. 응답 형식은 같다.
+엔진은 `opencode`(기본)뿐이다: 무료 DeepSeek V4.1 Flash를 OpenCode의 로컬 서버(`opencode serve`, 서버가 필요할 때 자식 프로세스로 띄움)로 쓴다. 로그인(키 연결)은 앱의 [AI 연결하기](`POST /llm/connect`)로 한다. 오프라인 로컬 모델(Ollama)은 없어졌다. `"openai_api"`(고급, 아래)는 개발용으로 남아 있다.
+- `GET /llm` → `{"provider", "label", "state": "ready"|"not_connected"|"not_installed"|"blocked", "installed": bool, "connected": bool, "model", "login_url": "https://opencode.ai/auth", "options": [{"id": "opencode", "label", "available"}], "llm_fallback": {...}, "notice": ""|"ollama_removed", "openai_api": {...}}`. `options`는 옛 클라이언트 호환용으로 항목 1개다. `notice`가 `"ollama_removed"`이면 옛 설정(`llm_provider: "ollama"`)이 시작할 때 `opencode`로 옮겨졌다는 뜻이고, 앱이 한 번 안내한 뒤 `POST /llm/notice/ack`(PC에서만)로 지운다.
+- `POST /llm` `{"provider": "opencode"}` → GET /llm과 같은 응답 (config.json에 저장). `{"provider": "ollama"}`는 400 `{"error": "오프라인 로컬 AI는 더 이상 지원하지 않아요.", "code": "engine_removed"}`, 그 밖의 모르는 값은 400 "알 수 없는 AI 엔진이에요."
+- `POST /llm/test` → `{"ok", "provider", "seconds", "reply"}` (선택한 엔진 자체를 시험). 실패는 아래 오류 코드.
+- `POST /llm/connect`, `/llm/disconnect`, `/llm/install`, `GET /llm/install`, `POST /llm/notice/ack`: 이 PC에서만 된다(휴대폰 허용 목록에 없어서 폰은 403 `lan_forbidden`). 자세한 계약은 `docs/onetouch_install_design.md` 3.4.3절(작업 B1).
+- **AI 오류 코드**: AI가 필요한 요청(`/chat`, `/feedback`, AI 레슨, `/llm/test` 등)이 AI 때문에 실패하면 본문이 `{"error": "한국어 문장", "code": "…"}`이다. `error`는 그대로 화면에 보여 줄 수 있다. 401은 쓰지 않는다.
+
+  | code | HTTP | 언제 |
+  |---|---|---|
+  | `ai_not_connected` | 503 | OpenCode는 있는데 로그인이 없음 ("AI가 아직 연결되지 않았어요. 설정에서 [AI 연결하기]를 눌러 주세요. (폰이면 PC의 회화 연습에서)") |
+  | `ai_not_installed` | 503 | opencode.exe가 없음 |
+  | `ai_auth` | 503 | 호출이 키·권한 문제로 거절됨 (로그인 만료, 키가 맞지 않음) |
+  | `ai_limit` | 429 | 사용 한도. `error`에 다시 시도할 시각(HH:MM)이 들어 있음 |
+  | `ai_overload` | 502 | AI 서버가 바쁨 |
+  | `engine_removed` | 400 | `POST /llm {"provider": "ollama"}` |
+
+  AI가 만든 답이 JSON 형식이 아니라 한 번 더 물어도 실패한 경우는 코드 없이 502 + `error`만 온다. 한도·서버 혼잡·키 거절이 생기면 `/health`·`GET /llm`의 `llm_fallback`이 `until`까지 안내를 띄우지만, 다음 호출을 막지는 않는다: 호출마다 AI를 먼저 시도하고, 성공하면 안내가 사라진다.
 - 대화(`/chat`)는 `conv_id`마다 OpenCode 세션 하나를 유지해 새 메시지만 보낸다(한 턴 약 3~4초).
-- (고급) `"openai_api"`: OpenAI 호환 HTTP API(DeepSeek 공식, OpenRouter, Gemini 등) + API 키. 화면 선택지에는 없고 `POST /llm {"provider": "openai_api", "preset", "model", "api_key"}`로만 고른다. 키는 사용자가 앱에 직접 입력한 것만 `backend/secrets.json`에 저장하고(`key_source`는 항상 `"secret"`), 응답·로그에 나오지 않는다. `GET /llm`의 `openai_api.has_key`도 `secrets.json`만 보고 정한다. **OpenCode 로그인 키(`auth.json`)는 이 앱이 절대 읽지 않는다** (`key_source: "opencode"`는 400). `GET /llm/models?preset=` → `{"models": [{"id", "free"}]}`.
+- (고급) `"openai_api"`: OpenAI 호환 HTTP API(DeepSeek 공식, OpenRouter, Gemini 등) + API 키. 화면 선택지에는 없고 `POST /llm {"provider": "openai_api", "preset", "model", "api_key"}`로만 고른다. 키는 사용자가 앱에 직접 입력한 것만 `backend/secrets.json`에 저장하고(`key_source`는 항상 `"secret"`), 응답·로그에 나오지 않는다. `GET /llm`의 `openai_api.has_key`도 `secrets.json`만 보고 정한다. **OpenCode 로그인 키(`auth.json`)는 이 앱이 절대 읽지 않는다** (`key_source: "opencode"`는 400). 키가 없으면 `llm_state`는 `not_connected`다. `GET /llm/models?preset=` → `{"models": [{"id", "free"}]}`.
 - OpenCode 작업 폴더: `%LOCALAPPDATA%\hoehwa-practice\opencode\work` (앱 폴더·git 저장소 밖; 에이전트 설정 `opencode.json`만 있다). OpenCode 프로젝트 범위에 앱 파일이 들어가지 않는다.
-- AI가 하나도 없을 때(OpenCode 없음·실패 **그리고** Ollama 꺼짐): `/fix`와 대화 교정은 오류 없이 HTTP 200으로 LanguageTool 결과만 돌려준다 — LanguageTool이 못 찾으면 `{"fix": "", "fix_ko": ""}`. 이때 `/health`·`GET /llm`의 `llm_fallback.reason`은 "AI 엔진을 쓸 수 없어요: …"로 시작하고 로컬 AI가 답한다고 말하지 않는다.
+- AI를 쓸 수 없을 때(설치 안 됨·연결 안 됨·한도): `/fix`와 대화 교정은 오류 없이 HTTP 200으로 LanguageTool 결과만 돌려준다 — LanguageTool이 못 찾으면 `{"fix": "", "fix_ko": ""}`. `/lesson`(기본 Tatoeba)과 `/score`·`/stt`·`/tts` 같은 AI가 필요 없는 기능은 그대로 동작한다.
+- 설정: `config.json`의 `llm_provider`는 `"opencode"`(기본) 또는 개발용 `"openai_api"`. 예전의 `llm_model`·`ollama_url`·`keep_alive`·`num_ctx`는 없어졌고, 옛 설정 파일에 남아 있어도 서버가 시작할 때 지운다(`llm_provider: "ollama"`는 `"opencode"`로 옮기고 `llm_migrated_from: "ollama"`를 적는다). 시험 서버(`--port`)는 이 이전을 메모리에서만 하고 설정 파일을 쓰지 않는다.
 - 문법 검사(LanguageTool) 신뢰 규칙: 학습자 문장에 자주 틀리는 규칙(대명사 격 바꾸기 `CONFUSION_OF_ME_I` 등)과 고유명사(대문자 단어)를 바꾸는 제안은 쓰지 않고, 고친 문장을 LanguageTool이 다시 검사해 여전히 문제가 있으면 고침을 내놓지 않는다(AI가 있으면 AI가 원문을 직접 본다). `fix_ko`는 규칙 종류(문법/철자/헷갈리는 단어)에 맞게 쓴다.
 - 같은 요청 재사용: 교정(`/fix`), 번역, 레슨 정답 검사 같은 결정적 작업의 AI 결과는 `backend/cache/llm_cache.sqlite`에 (작업, 엔진, 모델, 스키마, 메시지)로 캐시한다. 대화·피드백은 캐시하지 않는다.
 

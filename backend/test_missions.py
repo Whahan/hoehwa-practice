@@ -705,7 +705,7 @@ def extra_tests(data):
 
         # ---- route level (HTTP status mapping) with the fake AI
         client = TestClient(_fake_app(), raise_server_exceptions=False)
-        script["out"] = FakeApiError("AI 모델 서버(Ollama)에 연결할 수 없어요.", 503)
+        script["out"] = FakeApiError("AI 모델 서버에 연결할 수 없어요.", 503)
         r = client.post("/missions/judge", json={"lang": "en", "mission_id": mission["id"], "pending": [gid], "history": hist})
         check("route: AI ApiError 503 -> HTTP 503 + {error: 한글}", r.status_code == 503 and _is_korean_error(r), "%s %s" % (r.status_code, r.text[:100]))
         script["out"] = RuntimeError("boom")
