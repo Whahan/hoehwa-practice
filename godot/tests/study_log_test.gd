@@ -34,6 +34,7 @@ func _ready() -> void:
 	_test_score()
 	_test_weak_and_save()
 	_test_recording()
+	_test_path()
 	_test_settle()
 	_test_goal_and_clock()
 	_test_fix_cards()
@@ -42,6 +43,7 @@ func _ready() -> void:
 	StudyLog.open_hook = Callable()
 	StudyLog.load_from_disk() ## empty state while the path is still the temp one
 	StudyLog.today_override = -1
+	StudyLog.unix_override = -1
 	Store.prefs_path = _old_paths[0]
 	Store.progress_path = _old_paths[1]
 	StudyLog.path = _old_paths[2]
@@ -212,6 +214,10 @@ func _test_future_version() -> void:
 	StudyLog.add_seconds("en", "talk", 5)
 	StudyLog.flush()
 	ok((read_json(LOG_PATH) as Dictionary).has("future_feature"), "(c) still there after reload and another save")
+	ok(not (read_json(LOG_PATH) as Dictionary).has("path") and not StudyLog.snapshot().has("path"), "(c) T1a-4: a file without 'path' gets no 'path' key from loading and saving")
+	var snap_before: Dictionary = StudyLog.snapshot()
+	StudyLog.load_from_disk()
+	ok(StudyLog.snapshot()["days"] == snap_before["days"] and not StudyLog.snapshot().has("path"), "(c) T1a-4: reading the same file again leaves days as they were and still no 'path'")
 
 
 # ---------------------------------------------------------------- unreadable file / .bad rotation
@@ -445,6 +451,166 @@ func _test_recording() -> void:
 	ok(StudyLog.mission_best("cafe_order")["plays"] == 3, "missions survive a reload")
 
 
+# ---------------------------------------------------------------- path record (docs/home_menu_design.md §9.1)
+
+## Cases of the cell-key rule: [key, expected]. `bad_expect` flips one expectation so the checker must report a failure.
+func _cell_key_cases_hold(bad_expect: bool = false) -> bool:
+	var cases: Array = [["3-2", true], ["1-1", true], ["12-4", true], ["13-9", false], ["0-1", false], ["abc", false],
+		["03-2", false], ["3-5", false], ["3-0", false], ["3", false], ["3-2-1", false], ["", false], [32, false], ["-3-2", false]]
+	if bad_expect:
+		cases[3][1] = true ## "13-9" is NOT a cell key: expecting true must be reported as a mismatch
+	var all_ok := true
+	for c in cases:
+		if StudyLog._is_cell_key(c[0]) != c[1]:
+			all_ok = false
+	return all_ok
+
+
+func _test_path() -> void:
+	print("[path record: lessons, last cell, resume]")
+	ok(_cell_key_cases_hold(), "cell-key rule: 1-1 .. 12-4 pass, 13-9 / 0-1 / abc / 03-2 / 3-5 / numbers fail")
+	var sc_bad: bool = _cell_key_cases_hold(true)
+	print("  selfcheck %s cell-key checker with a wrong expectation" % ("MISSED-BUG(!)" if sc_bad else "FAIL-as-expected"))
+	ok(not sc_bad, "selfcheck: a wrong expectation is reported as a failure")
+
+	_fresh()
+	ok(StudyLog.path_done("en", 3, 2) == 0 and StudyLog.path_last("en") == [] and StudyLog.path_cells("en").is_empty() and StudyLog.resume().is_empty(), "empty log: path_done 0, path_last [], path_cells {}, resume {}")
+	ok(not StudyLog.snapshot().has("path") and not StudyLog.is_dirty(), "reading never creates the 'path' key nor makes the log dirty")
+	ok(StudyLog.add_path_lesson("en", 3, 2, 8, 10) and StudyLog.add_path_lesson("en", 3, 2, 10, 10), "T1a-1: add_path_lesson twice -> true")
+	ok(StudyLog.path_done("en", 3, 2) == 2 and StudyLog.path_done("ja", 3, 2) == 0 and StudyLog.path_done("en", 3, 3) == 0, "T1a-1: path_done == 2 for that cell only (other cell / other language 0)")
+	ok(StudyLog.path_last("en") == [3, 2] and StudyLog.path_last("ja") == [], "T1a-1: path_last == [3, 2] (ja still [])")
+	var cell: Dictionary = StudyLog.path_cells("en")["3-2"]
+	ok(int(cell["ok"]) == 18 and int(cell["total"]) == 20 and cell["last"] == iso(0), "ok / total add up (18 / 20), last = today -> %s" % str(cell))
+	ok(not StudyLog.add_path_lesson("xx", 3, 2, 1, 1) and not StudyLog.add_path_lesson("en", 0, 1, 1, 1) and not StudyLog.add_path_lesson("en", 13, 1, 1, 1) and not StudyLog.add_path_lesson("en", 1, 0, 1, 1) and not StudyLog.add_path_lesson("en", 1, 5, 1, 1), "bad language / month 0, 13 / week 0, 5 -> false")
+	ok(StudyLog.path_done("en", 3, 2) == 2 and StudyLog.path_cells("en").size() == 1 and StudyLog.path_done("en", 13, 1) == 0 and StudyLog.path_done("xx", 3, 2) == 0, "rejected calls changed nothing; path_done of bad arguments is 0")
+	StudyLog.add_path_lesson("en", 4, 1, 99, 5) ## ok is clamped to total, negative total -> 0
+	StudyLog.add_path_lesson("en", 4, 1, -3, -9)
+	var c41: Dictionary = StudyLog.path_cells("en")["4-1"]
+	ok(int(c41["ok"]) == 5 and int(c41["total"]) == 5 and int(c41["done"]) == 2, "ok clamped to 0..total, negative total counts as 0 (but the lesson still counts once) -> %s" % str(c41))
+	var copy: Dictionary = StudyLog.path_cells("en")
+	copy["3-2"]["done"] = 777
+	ok(StudyLog.path_done("en", 3, 2) == 2, "path_cells returns a copy")
+	StudyLog.add_path_lesson("ja", 12, 4, 3, 4)
+	ok(StudyLog.path_last("ja") == [12, 4] and StudyLog.path_last("en") == [4, 1], "last cell is kept per language")
+	ok(StudyLog.is_dirty() and StudyLog.flush(), "recording makes the log dirty, flush() writes")
+	var saved: Variant = read_json(LOG_PATH)
+	ok(saved is Dictionary and int(saved["path"]["cells"]["en"]["3-2"]["done"]) == 2 and saved["path"]["last"]["en"] == "4-1", "the file has path.cells.en.3-2.done == 2 and path.last.en")
+	StudyLog.load_from_disk()
+	ok(StudyLog.last_load_status == "ok" and StudyLog.path_done("en", 3, 2) == 2 and StudyLog.path_last("en") == [4, 1] and StudyLog.path_last("ja") == [12, 4], "T1a-1: flush() then load_from_disk() -> same values")
+	var capped_n: int = StudyLog.MAX_PATH_DONE
+	StudyLog._path_data(true)["cells"]["en"]["3-2"]["done"] = capped_n
+	StudyLog.add_path_lesson("en", 3, 2, 1, 1)
+	ok(StudyLog.path_done("en", 3, 2) == capped_n, "done is capped (%d)" % capped_n)
+
+	# sync never touches 'path'
+	ok(StudyLog.apply_sync({"days": {}, "phon": {}, "missions": {}}) and StudyLog.path_last("en") == [3, 2] and StudyLog.path_done("ja", 12, 4) == 1, "apply_sync() keeps the device-only 'path'")
+
+	# (T1a-6) reset
+	StudyLog.reset()
+	ok(not StudyLog.snapshot().has("path") and StudyLog.path_done("en", 4, 1) == 0 and StudyLog.path_last("en") == [] and StudyLog.resume().is_empty(), "T1a-6: reset() removes the path record (memory)")
+	ok(not (read_json(LOG_PATH) as Dictionary).has("path"), "T1a-6: ...and the file")
+
+	# (T1a-2) damaged but valid JSON: cleaned, never quarantined
+	print("[path record: damaged contents]")
+	_cleanup()
+	write_text(LOG_PATH, read_text("res://tests/sample_studylog_path.json"))
+	StudyLog.load_from_disk()
+	ok(StudyLog.last_load_status == "ok" and not FileAccess.file_exists(LOG_PATH + ".bad"), "T1a-2: damaged path inside valid JSON -> status 'ok', no .bad file")
+	var cells_en: Dictionary = StudyLog.path_cells("en")
+	var keys: Array = cells_en.keys()
+	keys.sort()
+	ok(keys == ["1-1", "2-1", "2-3", "3-2"], "T1a-2: only real cell keys survive (13-9, abc, 0-1, 03-2, 3-5, non-dict dropped) -> %s" % str(keys))
+	ok(int(cells_en["3-2"]["done"]) == 3 and int(cells_en["3-2"]["ok"]) == 22 and int(cells_en["3-2"]["total"]) == 30 and cells_en["3-2"]["last"] == "2026-10-15", "T1a-2: the valid cell is kept as it was")
+	ok(not (cells_en["3-2"] as Dictionary).has("junk") and (cells_en["3-2"] as Dictionary).size() == 4, "T1a-2: unknown sub-keys of a cell are dropped")
+	ok(int(cells_en["1-1"]["done"]) == 0 and int(cells_en["1-1"]["ok"]) == 0 and int(cells_en["1-1"]["total"]) == StudyLog.MAX_COUNT and cells_en["1-1"]["last"] == "", "T1a-2: done -5 -> 0, ok 'x' -> 0, total 1e99 -> cap, fake date 2026-02-30 -> '' -> %s" % str(cells_en["1-1"]))
+	ok(int(cells_en["2-1"]["done"]) == 0 and int(cells_en["2-1"]["ok"]) == 4, "T1a-2: done 'x' -> 0 (the rest of the cell survives)")
+	ok(int(cells_en["2-3"]["done"]) == StudyLog.MAX_PATH_DONE and int(cells_en["2-3"]["ok"]) == StudyLog.MAX_COUNT, "T1a-2: done 1e99 -> %d, ok 1e99 -> %d" % [StudyLog.MAX_PATH_DONE, StudyLog.MAX_COUNT])
+	ok(StudyLog.path_cells("ja").is_empty(), "T1a-2: cells.ja as an array -> {}")
+	ok(StudyLog.path_last("en") == [3, 2] and StudyLog.path_last("ja") == [], "T1a-2: last.en '3-2' kept, last.ja '99-9' -> none")
+	ok(StudyLog.resume().is_empty(), "T1a-2: resume {view:'hack', at:'soon'} -> {}")
+	ok(not (StudyLog.snapshot()["path"] as Dictionary).has("mystery"), "T1a-2: unknown keys inside 'path' are dropped")
+	ok(StudyLog.frozen_days("en") == {Plan.iso_to_days("2026-10-10"): true, Plan.iso_to_days("2026-10-12"): true}, "T1a-7: frozen_days('en') = day numbers of the valid frozen dates (fake dates / numbers skipped) -> %s" % str(StudyLog.frozen_days("en")))
+	ok(StudyLog.frozen_days("ja") == {} and StudyLog.frozen_days("xx") == {}, "T1a-7: no frozen days -> {} (also for an unknown language)")
+	StudyLog.add_path_lesson("en", 3, 2, 1, 1) ## the cleaned record can be written back
+	ok(StudyLog.flush() and int(read_json(LOG_PATH)["path"]["cells"]["en"]["3-2"]["done"]) == 4, "the cleaned record is written back and counts on")
+
+	# (T1a-2) 'path' itself is not an object
+	for bad in [[1, 2, 3], "text", 42, null, true]:
+		_cleanup()
+		write_text(LOG_PATH, JSON.stringify({"v": 1, "path": bad}))
+		StudyLog.load_from_disk()
+		var sp: Dictionary = StudyLog.snapshot()
+		ok(StudyLog.last_load_status == "ok" and StudyLog.path_done("en", 3, 2) == 0 and StudyLog.path_last("en") == [] and StudyLog.resume().is_empty() and (sp["path"] as Dictionary)["cells"] == {"en": {}, "ja": {}}, "T1a-2: path = %s -> empty path record, no error" % JSON.stringify(bad))
+		ok(not FileAccess.file_exists(LOG_PATH + ".bad"), "T1a-2: path = %s is valid JSON -> not quarantined" % JSON.stringify(bad))
+	# cells / last / resume with the wrong container types
+	_cleanup()
+	write_text(LOG_PATH, JSON.stringify({"v": 1, "path": {"cells": "x", "last": [1], "resume": 5}}))
+	StudyLog.load_from_disk()
+	ok(StudyLog.path_cells("en").is_empty() and StudyLog.path_last("en") == [] and StudyLog.resume().is_empty(), "T1a-2: cells / last / resume of the wrong type -> empty")
+
+	# (T1a-3) truncated JSON is quarantined as before
+	_cleanup()
+	write_text(LOG_PATH, '{"v":1,"path":{"cells":{"en":{"3-2":{"do')
+	StudyLog.load_from_disk()
+	ok(StudyLog.last_load_status == "bad" and FileAccess.file_exists(LOG_PATH + ".bad") and not FileAccess.file_exists(LOG_PATH), "T1a-3: truncated JSON -> status 'bad', .bad file, original path free")
+	ok(StudyLog.path_done("en", 3, 2) == 0 and not StudyLog.snapshot().has("path"), "T1a-3: starts empty")
+
+	# (T1a-5) note_resume
+	print("[path record: note_resume]")
+	_fresh()
+	var t0: int = 1793500000
+	StudyLog.unix_override = t0
+	ok(StudyLog.note_resume("lesson", "en") and StudyLog.resume() == {"view": "lesson", "lang": "en", "at": t0}, "T1a-5: first note is stored {view, lang, at}")
+	ok(StudyLog.is_dirty() and StudyLog.flush() and not StudyLog.is_dirty(), "T1a-5: ...dirty, then flushed")
+	StudyLog.unix_override = t0 + 30
+	ok(StudyLog.note_resume("lesson", "en") and not StudyLog.is_dirty() and int(StudyLog.resume()["at"]) == t0, "T1a-5: same view + language 30 s later -> not dirty, `at` unchanged")
+	StudyLog.unix_override = t0 + 59
+	StudyLog.note_resume("lesson", "en")
+	ok(not StudyLog.is_dirty(), "T1a-5: 59 s later: still unchanged")
+	StudyLog.unix_override = t0 + 60
+	ok(StudyLog.note_resume("lesson", "en") and StudyLog.is_dirty() and int(StudyLog.resume()["at"]) == t0 + 60, "T1a-5: 60 s later -> refreshed")
+	StudyLog.flush()
+	StudyLog.unix_override = t0 + 61
+	ok(StudyLog.note_resume("review", "en") and StudyLog.is_dirty() and StudyLog.resume()["view"] == "review", "T1a-5: another view within 60 s -> updated")
+	StudyLog.flush()
+	StudyLog.unix_override = t0 + 62
+	ok(StudyLog.note_resume("review", "ja") and StudyLog.is_dirty() and StudyLog.resume()["lang"] == "ja", "T1a-5: another language within 60 s -> updated")
+	StudyLog.flush()
+	var before_bad: Dictionary = StudyLog.resume()
+	ok(not StudyLog.note_resume("hack", "en") and not StudyLog.note_resume("lesson", "fr") and not StudyLog.note_resume("today", "en") and not StudyLog.note_resume("", "") and not StudyLog.note_resume("settings", "ja"), "T1a-5: view 'hack' / language 'fr' / screens that are not study screens -> false")
+	ok(StudyLog.resume() == before_bad and not StudyLog.is_dirty(), "T1a-5: rejected notes change nothing")
+	for v in StudyLog.PATH_VIEWS:
+		StudyLog.unix_override += 100
+		ok(StudyLog.note_resume(v, "en") and StudyLog.resume()["view"] == v, "T1a-5: study screen '%s' accepted" % v)
+	StudyLog.flush()
+	StudyLog.load_from_disk()
+	ok(StudyLog.resume()["view"] == "song" and StudyLog.resume()["lang"] == "en", "note_resume survives flush + load")
+	var cp: Dictionary = StudyLog.resume()
+	cp["view"] = "x"
+	ok(StudyLog.resume()["view"] == "song", "resume() returns a copy")
+	# a clock that was set back: `at` in the future (> 1 day) is returned as it is, no error; noting again replaces it
+	_cleanup()
+	var future_at: int = t0 + 3 * 86400
+	write_text(LOG_PATH, JSON.stringify({"v": 1, "path": {"resume": {"view": "talk", "lang": "ja", "at": future_at}}}))
+	StudyLog.load_from_disk()
+	ok(StudyLog.resume() == {"view": "talk", "lang": "ja", "at": future_at}, "T1a-5: resume.at 3 days in the future is returned unchanged (HomeModel decides whether to show it)")
+	StudyLog.unix_override = t0
+	ok(StudyLog.note_resume("talk", "ja") and StudyLog.is_dirty() and int(StudyLog.resume()["at"]) == t0, "T1a-5: a note after the clock was set back replaces the future `at`")
+	# invalid resume values in the file
+	for bad_resume in [{"view": "lesson", "lang": "en", "at": -5}, {"view": "lesson", "lang": "fr", "at": 5}, {"view": "lesson", "lang": "en"}, {"view": 5, "lang": "en", "at": 5}, {"view": "lesson", "lang": "en", "at": "7"}, "lesson"]:
+		_cleanup()
+		write_text(LOG_PATH, JSON.stringify({"v": 1, "path": {"resume": bad_resume}}))
+		StudyLog.load_from_disk()
+		ok(StudyLog.resume().is_empty(), "T1a-2: resume %s -> {}" % JSON.stringify(bad_resume))
+	_cleanup()
+	write_text(LOG_PATH, '{"v":1,"path":{"resume":{"view":"practice","lang":"en","at":1793500000.0,"extra":1}}}')
+	StudyLog.load_from_disk()
+	ok(StudyLog.resume() == {"view": "practice", "lang": "en", "at": 1793500000}, "a valid resume (float number in JSON, extra key) is kept as ints, extra key dropped")
+	StudyLog.unix_override = -1
+	_cleanup()
+	StudyLog.load_from_disk()
+
+
 # ---------------------------------------------------------------- settle with Store.progress
 
 func _test_settle() -> void:
@@ -576,6 +742,18 @@ func _test_goal_and_clock() -> void:
 	ok(clock.tick(100000.0, true) <= 15 and StudyLog.today_seconds("en") <= sec_now + 15, "a huge gap (sleep/pause) counts at most 15 s")
 	var by: Dictionary = StudyLog.snapshot()["days"][iso(0)]["en"]["by"]
 	ok(by.has("lesson") and by.size() == 1, "seconds are filed under the current view (lesson)")
+	ok(StudyLog.resume().get("view", "") == "lesson" and StudyLog.resume().get("lang", "") == "en", "StudyClock.tick notes the study screen for 이어하기 (lesson, en)")
+	_fresh()
+	var clock_h := StudyClock.new()
+	clock_h.lang_override = "en"
+	clock_h.view_override = "today"
+	clock_h.tick(10.0, true)
+	ok(StudyLog.resume().is_empty() and not StudyLog.snapshot().has("path"), "seconds on the home / settings screens do not note a resume target (no 'path' key either)")
+	clock_h.view_override = "song"
+	clock_h.lang_override = "ja"
+	clock_h.tick(5.0, true)
+	ok(StudyLog.resume().get("view", "") == "song" and StudyLog.resume().get("lang", "") == "ja", "song / ja is noted too")
+	clock_h.free()
 
 	# midnight
 	_fresh()

@@ -30,6 +30,12 @@ func go_back() -> bool:
 	return false
 
 
+## Deep navigation (Store.navigate_args): main.gd has already shown this view and now hands over `args`
+## (lang, n, w, start ...). Return true when this screen understood and handled them. The default does nothing.
+func open_target(_args: Dictionary) -> bool:
+	return false
+
+
 ## Rebuilds a scrolling page while keeping the scroll position.
 func rebuild_keep_scroll(scroll: ScrollContainer, builder: Callable) -> void:
 	var sv: int = scroll.scroll_vertical
