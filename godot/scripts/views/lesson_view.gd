@@ -17,6 +17,11 @@ var status: String = "idle" # idle | loading | run | done
 var err: String = ""
 var sel_n: int = 1
 var sel_w: int = 1
+var _run_n: int = -1 ## cell (month / week) the running lesson was started for; the log counts it there even if sel_* changes
+var _run_w: int = -1
+var _boards: Array = [] ## PathBoard of every month on the lesson home (see path_boards)
+var _render_serial: int = 0
+var _keep_scroll: int = -1 ## >= 0: the next lesson-home render restores this scroll position instead of centring the current node
 var title: String = ""
 var attribution: String = "" # source credit of the response (CC BY), "" when none
 var exercises: Array = []
@@ -99,16 +104,67 @@ func _process(_delta: float) -> void:
 		_loading_label.text = "문제 10개를 새로 만들고 있어요. 보통 10~60초 걸려요.  (%d초 경과)" % sec
 
 
+## The cell to learn next is the "you are here" cell of the path (home_menu_design §8.3), not the calendar week.
 func _set_default_selection() -> void:
-	var p: Dictionary = Store.position()
-	sel_n = int(p["n"])
-	sel_w = int(p["w"])
+	var cc: Dictionary = PathModel.current_cell(lang)
+	sel_n = int(cc["n"])
+	sel_w = int(cc["w"])
+
+
+## Deep navigation (Store.navigate_args, docs §4.4): picks lang / n / w and, with "start": true and real-sentence lessons
+## (an AI lesson takes 10-60 s, a person presses start), starts at once. Returns false for values it cannot use
+## (nothing changes) and while a lesson is being solved (the progress would be lost).
+func open_target(args: Dictionary) -> bool:
+	var l: Variant = args.get("lang", lang)
+	if not (l is String) or not (l == "en" or l == "ja"):
+		return false
+	var has_cell: bool = args.has("n") or args.has("w")
+	var n_v: Variant = args.get("n", sel_n)
+	var w_v: Variant = args.get("w", sel_w)
+	if has_cell and (not _whole(n_v) or not _whole(w_v) or PathModel.index_of(int(n_v), int(w_v)) < 0):
+		return false
+	if status == "run":
+		return false
+	if status != "idle":
+		quit_lesson()
+	if l != lang:
+		lang = l
+		if Store.lang() != l:
+			Store.set_lang(l)
+	err = ""
+	if has_cell:
+		sel_n = int(n_v)
+		sel_w = int(w_v)
+	else:
+		_set_default_selection()
+	var go: Variant = args.get("start", false)
+	if go is bool and go and lesson_source() == "tatoeba":
+		start_lesson()
+	else:
+		_render()
+	return true
+
+
+static func _whole(v: Variant) -> bool:
+	if v is int:
+		return true
+	if v is float:
+		var f: float = v
+		return not is_nan(f) and not is_inf(f) and f == floorf(f)
+	return false
+
+
+## The PathBoard of every month of the lesson home (empty while a lesson is being made or solved).
+func path_boards() -> Array:
+	return _boards
 
 
 # ---------------------------------------------------------------- generating
 
 func start_lesson() -> void:
 	err = ""
+	_run_n = sel_n
+	_run_w = sel_w
 	status = "loading"
 	_loading_start = Time.get_ticks_msec()
 	_lesson_serial += 1
@@ -159,6 +215,8 @@ func lesson_source() -> String:
 func set_lesson_source(v: String) -> void:
 	Store.set_pref("lesson_source", "ai" if v == "ai" else "tatoeba")
 	err = ""
+	if _page != null and status == "idle":
+		_keep_scroll = _page.scroll_vertical # the path stays where it is
 	_render()
 
 
@@ -344,6 +402,8 @@ func finish_lesson() -> void:
 	Store.add_xp(lang, ok * 10)
 	Store.inc_stat(lang, "lessons")
 	Store.mark_today(lang)
+	# the path counts the lesson in the cell it was started for; a lesson loaded without start_lesson counts in the selected one
+	StudyLog.add_path_lesson(lang, _run_n if _run_n >= 1 else sel_n, _run_w if _run_w >= 1 else sel_w, ok, results.size())
 	added_count = Store.add_review(wrong)
 	Store.save_progress()
 	status = "done"
@@ -425,7 +485,9 @@ func go_back() -> bool:
 func _render() -> void:
 	if _page == null:
 		return
+	_render_serial += 1
 	var had_header: bool = _header != null
+	_boards = []
 	_record_widget = null
 	_prosody_panel = null
 	_prosody_tips = null
@@ -444,6 +506,7 @@ func _render() -> void:
 			_render_done(c)
 		_:
 			_render_home(c)
+	_keep_scroll = -1
 	UI.fix_cjk(c)
 	UI.fix_cjk(_footer_col.content)
 	if had_header != (_header != null):
@@ -475,133 +538,161 @@ func _accent_text(acc: Color) -> Color:
 
 func _render_home(c: VBoxContainer) -> void:
 	var acc: Color = Pal.accent(lang)
-	_header = PageHeader.build("레슨", "%d XP · 레슨 %d회" % [Store.xp(lang), Store.stat(lang, "lessons")])
-	c.add_child(_header)
-	var top := UI.adaptive(12)
+	var phone: bool = Platform.is_phone()
 	var lang_seg := UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
 		Store.set_lang(v)
 		err = ""
+		_set_default_selection()
 		_render())
-	top.add_child(lang_seg)
-	c.add_child(top)
+	# Phone: no big title block, the app bar carries the title and the "you are here" card is the first thing on the page
+	# (docs §7.3). PC: title block on the left, language switch on the right.
+	if phone:
+		_header = null
+		var top := UI.adaptive(12)
+		top.add_child(lang_seg)
+		c.add_child(top)
+	else:
+		_header = PageHeader.build("레슨", "%d XP · 레슨 %d회" % [Store.xp(lang), Store.stat(lang, "lessons")])
+		_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var top_pc := UI.hbox(12)
+		top_pc.add_child(_header)
+		lang_seg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		top_pc.add_child(lang_seg)
+		c.add_child(top_pc)
 	if err != "":
 		c.add_child(_error_box(err))
 
+	var res: Dictionary = _path_result()
+	var states: Array = res["states"]
+	var cur_i: int = int(res["current"])
+	var sel_i: int = PathModel.index_of(sel_n, sel_w)
+
+	# --- "you are here" card: the cell to learn next, the lesson kind and the start button
 	var card := UI.card("BigCard", 14)
-	card.body.add_child(UI.label("오늘의 레슨", "Eyebrow", false))
-	card.body.add_child(UI.label(UI.plain(Store.month_data(lang, sel_n).get("title", "")), "H2"))
-	card.body.add_child(UI.label("이번 주에 배울 표현으로 문장 고르기, 빈칸, 문장 조립, 듣기, 따라 말하기 문제를 매번 새로 만들어요. 실제 예문 레슨은 바로 만들어지고, AI 레슨은 10~60초 걸릴 수 있어요.", "Muted"))
-
-	var months: Array = Store.months(lang)
-	var m_items: Array = []
-	var m_sel := 0
-	for i in months.size():
-		var m: Dictionary = months[i]
-		m_items.append("%d개월차 · %s" % [int(m["n"]), UI.plain(m["title"])])
-		if int(m["n"]) == sel_n:
-			m_sel = i
-	var w_items: Array = []
-	var weeks: Array = Store.month_data(lang, sel_n).get("weeks", [])
-	for i in weeks.size():
-		w_items.append("%s · %s" % [str((weeks[i] as Dictionary).get("w", "")), UI.plain((weeks[i] as Dictionary).get("topic", ""))])
-	var w_sel: int = clampi(sel_w - 1, 0, maxi(0, w_items.size() - 1))
-	var fields := UI.adaptive(12)
-	if Platform.is_phone():
-		# big touch rows that open a bottom sheet instead of the small drop-down list
-		var m_pairs: Array = []
-		for i in months.size():
-			m_pairs.append([str(int((months[i] as Dictionary)["n"])), m_items[i]])
-		var w_pairs: Array = []
-		for i in w_items.size():
-			w_pairs.append([str(i + 1), w_items[i]])
-		fields.add_child(_pick_field("범위", m_items[m_sel] if m_sel < m_items.size() else "", m_pairs, str(sel_n), func(v: int) -> void:
-			sel_n = v
-			sel_w = 1
-			_render()))
-		fields.add_child(_pick_field("주차", w_items[w_sel] if w_sel < w_items.size() else "", w_pairs, str(sel_w), func(v: int) -> void:
-			sel_w = v
-			_render()))
-	else:
-		var mo := UI.option_button(m_items, m_sel)
-		mo.item_selected.connect(func(i: int) -> void:
-			sel_n = int((months[i] as Dictionary)["n"])
-			sel_w = 1
-			_render())
-		var wo := UI.option_button(w_items, w_sel)
-		wo.item_selected.connect(func(i: int) -> void: sel_w = i + 1)
-		var f1 := UI.field("범위", mo)
-		f1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var f2 := UI.field("주차", wo)
-		f2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		fields.add_child(f1)
-		fields.add_child(f2)
-	card.body.add_child(fields)
-
+	var eyebrow: String = "지금 위치"
+	if bool(res["finished"]):
+		eyebrow = "1년 과정 완료"
+	elif sel_i != cur_i:
+		eyebrow = "선택한 칸"
+	card.body.add_child(UI.label(eyebrow, "Eyebrow", false))
+	card.body.add_child(UI.label("%d개월차 · %d주" % [sel_n, sel_w], "H2"))
+	var sel_state: String = str(states[sel_i]) if sel_i >= 0 and sel_i < states.size() else "open"
+	var cnt: int = clampi(StudyLog.path_done(lang, sel_n, sel_w), 0, PathModel.NODE_GOAL)
+	if sel_state == "done":
+		cnt = PathModel.NODE_GOAL
+	var prog := UI.hbox(10)
+	var dots_c: Control = PathBoard.dots(cnt, PathModel.NODE_GOAL)
+	dots_c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	prog.add_child(dots_c)
+	var cnt_l := UI.label("%d/%d" % [cnt, PathModel.NODE_GOAL], "Strong", false)
+	cnt_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	prog.add_child(cnt_l)
+	card.body.add_child(prog)
+	var topic: String = PathBoard.topic_of(lang, sel_n, sel_w)
+	if topic != "":
+		card.body.add_child(UI.label("이번 주: %s" % topic, "Muted"))
 	var src_items: Array = [["tatoeba", "실제 예문 레슨 (빠름)"], ["ai", "AI 레슨 (느림)"]]
-	if Platform.is_phone():
+	if phone:
 		src_items = [["tatoeba", "실제 예문 (빠름)"], ["ai", "AI (느림)"]]
 	var src_seg := UI.segmented(src_items, lesson_source(), set_lesson_source, func(_v: String) -> Color: return acc)
 	card.body.add_child(UI.field("레슨 종류", src_seg))
-
-	var go := UI.button("레슨 시작", "primary", acc, 56)
+	var go := UI.button("레슨 시작", "primary", Pal.PRIMARY, Ds.HOME_CTA_H_PHONE if phone else Ds.HOME_CTA_H_PC)
 	go.pressed.connect(start_lesson)
 	card.body.add_child(go)
 	c.add_child(card)
 
-	var rv: int = Store.review_for(lang).size()
-	var rc := UI.card("Card", 8)
-	rc.body.add_child(UI.label("복습", "Eyebrow", false))
-	rc.body.add_child(UI.label("틀린 문장 다시 말하기", "H3"))
-	if rv > 0:
-		rc.body.add_child(UI.label("레슨과 대화에서 틀리거나 고친 문장 %d개가 모여 있어요." % rv, "Muted"))
-		var rb := UI.button("복습하러 가기", "soft", acc, 48)
-		rb.pressed.connect(func() -> void: Store.navigate.emit("review", lang))
-		rc.body.add_child(rb)
-	else:
-		rc.body.add_child(UI.label("아직 복습할 문장이 없어요. 레슨에서 틀린 문장과 대화에서 교정받은 문장이 여기에 쌓여요.", "Muted"))
-	c.add_child(rc)
+	# --- the path: one board per month, 4 weeks each
+	for n in range(1, PathModel.MONTHS + 1):
+		var first: int = (n - 1) * PathModel.WEEKS
+		var sts: Array = states.slice(first, first + PathModel.WEEKS)
+		var done_k: int = sts.count("done")
+		c.add_child(PathBoard.month_header(n, PathBoard.month_title_of(lang, n), done_k))
+		var names: Array = []
+		for w in range(1, PathModel.WEEKS + 1):
+			names.append(PathBoard.topic_of(lang, n, w))
+		var board := PathBoard.new()
+		board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		board.build(lang, n, sts, names, cur_i)
+		board.node_pressed.connect(_on_path_node)
+		c.add_child(board)
+		_boards.append(board)
+	var keep: int = _keep_scroll
+	_keep_scroll = -1
+	_settle_scroll(keep, _render_serial)
 
 
-## Phone: caption over an input-looking row; tapping it opens a bottom sheet with `items` ([[value, label], ...]) and
-## `on_pick(int)` gets the picked value. `shown` is the label of the current choice.
-func _pick_field(caption: String, shown: String, items: Array, current: String, on_pick: Callable) -> Control:
-	var b := Button.new()
-	b.text = shown
-	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.clip_text = true
-	b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.custom_minimum_size.y = Ds.field_h()
-	var normal := UI.style(Pal.SURFACE, Pal.LINE_STRONG, 1, Ds.R_INPUT, 14, 10)
-	normal.content_margin_right = 44 # room for the chevron
-	var pressed := UI.style(Pal.SUNK, Pal.LINE_STRONG, 1, Ds.R_INPUT, 14, 10)
-	pressed.content_margin_right = 44
-	for n in ["normal", "focus"]:
-		b.add_theme_stylebox_override(n, normal)
-	for n in ["hover", "pressed", "hover_pressed", "disabled"]:
-		b.add_theme_stylebox_override(n, pressed)
-	for n in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
-		b.add_theme_color_override(n, Pal.INK)
-	var chev := GlyphIcon.new("chevron_down", 20.0, Pal.MUTED)
-	chev.anchor_left = 1.0
-	chev.anchor_right = 1.0
-	chev.anchor_top = 0.5
-	chev.anchor_bottom = 0.5
-	chev.offset_left = -34.0
-	chev.offset_right = -14.0
-	chev.offset_top = -10.0
-	chev.offset_bottom = 10.0
-	b.add_child(chev)
-	b.accessibility_name = caption
-	b.pressed.connect(func() -> void:
-		var sh := Sheet.choice(self, caption, items, current)
-		sh.closed.connect(func(v: Variant) -> void:
-			if str(v).is_valid_int():
-				on_pick.call(int(str(v)))))
-	return UI.field(caption, b)
+## States of the 48 cells of `lang` (PathModel.states from the log, the weekly checks and the calendar).
+func _path_result() -> Dictionary:
+	var last: Array = StudyLog.path_last(lang)
+	var last_idx: int = PathModel.index_of(int(last[0]), int(last[1])) if last.size() == 2 else -1
+	return PathModel.states(PathModel.done_flags(lang), PathModel.calendar_index(), last_idx)
+
+
+## Two frames after a lesson-home render (the page has its size by then): restore the scroll position when `keep` >= 0,
+## else put the current node about 35 % from the top of the page. No animation (docs §5.7).
+func _settle_scroll(keep: int, serial: int) -> void:
+	if not is_inside_tree():
+		return
+	await get_tree().process_frame
+	if serial != _render_serial or not is_inside_tree():
+		return
+	await get_tree().process_frame
+	if serial != _render_serial or status != "idle" or _page == null or not is_instance_valid(_page):
+		return
+	if keep >= 0:
+		_page.scroll_vertical = keep
+		return
+	var cb: Button = current_node_button()
+	if cb == null or not cb.is_inside_tree():
+		return
+	var pr: Rect2 = _page.get_global_rect()
+	var dy: float = cb.get_global_rect().get_center().y - (pr.position.y + pr.size.y * 0.35)
+	_page.scroll_vertical = maxi(0, _page.scroll_vertical + int(roundf(dy)))
+
+
+## The node button that is "current" on the lesson home; null when there is none (all done shows the last cell as current).
+func current_node_button() -> Button:
+	for b in _boards:
+		var board: PathBoard = b
+		for w in range(1, PathModel.WEEKS + 1):
+			var nb := board.node_button(w) as PathNode
+			if nb != null and nb.state == "current":
+				return nb
+	return null
+
+
+## A node of the path was pressed. Locked nodes ask first (soft lock, docs §8.3); every other one opens its sheet.
+func _on_path_node(n: int, w: int, state: String) -> void:
+	if status != "idle":
+		return
+	var sheet_title: String = "%d개월차 · %d주" % [n, w]
+	if state == "locked":
+		var msg := UI.label("앞 단계를 먼저 하면 길이 순서대로 열려요. 그래도 미리 해 볼까요?")
+		var ls := Sheet.open(self, sheet_title, msg, [
+			{"id": "preview", "text": "미리 해 보기", "kind": "primary"},
+			{"id": "close", "text": "닫기", "kind": "flat"}])
+		ls.closed.connect(func(r: Variant) -> void:
+			if str(r) == "preview":
+				_start_cell(n, w))
+		return
+	var sh := Sheet.open(self, sheet_title, PathBoard.detail_body(lang, n, w, state), [
+		{"id": "start", "text": "레슨 시작", "kind": "primary"},
+		{"id": "close", "text": "닫기", "kind": "flat"}])
+	sh.closed.connect(func(r: Variant) -> void:
+		if str(r) == "start":
+			_start_cell(n, w)
+		elif status == "idle" and _page != null:
+			_keep_scroll = _page.scroll_vertical # a weekly check may have changed a node: draw again, stay where we are
+			_render())
+
+
+func _start_cell(n: int, w: int) -> void:
+	if status != "idle":
+		return
+	sel_n = n
+	sel_w = w
+	start_lesson()
 
 
 func _error_box(msg: String) -> Control:
