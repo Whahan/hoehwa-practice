@@ -165,7 +165,7 @@ func _run() -> void:
 	# ---------------------------------------------------------------- today
 	main_node.show_view("today")
 	await _shot("today")
-	# the settings are a screen of their own (shell: 더보기 / the 설정 action / the connection chip)
+	# the settings are a screen of their own (shell: 메뉴 / the 설정 action / the connection chip)
 	main_node.show_view("settings")
 	await _shot("settings")
 	var ssc: ScrollContainer = (views["settings"] as SettingsView).scroll_host()
@@ -393,11 +393,13 @@ func _run_phone_extras(views: Dictionary) -> void:
 	Backend._set_status(Backend.Status.NEEDS_PAIRING, "연결이 필요해요")
 	await _shot("needs_pairing")
 	Backend._set_status(Backend.Status.READY)
-	# the whole tab list (English v1.1 adds 연습 and 기록): 4 cells + 더보기 with 연습, 읽기, 기록, 로드맵, 설정
-	main_node.call("add_tab", "practice", "연습", AppView.new(), "연습", "review")
+	# the whole tab list (English v1.1 adds 연습 and 기록): the bar keeps its cells, the 메뉴 screen lists 대화, 연습, 읽기,
+	# 기록, 로드맵, 설정 (the phone only: the PC shell has no 메뉴 screen)
+	main_node.call("add_tab", "practice", "연습", AppView.new(), "연습", "talk")
 	main_node.call("add_tab", "stats", "기록", AppView.new(), "기록", "reading")
 	main_node.call("show_view", "today")
 	await _shot("tabs_bar")
-	main_node._bottom_tabs.open_more()
-	await _shot("tabs_more_sheet")
-	main_node._bottom_tabs.close_more()
+	if (main_node.views as Dictionary).has("menu"):
+		main_node.call("show_view", "menu")
+		await _shot("menu")
+		main_node.call("show_view", "today")
