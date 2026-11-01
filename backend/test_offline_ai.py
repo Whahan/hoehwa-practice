@@ -265,19 +265,51 @@ DUBIOUS_EN = ["Me and him goes to school together", "Me and Tom went home", "My 
               "Me is Tom", "Them are my friends"]
 
 
+CRED_PAT = re.compile(r"auth\.json|\.local[/\\]+share|XDG_DATA_HOME")
+
+
+def credential_refs(src):
+    """Line numbers of REAL references to OpenCode's login file / XDG data dirs in Python source: string literals that are
+    code (not docstrings); comments and docstrings that merely say "never reads auth.json" are not references."""
+    import ast
+    tree = ast.parse(src)
+    doc_nodes = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                doc_nodes.add(id(first.value))
+    hits = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in doc_nodes and CRED_PAT.search(node.value):
+            hits.append(node.lineno)
+    return sorted(set(hits))
+
+
 def test_no_credential_reads():
-    """No backend code may read the OpenCode login (auth.json in OpenCode's data dir) or any XDG data dir."""
+    """No backend code may read the OpenCode login (auth.json in OpenCode's data dir) or any XDG data dir. Test files are
+    skipped (they name these paths to check for them); comments and docstrings are ignored (see credential_refs)."""
     import glob
     here = os.path.dirname(os.path.abspath(__file__))
-    pat = re.compile(r"auth\.json|\.local[/\\]+share|XDG_DATA_HOME")
+    # the scanner itself must flag a real read and ignore prose (a scanner that never fails is worthless)
+    real = 'import os\nf = open(os.path.expanduser("~/.local/share/opencode/auth.json"))\n'
+    real2 = 'import os\nd = os.environ["XDG_DATA_HOME"]\n'
+    prose = '"""Module that never reads auth.json or XDG_DATA_HOME."""\n# never reads ~/.local/share/opencode/auth.json\n' \
+            'def f():\n    """does not touch auth.json"""\n    return 1  # auth.json is not read\n'
+    check("scanner selfcheck: open(~/.local/share/opencode/auth.json) is flagged", credential_refs(real) == [2], credential_refs(real))
+    check("scanner selfcheck: os.environ['XDG_DATA_HOME'] is flagged", credential_refs(real2) == [2], credential_refs(real2))
+    check("scanner selfcheck: comments and docstrings that mention auth.json are not flagged", credential_refs(prose) == [], credential_refs(prose))
     bad = []
     for fn in sorted(glob.glob(os.path.join(here, "*.py"))):
-        if os.path.basename(fn) == os.path.basename(__file__):
+        base = os.path.basename(fn)
+        if base.startswith("test_") or base == os.path.basename(__file__):
             continue
         with open(fn, encoding="utf-8", errors="replace") as f:
-            for i, line in enumerate(f, 1):
-                if pat.search(line):
-                    bad.append("%s:%d" % (os.path.basename(fn), i))
+            src = f.read()
+        try:
+            bad += ["%s:%d" % (base, n) for n in credential_refs(src)]
+        except SyntaxError as e:
+            bad.append("%s: cannot parse (%s)" % (base, e))
     check("backend code never touches auth.json / ~/.local/share / XDG_DATA_HOME", not bad, bad)
 
 
