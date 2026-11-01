@@ -1,7 +1,7 @@
 # 노래로 공부하기(팝송·J-pop 가사 학습) 설계
 
 - 작성: designer (설계만, 코드·설정 수정 없음) / 조사일: 2026-10-30 / 대상 버전: 1.4 (가칭)
-- 읽은 것(코드로 확인): `backend\server.py`(`/stt` `/score` `transcribe` `decode_audio_b64` `ollama_json` `ko_ok` `ja_reading` `ja_pron` `_final_score` `/health`), `lan.py`(허용 목록·본문 한도·`LanGate`), `reading.py`(`analyze` `gloss`), `practice.py`(라우터 패턴), `features.py`(`ctc_align`), `lan_stub_server.py`, `requirements.txt`, `config.json`, `.gitignore`, `packaging\check_zip.py`, `godot\scripts\autoload\{api,route,local_api,store,recorder,tts}.gd`, `core\{study_log,kana_hangul,text_sim,progress}.gd`, `sync\sync_doc.gd`(`clean_card` `SHARED_PREFS`), `practice\{speak_drill,shadow_screen,dictation_diff}.gd`, `ui\{reading_line,list_group,sheet,ui}.gd`, `views\{practice_view,reading_view}.gd`, `main.gd`, `export_presets.cfg`, `docs\phone_standalone_design.md`(형식), `docs\android_remote_design.md`.
+- 읽은 것(코드로 확인): `backend\server.py`(`/stt` `/score` `transcribe` `decode_audio_b64` `llm_json` `ko_ok` `ja_reading` `ja_pron` `_final_score` `/health`), `lan.py`(허용 목록·본문 한도·`LanGate`), `reading.py`(`analyze` `gloss`), `practice.py`(라우터 패턴), `features.py`(`ctc_align`), `lan_stub_server.py`, `requirements.txt`, `config.json`, `.gitignore`, `packaging\check_zip.py`, `godot\scripts\autoload\{api,route,local_api,store,recorder,tts}.gd`, `core\{study_log,kana_hangul,text_sim,progress}.gd`, `sync\sync_doc.gd`(`clean_card` `SHARED_PREFS`), `practice\{speak_drill,shadow_screen,dictation_diff}.gd`, `ui\{reading_line,list_group,sheet,ui}.gd`, `views\{practice_view,reading_view}.gd`, `main.gd`, `export_presets.cfg`, `docs\phone_standalone_design.md`(형식), `docs\android_remote_design.md`.
 - 직접 확인한 환경(읽기 전용 실행): `backend\.venv`에 PyAV 17.1(인코더 `libmp3lame` `libopus` `vorbis`(내장) `aac` `flac` 있음, `libvorbis` 없음), faster-whisper 1.2.1(`WhisperModel.find_alignment` 있음), torch 2.14.1+cpu, librosa, onnxruntime 있음 / `demucs` `torchaudio` `python-multipart` `ctc_forced_aligner` 없음. 이 PC GPU: RTX 3060 Ti 8 GB. Whisper 기본 `small`(cuda, int8_float16).
 - 웹 조사(문서 읽기만): LRCLIB 공식 문서(`lrclib.net/docs.md`), Godot 클래스 문서(`AudioStreamMP3`, `AudioEffectPitchShift`), Godot 4.6 안드로이드 파일 대화상자(SAF) 관련 포럼 글.
 - 표기: **(추측)** = 코드·문서로 확인하지 못한 가정. **(실측 필요)** = 실제로 재야 하는 값. **(제안값)** = 합격선을 내가 정한 것(측정 후 오케스트레이터가 조정). 표기 없는 것은 확인한 사실.
@@ -649,7 +649,7 @@ J0(폰)은 U2 전에. S0은 K3+K6 뒤, 결과로 K3의 기본 설정을 확정(�
 ### 12.1b 계약 추가 (2026-10-30, K4 보고 반영 — §5.1보다 우선)
 - `POST /song/jobs`의 `options`와 `POST /song/enrich` 요청에 **`"ai_ok": bool`**(없으면 false)을 추가한다. 서버(K5)는 이 값을 `song_enrich.enrich_lines(..., allow_ai=ai_ok)`로 넘기고, false면 번역·단어 뜻을 AI에 보내지 않고 `ko:""`·`ko_missing`/`gloss_missing` 경고로 끝낸다(외부 전송 0).
 - 클라이언트(U2·U4b)는 `ai_ok = song_consent AND (곡별 해석 켬)`으로 보낸다. 동의 전에는 항상 false. 이 AND는 U2·U4b 합격 조건에 넣는다.
-- `song_enrich.init(...)` 연동 인자: `readmode, ollama_json, ko_ok, ja_reading, ja_pron, log, ApiError`(K5가 server.py에서 연결). `/song/enrich` 라우터가 ≤20줄·60초 제한을 직접 건다(모듈은 400줄까지 받음).
+- `song_enrich.init(...)` 연동 인자: `readmode, llm_json, ko_ok, ja_reading, ja_pron, log, ApiError`(K5가 server.py에서 연결). `/song/enrich` 라우터가 ≤20줄·60초 제한을 직접 건다(모듈은 400줄까지 받음).
 
 ### 12.1c S0 실측 결과에 따른 결정 (2026-10-31)
 - 전사 기본값: `initial_prompt` 힌트 **끔**(창 안 힌트 단어를 건너뛰고, 반주만 넣으면 가사를 되풀이하는 환각), VAD **끔**(합성 음성에서 차이 없음, 실곡 H1에서 재비교), `no_speech_prob ≥ 0.8`인 8단어 미만 줄 제거.

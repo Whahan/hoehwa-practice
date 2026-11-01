@@ -1,6 +1,6 @@
 # 회화 앱 구조와 API 계약
 
-데스크톱 학습 앱. 화면은 Godot 4.6.3, 음성·AI 처리는 같은 PC의 파이썬 로컬 서버가 맡는다. 음성 인식·목소리·채점·문법 검사는 인터넷 없이 동작한다(모델 다운로드 후). 대화·레슨 AI는 기본으로 무료 DeepSeek V4.1 Flash(OpenCode, 인터넷 필요)를 쓰고, 쓸 수 없으면 오프라인 로컬 모델(Ollama qwen3:8b)이 자동으로 대신한다(아래 "AI 엔진").
+데스크톱 학습 앱. 화면은 Godot 4.6.3, 음성·AI 처리는 같은 PC의 파이썬 로컬 서버가 맡는다. 음성 인식·목소리·채점·문법 검사는 인터넷 없이 동작한다(모델 다운로드 후). 대화·레슨 AI는 무료 DeepSeek V4.1 Flash(OpenCode, 인터넷 필요) 하나뿐이고, 앱의 [AI 연결하기]로 한 번 연결한다(아래 "AI 엔진"). 연결 전에도 AI가 필요 없는 기능은 동작하고, AI가 필요한 호출은 503 `ai_not_connected`를 받는다. 로컬 모델(Ollama)은 1.5.0부터 없다.
 
 ```
 app/
@@ -148,7 +148,7 @@ app/
  "phrases": [{"phrase": str, "reading": str, "pron": str, "ko": str}]}
 ```
 
-### POST /lesson  (듀오링고식 레슨 생성)
+### POST /lesson  (레슨 생성)
 요청 `{"lang", "month": 1-12, "week": 1-4, "stage": 1-4}`
 응답 `{"title": "한국어 제목", "exercises": [Exercise, ...]}` (8~10개, 유형 섞임)
 Exercise 유형:
@@ -177,7 +177,7 @@ Godot는 마이크를 직접 열지 않는다(`audio/driver/enable_input=false`)
 ### POST /fix  (대화 중 교정, /chat과 따로)
 요청 `{"lang", "stage", "text": 학습자 문장, "prev_ai": 직전 AI 말}` → `{"fix": str, "fix_ko": str}`
 `/chat`에 `"skip_fix": true`를 보내면 교정을 빼고 답만 빨리 돌려준다. 앱은 답을 먼저 보여 주고 `/fix` 결과를 나중에 붙인다.
-- 교정 순서: 먼저 LanguageTool(오프라인, `backend/tools/languagetool`, Java 17+)로 문법·철자를 검사한다(약 0.05초). 고칠 것이 있으면 각 오류의 첫 제안을 겹치지 않게 적용하고(지난 시간 표현이 있으면 과거형 제안을 고름), `fix_ko`는 규칙 종류별 한국어 설명(`'go' → 'went': 어제·지난주처럼 지난 일을 말할 때는 과거형을 써요.`)이다. AI 엔진이 있으면 그 결과를 AI가 한 번 더 자연스럽게 다듬을 수 있다(config `grammar_llm_polish`, 기본 켬). LanguageTool이 아무것도 못 찾으면 예전처럼 AI가 "문법은 맞지만 어색한" 문장을 고친다. AI가 없어도 LanguageTool 결과만으로 답한다.
+- 교정 순서: 먼저 LanguageTool(오프라인, `backend/tools/languagetool`, Java 17+; 설치 때 포터블 JRE 21도 `backend/tools`에 함께 받는다)로 문법·철자를 검사한다(약 0.05초). 고칠 것이 있으면 각 오류의 첫 제안을 겹치지 않게 적용하고(지난 시간 표현이 있으면 과거형 제안을 고름), `fix_ko`는 규칙 종류별 한국어 설명(`'go' → 'went': 어제·지난주처럼 지난 일을 말할 때는 과거형을 써요.`)이다. AI 엔진이 있으면 그 결과를 AI가 한 번 더 자연스럽게 다듬을 수 있다(config `grammar_llm_polish`, 기본 켬). LanguageTool이 아무것도 못 찾으면 예전처럼 AI가 "문법은 맞지만 어색한" 문장을 고친다. AI가 없어도 LanguageTool 결과만으로 답한다.
 - 일본어는 LanguageTool 규칙이 적어(예: これわ→これは) 대부분 AI가 고친다.
 
 ### 읽기 모드 (/reading/*)
@@ -195,7 +195,7 @@ LingQ/Lute 방식: 글을 붙여 넣으면 단어를 눌러 뜻·예문을 보�
 
 `POST /reading/gloss` `{"lang", "items": [{"lemma", "sentence"}]}` (최대 30개) →
 `{"glosses": [{"lemma", "pos": "동사|명사|…", "ko": "문맥에 맞는 한국어 뜻(짧게)", "ipa": "영어 IPA, 일본어는 히라가나 읽기", "note": "용법 한 줄 또는 \"\"", "pron": "일본어는 lemma의 가타카나 발음형(캐시하지 않고 응답 때 계산), 영어는 \"\""}]}`
-현재 AI 엔진(무료 DeepSeek 또는 오프라인 로컬)으로 한 번에 생성한다. 같은 (lang, lemma, sentence)는 서버가 캐시한다.
+현재 AI 엔진(무료 DeepSeek)으로 한 번에 생성한다. 같은 (lang, lemma, sentence)는 서버가 캐시한다.
 
 `GET /examples?lang=en&q=<lemma>&limit=5` →
 ```json
@@ -519,7 +519,7 @@ backend/data/sync/
 요청 `{"lang": "en", "lines": [{"i": 3, "text": "…"}], "tasks": ["reading", "translate", "tokens", "gloss"], "known": ["love"], "ai_ok": false}` — 줄은 1~20개(넘으면 400 `bad_request`), 줄당 200자까지. 응답 `{"lines": [{"i": 3, "reading": "", "pron": "", "ko": "…", "words": [{"w", "lemma", "level", "zipf", "content"}]}], "glossary": {"lemma": {"pos", "ko", "ipa", "pron"}}, "warnings": []}` — 요청한 `tasks`의 키만 줄에 들어간다. `ai_ok`가 false면 `translate`·`gloss`는 AI에 보내지 않고 `ko:""` + `ko_missing`/`gloss_missing`. 60초를 넘기면 504 `enrich_timeout`, 동시에 2건을 넘기면 429 `queue_full`.
 
 ### POST /song/identify — 적은 말을 원래 제목·가수 후보로 (동기, 최대 30초)
-요청 `{"q": "레릿고", "lang": "en"|"ja"|""}`. `q`는 앞뒤 공백을 떼고 1~120자(아니면 400 `{"error": "bad_q", "code": "bad_q"}`), `lang`이 그 밖의 값이면 400 `bad_request`. 응답 200 `{"ok": true, "cands": [{"title": "Kettle Morning", "artist": "Test Artist"}]}` — 0~3개, 가장 그럴듯한 것이 먼저. **AI는 가사를 쓰지 않는다**: 프롬프트가 원제목·가수만 JSON으로 달라고 하고(가사·설명 금지), 서버는 AI 답을 믿지 않고 다시 거른다 — `title` 1~100자·`artist` 0~80자(문자열만, 숫자 등은 버림), 줄바꿈·탭 같은 제어문자가 든 항목 버림, 중복(대소문자·공백 무시) 버림, 3개 초과는 자름, `title`·`artist` 말고 다른 키는 버림, JSON이 아니거나 모양이 틀리면 `cands: []`. 가사는 앱이 이 후보로 LRCLIB에서 따로 받는다. 한국어 음차·번역 제목·오타·가수만/제목만도 AI가 처리한다. AI(설정된 `llm_provider`를 따르는 `ollama_json`)가 없거나 실패하거나 30초를 넘기면 503 `{"error": "ai_unavailable", "code": "ai_unavailable"}`, 동시에 2건을 넘기면 429 `queue_full`. 로그에는 `q`의 길이만 남고 내용은 남지 않으며, `q`는 영구 LLM 캐시에도 들어가지 않는다. 휴대폰 허용 목록에 있다. `lan_stub_server.py --song`은 가짜 AI로 이 경로를 낸다: `q`에 `nothing`이 들어가면 `cands: []`, `down`이면 503, 그 밖에는 가짜 LRCLIB에 있는 `[{"title": "Kettle Morning", "artist": "Test Artist"}]`.
+요청 `{"q": "레릿고", "lang": "en"|"ja"|""}`. `q`는 앞뒤 공백을 떼고 1~120자(아니면 400 `{"error": "bad_q", "code": "bad_q"}`), `lang`이 그 밖의 값이면 400 `bad_request`. 응답 200 `{"ok": true, "cands": [{"title": "Kettle Morning", "artist": "Test Artist"}]}` — 0~3개, 가장 그럴듯한 것이 먼저. **AI는 가사를 쓰지 않는다**: 프롬프트가 원제목·가수만 JSON으로 달라고 하고(가사·설명 금지), 서버는 AI 답을 믿지 않고 다시 거른다 — `title` 1~100자·`artist` 0~80자(문자열만, 숫자 등은 버림), 줄바꿈·탭 같은 제어문자가 든 항목 버림, 중복(대소문자·공백 무시) 버림, 3개 초과는 자름, `title`·`artist` 말고 다른 키는 버림, JSON이 아니거나 모양이 틀리면 `cands: []`. 가사는 앱이 이 후보로 LRCLIB에서 따로 받는다. 한국어 음차·번역 제목·오타·가수만/제목만도 AI가 처리한다. AI(설정된 `llm_provider`를 따르는 `llm_json`)가 없거나 실패하거나 30초를 넘기면 503 `{"error": "ai_unavailable", "code": "ai_unavailable"}`, 동시에 2건을 넘기면 429 `queue_full`. 로그에는 `q`의 길이만 남고 내용은 남지 않으며, `q`는 영구 LLM 캐시에도 들어가지 않는다. 휴대폰 허용 목록에 있다. `lan_stub_server.py --song`은 가짜 AI로 이 경로를 낸다: `q`에 `nothing`이 들어가면 `cands: []`, `down`이면 503, 그 밖에는 가짜 LRCLIB에 있는 `[{"title": "Kettle Morning", "artist": "Test Artist"}]`.
 
 ### 시험
 `HOEHWA_TEST_HOOKS=1`일 때만 읽는 환경 변수: `HOEHWA_SONG_DIR`(작업 폴더), `HOEHWA_SONG_TTL_SEC`(두 TTL을 이 초로), `HOEHWA_SONG_FAKE_ASR=1`(가짜 Whisper: 가사 단어를 곡 전체에 고르게 "들은" 것으로 하고, 가사가 없으면 번호 붙은 가짜 단어), `HOEHWA_SONG_FAKE_ASR_DELAY`(창마다 걸리는 초). `lan_stub_server.py --song [--song-dir D] [--song-delay S]`는 모델 없이 이 API 전체(가짜 전사·가짜 AI)를 낸다. 시험은 `backend/test_song.py`(서버 없이 약 1분), `--stub PORT`(스텁 실제 HTTP), `--base URL --song-file F.mp3 --lyrics-json TRUTH.json`(실제 모델이 있는 시험 서버).
