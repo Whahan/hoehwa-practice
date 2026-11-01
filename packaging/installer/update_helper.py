@@ -220,7 +220,7 @@ def read_gpu(gpu_file):
     # returns "cpu", "nvidia", or "" (no file / unknown value)
     try:
         v = open(gpu_file, encoding="utf-8-sig").read().strip().lower()
-    except OSError:
+    except (OSError, ValueError):   # unreadable or not UTF-8 (e.g. UTF-16 from Out-File) -> unknown, keep nvidia
         return ""
     return v if v in ("cpu", "nvidia") else ""
 
