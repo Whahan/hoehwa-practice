@@ -79,6 +79,7 @@ func _ready() -> void:
 	await _test_start_button()
 	await _test_ai()
 	await _test_songs()
+	await _test_lifecycle()
 	await _test_direct_mark()
 	await _test_garbage()
 	_test_file_rules()
@@ -731,6 +732,32 @@ func _test_songs() -> void:
 	# a broken song list counts as zero
 	var res: Dictionary = SongDue.scan(func() -> Variant: return "not a dictionary")
 	ok(int(res["due"]) == 0 and int(res["songs"]) == 0, "SongDue.scan with a broken lister -> zeros")
+
+
+# ---------------------------------------------------------------- lifecycle (thread join, signal connections)
+
+func _test_lifecycle() -> void:
+	print("[lifecycle]")
+	_reset()
+	var n_status: int = Backend.status_changed.get_connections().size()
+	var n_cur: int = Store.curriculum_updated.get_connections().size()
+	SongDue.cache = {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "at": 0} # never scanned: the view starts a scan thread
+	var tv := TodayView.new()
+	tv.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(tv)
+	ok(tv._song_thread != null, "a song scan thread is running right after the view enters the tree")
+	ok(Backend.status_changed.get_connections().size() == n_status + 1 and Store.curriculum_updated.get_connections().size() == n_cur + 1, "the view is connected to Backend.status_changed and Store.curriculum_updated")
+	remove_child(tv) # before the deferred "scan done" call ran: _exit_tree has to join the thread
+	ok(tv._song_thread == null, "leaving the tree joins the scan thread (_song_thread is null)")
+	tv.queue_free()
+	await _frames(3)
+	ok(Backend.status_changed.get_connections().size() == n_status, "after free: Backend.status_changed connections are back to %d" % n_status)
+	ok(Store.curriculum_updated.get_connections().size() == n_cur, "after free: Store.curriculum_updated connections are back to %d" % n_cur)
+	Backend.status_changed.emit()
+	Store.curriculum_updated.emit()
+	await _frames(3)
+	ok(true, "emitting both signals after the view was freed raises no error (a script error would show in the output)")
+	_set_songs(0)
 
 
 # ---------------------------------------------------------------- T4-19 direct mark

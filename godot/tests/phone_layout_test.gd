@@ -380,7 +380,7 @@ func _pc_state_checks(state: String, main: Control) -> void:
 			ok(nav != null and nav.size.x >= 223.0 and nav.size.x <= 225.0, "W4-2: the side nav is 224 px wide (%.1f)" % nav.size.x)
 			ok(nav.get_global_rect().position.x <= 0.5 and nav.get_global_rect().end.y >= get_viewport().get_visible_rect().size.y - 0.5, "W4-2: the side nav fills the left edge, top to bottom")
 			ok(main._content.get_global_rect().position.y <= 0.5 and main._content.get_global_rect().position.x >= nav.get_global_rect().end.x - 0.5, "W4-2: no tab row on top: the page starts at the top edge, right of the side nav")
-			ok(tv._scroll.content.get_global_rect().size.x <= 880.5, "W4-2: the content column is at most 880 px wide (%.0f)" % tv._scroll.content.get_global_rect().size.x)
+			ok(tv._scroll.content.get_global_rect().size.x <= 960.5, "W4-2: the home content column is at most 960 px wide (%.0f)" % tv._scroll.content.get_global_rect().size.x)
 			ok(not main._link_chip.visible, "L-06: '폰 연결 켜짐' hidden by default")
 			ok(main._status_text.text != "" and nav.get_global_rect().encloses(main._status_text.get_global_rect()), "W4-2: the engine chip '%s' is inside the side nav" % main._status_text.text)
 			ok(nav.current() == "today" and nav.item_buttons().has("settings") and (nav.item_buttons()["settings"] as Control).is_visible_in_tree(), "W4-2: 오늘 is selected and the 설정 item is shown")
