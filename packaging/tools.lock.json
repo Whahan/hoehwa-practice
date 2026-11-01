@@ -1,0 +1,28 @@
+{
+ "schema": 1,
+ "opencode": {
+   "version": "1.19.0",
+   "dest": "backend/tools/opencode",
+   "exe": "opencode.exe",
+   "variants": {
+     "x64": {"url": "https://github.com/anomalyco/opencode/releases/download/v1.19.0/opencode-windows-x64.zip",
+             "sha256": "17108e9448c4fdad48eb8714c4ed6f5dfc9cf86c2eb8f2ce5d02043fef806eb5", "size": 62173956},
+     "x64-baseline": {"url": "https://github.com/anomalyco/opencode/releases/download/v1.19.0/opencode-windows-x64-baseline.zip",
+             "sha256": "2759ca3449fe946d82da3be43d2e85332127399686aafceaff153b90c3079c56", "size": 62173954}
+   }
+ },
+ "jre": {
+   "version": "21.0.13+9",
+   "dest": "backend/tools",
+   "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.13_9.zip",
+   "sha256": "2332c0b4cff6bed722da3567c91d5e47568bcba863fa4945d0a8d6fc76158628", "size": 49106397
+ },
+ "buildtools": {
+   "innosetup": {
+     "version": "6.7.4",
+     "file": "innosetup-6.7.4.exe",
+     "url": "https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe",
+     "sha256": "a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c", "size": 10604576
+   }
+ }
+}

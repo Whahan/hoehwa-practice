@@ -224,10 +224,10 @@ func _state_checks(state: String, main: Control) -> void:
 	match state:
 		"today":
 			var tv: TodayView = main.views["today"]
-			ok(tv._grid.columns == 1, "L: today cards are one column on the phone")
+			ok(not _tv_wide(tv), "L: the home cards are one column on the phone")
 			ok(bt.visible and bt.get_global_rect().end.y >= SCREEN_H - 0.5, "bottom tab bar is at the bottom of the screen")
 			var cells: Array = bt.cell_buttons()
-			ok(cells.size() == 5, "W4-1: bottom bar has 5 cells: 4 tabs + 더보기 (%d)" % cells.size())
+			ok(cells.size() == 4, "T3-2: the bottom bar has 4 cells here (홈, 레슨, 복습, 메뉴: no 노래 in this scene) (%d)" % cells.size())
 			var wide_enough := true
 			for cb in cells:
 				var r: Rect2 = (cb as Control).get_global_rect()
@@ -235,19 +235,23 @@ func _state_checks(state: String, main: Control) -> void:
 					wide_enough = false
 			ok(wide_enough, "every tab cell is at least 48x56")
 			ok(bt.max_direct == 5, "W4-1: BottomTabs.max_direct is 5")
-			ok(bt.direct_keys() == ["today", "lesson", "talk", "review"], "W4-1: the direct tabs are 오늘, 레슨, 대화, 복습 (%s)" % [bt.direct_keys()])
-			ok(bt.overflow_keys().has("settings") and bt.overflow_keys().back() == "settings", "W4-1: 설정 is the last entry of the 더보기 sheet (%s)" % [bt.overflow_keys()])
+			ok(main.bar_keys() == ["today", "lesson", "review", "menu"] and bt.direct_keys() == main.bar_keys(), "T3-2: bar_keys are 홈, 레슨, 복습, 메뉴 (%s)" % [main.bar_keys()])
+			ok(bt.overflow_keys().is_empty(), "T3-2: nothing goes to a 더보기 sheet and the bar has no 더보기 cell (%s)" % [bt.overflow_keys()])
+			var cell_texts: Array = []
+			for cb0 in cells:
+				cell_texts.append((cb0 as Button).text)
+			ok(cell_texts == ["홈", "레슨", "복습", "메뉴"], "T3-1: the cell labels are 홈, 레슨, 복습, 메뉴 (%s)" % [cell_texts])
 			ok(main._side_nav == null, "no side navigation on the phone")
 			var inset: float = float(PhoneLayout.safe_insets()["top"])
 			ok(bar.get_global_rect().size.y <= 56.0 + inset + 0.5, "W4-1: the app bar is at most 56 px + the inset high (%.0f)" % bar.get_global_rect().size.y)
 			ok(main._status_text.text != "" and bar.get_global_rect().encloses(main._status_text.get_global_rect()), "W4-1: the connection chip text '%s' is inside the app bar" % main._status_text.text)
 			ok(bar.get_global_rect().position.y <= 0.5 and bar.get_global_rect().end.y <= main._content.get_global_rect().position.y + 0.5, "the app bar sits on top of the page")
 			var acts: Array = bar.action_buttons()
-			ok(acts.size() == 1 and (acts[0] as Button).text == "설정", "오늘: the app bar has the 설정 action")
-			ok(not bar.back_button().visible and bar.title_label().text == "오늘", "오늘: no back button, the tab name is the bar title")
+			ok(acts.size() == 1 and (acts[0] as Button).text == "설정", "홈: the app bar has the 설정 action")
+			ok(not bar.back_button().visible and bar.title_label().text == "홈", "홈: no back button, the tab name is the bar title")
 		"settings":
 			var tv0: SettingsView = main.views["settings"]
-			ok(main.current == "settings" and bt.overflow_keys().has("settings"), "settings: the shell shows the settings screen (a 더보기 entry)")
+			ok(main.current == "settings" and bt._current == "menu", "settings: the shell shows the settings screen with the 메뉴 tab lit (TAB_PARENT)")
 			ok(tv0.find_children("*", "RemoteLinkPanel", true, false).size() == 1, "settings: RemoteLinkPanel is mounted on the phone")
 			ok(tv0.find_children("*", "PhoneLinkPanel", true, false).is_empty(), "settings: no PhoneLinkPanel on the phone")
 			ok(tv0._engine_ob == null, "settings: the AI engine section is hidden on the phone")
@@ -309,8 +313,36 @@ func _state_checks(state: String, main: Control) -> void:
 			var rv2: ReadingView = main.views["reading"]
 			ok(rv2.bar_hosted and bar.back_button().visible and bar.title_label().text == "Running in the Rain", "reading reader: the bar shows the back button and the text title ('%s')" % bar.title_label().text)
 			ok(bar.action_buttons().size() == 1 and (bar.action_buttons()[0] as Button).text == "글자 크기", "reading reader: the bar has the 글자 크기 action")
-		"tabs_more_sheet":
-			ok(bt.is_more_open(), "tabs: the 더보기 sheet is open in this state")
+		"menu":
+			var mnv: MenuView = main.views["menu"]
+			ok(main.current == "menu" and bt._current == "menu", "T3-4: the 메뉴 screen is open and its tab is lit")
+			ok(bar.title_label().text == "메뉴" and not bar.back_button().visible, "T3-4: the bar says 메뉴 and has no back button")
+			ok(mnv.summary_card() != null and mnv.group_count() == 3, "T3-4: the 내 기록 card and the 3 groups (말하기·읽기, 기록, 앱) are shown (%d)" % mnv.group_count())
+			ok(mnv.entry_keys() == ["talk", "practice", "reading", "stats", "roadmap", "settings"], "T3-4: the 메뉴 has a row for every screen outside the bar (%s)" % [mnv.entry_keys()])
+			var mrows_ok := true
+			for mk in mnv.entry_keys():
+				if mnv.row_control(str(mk)).get_global_rect().size.y < 55.5:
+					mrows_ok = false
+			ok(mrows_ok, "T3-4: every 메뉴 row is at least 56 px high")
+
+
+## The home screen is one column (phone / narrow window) or two. The new home (TodayView.is_wide / card) answers directly; a
+## screen that is not merged yet still has the old `_grid`, which keeps the same check until then.
+func _tv_wide(tv: Control) -> bool:
+	if tv.has_method("is_wide"):
+		return bool(tv.call("is_wide"))
+	return int(tv.get("_grid").columns) == 2
+
+
+func _tv_cards(tv: Control) -> Array:
+	if tv.has_method("card"):
+		var out: Array = []
+		for id in ["tasks", "resume", "streak", "ai", "shortcuts"]:
+			var c: Variant = tv.call("card", id)
+			if c != null:
+				out.append(c)
+		return out
+	return (tv.get("_grid") as Node).get_children()
 
 
 func _has_button(root: Node, text: String) -> bool:
@@ -342,7 +374,8 @@ func _pc_state_checks(state: String, main: Control) -> void:
 		"today":
 			var tv: TodayView = main.views["today"]
 			var nav: SideNav = main._side_nav
-			ok(tv._grid.columns == 2, "W4-2: today cards are two columns at 1280 (the side nav included)")
+			ok(_tv_wide(tv), "W4-2: the home cards are two columns at 1280 (the side nav included)")
+			ok(nav.current() == "today" and (nav.item_buttons()["today"] as Button).text == "홈", "T3-8: the side nav has 홈 selected")
 			ok(main._bottom_tabs == null and main._app_bar == null, "W4-2: no bottom tab bar and no app bar on the PC")
 			ok(nav != null and nav.size.x >= 223.0 and nav.size.x <= 225.0, "W4-2: the side nav is 224 px wide (%.1f)" % nav.size.x)
 			ok(nav.get_global_rect().position.x <= 0.5 and nav.get_global_rect().end.y >= get_viewport().get_visible_rect().size.y - 0.5, "W4-2: the side nav fills the left edge, top to bottom")
@@ -392,6 +425,7 @@ func _after_walk() -> void:
 		ok(_bad_text.size() == 0, "L-08: no Ctrl / 스페이스바 text on the phone")
 		if all_states:
 			await _test_back(main)
+			await _test_back_tree(main)
 			await _test_tabs(main)
 			_test_deadzone(main)
 			await _test_chip_and_actions(main)
@@ -585,51 +619,101 @@ func _test_back(main: Control) -> void:
 	ok(_exit_count == 1, "L-09: a second press after more than 2 s only toasts again")
 
 
-## Tab extension point: the whole list on the phone (4 tabs in the bar, the rest in the 더보기 sheet).
+## T3-6: where the back button goes (home_menu_design §4.3): out of the 메뉴 to 홈, out of a 메뉴 screen to the 메뉴, out of a
+## screen opened from 홈 to 홈, a bar tab to 홈; on 홈 a toast, and the exit only on the second press within 2 s.
+func _test_back_tree(main: Control) -> void:
+	main.add_tab("practice", "연습", AppView.new(), "연습", "talk") # (the same tabs the other checks add)
+	main.add_tab("stats", "기록", AppView.new(), "기록", "reading")
+	main.show_view("menu")
+	main.show_view("reading")
+	await _frames(2)
+	main.handle_back()
+	await _frames(2)
+	ok(main.current == "menu", "T3-6 1: 메뉴 -> 읽기 -> back: 메뉴 (%s)" % main.current)
+	main.handle_back()
+	await _frames(2)
+	ok(main.current == "today", "T3-6 1b: back from the 메뉴 goes to 홈 (%s)" % main.current)
+	main.show_view("today")
+	Store.navigate.emit("talk", "en")
+	await _frames(2)
+	ok(main.current == "talk", "T3-6 2 setup: Store.navigate opened 대화")
+	ok(main.back_target() == "today", "T3-6 2: the back target of a screen opened from 홈 is 홈 (%s)" % main.back_target())
+	main.handle_back()
+	await _frames(2)
+	ok(main.current == "today", "T3-6 2: 홈 -> 대화 -> back: 홈 (%s)" % main.current)
+	main.show_view("lesson")
+	await _frames(2)
+	ok(main.back_target() == "today", "T3-6 3: the back target of the 레슨 tab is 홈")
+	main.handle_back()
+	await _frames(2)
+	ok(main.current == "today", "T3-6 3: 레슨 -> back: 홈 (%s)" % main.current)
+	ok(main.back_target() == "", "T3-6 4: 홈 has no back target")
+	var exits: Array = [0]
+	var cb := func() -> void: exits[0] += 1
+	main.exit_requested.connect(cb)
+	main.set("_last_back_msec", -100000)
+	main._toast_label.text = ""
+	main.handle_back()
+	ok(exits[0] == 0 and str(main._toast_label.text) == "한 번 더 누르면 종료돼요", "T3-6 4: the first back on 홈 only toasts (exits %d, '%s')" % [exits[0], main._toast_label.text])
+	main.handle_back()
+	ok(exits[0] == 1, "T3-6 4: the second back within 2 s requests the exit (%d)" % exits[0])
+	main.exit_requested.disconnect(cb)
+	main.set("_last_back_msec", -100000)
+	# a screen outside the bar opened from another outside screen keeps the first origin
+	main.show_view("menu")
+	main.show_view("roadmap")
+	main.show_view("settings")
+	main.handle_back()
+	await _frames(2)
+	ok(main.current == "menu", "T3-6 6: 메뉴 -> 로드맵 -> 설정 -> back: 메뉴 (the origin stays) (%s)" % main.current)
+	main.show_view("today")
+	await _frames(2)
+
+
+## Tab extension point: the whole list on the phone (the bar keeps its cells, the other screens are rows of the 메뉴 screen).
 func _test_tabs(main: Control) -> void:
-	main.add_tab("practice", "연습", AppView.new(), "연습", "review")
+	main.add_tab("practice", "연습", AppView.new(), "연습", "talk")
 	main.add_tab("stats", "기록", AppView.new(), "기록", "reading")
 	var bt: BottomTabs = main._bottom_tabs
 	await _frames(3)
-	ok(main.tab_keys() == ["today", "lesson", "talk", "review", "practice", "reading", "stats", "roadmap", "settings"], "tabs: order after the v1.1 tabs (%s)" % [main.tab_keys()])
-	ok(bt.direct_keys() == ["today", "lesson", "talk", "review"], "W4-1: direct tabs = 오늘, 레슨, 대화, 복습 (%s)" % [bt.direct_keys()])
-	ok(bt.overflow_keys() == ["practice", "reading", "stats", "roadmap", "settings"], "W4-1: 더보기 = 연습, 읽기, 기록, 로드맵, 설정 (%s)" % [bt.overflow_keys()])
+	ok(main.tab_keys() == ["today", "lesson", "review", "menu", "talk", "practice", "reading", "stats", "roadmap", "settings"], "T3-3: phone tab order after the v1.1 tabs (%s)" % [main.tab_keys()])
+	ok(main.bar_keys() == ["today", "lesson", "review", "menu"] and bt.direct_keys() == ["today", "lesson", "review", "menu"], "T3-2: the direct tabs = 홈, 레슨, 복습, 메뉴 (%s)" % [bt.direct_keys()])
+	ok(bt.overflow_keys().is_empty(), "T3-2: nothing is left for a 더보기 sheet (%s)" % [bt.overflow_keys()])
 	var cells: Array = bt.cell_buttons()
-	ok(cells.size() == 5, "tabs: bar shows 4 tabs + the 더보기 cell")
+	ok(cells.size() == 4, "tabs: the bar shows exactly 4 cells and no 더보기 cell (%d)" % cells.size())
 	var min_w := 1000.0
+	var min_h := 1000.0
 	var right := 0.0
 	for c in cells:
 		var r: Rect2 = (c as Control).get_global_rect()
 		min_w = minf(min_w, r.size.x)
+		min_h = minf(min_h, r.size.y)
 		right = maxf(right, r.end.x)
-	ok(min_w >= 48.0 and right <= SCREEN_W + 0.5, "tabs: cells >= 48 px wide and inside the screen (min %.0f, right %.0f)" % [min_w, right])
-	bt.open_more()
-	await _frames(2)
-	ok(bt.is_more_open(), "tabs: 더보기 sheet opens")
-	var sheet_btns := 0
-	var small := 0
-	var all: Array = []
-	_controls(bt, all)
-	for c2 in all:
-		if c2 is Button and (c2 as Button).get_parent() is VBoxContainer and (c2 as Control).get_global_rect().size.x > 300.0:
-			sheet_btns += 1
-			if (c2 as Control).get_global_rect().size.y < 56.0:
-				small += 1
-	ok(sheet_btns == 5 and small == 0, "tabs: sheet lists 5 tabs, each >= 56 px high (%d, %d small)" % [sheet_btns, small])
-	main.handle_back()
-	ok(not bt.is_more_open(), "tabs: back closes the sheet")
-	bt.open_more()
-	await _frames(2)
-	var sheet_pick: Sheet = bt._sheet
-	if sheet_pick != null and sheet_pick.buttons.has("settings"):
-		(sheet_pick.buttons["settings"] as Button).pressed.emit()
+	ok(min_w >= 48.0 and min_h >= 56.0 and right <= SCREEN_W + 0.5, "tabs: cells >= 48x56 px and inside the screen (min %.0fx%.0f, right %.0f)" % [min_w, min_h, right])
+	# the 메뉴 screen has a row for every key that is not in the bar
+	main.show_view("menu")
 	await _frames(3)
-	ok(main.current == "settings" and not bt.is_more_open(), "tabs: picking 설정 in the sheet opens the settings screen")
+	var mv: MenuView = main.views["menu"]
+	var outside: Array = []
+	for k in main.tab_keys():
+		if not main.bar_keys().has(k) and k != "menu":
+			outside.append(k)
+	var got: Array = mv.entry_keys()
+	got.sort()
+	outside.sort()
+	ok(got == outside, "T3-4: the 메뉴 has a row for every tab outside the bar (%s | %s)" % [got, outside])
+	# a row opens its screen, and the 메뉴 tab stays lit
+	mv.choose("settings")
+	await _frames(3)
+	ok(main.current == "settings" and bt._current == "menu", "tabs: picking 설정 in the 메뉴 opens the settings screen, the 메뉴 tab lit")
 	main.add_tab("log", "기록 2", AppView.new(), "기록 2")
 	await _frames(2)
-	ok(main.tab_keys().slice(-2) == ["log", "settings"] and bt.overflow_keys().back() == "settings", "tabs: a tab added without after_key goes in front of 설정")
+	ok(main.tab_keys().slice(-2) == ["log", "settings"] and main.bar_keys() == ["today", "lesson", "review", "menu"], "tabs: a tab added without after_key goes in front of 설정 and not into the bar")
+	main.show_view("menu")
+	await _frames(3)
+	ok(mv.entry_keys().has("log"), "T3-4: the added tab is a row of the 메뉴 (%s)" % [mv.entry_keys()])
 	main.show_view("log")
-	ok(main.current == "log" and bt.overflow_keys().has("log"), "tabs: an overflow tab can be shown")
+	ok(main.current == "log" and bt._current == "menu", "tabs: an added tab can be shown and lights 메뉴")
 	main.show_view("today")
 
 
@@ -650,18 +734,25 @@ func _test_pc_nav(main: Control) -> void:
 		await _frames(2)
 		ok(main.current == str(k) and (main.views[k] as Control).visible and nav.current() == str(k), "PC nav: clicking '%s' opens it and selects it" % k)
 	main.show_view("today")
-	main.add_tab("practice", "연습", AppView.new(), "", "review")
+	main.add_tab("practice", "연습", AppView.new(), "", "talk")
 	main.add_tab("stats", "기록", AppView.new(), "", "reading")
 	main.add_tab("log", "기록 2", AppView.new())
 	await _frames(3)
 	btns = nav.item_buttons()
-	ok(main.tab_keys() == ["today", "lesson", "talk", "review", "practice", "reading", "stats", "roadmap", "log", "settings"], "PC nav: tab order (%s)" % [main.tab_keys()])
-	ok(btns.size() == 10, "PC nav: ten items in all (%d)" % btns.size())
+	ok(main.tab_keys() == ["today", "lesson", "review", "talk", "practice", "reading", "stats", "roadmap", "log", "settings"], "T3-3: PC tab order (%s)" % [main.tab_keys()])
+	ok(btns.size() == 10, "T3-8: PC nav: ten items in all (%d)" % btns.size())
+	ok(not btns.has("menu") and not main.views.has("menu"), "T3-8: PC nav: no 메뉴 item and no 메뉴 screen")
+	ok((btns["today"] as Button).text == "홈", "T3-8: PC nav: the first item is called 홈")
 	var ys := {}
 	for k in btns.keys():
 		ys[k] = (btns[k] as Control).get_global_rect().position.y
-	ok(ys["today"] < ys["lesson"] and ys["lesson"] < ys["talk"] and ys["talk"] < ys["practice"] and ys["practice"] < ys["reading"] and ys["reading"] < ys["review"], "PC nav: 학습 section order 오늘, 레슨, 대화, 연습, 읽기, 복습")
-	ok(ys["review"] < ys["stats"] and ys["stats"] < ys["roadmap"] and ys["roadmap"] < ys["log"] and ys["log"] < ys["settings"], "PC nav: 기록 section (기록, 로드맵, the added tab) and 설정 at the bottom")
+	ok(ys["today"] < ys["lesson"] and ys["lesson"] < ys["review"] and ys["review"] < ys["talk"] and ys["talk"] < ys["practice"] and ys["practice"] < ys["reading"], "T3-8: PC nav: 공부 (홈, 레슨, 복습), then 말하기·읽기 (대화, 연습, 읽기)")
+	ok(ys["reading"] < ys["stats"] and ys["stats"] < ys["roadmap"] and ys["roadmap"] < ys["log"] and ys["log"] < ys["settings"], "T3-8: PC nav: 기록 group (기록, 로드맵, the added tab) and 설정 at the bottom")
+	var heads: Array = []
+	for l in nav._list.find_children("*", "Label", true, false):
+		heads.append((l as Label).text)
+	ok(heads == ["공부", "말하기·읽기", "기록"], "T3-8: PC nav: the group headers are 공부, 말하기·읽기, 기록 (%s)" % [heads])
+	ok(nav.size.x >= 223.0 and nav.size.x <= 225.0, "T3-8: PC nav: 224 px wide (%.1f)" % nav.size.x)
 	main.show_view("log")
 	await _frames(2)
 	ok(main.current == "log" and nav.current() == "log", "PC nav: an added tab opens")
@@ -716,18 +807,18 @@ func _test_pc_narrow(main: Control) -> void:
 	main.show_view("today")
 	await _frames(5)
 	var tv: TodayView = main.views["today"]
-	ok(tv._grid.columns == 1, "W4-2: at 900 the content is %.0f px wide: one column of cards" % tv.size.x)
-	var cards: Array = tv._grid.get_children()
+	ok(not _tv_wide(tv), "W4-2: at 900 the content is %.0f px wide: one column of cards" % tv.size.x)
+	var cards: Array = _tv_cards(tv)
 	var overlap := false
 	for i in cards.size():
 		for j in range(i + 1, cards.size()):
 			if (cards[i] as Control).get_global_rect().intersects((cards[j] as Control).get_global_rect()):
 				overlap = true
-	ok(cards.size() == 2 and not overlap, "W4-2: at 900 the two language cards do not overlap")
+	ok(cards.size() >= 2 and not overlap, "W4-2: at 900 the home cards (%d) do not overlap" % cards.size())
 	ok(main._status_text.get_global_rect().end.x <= nav.get_global_rect().end.x + 0.5, "W4-2: at 900 the engine chip text stays inside the side nav")
 	win.size = Vector2i(1280, 800)
 	await _frames(6)
-	ok(tv._grid.columns == 2, "W4-2: back at 1280 the cards are two columns")
+	ok(_tv_wide(tv), "W4-2: back at 1280 the cards are two columns")
 
 
 # ---------------------------------------------------------------- W4-3..W4-5 (both platforms)
