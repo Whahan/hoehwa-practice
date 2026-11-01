@@ -219,6 +219,26 @@ $r3 = Run-Install $r2root $envBase
 Check "D5 이어하기: 훅 없이 다시 실행하면 종료 0" ($r3.Exit -eq 0) ("exit=" + $r3.Exit)
 Check "D5 2~3단계는 '이미 끝난 단계', 4단계는 다시 함" (($r3.Out -match '\[2/11\][^\[]*이미 끝난 단계') -and ($r3.Out -match '\[3/11\][^\[]*이미 끝난 단계') -and -not ($r3.Out -match '\[4/11\][^\[]*이미 끝난 단계')) ""
 Check "D5 이어하기 진행 파일 계약 (done/100)" ((Test-Snapshots $r3.Snaps "done").Count -eq 0) ((Test-Snapshots $r3.Snaps "done") -join "; ")
+# 5·6단계(OpenCode, JRE) 실패는 설치를 막지 않는다: 경고만 남기고 7단계 이후도 하고, 종료 0, state=done
+foreach ($case in @(@(5, "AI 프로그램을 받지 못했어요", "05"), @(6, "문법 검사 도구를 받지 못했어요", "06"))) {
+    $sroot = Join-Path $Work ("fake_soft" + $case[0]); New-FakeRoot $sroot
+    $envSoft = $envBase.Clone(); $envSoft["HOEHWA_SETUP_FAIL_STEP"] = [string]$case[0]
+    $rs = Run-Install $sroot $envSoft
+    $fs = if ($rs.Snaps.Count) { $rs.Snaps[$rs.Snaps.Count - 1].Obj } else { $null }
+    $slog = Get-Content -LiteralPath (Join-Path $sroot "install.log") -Raw -Encoding UTF8
+    Check ("{0}단계 실패 흉내: 설치는 계속되어 종료 0, state=done, pct=100" -f $case[0]) ($rs.Exit -eq 0 -and $fs -and $fs.state -eq "done" -and $fs.pct -eq 100 -and $fs.code -eq 0) ("exit=" + $rs.Exit)
+    Check ("{0}단계 실패 흉내: 진행 파일 warn 에 한국어 경고 '{1}'" -f $case[0], $case[1]) ($fs -and $fs.warn -match [regex]::Escape($case[1])) ($fs.warn)
+    Check ("{0}단계 실패 흉내: 7·8단계도 실행됨(표시 파일 07,08 있음), version.txt 기록" -f $case[0]) ((Test-Path (Join-Path $sroot "runtime\.state\07-models.ok")) -and (Test-Path (Join-Path $sroot "runtime\.state\08-prefetch.ok")) -and (Test-Path (Join-Path $sroot "version.txt"))) ""
+    Check ("{0}단계 실패 흉내: install.log 에 원인 줄([경고 원인])과 경고 문구" -f $case[0]) ($slog -match '\[경고 원인\]' -and $slog -match [regex]::Escape($case[1])) ""
+    Check ("{0}단계 실패 흉내: 진행 파일 계약(done)" -f $case[0]) ((Test-Snapshots $rs.Snaps "done").Count -eq 0) ((Test-Snapshots $rs.Snaps "done") -join "; ")
+    Check ("{0}단계 실패 흉내: 단계 표시 파일 {1}-*.ok 는 안 만들어 다음 실행에서 다시 시도" -f $case[0], $case[2]) (@(Get-ChildItem (Join-Path $sroot "runtime\.state") -Filter ($case[2] + "-*.ok") -ErrorAction SilentlyContinue).Count -eq 0) ""
+}
+# 필수 단계(7 음성 모델) 실패는 여전히 막는다 (종료 50)
+$r7f = Join-Path $Work "fake_hard7"; New-FakeRoot $r7f
+$envH7 = $envBase.Clone(); $envH7["HOEHWA_SETUP_FAIL_STEP"] = "7"
+$rh7 = Run-Install $r7f $envH7
+$fh7 = if ($rh7.Snaps.Count) { $rh7.Snaps[$rh7.Snaps.Count - 1].Obj } else { $null }
+Check "필수 7단계 실패 흉내: 종료 50, state=error" ($rh7.Exit -eq 50 -and $fh7 -and $fh7.state -eq "error" -and $fh7.code -eq 50) ("exit=" + $rh7.Exit)
 # 인터넷 점검 실패 흉내 (R10): 어느 주소인지 한국어로, 종료 20
 $r2b = Join-Path $Work "fake_net"; New-FakeRoot $r2b
 $envNet = $envBase.Clone(); $envNet["HOEHWA_TEST_NET_FAIL"] = "github.com"
@@ -372,7 +392,7 @@ $script:HB = 0
 function Set-Progress { param($Detail = $null, $Frac = $null, [string]$State = "running", [string]$Err = "", [int]$Code = 0, [switch]$Force) $script:HB++ }
 $script:LogW = [System.IO.StreamWriter]::Null
 function Write-Utf8([string]$path, [string]$text) { [System.IO.File]::WriteAllText($path, $text, $Utf8) }
-foreach ($n in @("Quote-Arg", "Invoke-Native", "Format-ErrorLine", "Get-EffectiveLock", "Test-HealthGood", "Get-HealthWhy", "Write-FileAtomic")) { Invoke-Expression (Get-FnText $n) }
+foreach ($n in @("Quote-Arg", "Invoke-Native", "Fail", "Invoke-InstallTools", "Format-ErrorLine", "Get-EffectiveLock", "Test-HealthGood", "Get-HealthWhy", "Write-FileAtomic")) { Invoke-Expression (Get-FnText $n) }
 
 Check "Quote-Arg: 공백·따옴표·끝 역슬래시" ((Quote-Arg "a b") -eq '"a b"' -and (Quote-Arg 'x"y') -eq '"x\"y"' -and (Quote-Arg 'C:\a b\') -eq '"C:\a b\\"' -and (Quote-Arg "") -eq '""' -and (Quote-Arg "plain") -eq "plain") ""
 $c = Invoke-Native "cmd.exe" @("/c", "exit 3") -Quiet
@@ -394,6 +414,29 @@ if ($Py) {
     $alive = [bool](Get-Process -Id $childPid -ErrorAction SilentlyContinue)
     Check "Invoke-Native: -TimeoutSec 가 지나면 자기가 시작한 PID 만 끄고 1 을 돌려준다" ($c -eq 1 -and $sw.Elapsed.TotalSeconds -lt 10 -and -not $alive) ("code=$c, " + [math]::Round($sw.Elapsed.TotalSeconds, 1) + "초, 살아 있음=$alive")
     if ($alive) { & taskkill.exe /PID $childPid /T /F | Out-Null }
+}
+if ($Py) {
+    # 가짜 install_tools.py 로 Invoke-InstallTools 의 실제 코드를 시험한다
+    $script:Vendor = Join-Path $Work "vend_fake"; New-Item -ItemType Directory -Force $script:Vendor | Out-Null
+    $script:Root = Join-Path $Work "root_fake"; New-Item -ItemType Directory -Force $script:Root | Out-Null
+    $script:Py = $Py; $script:ToolNice = "OpenCode"
+    [System.IO.File]::WriteAllText((Join-Path $script:Vendor "tools.lock.json"), "{}")
+    function Run-FakeTools([string]$body) {
+        [System.IO.File]::WriteAllText((Join-Path $script:Vendor "install_tools.py"), $body, $Utf8)
+        $script:FailCode = 0; $msg = ""
+        try { Invoke-InstallTools "opencode" "OpenCode" } catch { $msg = $_.Exception.Message }
+        return [pscustomobject]@{ Msg = $msg; Code = $script:FailCode }
+    }
+    $t1 = Run-FakeTools "import sys`nprint('TOOL opencode FAIL hash 해시가 달라요')`nprint('TOOL_RESULT FAIL')`nsys.exit(30)`n"
+    Check "Invoke-InstallTools: 해시 실패(종료 30)는 한국어 이유와 함께 예외, 코드 30" ($t1.Code -eq 30 -and $t1.Msg -match '해시가 달라요') ($t1.Msg + " / " + $t1.Code)
+    $t2 = Run-FakeTools "import sys`nprint('TOOL opencode FAIL net 인터넷이 안 돼요')`nsys.exit(20)`n"
+    Check "Invoke-InstallTools: 인터넷 실패(종료 20)는 코드 20" ($t2.Code -eq 20 -and $t2.Msg -match '인터넷이 안 돼요') ($t2.Msg + " / " + $t2.Code)
+    $t3 = Run-FakeTools "print('TOOL opencode OK 1.19.0 x')`nprint('TOOL_RESULT OK')`n"
+    Check "Invoke-InstallTools: TOOL_RESULT OK 면 예외 없음" ($t3.Msg -eq "" -and $t3.Code -eq 0) ($t3.Msg)
+    $t4 = Run-FakeTools "print('TOOL opencode OK 1.19.0 x')`n"
+    Check "Invoke-InstallTools: 종료 0 이어도 TOOL_RESULT OK 가 없으면 실패로 본다" ($t4.Msg -ne "") ""
+    $t5 = Run-FakeTools "import sys`nsys.exit(7)`n"
+    Check "Invoke-InstallTools: 이유 줄 없이 종료 7 이면 기본 한국어 문구, 코드 1" ($t5.Code -eq 1 -and $t5.Msg -match '[가-힣]') ($t5.Msg + " / " + $t5.Code)
 }
 $c = Invoke-Native "C:\nonexistent\nothing.exe" @() -Quiet
 Check "Invoke-Native: 없는 실행 파일은 예외 없이 1" ($c -eq 1) ""

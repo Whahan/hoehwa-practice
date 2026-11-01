@@ -47,8 +47,8 @@ $StepDefs = @(
     @{ N = 2;  Key = "python";       Weight = 2;  Code = 1;  Title = "파이썬 준비 중";          Name = "파이썬 3.10.11 (포터블) 풀기" },
     @{ N = 3;  Key = "pip";          Weight = 2;  Code = 20; Title = "pip 준비 중";             Name = "pip 준비 (개발 PC 와 같은 버전)" },
     @{ N = 4;  Key = "packages";     Weight = 35; Code = 40; Title = "파이썬 패키지 설치 중";  Name = "파이썬 패키지 설치 (PyTorch, Whisper, Kokoro 등 - 가장 오래 걸립니다)" },
-    @{ N = 5;  Key = "opencode";     Weight = 6;  Code = 1;  Title = "OpenCode 받는 중";        Name = "OpenCode 받기 (무료 AI 엔진)" },
-    @{ N = 6;  Key = "jre";          Weight = 3;  Code = 1;  Title = "자바 받는 중";            Name = "자바(JRE) 받기 (문법 검사기용)" },
+    @{ N = 5;  Key = "opencode";     Weight = 6;  Code = 1;  Soft = $true; WarnMsg = "AI 프로그램을 받지 못했어요. 앱에서 [AI 연결하기]를 누르면 다시 받아요."; Title = "OpenCode 받는 중";        Name = "OpenCode 받기 (무료 AI 엔진)" },
+    @{ N = 6;  Key = "jre";          Weight = 3;  Code = 1;  Soft = $true; WarnMsg = "문법 검사 도구를 받지 못했어요. 문법 교정은 AI가 대신해요."; Title = "자바 받는 중";            Name = "자바(JRE) 받기 (문법 검사기용)" },
     @{ N = 7;  Key = "models";       Weight = 28; Code = 50; Title = "음성 모델 받는 중";       Name = "음성 모델 받기 (Whisper small, Kokoro-82M 등 - 약 2 GB)" },
     @{ N = 8;  Key = "prefetch";     Weight = 5;  Code = 50; Title = "데이터 준비 중";          Name = "나머지 데이터 준비 (일본어 사전, 목소리, 음성 인식 장치 확인)" },
     @{ N = 9;  Key = "languagetool"; Weight = 8;  Code = 1;  Title = "문법 검사기 설치 중";     Name = "문법 검사기 LanguageTool 받기" },
@@ -104,6 +104,7 @@ $script:Pct = 0
 $script:CurStep = 1
 $script:StepTitle = "시작하는 중"
 $script:Detail = ""
+$script:ProgWarn = ""   # 설치를 막지 않는 경고(5·6단계 실패 등): 진행 파일의 warn 에 끝까지 남는다
 $script:LastWriteTick = -100000
 $script:ProgressSw = [System.Diagnostics.Stopwatch]::StartNew()
 # 키·토큰처럼 보이는 문자열은 가리고, 한국어 한 줄(120자 이하)로 만든다
@@ -135,7 +136,7 @@ function Set-Progress {
     try {
         $o = [ordered]@{
             v = 1; state = $State; pct = [int]$script:Pct; step = [int]$script:CurStep; steps = $TotalSteps
-            title = $script:StepTitle; detail = $script:Detail; error = $Err; code = $Code; log = $LogFile
+            title = $script:StepTitle; detail = $script:Detail; error = $Err; code = $Code; log = $LogFile; warn = $script:ProgWarn
             t = (Get-Date -Format "yyyy-MM-dd'T'HH:mm:sszzz")
         }
         [void](Write-FileAtomic $ProgressFile ($o | ConvertTo-Json -Compress))
@@ -306,6 +307,14 @@ function Invoke-InstallTools([string]$only, [string]$niceName) {
 }
 
 # ------------------------------------------------------------------ 단계 실행기
+# 설치를 막지 않는 실패: 자세한 이유(해시·zip 등)는 install.log 에만, 사용자에게는 짧은 한국어 경고를 진행 파일(warn, detail)에 남기고 계속한다
+function Soft-Fail([string]$userMsg, [string]$reason) {
+    Log ("[경고 원인] " + $reason)
+    Warn $userMsg
+    $script:ProgWarn = (($script:ProgWarn + " " + $userMsg).Trim())
+    if ($script:ProgWarn.Length -gt 300) { $script:ProgWarn = $script:ProgWarn.Substring(0, 299) + "…" }
+    Set-Progress -Detail $userMsg -Force
+}
 function Invoke-SimStep([int]$n) {
     for ($i = 1; $i -le 4; $i++) {
         Start-Sleep -Milliseconds 250
@@ -319,7 +328,7 @@ function Step([int]$n, [scriptblock]$Body, [switch]$Always, [switch]$RealInSimul
     Say ""
     Say ("[{0}/{1}] {2}" -f $n, $TotalSteps, $def.Name) "Cyan"
     $endPct = [math]::Min(99, $def.Start + $def.Weight)
-    if ($FailStep -eq $n) {
+    if ($FailStep -eq $n -and -not $def.Soft) {
         Set-Progress -Detail "(시험) 실패를 흉내냅니다" -Frac 0 -Force
         Log "(시험 훅) HOEHWA_SETUP_FAIL_STEP=$n"
         Fail ("(시험) {0}단계 실패를 흉내 냈어요." -f $n) $def.Code
@@ -334,7 +343,16 @@ function Step([int]$n, [scriptblock]$Body, [switch]$Always, [switch]$RealInSimul
     }
     Set-Progress -Detail $def.Title -Frac 0 -Force
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    if ($Simulate -and -not $RealInSimulation) { Say "    (시뮬레이션) 실제 작업 대신 1초 기다립니다." "Yellow"; Invoke-SimStep $n } else { & $Body }
+    $softFailed = $false
+    try {
+        if ($FailStep -eq $n) { Log "(시험 훅) HOEHWA_SETUP_FAIL_STEP=$n (이 단계는 실패해도 설치를 막지 않음)"; Fail "(시험) 해시 불일치를 흉내 냈어요." 30 }
+        if ($Simulate -and -not $RealInSimulation) { Say "    (시뮬레이션) 실제 작업 대신 1초 기다립니다." "Yellow"; Invoke-SimStep $n } else { & $Body }
+    } catch {
+        if (-not $def.Soft) { throw }
+        $script:FailCode = 0
+        Soft-Fail $def.WarnMsg $_.Exception.Message
+        $softFailed = $true
+    }
     $sw.Stop()
     if (-not $Always) {
         New-Item -ItemType Directory -Force $StateDir | Out-Null
@@ -343,7 +361,7 @@ function Step([int]$n, [scriptblock]$Body, [switch]$Always, [switch]$RealInSimul
     if ($script:Pct -lt $endPct) { $script:Pct = $endPct }
     Set-Progress -Force
     Say ("    완료 ({0:N0}초)" -f $sw.Elapsed.TotalSeconds) "Green"
-    $script:Timings.Add([pscustomobject]@{ N = $n; Title = $def.Name; Sec = [math]::Round($sw.Elapsed.TotalSeconds); Result = "완료" })
+    $script:Timings.Add([pscustomobject]@{ N = $n; Title = $def.Name; Sec = [math]::Round($sw.Elapsed.TotalSeconds); Result = $(if ($softFailed) { "경고(건너뜀)" } else { "완료" }) })
 }
 
 # =================================================================== -DryRun: 계획만 출력
