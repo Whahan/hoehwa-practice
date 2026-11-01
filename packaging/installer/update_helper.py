@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """Helper for build_dist.ps1 (release manifest) and update.ps1 (applying an update).
 
-    python update_helper.py lockinfo <vendor_dir> [<backend_dir>]          -> JSON of lock hashes
+    python update_helper.py lockinfo <vendor_dir> [<backend_dir>]          -> JSON of lock hashes (requirements, bootstrap, models, languagetool, tools, tatoeba_schema)
     python update_helper.py manifest <root> <version> <min_installer> <installer_schema> <out.json> [--exclude-from-update rel ...]
     python update_helper.py verify <staging_dir> <manifest.json>           -> checks sha256 of every file shipped in the update
-    python update_helper.py pipsync <requirements.lock.txt> <bootstrap.lock.txt> [<wheels_dir>]
-                                                                           (run with the app's runtime python)
+    python update_helper.py pipsync <requirements.lock.txt> <bootstrap.lock.txt> [<wheels_dir>] [--gpu-file <gpu.txt>]
+                                                                           (run with the app's runtime python). When gpu.txt says "cpu" the
+                                                                           nvidia-* packages of the lock are neither installed nor removed;
+                                                                           no gpu.txt (installs made before 1.5) = everything is installed.
+                                                                           Default gpu.txt: runtime/.state/gpu.txt next to the running python.
     python update_helper.py mergecfg <user_config.json> <new_default_config.json> <out.json>
     python update_helper.py languagetool <models.lock.json> <backend_dir>
     python update_helper.py dirsize <root> [--skip rel ...]                -> total bytes of a folder tree
@@ -87,7 +90,15 @@ def lockinfo(vendor_dir, backend_dir=None):
     info["models"] = sha256_text(json.dumps(hf, sort_keys=True))
     lt = ml.get("languagetool")
     info["languagetool"] = sha256_text(json.dumps(lt, sort_keys=True)) if lt else ""
-    info["ollama"] = (ml.get("ollama") or {}).get("digest", "")
+    # vendor\tools.lock.json (OpenCode / JRE download pins). "" when the file does not exist (installs made before 1.5).
+    # Hashed from the parsed JSON so a different line ending or indentation does not count as a change.
+    info["tools"] = ""
+    tp = os.path.join(vendor_dir, "tools.lock.json")
+    if os.path.isfile(tp):
+        try:
+            info["tools"] = sha256_text(json.dumps(json.load(open(tp, encoding="utf-8-sig")), sort_keys=True))
+        except (OSError, ValueError):
+            info["tools"] = sha256_text("unreadable")
     info["tatoeba_schema"] = ""
     if backend_dir:
         tb = os.path.join(backend_dir, "tatoeba_build.py")
@@ -201,8 +212,25 @@ def pip(args, check=True):
     return r
 
 
-def pipsync(lock, boot, wheels):
-    env_ok = True
+def is_nvidia(key):
+    return key.startswith("nvidia-")
+
+
+def read_gpu(gpu_file):
+    # returns "cpu", "nvidia", or "" (no file / unknown value)
+    try:
+        v = open(gpu_file, encoding="utf-8-sig").read().strip().lower()
+    except (OSError, ValueError):   # unreadable or not UTF-8 (e.g. UTF-16 from Out-File) -> unknown, keep nvidia
+        return ""
+    return v if v in ("cpu", "nvidia") else ""
+
+
+def default_gpu_file():
+    # runtime\python\python.exe -> runtime\.state\gpu.txt
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(sys.executable))), ".state", "gpu.txt")
+
+
+def pipsync(lock, boot, wheels, gpu_file=None):
     os.environ["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
     os.environ["PIP_NO_INPUT"] = "1"
     os.environ["PIP_NO_CACHE_DIR"] = "1"   # nothing is cached: "updating should not grow the app"
@@ -215,12 +243,17 @@ def pipsync(lock, boot, wheels):
     if boot_todo:
         pip(["install", "--no-cache-dir", "--no-warn-script-location", "--disable-pip-version-check"] + boot_todo)
     # 2. app packages: only what differs from the lock
-    want = parse_req(lock_lines(lock))
+    want_all = parse_req(lock_lines(lock))
+    gpu = read_gpu(gpu_file or default_gpu_file())
+    # NVIDIA-less PC (gpu.txt = cpu): the nvidia-* wheels (about 2 GB) are skipped - and left alone if they are already there.
+    skipped = set(k for k in want_all if is_nvidia(k)) if gpu == "cpu" else set()
+    want = {k: v for k, v in want_all.items() if k not in skipped}
+    print("PIPSYNC gpu=%s: skipping %d GPU-library package(s)" % (gpu or "unknown", len(skipped)), flush=True)
     r = subprocess.run([sys.executable, "-X", "utf8", "-m", "pip", "freeze"],
                        stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
     have = parse_req(r.stdout.splitlines())
     todo = [line for k, (v, line) in sorted(want.items()) if k not in have or have[k][0] != v]
-    extra = [k for k in sorted(have) if k not in want and k not in ("pip", "setuptools", "wheel")]
+    extra = [k for k in sorted(have) if k not in want and k not in skipped and k not in ("pip", "setuptools", "wheel")]
     print("PIPSYNC plan: install/upgrade %d, remove %d" % (len(todo), len(extra)), flush=True)
     for t in todo:
         print("  + " + t, flush=True)
@@ -252,7 +285,7 @@ def pipsync(lock, boot, wheels):
                        stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
     have = parse_req(r.stdout.splitlines())
     diff = sorted(set(k for k in want if k not in have or have[k][0] != want[k][0]) |
-                  set(k for k in have if k not in want))
+                  set(k for k in have if k not in want and k not in skipped))
     for k in diff:
         print("  MISMATCH %s: want %s have %s" % (k, want.get(k, ("-",))[0], have.get(k, ("-",))[0]))
     print("PIPSYNC_RESULT %s" % ("OK" if not diff else "MISMATCH"))
@@ -652,7 +685,12 @@ def main():
     if cmd == "verify":
         return verify(a[1], a[2])
     if cmd == "pipsync":
-        return pipsync(a[1], a[2], a[3] if len(a) > 3 else None)
+        gpu_file = None
+        if "--gpu-file" in a:
+            i = a.index("--gpu-file")
+            gpu_file = a[i + 1] if i + 1 < len(a) else None
+            a = a[:i] + a[i + 2:]
+        return pipsync(a[1], a[2], a[3] if len(a) > 3 else None, gpu_file)
     if cmd == "mergecfg":
         mergecfg(a[1], a[2], a[3])
         return 0
