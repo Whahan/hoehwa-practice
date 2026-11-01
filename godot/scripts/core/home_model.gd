@@ -270,8 +270,7 @@ static func goal_reached(s: Dictionary) -> bool:
 
 # ---------------------------------------------------------------- real snapshot
 
-## 실제 값으로 스냅샷을 만든다. T4 가 본문을 채운다(StudyLog, Store, PathModel 을 부르므로 T1b 는 만들지 않는다).
-static func snapshot(_lang: String) -> Dictionary:
-	# TODO(T4): StudyLog.range_summary(lang,1)[0], Store.due_count, StudyLog.settle, PathModel.current_cell,
-	#           Store.position, StudyLog.resume, Time(현지 hour), SongDue.cache(song_due, song_count)
-	return {}
+## 실제 값으로 스냅샷을 만든다(설계 §9.3). 순수 계산 파일에 Store/StudyLog/시계 접근을 두지 않으려고
+## 읽는 코드는 HomeParts.snapshot() 에 있고, 여기서는 그것을 그대로 돌려준다.
+static func snapshot(lang: String) -> Dictionary:
+	return HomeParts.snapshot(lang)
