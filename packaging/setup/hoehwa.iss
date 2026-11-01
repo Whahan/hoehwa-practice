@@ -41,10 +41,12 @@
 
 #if IsTest
   #define AppGuid "{{D56CB0A7-1AA7-41AA-89C9-B78E146F3367}"
+  #define AppGuidRaw "{D56CB0A7-1AA7-41AA-89C9-B78E146F3367}"
   #define OutNameDefault "hoehwa-practice-setup-test"
   #define MutexName "HoehwaPracticeSetupTestMutex"
 #else
   #define AppGuid "{{2806D5F9-42D5-4311-AB1F-482E52506E7D}"
+  #define AppGuidRaw "{2806D5F9-42D5-4311-AB1F-482E52506E7D}"
   #define OutNameDefault "hoehwa-practice-setup"
   #define MutexName "HoehwaPracticeSetupMutex"
 #endif
@@ -231,6 +233,72 @@ end;
 function GetDefaultDir(Param: String): String;
 begin
   Result := ChooseDefaultDir(BaseLocalAppData, FallbackDir);
+end;
+
+// ------------------------------------------------------------------ 설치 폴더 검사 (다른 사람의 파일을 지우지 않기 위해)
+// 제거 프로그램은 {app} 아래의 runtime, backend, vendor, defaults, backup … 를 통째로 지운다. 그러므로 /DIR 로 '이미 다른 파일이 든 폴더'를 주면
+// 설치를 시작하기 전에 거절한다. 빈 폴더, 없는 폴더, 우리가 설치한 폴더(다시 설치/복구)만 받는다. 드라이브 맨 위(D:\)도 거절한다.
+function IsRootDir(const D: String): Boolean;
+var
+  S: String;
+begin
+  S := RemoveBackslashUnlessRoot(D);
+  Result := (Length(S) <= 3) and (Pos(':', S) = 2);
+end;
+
+function DirIsEmpty(const D: String): Boolean;
+var
+  FR: TFindRec;
+begin
+  Result := True;
+  if FindFirst(AddBackslash(D) + '*', FR) then
+  begin
+    try
+      repeat
+        if (FR.Name <> '.') and (FR.Name <> '..') then
+        begin
+          Result := False;
+          Break;
+        end;
+      until not FindNext(FR);
+    finally
+      FindClose(FR);
+    end;
+  end;
+end;
+
+// 우리가 설치한 폴더인가: (1) 제거 항목의 설치 위치가 이 폴더이거나 (2) 우리 설치 파일 셋(회화연습.exe, install.ps1, manifest.json 에 installer_version 과 files)이 있다.
+// (2) 는 zip 으로 설치한 옛 폴더, 설치가 중간에 멈춘 폴더, 다른 폴더에 다시 설치해서 제거 항목이 그쪽을 가리키는 경우를 위한 것이다.
+function IsOurInstall(const D: String): Boolean;
+var
+  Reg: String;
+  Man: AnsiString;
+  B: String;
+begin
+  Result := False;
+  if RegQueryStringValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#AppGuidRaw}_is1', 'Inno Setup: App Path', Reg) then
+    if CompareText(RemoveBackslashUnlessRoot(Reg), RemoveBackslashUnlessRoot(D)) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  B := AddBackslash(D);
+  if FileExists(B + '회화연습.exe') and FileExists(B + 'install.ps1') and FileExists(B + 'manifest.json') then
+  begin
+    Man := '';
+    if LoadStringFromFile(B + 'manifest.json', Man) then
+      Result := (Pos('"installer_version"', Man) > 0) and (Pos('"files"', Man) > 0);
+  end;
+end;
+
+// '' 이면 괜찮다. 아니면 사용자에게 보일 한국어 이유.
+function CheckTargetDir(const D: String): String;
+begin
+  Result := '';
+  if IsRootDir(D) then
+    Result := '드라이브 맨 위(루트)에는 설치할 수 없어요. 폴더를 하나 만들어 그 안에 설치해 주세요.' + #13#10#13#10 + D
+  else if DirExists(D) and (not DirIsEmpty(D)) and (not IsOurInstall(D)) then
+    Result := '이 폴더에는 다른 파일이 있어요. 빈 폴더나 새 폴더를 골라 주세요.' + #13#10#13#10 + D;
 end;
 
 // ------------------------------------------------------------------ 바로가기 경로 (시험용은 환경변수로 돌린다)
@@ -536,11 +604,24 @@ begin
   end;
 end;
 
+// 설치를 시작하기 전: 폴더가 괜찮은지 본다. 문자열을 돌려주면 Setup 이 아무것도 쓰지 않고 (종료 코드 8) 그 문장을 보여 주며 끝난다.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := CheckTargetDir(ExpandConstant('{app}'));
+  if Result <> '' then
+    Log('설치 폴더 거절: ' + Result);
+end;
+
 procedure DeinitializeSetup;
 begin
   if FailExitCode <> 0 then
   begin
     Log('setup.exe 를 실패 코드 ' + IntToStr(FailExitCode) + ' 로 끝냅니다 (설치된 파일은 그대로 둠).');
+    // 임시 폴더(%TEMP%\is-*.tmp)는 ExitProcess 로 끝나면 Setup 이 지우지 못해 몇 KB 가 남는다. 우리 파일만 지운다.
+    // (죽은 뒤에 폴더를 지우는 cmd 를 따로 띄워 보았지만, 그러면 setup.exe 의 종료 코드가 1 로 바뀌어서 쓰지 않는다)
+    DeleteFile(ProgFile);
+    DeleteFile(ExpandConstant('{tmp}') + '\stop_app.ps1');
+    DeleteFile(ExpandConstant('{tmp}') + '\hoehwa-stop-report.txt');
     ExitProcess(FailExitCode);
   end;
 end;
@@ -630,3 +711,8 @@ begin
     SuppressibleMsgBox('회화 연습을 제거했어요.' + #13#10#13#10 + '학습 기록은 지우지 않고 남겨 두었어요:' + #13#10 + ExpandConstant('{userappdata}') + '\Godot\app_userdata\회화 연습', mbInformation, MB_OK, IDOK);
   end;
 end;
+
+#ifdef DumpPre
+// 시험용: 전처리가 끝난 스크립트를 파일로 저장한다 (배포 빌드에 시험 훅이 없는지 검사하는 데 쓴다)
+#expr SaveToFile(DumpPre)
+#endif

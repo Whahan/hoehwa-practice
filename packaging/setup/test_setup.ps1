@@ -43,7 +43,7 @@ function Restore-Env([hashtable]$old) { foreach ($k in $old.Keys) { [Environment
 # 임시 폴더에 새로 생긴 Inno 임시 폴더(is-*.tmp)의 진행 파일을 읽는다 (쓰는 쪽이 교체 중이어도 읽도록 공유 모드로)
 $TempDir = [System.IO.Path]::GetTempPath()
 $BaseTmp = @{}
-foreach ($d in @(Get-ChildItem -LiteralPath $TempDir -Directory -Filter "is-*.tmp" -ErrorAction SilentlyContinue)) { $BaseTmp[$d.FullName] = $true }
+foreach ($tmpd in @(Get-ChildItem -LiteralPath $TempDir -Directory -Filter "is-*.tmp" -ErrorAction SilentlyContinue)) { $BaseTmp[$tmpd.FullName] = $true }
 function Read-AnyProgress {
     # 가장 최근에 쓰인 진행 파일 (이전 실행이 남긴 임시 폴더의 옛 파일은 건너뛴다)
     $best = $null; $bestT = [datetime]::MinValue
@@ -77,6 +77,12 @@ function Clean-Tmp {
 # setup 실행: 반환 Exit, Sec, Samples(진행 파일을 0.15초마다 읽은 기록), Log
 function Run-Setup([string[]]$Args2, [hashtable]$Envs = @{}, [int]$TimeoutSec = 240, [switch]$NoWait) {
     $argLine = ($Args2 | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join " "
+    foreach ($a2 in $Args2) {
+        if ($a2 -match '^/DIR=(.*)$') {
+            $dd = $Matches[1]
+            if (-not ([System.IO.Path]::IsPathRooted($dd) -and ($dd.StartsWith($D + "\", [StringComparison]::OrdinalIgnoreCase) -or $dd.StartsWith($Work + "\", [StringComparison]::OrdinalIgnoreCase)))) { throw "안전장치: /DIR 이 시험 드라이브($D)나 작업 폴더($Work) 밖이에요: $dd" }
+        }
+    }
     Clean-Tmp
     $old = Set-Env $Envs
     try { $p = Start-Process -FilePath $SetupExe -ArgumentList $argLine -PassThru; $null = $p.Handle } finally { Restore-Env $old }
@@ -127,43 +133,64 @@ if (-not $cur) {
     if (Test-Path ($Drive + ":\")) { throw "드라이브 $Drive 는 이미 쓰이고 있어요. -Drive 로 다른 글자를 주세요." }
     & subst.exe ($Drive + ":") $RealSub | Out-Null; $madeSubst = $true
 } elseif ($cur -notmatch [regex]::Escape($RealSub)) { throw "드라이브 $Drive 가 다른 폴더를 가리켜요: $cur" }
-$D = $Drive + ":"
+$D = $Drive + ":"   # 주의: PowerShell 변수 이름은 대소문자를 가리지 않는다. $d 같은 이름을 다른 용도로 쓰면 이 값이 바뀐다.
 
-$BuiltHere = $false
-if (-not $SetupExe) {
-    if (-not $Iscc) {
-        $lock = Get-Content -LiteralPath (Join-Path $Here "..\tools.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-        $Iscc = Join-Path $env:LOCALAPPDATA ("hoehwa-practice\buildtools\innosetup-" + $lock.buildtools.innosetup.version + "\ISCC.exe")
-    }
-    $stage = Join-Path $Work "fakestage\회화연습"
-    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
-    foreach ($d in @("backend", "vendor", "defaults")) { New-Item -ItemType Directory -Force (Join-Path $stage $d) | Out-Null }
-    $inst = Join-Path $Here "..\installer"
-    foreach ($f in @("install.ps1", "uninstall.ps1", "update.ps1", "업데이트.bat")) { Copy-Item -LiteralPath (Join-Path $inst $f) $stage }
-    Copy-Item -LiteralPath (Join-Path $Here "stop_app.ps1") $stage
-    Copy-Item -LiteralPath (Join-Path $inst "check_env.py") (Join-Path $stage "vendor\check_env.py")
-    foreach ($f in @("backend\server.py", "backend\curriculum.json", "vendor\requirements.lock.txt", "vendor\bootstrap.lock.txt", "vendor\models.lock.json", "vendor\install_models.py", "vendor\install_tools.py", "vendor\tools.lock.json", "vendor\update_helper.py")) {
-        [System.IO.File]::WriteAllText((Join-Path $stage $f), "x")
-    }
-    Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\ping.exe") (Join-Path $stage "회화연습.exe")
-    [System.IO.File]::WriteAllText((Join-Path $stage "vendor\vendor.json"), "{}")
-    Copy-Item -LiteralPath (Join-Path $Here "..\defaults\config.default.json") (Join-Path $stage "backend\config.json")
-    [System.IO.File]::WriteAllText((Join-Path $stage "defaults\prefs.json"), '{"a":1}')
-    [System.IO.File]::WriteAllText((Join-Path $stage "manifest.json"), '{"version":"9.9.9","installer_version":2}')
-    $outDir = Join-Path $Work "out"
-    New-Item -ItemType Directory -Force $outDir | Out-Null
-    $cargs = @("/Q", "/DStageDir=$stage", "/DAppVersion=9.9.9", "/DOutDir=$outDir", "/DTestBuild=1", "/DLzma=lzma2/fast", (Join-Path $Here "hoehwa.iss"))
+if (-not $Iscc) {
+    $lock = Get-Content -LiteralPath (Join-Path $Here "..\tools.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $Iscc = Join-Path $env:LOCALAPPDATA ("hoehwa-practice\buildtools\innosetup-" + $lock.buildtools.innosetup.version + "\ISCC.exe")
+}
+$stage = Join-Path $Work "fakestage\회화연습"
+if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+foreach ($sub in @("backend", "vendor", "defaults")) { New-Item -ItemType Directory -Force (Join-Path $stage $sub) | Out-Null }
+$inst = Join-Path $Here "..\installer"
+foreach ($f in @("install.ps1", "uninstall.ps1", "update.ps1", "업데이트.bat")) { Copy-Item -LiteralPath (Join-Path $inst $f) $stage }
+Copy-Item -LiteralPath (Join-Path $Here "stop_app.ps1") $stage
+Copy-Item -LiteralPath (Join-Path $inst "check_env.py") (Join-Path $stage "vendor\check_env.py")
+foreach ($f in @("backend\server.py", "backend\curriculum.json", "vendor\requirements.lock.txt", "vendor\bootstrap.lock.txt", "vendor\models.lock.json", "vendor\install_models.py", "vendor\install_tools.py", "vendor\tools.lock.json", "vendor\update_helper.py")) {
+    [System.IO.File]::WriteAllText((Join-Path $stage $f), "x")
+}
+Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\ping.exe") (Join-Path $stage "회화연습.exe")
+[System.IO.File]::WriteAllText((Join-Path $stage "vendor\vendor.json"), "{}")
+Copy-Item -LiteralPath (Join-Path $Here "..\defaults\config.default.json") (Join-Path $stage "backend\config.json")
+[System.IO.File]::WriteAllText((Join-Path $stage "defaults\prefs.json"), '{"a":1}')
+[System.IO.File]::WriteAllText((Join-Path $stage "manifest.json"), '{"version":"9.9.9","installer_version":2,"files":{"backend/server.py":{"sha256":"0","size":1,"in_update":true}}}')
+
+$outDir = Join-Path $Work "out"
+New-Item -ItemType Directory -Force $outDir | Out-Null
+function Run-Iscc([string[]]$extra) {
+    $cargs = @("/Q", "/DStageDir=$stage", "/DAppVersion=9.9.9", "/DOutDir=$outDir", "/DLzma=lzma2/fast") + $extra + @((Join-Path $Here "hoehwa.iss"))
     $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $co = & $Iscc @cargs 2>&1 | ForEach-Object { "$_" }
     $cc = $LASTEXITCODE; $ErrorActionPreference = $old
-    Check "컴파일(시험용 빌드): ISCC 종료 0" ($cc -eq 0) (($co | Select-Object -Last 2) -join " / ")
+    return [pscustomobject]@{ Exit = $cc; Tail = (($co | Select-Object -Last 2) -join " / ") }
+}
+if (-not $SetupExe) {
+    $r = Run-Iscc @("/DTestBuild=1")
+    Check "컴파일(시험용 빌드): ISCC 종료 0" ($r.Exit -eq 0) $r.Tail
     $SetupExe = Join-Path $outDir "hoehwa-practice-setup-test.exe"
-    $BuiltHere = $true
 }
 if (-not (Test-Path -LiteralPath $SetupExe)) { throw "setup 시험 파일이 없어요: $SetupExe" }
 $SetupExe = (Resolve-Path -LiteralPath $SetupExe).Path
 Write-Host "시험 대상: $SetupExe"
 if ($SetupExe -notmatch 'setup-test\.exe$') { throw "시험용 빌드(…-setup-test.exe)만 시험합니다. 배포용 setup.exe 는 실행하지 않아요." }
+
+# ------------------------------------------------------------ R. 배포 빌드에는 시험 훅이 없다 / release.json
+$preFile = Join-Path $Work "release_preprocessed.iss"
+$rr = Run-Iscc @("/DTestBuild=0", "/DOutBase=hoehwa-release-probe", "/DDumpPre=$preFile")
+$preLines = if (Test-Path -LiteralPath $preFile) { @([System.IO.File]::ReadAllLines($preFile, [System.Text.Encoding]::UTF8) | Where-Object { $_.Trim() -and $_.Trim() -notmatch '^(;|//)' }) } else { @() }
+$hookHits = @($preLines | Where-Object { $_ -match 'HOEHWA_|GetEnv|PATHRULE|HOEHWA_TEST' })
+Check "R1 배포 빌드(TestBuild=0) 컴파일 성공, 전처리된 스크립트가 만들어짐" ($rr.Exit -eq 0 -and $preLines.Count -gt 100) "줄 $($preLines.Count) $($rr.Tail)"
+Check "R2 배포 빌드 전처리 스크립트(주석 제외)에 HOEHWA_/GetEnv/PATHRULE 가 0건" ($preLines.Count -gt 100 -and $hookHits.Count -eq 0) "건수=$($hookHits.Count)"
+$probeExe = Join-Path $outDir "hoehwa-release-probe.exe"
+if (Test-Path -LiteralPath $probeExe) { Remove-Item -LiteralPath $probeExe -Force -ErrorAction SilentlyContinue }   # 배포 빌드는 컴파일만 하고 실행하지 않는다
+# 시험 빌드에는 훅이 있어야 한다 (검사가 헛돌지 않는다는 음성 대조)
+$prt = Join-Path $Work "test_preprocessed.iss"
+$null = Run-Iscc @("/DTestBuild=1", "/DOutBase=hoehwa-test-probe", "/DDumpPre=$prt")
+$tHits = if (Test-Path -LiteralPath $prt) { @([System.IO.File]::ReadAllLines($prt, [System.Text.Encoding]::UTF8) | Where-Object { $_.Trim() -notmatch '^(;|//)' -and $_ -match 'HOEHWA_|GetEnv|PATHRULE' }) } else { @() }
+Remove-Item -LiteralPath (Join-Path $outDir "hoehwa-test-probe.exe") -Force -ErrorAction SilentlyContinue
+Check "R3 (음성 대조) 시험 빌드의 같은 검사는 훅을 찾아냄 (건수>0)" ($tHits.Count -gt 0) "건수=$($tHits.Count)"
+$relJson = Get-Content -LiteralPath (Join-Path $Here "..\release.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+Check "R4 release.json: installer_version 2, min_installer_version 1, asset_prefix hoehwa-practice" ($relJson.installer_version -eq 2 -and $relJson.min_installer_version -eq 1 -and $relJson.asset_prefix -eq "hoehwa-practice") "iv=$($relJson.installer_version) min=$($relJson.min_installer_version)"
 
 $snap0 = Shortcut-Snapshot
 if (-not $SkipVisible) {
@@ -268,7 +295,7 @@ $tF = Read-Log $logF
 Check "F1 종료 코드가 0 이 아님 (40)" ($resF.Exit -eq 40) "exit=$($resF.Exit)"
 Check "F2 로그에 한국어 사유와 install.log 경로" ($tF -match '설치 실패: .*[가-힣]' -and $tF -match '기록 파일: .*install\.log') ""
 $lastS = if ($resF.Samples.Count) { $resF.Samples[$resF.Samples.Count - 1] } else { $null }
-Check "F3 진행 파일 마지막: state=error, code=40, 한국어 error" ($lastS -and $lastS.State -eq "error" -and $lastS.Code -eq 40 -and $lastS.Error -match '[가-힣]') ($(if ($lastS) { "state=$($lastS.State) code=$($lastS.Code)" } else { "표본 없음" }))
+Check "F3 진행 파일의 마지막 상태가 setup 에 전달됨: state=error, 단계 4, code=40, 한국어 error (Inno 로그의 '끝' 줄과 '설치 실패' 줄)" ($tF -match 'install\.ps1 끝: .*상태=error 단계=4 .*코드=40' -and $tF -match '설치 실패: \(시험\) 4단계') ""
 Check "F4 실패해도 파일이 남아 있음 (롤백 없음)" ((Test-Path -LiteralPath "$Y\install.ps1") -and (Test-Path -LiteralPath "$Y\unins000.exe") -and (Test-Path -LiteralPath "$Y\회화연습.exe")) ""
 Check "F5 실패해도 제거 항목은 남음 (제거 가능)" (Test-Path $RegKey) ""
 # 설정 파일 보존: 사용자가 바꾼 config.json 은 다시 실행해도 덮어쓰지 않는다
@@ -354,7 +381,7 @@ $resL = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$longDir", "/LOG=$
 $tL = Read-Log $logL
 $lastL = if ($resL.Samples.Count) { $resL.Samples[$resL.Samples.Count - 1] } else { $null }
 Check "L1 /DIR 가 96자 이상: 종료 10, 한국어 안내(경로)" ($resL.Exit -eq 10 -and $tL -match '경로' -and $longDir.Length -ge 96) "exit=$($resL.Exit) 길이=$($longDir.Length)"
-Check "L2 진행 파일 error 에 '경로' 포함, code=10" ($lastL -and $lastL.Code -eq 10 -and $lastL.Error -match '경로') ($(if ($lastL) { $lastL.Error } else { "표본 없음" }))
+Check "L2 진행 파일 error 가 setup 에 전달됨: code=10, '설치 폴더 경로가 너무 길어요'" ($tL -match '상태=error .*코드=10' -and $tL -match '설치 실패: 설치 폴더 경로가 너무 길어요') ""
 if (Test-Path -LiteralPath "$longDir\unins000.exe") {
     $ul = Start-Process -FilePath "$longDir\unins000.exe" -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES") -PassThru -Wait
 }
@@ -370,6 +397,56 @@ $second = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$M2", "/LOG=$log
 $firstRes = Wait-Setup $first.Proc 240
 Check "M1 두 번째 setup 은 바로 끝나고 (15초 이내) 아무것도 설치하지 않음" ($second.Sec -lt 15 -and -not (Test-Path -LiteralPath (Real-Path $M2))) "exit=$($second.Exit) $([int]$second.Sec)초"
 Check "M2 첫 번째 setup 은 영향 없이 성공 (종료 0)" ($firstRes.Exit -eq 0 -and (Test-Path -LiteralPath "$M1\version.txt")) "exit=$($firstRes.Exit)"
+
+# ------------------------------------------------------------ G. 설치 폴더 검사: 다른 사람의 파일이 든 폴더는 거절 (제거 때 지워 버리지 않게)
+function Tree-Snap([string]$dir) {
+    if (-not (Test-Path -LiteralPath $dir)) { return "<none>" }
+    return ((Get-ChildItem -LiteralPath $dir -Recurse -Force | ForEach-Object { $_.FullName.Substring($dir.Length) + "|" + $(if ($_.PSIsContainer) { "d" } else { $_.Length }) } | Sort-Object) -join ";")
+}
+function Reg-AppPath { try { return [string](Get-ItemProperty -LiteralPath $RegKey -Name "Inno Setup: App Path" -ErrorAction Stop)."Inno Setup: App Path" } catch { return "<none>" } }
+# G1 foreign, non-empty folder (has backup\keep.txt like a real user folder)
+$FG = "$D\foreign"
+New-Item -ItemType Directory -Force "$FG\backup" | Out-Null; New-Item -ItemType Directory -Force "$FG\docs" | Out-Null
+[System.IO.File]::WriteAllText("$FG\backup\keep.txt", "mine"); [System.IO.File]::WriteAllText("$FG\docs\a.txt", "doc")
+$snapF = Tree-Snap (Real-Path $FG); $regBefore = Reg-AppPath
+$logG1 = Join-Path $Work "innoG1.log"
+$resG1 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$FG", "/LOG=$logG1") (Env-Std "g1")
+$tG1 = Read-Log $logG1
+Check "G1 다른 파일이 든 폴더(/DIR)는 거절: 종료 코드 0 이 아님, 한국어 안내" ($resG1.Exit -ne 0 -and $tG1 -match '이 폴더에는 다른 파일이 있어요\. 빈 폴더나 새 폴더를 골라 주세요\.') "exit=$($resG1.Exit)"
+Check "G2 거절된 폴더에는 아무것도 쓰지 않음 (파일 목록·크기 그대로, install.ps1 등 없음)" ((Tree-Snap (Real-Path $FG)) -eq $snapF -and -not (Test-Path -LiteralPath (Real-Path "$FG\install.ps1"))) ""
+Check "G3 거절하면 제거 항목도 바뀌지 않음" ((Reg-AppPath) -eq $regBefore) "전=$regBefore 후=$(Reg-AppPath)"
+# G4 empty existing folder is fine; G5 reinstall over our own install is fine
+$E1 = "$D\emptyfolder"; New-Item -ItemType Directory -Force (Real-Path $E1) | Out-Null
+$resG4 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$E1", "/LOG=$(Join-Path $Work 'innoG4.log')") (Env-Std "g4")
+$installed.Add($E1)
+Check "G4 비어 있는 기존 폴더는 허용 (종료 0, 설치됨)" ($resG4.Exit -eq 0 -and (Test-Path -LiteralPath (Real-Path "$E1\version.txt"))) "exit=$($resG4.Exit)"
+$resG5 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$E1", "/LOG=$(Join-Path $Work 'innoG5.log')") (Env-Std "g5")
+Check "G5 우리가 이미 설치한 폴더에 다시 설치(복구)는 허용 (종료 0)" ($resG5.Exit -eq 0) "exit=$($resG5.Exit)"
+# G6 our own folder whose uninstall entry points elsewhere (marker files only): install elsewhere first, then reinstall here
+$E2 = "$D\second"
+$null = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$E2", "/LOG=$(Join-Path $Work 'innoG6a.log')") (Env-Std "g6a")
+$installed.Add($E2)
+$resG6 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$E1", "/LOG=$(Join-Path $Work 'innoG6b.log')") (Env-Std "g6b")
+Check "G6 제거 항목이 다른 폴더를 가리켜도, 우리 설치 파일이 든 폴더에는 다시 설치할 수 있음" ($resG6.Exit -eq 0) "exit=$($resG6.Exit)"
+# G7 drive root
+$rootBefore = Tree-Snap $RealSub
+$resG7 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$D\", "/LOG=$(Join-Path $Work 'innoG7.log')") (Env-Std "g7")
+Check "G7 드라이브 맨 위(/DIR=K:\)는 거절: 종료 코드 0 이 아님, 아무것도 쓰지 않음" ($resG7.Exit -ne 0 -and (Read-Log (Join-Path $Work 'innoG7.log')) -match '드라이브 맨 위' -and (Tree-Snap $RealSub) -eq $rootBefore) "exit=$($resG7.Exit)"
+# G8 uninstall leaves a sibling user folder and the parent alone
+$PAR = "$D\parent"; $APP = "$PAR\app"
+New-Item -ItemType Directory -Force (Real-Path "$PAR\backup") | Out-Null; New-Item -ItemType Directory -Force (Real-Path "$PAR\runtime") | Out-Null
+[System.IO.File]::WriteAllText((Real-Path "$PAR\backup\keep.txt"), "mine"); [System.IO.File]::WriteAllText((Real-Path "$PAR\runtime\keep.txt"), "mine")
+$resG8 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$APP", "/LOG=$(Join-Path $Work 'innoG8.log')") (Env-Std "g8")
+$installed.Add($APP)
+$uG8 = Start-Process -FilePath "$APP\unins000.exe" -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES") -PassThru
+$uG8.WaitForExit(120000) | Out-Null
+$swg = [System.Diagnostics.Stopwatch]::StartNew(); while ($swg.Elapsed.TotalSeconds -lt 40 -and (Test-Path -LiteralPath (Real-Path $APP))) { Start-Sleep -Milliseconds 500 }
+Check "G8 제거 뒤: 설치 폴더는 사라지고, 옆에 있던 사용자 폴더(parent\backup, parent\runtime)와 부모 폴더는 그대로" ($resG8.Exit -eq 0 -and -not (Test-Path -LiteralPath (Real-Path $APP)) -and (Test-Path -LiteralPath (Real-Path "$PAR\backup\keep.txt")) -and (Test-Path -LiteralPath (Real-Path "$PAR\runtime\keep.txt"))) ""
+# G9 foreign folder that merely looks similar (has our file names but no valid manifest) is still refused
+$FG2 = "$D\lookalike"; New-Item -ItemType Directory -Force (Real-Path $FG2) | Out-Null
+foreach ($n in @("회화연습.exe", "install.ps1", "manifest.json", "notes.txt")) { [System.IO.File]::WriteAllText((Real-Path "$FG2\$n"), "not ours") }
+$resG9 = Run-Setup @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/DIR=$FG2", "/LOG=$(Join-Path $Work 'innoG9.log')") (Env-Std "g9")
+Check "G9 우리 파일 이름만 흉내 낸 남의 폴더(manifest 가 우리 것이 아님)도 거절" ($resG9.Exit -ne 0 -and -not (Test-Path -LiteralPath (Real-Path "$FG2\unins000.exe"))) "exit=$($resG9.Exit)"
 
 # ------------------------------------------------------------ V. 화면 있는 무입력 모드 (F8) + 화면 캡처 (그 창만)
 if (-not $SkipVisible) {
@@ -415,8 +492,8 @@ if (-not $SkipVisible) {
     if (Test-Path $RegKey) { Remove-Item -LiteralPath $RegKey -Recurse -Force -ErrorAction SilentlyContinue }
     $running = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -and $_.ExecutablePath -like "*hoehwa-practice-setup-test*" })
     if (-not $running.Count) {
-        foreach ($d in @(Get-ChildItem -LiteralPath $TempDir -Directory -Filter "is-*.tmp" -ErrorAction SilentlyContinue)) {
-            if (-not $BaseTmp.ContainsKey($d.FullName) -and (Is-OurTmp $d.FullName)) { Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+        foreach ($tmpd in @(Get-ChildItem -LiteralPath $TempDir -Directory -Filter "is-*.tmp" -ErrorAction SilentlyContinue)) {
+            if (-not $BaseTmp.ContainsKey($tmpd.FullName) -and (Is-OurTmp $tmpd.FullName)) { Remove-Item -LiteralPath $tmpd.FullName -Recurse -Force -ErrorAction SilentlyContinue }
         }
     }
     if ($madeSubst) { & subst.exe ($Drive + ":") /D | Out-Null }
