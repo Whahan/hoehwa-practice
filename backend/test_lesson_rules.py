@@ -510,7 +510,7 @@ def show(lang, d):
 
 
 def test_corrupt_server():
-    """For a test server started with HOEHWA_TATOEBA_DB=<empty or non-SQLite file> (and HOEHWA_TEST_HOOKS=1 + --ollama-url on a closed
+    """For a test server started with HOEHWA_TATOEBA_DB=<empty or non-SQLite file> (and HOEHWA_TEST_HOOKS=1 + OpenCode hidden so
     port so the AI path fails fast): /lesson must answer with a lesson or a Korean error, never 500."""
     print("\n== server with a corrupted Tatoeba DB:", BASE)
     h = requests.get(BASE + "/health", timeout=30).json()

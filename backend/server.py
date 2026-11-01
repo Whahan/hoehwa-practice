@@ -24,7 +24,9 @@ import llm_common   # LlmError + JSON helpers shared by the remote engines
 import llm_opencode   # "opencode" engine: `opencode serve` + free DeepSeek V4.1 Flash (the default engine)
 import llm_api        # "openai_api" engine: OpenAI-compatible HTTP APIs (OpenCode Zen, DeepSeek, Gemini, OpenRouter)
 import llm_cache     # persistent cache of deterministic AI results (fix, translate, verify, gloss)
-import llm_fallback   # remote engine usage-limit -> local Ollama fallback state
+import llm_fallback   # remote engine usage-limit / failure notice (state shown in /health, /llm; calls are never blocked)
+import llm_config     # start-up migration of config.json (old "ollama" engine -> "opencode")
+import llm_routes     # POST /llm/connect, /llm/disconnect, /llm/install, GET /llm/install, POST /llm/notice/ack
 import grammar        # offline grammar correction (LanguageTool child process)
 from io import BytesIO
 from logging.handlers import RotatingFileHandler
@@ -33,7 +35,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 HF_DIR = os.path.join(BASE, "models", "hf")
 LOG_DIR = os.path.join(BASE, "logs")
 CACHE_DIR = os.path.join(BASE, "cache", "tts")
-CONFIG_PATH = os.path.join(BASE, "config.json")
+CONFIG_PATH = os.path.join(BASE, "config.json")   # a test server may read another file: --config (see below)
 CURRICULUM_PATH = os.path.join(BASE, "curriculum.json")
 os.makedirs(HF_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -59,6 +61,8 @@ def _arg(name, default=None):
 
 # A second test server can run beside the app's: --port 8781 --tag w2 --stt-cpu
 ARG_PORT = _arg("--port")
+if ARG_PORT and _arg("--config"):   # test servers only: read this config file instead of backend\config.json (never written: --port)
+    CONFIG_PATH = os.path.abspath(_arg("--config"))
 ARG_TAG = _arg("--tag")
 ARG_STT_CPU = "--stt-cpu" in sys.argv
 LOG_NAME = "server-%s.log" % ARG_TAG if ARG_TAG else "server.log"
@@ -127,13 +131,9 @@ if not log.handlers:
 # ----------------------------------------------------------------------------------------------
 DEFAULT_CONFIG = {
     "port": 8770,
-    "llm_model": "qwen3:8b",
-    "ollama_url": "http://127.0.0.1:11434",
-    "keep_alive": "30m",
-    "num_ctx": 6144,
     "stt": {"model": "small", "device": "cuda", "compute_type": "int8_float16"},
     "tts": {"voice_en": "af_heart", "voice_ja": "jf_alpha", "device": "auto", "cache_max_mb": 300},
-    # default AI engine: the free DeepSeek V4.1 Flash through OpenCode (local Ollama answers when it is unavailable)
+    # default AI engine: the free DeepSeek V4.1 Flash through OpenCode ("openai_api" is the hidden developer engine)
     "llm_provider": "opencode",
     "opencode": {"model": "deepseek-v4.1-flash-free", "variant": "low"},
     "lan": dict(lan.DEFAULT_LAN),   # phone link (off by default, Tailscale only): enabled, port, name. No tokens here.
@@ -158,7 +158,7 @@ def load_config():
     return cfg
 
 
-_OVERRIDES = {}   # config path -> value forced by a command-line flag (--port, --stt-cpu, --ollama-url, --llm-model)
+_OVERRIDES = {}   # config path -> value forced by a command-line flag (--port, --stt-cpu)
 
 
 def _cli_override(path, value):
@@ -218,23 +218,24 @@ if (CFG.get("openai_api") or {}).get("key_source") == "opencode":  # migration: 
     CFG["openai_api"]["key_source"] = "secret"
     if not ARG_PORT:
         save_config(CFG)
-if _arg("--ollama-url"):  # test servers: point the local model at another (e.g. a closed) port
-    _cli_override(("ollama_url",), _arg("--ollama-url"))
+# the app no longer runs a local model: an old config.json with the "ollama" engine is moved to "opencode" here (llm_config.py);
+# a test server (--port) only changes the copy in memory, the file stays as it is
+CFG = llm_config.migrate(CFG)[0]   # (new cfg, notice): the notice is read back from CFG["llm_migrated_from"] by GET /llm
+if not ARG_PORT:
+    save_config(CFG)   # no-op when nothing changed
 if ARG_PORT:
     _cli_override(("port",), int(ARG_PORT))
 if ARG_STT_CPU:
     _cli_override(("stt", "device"), "cpu")
     _cli_override(("stt", "compute_type"), "int8")
-if _arg("--llm-model"):  # test servers: compare local models without touching config.json
-    _cli_override(("llm_model",), _arg("--llm-model"))
-    _cli_override(("llm_provider",), "ollama")
 
 
 class ApiError(Exception):
-    def __init__(self, msg, status=400, format_error=False):
+    def __init__(self, msg, status=400, format_error=False, code=""):
         self.msg = msg
         self.status = status
         self.format_error = format_error   # the AI answered, but not with a usable JSON object (ollama_json asks once more)
+        self.code = code                   # machine-readable reason added to the error body ("ai_not_connected", ...)
 
 
 def need_lang(lang):
@@ -1543,33 +1544,10 @@ class LLMDown(Exception):
     pass
 
 
-_llm_health = {"t": 0.0, "ok": False}
-
-
-def llm_available():
-    if llm_provider() == "opencode":
-        return llm_opencode.available() or local_llm_ready()  # without OpenCode the local model answers
-    if llm_provider() == "openai_api":
-        return llm_api.has_key(llm_api.settings(CFG))
-    now = time.time()
-    if now - _llm_health["t"] < 5:
-        return _llm_health["ok"]
-    ok = False
-    try:
-        r = requests.get(CFG["ollama_url"] + "/api/tags", timeout=1.5)
-        names = [m.get("name") or m.get("model") for m in r.json().get("models", [])]
-        want = CFG["llm_model"]
-        ok = want in names or (want + ":latest") in names
-    except Exception:
-        ok = False
-    _llm_health.update(t=now, ok=ok)
-    return ok
-
-
-# AI engines: "opencode" (default: free DeepSeek V4.1 Flash through `opencode serve`), "ollama" (offline local model,
-# also the automatic fallback), "openai_api" (any OpenAI-compatible API with a key; not shown in the app's picker)
-ENGINES = ("opencode", "ollama", "openai_api")
-ENGINE_LABEL = {"opencode": llm_opencode.LABEL, "ollama": "오프라인 로컬", "openai_api": "API 키 엔진"}
+# AI engines: "opencode" (default: free DeepSeek V4.1 Flash through `opencode serve`) and "openai_api" (any OpenAI-compatible
+# API with a key; a hidden developer engine, not shown in the app). There is no local model any more (docs/onetouch_install_design.md).
+ENGINES = ("opencode", "openai_api")
+ENGINE_LABEL = {"opencode": "무료 DeepSeek", "openai_api": "API 키 엔진"}   # short names for the "limit reached" notices
 
 
 def llm_provider():
@@ -1577,9 +1555,17 @@ def llm_provider():
     return p if p in ENGINES else "opencode"
 
 
-def using_remote():
-    """A remote engine is selected (OpenCode or the OpenAI-compatible API), not the local Ollama model."""
-    return llm_provider() != "ollama"
+def llm_state():
+    """"ready" | "not_connected" | "not_installed" | "blocked" (ready, but a limit / busy / rejected-key notice is showing).
+    Never blocks: llm_opencode.state() only reads its cache. A "blocked" engine is still tried on every call."""
+    prov = llm_provider()
+    if prov == "openai_api":
+        st = "ready" if llm_api.has_key(llm_api.settings(CFG)) else "not_connected"
+    else:
+        st = llm_opencode.state()
+    if st == "ready" and llm_fallback.active_for(prov):
+        st = "blocked"
+    return st
 
 
 def _opencode_json(messages, schema, temperature):
@@ -1590,7 +1576,7 @@ def _opencode_json(messages, schema, temperature):
         log.warning("opencode call failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
         raise
     log.info("opencode call %.1fs %s", dt, st)
-    _llm_health.update(t=time.time(), ok=True)
+    llm_fallback.clear()   # it answers again: the notice is over
     return data
 
 
@@ -1602,12 +1588,14 @@ def _api_json(messages, schema, temperature, num_predict):
         log.warning("openai_api call failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
         raise
     log.info("openai_api call %.1fs (%s)", dt, model)
-    _llm_health.update(t=time.time(), ok=True)
+    llm_fallback.clear()
     return data
 
 
 def _remote_json(messages, schema, temperature, num_predict):
     if llm_provider() == "openai_api":
+        if not llm_api.has_key(llm_api.settings(CFG)):   # no key typed yet: say "not connected", not "key rejected"
+            raise llm_common.LlmError(AI_ERRORS["not_connected"][2], 503, "not_connected", "no api key")
         return _api_json(messages, schema, temperature, num_predict)
     return _opencode_json(messages, schema, temperature)
 
@@ -1616,78 +1604,34 @@ def _remote_model():
     return llm_api.settings(CFG)["model"] if llm_provider() == "openai_api" else llm_opencode.model(CFG)
 
 
-# ---- usage-limit fallback from the remote engine to the local model (llm_fallback.py) ----
-_local_health = {"t": 0.0, "ok": False}
+# AI errors the app can act on: LlmError.kind -> (HTTP status, code in the error body, Korean message). Kinds "limit", "auth"
+# and "overload" also leave a notice (llm_fallback.py: /health.llm_fallback, GET /llm); the call itself is never blocked.
+AI_ERRORS = {
+    "not_connected": (503, "ai_not_connected", "AI가 아직 연결되지 않았어요. 설정에서 [AI 연결하기]를 눌러 주세요. (폰이면 PC의 회화 연습에서)"),
+    "not_installed": (503, "ai_not_installed", "AI 구성 요소가 없어요. [AI 연결하기]에서 받을 수 있어요."),
+    "auth": (503, "ai_auth", "OpenCode 로그인이 만료됐거나 키가 맞지 않아요. [AI 연결하기]로 다시 연결해 주세요."),
+    "limit": (429, "ai_limit", "무료 AI의 사용 한도에 도달했어요. %s 이후 다시 시도해 주세요."),
+    "overload": (502, "ai_overload", "AI 서버가 바빠요. 잠시 뒤에 다시 시도해 주세요."),
+}
 
 
-def _local_model_listed():
-    """Ollama answers on ollama_url and has the configured model (no start attempt)."""
-    try:
-        r = requests.get(CFG["ollama_url"] + "/api/tags", timeout=1.5)
-        names = [m.get("name") or m.get("model") for m in r.json().get("models", [])]
-        want = CFG["llm_model"]
-        return want in names or (want + ":latest") in names
-    except Exception:
-        return False
-
-
-_local_start_fail_t = 0.0
-
-
-def local_llm_ready():
-    """The local Ollama model can answer. Starts Ollama if it is installed but not running (a failed start is not
-    retried for 2 minutes, so a broken Ollama never stalls requests). Cached 10 s."""
-    global _local_start_fail_t
-    now = time.time()
-    if now - _local_health["t"] < 10:
-        return _local_health["ok"]
-    ok = False
-    if _ollama_installed() or not using_remote():
-        if _local_model_listed():
-            ok = True
-        elif now - _local_start_fail_t > 120:
-            ensure_ollama()
-            ok = _local_model_listed()
-            if not ok:
-                _local_start_fail_t = time.time()
-    _local_health.update(t=time.time(), ok=ok)
-    return ok
-
-
-_local_probe = {"t": 0.0, "ok": False}
-
-
-def local_llm_reachable():
-    """Like local_llm_ready() but never starts anything and answers fast (cached 5 s): for /health and GET /llm."""
-    now = time.time()
-    if now - _local_probe["t"] < 5:
-        return _local_probe["ok"]
-    ok = _local_model_listed()
-    _local_probe.update(t=now, ok=ok)
-    return ok
-
-
-def remote_route_active():
-    """True if AI calls go to the selected remote engine now; False if Ollama is selected, or the remote engine is
-    unavailable / hit its limit and the local model can stand in until the reset time."""
-    if not using_remote():
-        return False
-    if llm_provider() == "opencode" and not llm_opencode.available() and local_llm_ready():
-        return False  # OpenCode not installed: the local model answers (see _fallback_status)
-    return not (llm_fallback.active_for(llm_provider()) and local_llm_ready())
-
-
-def on_remote_error(e):
-    """Record a usage-limit / login failure of the remote engine. True if the request should be retried locally."""
-    if not getattr(e, "kind", None):
-        return False
+def remote_failure(e):
+    """llm_common.LlmError of the selected engine -> the ApiError to raise (code + Korean message from AI_ERRORS). Records a
+    limit / busy / rejected-key notice. A malformed answer (kind None) keeps its message and format_error flag."""
     prov = llm_provider()
-    llm_fallback.mark(prov, e.kind, e.raw, e.msg, label=ENGINE_LABEL.get(prov, prov))
-    st = llm_fallback.status(prov)
-    ok = local_llm_ready()
-    log.warning("%s unusable (%s) until %s -> %s", prov, e.kind, st["until"],
-                "using local model %s" % CFG["llm_model"] if ok else "local model NOT ready, no fallback")
-    return ok
+    kind = getattr(e, "kind", None)
+    if kind in ("limit", "auth", "overload"):
+        llm_fallback.mark(prov, kind, e.raw, e.msg, label=ENGINE_LABEL.get(prov, prov))
+        st = llm_fallback.status(prov)
+        log.warning("%s unusable (%s) until %s", prov, kind, st["until"])
+    if kind not in AI_ERRORS:
+        return ApiError(e.msg, e.status, format_error=llm_common.is_format_error(e))
+    status, code, msg = AI_ERRORS[kind]
+    if kind == "limit":
+        msg = msg % (llm_fallback.reset_text(prov) or "잠시 뒤")
+    if prov == "openai_api" and kind in ("limit", "auth", "overload") and e.msg:
+        msg = e.msg   # the API engine's own message names the provider and the real cause
+    return ApiError(msg, status, code=code)
 
 
 CACHE_VERSION = 2   # part of every cache key: bump it to retire answers stored by older (unvalidated) code
@@ -1728,12 +1672,14 @@ STRICT_JSON_NOTE = ("(Your previous answer could not be read as JSON. Answer aga
 
 
 def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False, cache_key_kind=None, validate=None):
-    """The single LLM entry point: the selected remote engine or local Ollama, with the usage-limit fallback.
+    """The single LLM entry point: the selected remote engine (OpenCode's free DeepSeek, or the developer API engine).
+    (The name is kept until the rename to llm_json, docs/onetouch_install_design.md task G.)
     cache_key_kind: e.g. "fix", "translate", "verify", "gloss" -> the result is cached persistently (backend/cache/
     llm_cache.sqlite) by (kind, provider, model, schema, messages, options). Only for deterministic tasks; default off.
     validate: optional callback(data) -> bool; with cache_key_kind, the answer is cached only when it returns True.
     An answer that holds no usable JSON object (after llm_common.extract_json's repairs) is asked for ONE more time with a
-    stricter instruction; if that fails too, ApiError 502 (Korean message)."""
+    stricter instruction; if that fails too, ApiError 502 (Korean message). Engine problems raise ApiError with a code
+    (AI_ERRORS: ai_not_connected, ai_not_installed, ai_auth, ai_limit, ai_overload); nothing answers in its place."""
     try:
         return _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate)
     except ApiError as e:
@@ -1750,50 +1696,11 @@ def ollama_json(messages, schema, temperature=0.7, num_predict=1800, think=False
 
 def _ollama_json_once(messages, schema, temperature, num_predict, think, cache_key_kind, validate=None):
     opts = {"temperature": temperature, "num_predict": num_predict, "think": think}
-    if remote_route_active():
-        try:
-            return _with_cache(cache_key_kind, llm_provider(), _remote_model(), messages, schema, opts,
-                               lambda: _remote_json(messages, schema, temperature, num_predict), validate)
-        except llm_common.LlmError as e:
-            if not on_remote_error(e):
-                raise ApiError(e.msg, e.status, format_error=llm_common.is_format_error(e))
-    return _with_cache(cache_key_kind, "ollama", CFG["llm_model"], messages, schema, opts,
-                       lambda: _ollama_chat_json(messages, schema, temperature, num_predict, think), validate)
-
-
-def _ollama_chat_json(messages, schema, temperature, num_predict, think):
-    body = {
-        "model": CFG["llm_model"], "messages": messages, "stream": False, "think": think,
-        "format": schema, "keep_alive": CFG.get("keep_alive", "30m"),
-        "options": {"temperature": temperature, "top_p": 0.9, "num_ctx": CFG.get("num_ctx", 6144), "num_predict": num_predict},
-    }
-    t0 = time.time()
     try:
-        r = requests.post(CFG["ollama_url"] + "/api/chat", json=body, timeout=300)
-        if r.status_code == 500 and "repeat" in r.text:  # model got stuck in a loop: retry once, hotter + random seed
-            log.warning("ollama repeat abort, retrying")
-            body["options"]["temperature"] = min(1.0, temperature + 0.25)
-            body["options"]["seed"] = random.randint(1, 10**6)
-            body["options"]["repeat_penalty"] = 1.1
-            r = requests.post(CFG["ollama_url"] + "/api/chat", json=body, timeout=300)
-    except requests.exceptions.ConnectionError:
-        raise ApiError("AI 모델 서버(Ollama)에 연결할 수 없어요. Ollama가 실행 중인지 확인해 주세요.", 503)
-    except requests.exceptions.Timeout:
-        raise ApiError("AI 응답이 너무 오래 걸려요. 잠시 뒤에 다시 시도해 주세요.", 504)
-    if r.status_code == 404:
-        raise ApiError("AI 모델 '%s'이(가) 설치되어 있지 않아요. setup.ps1을 다시 실행해 주세요." % CFG["llm_model"], 503)
-    if r.status_code != 200:
-        log.warning("ollama %s: %s", r.status_code, r.text[:300])
-        raise ApiError("AI 모델 호출에 실패했어요. 잠시 뒤에 다시 시도해 주세요.", 502)
-    try:
-        content = r.json()["message"]["content"]
-        data = llm_common.extract_json(content)
-    except Exception:
-        log.warning("ollama returned non-JSON: %s", r.text[:500])
-        raise ApiError(llm_common.FORMAT_MSG, 502, format_error=True)
-    log.info("ollama call %.1fs (%d chars)", time.time() - t0, len(content))
-    _llm_health.update(t=time.time(), ok=True)
-    return data
+        return _with_cache(cache_key_kind, llm_provider(), _remote_model(), messages, schema, opts,
+                           lambda: _remote_json(messages, schema, temperature, num_predict), validate)
+    except llm_common.LlmError as e:
+        raise remote_failure(e)
 
 
 def S(**props):
@@ -1954,7 +1861,7 @@ def correct_learner(lang, stage, text, prev_ai):
     if lt is None:
         try:
             return _llm_correct(lang, stage, text, prev_ai)
-        except ApiError as e:   # no AI engine can answer (OpenCode missing/failing and Ollama unreachable): no fix, not an error
+        except ApiError as e:   # no AI engine can answer (not connected / not installed / limit reached ...): no fix, not an error
             log.info("no AI available for the correction (%s): no fix", e.msg)
             return "", ""
     if not CFG.get("grammar_llm_polish", True):
@@ -2016,7 +1923,7 @@ def _llm_correct(lang, stage, text, prev_ai, lt_fix=""):
 
 
 def _chat_opencode(req, lang, sys_prompt):
-    """Chat turn on one `opencode serve` session per conversation (llm_opencode.chat_json); None = use the normal path."""
+    """Chat turn on one `opencode serve` session per conversation (llm_opencode.chat_json); None = ask again through ollama_json."""
     hist = clean_hist(req.history, limit=400)  # the session keeps its own context; only the new message is sent
     note = ""
     if hist and hist[-1]["role"] == "me":
@@ -2027,11 +1934,11 @@ def _chat_opencode(req, lang, sys_prompt):
         data, dt, st = llm_opencode.chat_json(CFG, req.conv_id or "", sys_prompt, hist, note, CHAT_SCHEMA)
     except llm_common.LlmError as e:
         log.warning("opencode chat failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
-        if on_remote_error(e) or llm_common.is_format_error(e):   # a malformed answer: the next path asks again (strict JSON)
+        if llm_common.is_format_error(e):   # a malformed answer: the next path asks again (strict JSON)
             return None
-        raise ApiError(e.msg, e.status)
+        raise remote_failure(e)   # not connected / limit / ...: nothing else can answer, the app shows the message
     log.info("opencode chat turn %.1fs %s", dt, st)
-    _llm_health.update(t=time.time(), ok=True)
+    llm_fallback.clear()   # it answers again: the notice is over
     return data if isinstance(data, dict) else {}
 
 
@@ -2068,11 +1975,11 @@ def run_chat(req):
         prev_ai = hist[-2]["text"][:300]
     reply = ko = ""
     data = {}
-    oc_session = llm_provider() == "opencode" and remote_route_active()
+    oc_session = llm_provider() == "opencode"
     for attempt in range(2):
         data = _chat_opencode(req, lang, sys_prompt) if (oc_session and attempt == 0) else None
         from_oc = data is not None
-        if data is None:  # other engines, the retry, or the OpenCode limit fallback
+        if data is None:  # other engines, or the retry after a malformed OpenCode answer
             data = ollama_json(msgs, CHAT_SCHEMA, temperature=0.6 if attempt == 0 else 0.45, num_predict=600)
         reply = str(data.get("reply", "")).strip()
         ko = str(data.get("ko", "") or "").strip()
@@ -2098,8 +2005,6 @@ def run_chat(req):
     # the reading is always made locally (pyopenjtalk is more exact than the model's own "reading"); fix_ja_reading
     # guarantees that it holds kana / punctuation only
     reading = fix_ja_reading(ja_reading(reply), reply) if lang == "ja" else ""
-    if lang == "ja" and not remote_route_active():  # the remote models translate well inside the reply itself
-        ko = translate_ko(reply, lang) or ko
     ko = scrub_ko(ko, lang)
     fix = fix_ko = ""
     if last_me and not req.skip_fix:
@@ -2620,42 +2525,15 @@ class LessonReq(BaseModel):
     source: Optional[str] = None  # "tatoeba" (default, rule-based) | "ai" (LLM)
 
 
-def ensure_ollama():
-    """Start the Ollama tray app if its API is not answering (it normally starts at Windows login)."""
-    try:
-        requests.get(CFG["ollama_url"] + "/api/tags", timeout=1.5)
-        return
-    except Exception:
-        pass
-    if ("ollama_url",) in _OVERRIDES:   # --ollama-url points at another (test) server: never start the real Ollama app for it
-        log.info("ollama_url forced by --ollama-url: not starting the Ollama app")
-        return
-    exe = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama app.exe")
-    if not os.path.exists(exe):
-        log.warning("Ollama is not running and %s was not found", exe)
-        return
-    log.info("starting Ollama: %s", exe)
-    try:
-        subprocess.Popen([exe], close_fds=True, creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | NEW_PROCESS_GROUP
-    except Exception:
-        log.exception("could not start Ollama")
-        return
-    for _ in range(30):
-        time.sleep(1)
-        try:
-            requests.get(CFG["ollama_url"] + "/api/tags", timeout=1.5)
-            log.info("Ollama is up")
-            return
-        except Exception:
-            pass
-    log.warning("Ollama did not come up within 30 s")
-
-
 def _warmup():
     time.sleep(0.5)
     grammar.prestart()  # LanguageTool JVM starts in its own thread (about 2-10 s) so the first /fix is quick
     if llm_provider() == "opencode":
-        llm_opencode.prestart()  # `opencode serve` (about 2 s)
+        try:
+            llm_opencode.refresh_async()   # who is logged in (`opencode auth list`): /health only reads the cached answer
+            llm_opencode.prestart()        # `opencode serve` (about 2 s)
+        except Exception:
+            log.exception("opencode prestart failed")
     steps = [("stt", get_stt), ("tts-en", lambda: get_tts("en")), ("tts-ja", lambda: get_tts("ja")), ("ojt", ojt),
              ("phoneme", features.phoneme_load), ("pitch", features.warmup_pitch), ("reading", readmode.warmup), ("lesson-pool", lesson_rules.warmup)]
     for name, fn in steps:
@@ -2663,15 +2541,7 @@ def _warmup():
             fn()
         except Exception:
             log.exception("warmup %s failed", name)
-    if using_remote():
-        log.info("LLM provider %s (%s)", llm_provider(), "found" if llm_available() else "NOT installed")
-        log.info("warmup finished")
-        return
-    ensure_ollama()
-    try:  # load the LLM into memory so the first chat is quick
-        ollama_json([{"role": "user", "content": "Reply with JSON: say hello."}], CHAT_SCHEMA, temperature=0.1, num_predict=250)
-    except Exception:
-        log.warning("LLM warmup failed (is Ollama running?)", exc_info=True)
+    log.info("LLM provider %s (%s)", llm_provider(), llm_state())
     log.info("warmup finished")
 
 
@@ -2701,7 +2571,10 @@ sync_hub.attach(app, BASE, log, sync_dir=_arg("--sync-dir"), test_server=bool(AR
 
 @app.exception_handler(ApiError)
 async def _api_error(request: Request, exc: ApiError):
-    return JSONResponse({"error": exc.msg}, status_code=exc.status)
+    body = {"error": exc.msg}
+    if exc.code:
+        body["code"] = exc.code
+    return JSONResponse(body, status_code=exc.status)
 
 
 @app.exception_handler(RequestValidationError)
@@ -2730,7 +2603,7 @@ async def _timing(request: Request, call_next):
 
 
 class LlmReq(BaseModel):
-    provider: str = "ollama"
+    provider: str = "opencode"
     # openai_api only (all optional): preset id, model id, "opencode" | "secret", and a key to store in secrets.json
     preset: Optional[str] = None
     model: Optional[str] = None
@@ -2746,16 +2619,26 @@ def _api_info():
                         for k, v in llm_api.PRESETS.items()]}
 
 
+LOGIN_URL = "https://opencode.ai/auth"
+
+
 @app.get("/llm")
 def llm_get():
     api = _api_info()
-    return {"provider": llm_provider(),
-            # the app's picker: the free DeepSeek through OpenCode (default) and the offline local model.
-            # "openai_api" (any OpenAI-compatible API + key) stays selectable through POST /llm; its settings are below.
-            "options": [{"id": "opencode", "label": llm_opencode.LABEL, "available": llm_opencode.available()},
-                        {"id": "ollama", "label": "오프라인 로컬 (%s)" % CFG["llm_model"], "available": _ollama_installed()}],
-            "openai_api": dict(api, label="API 키 (%s · %s)" % (llm_api.PRESETS[api["preset"]]["label"], api["model"])),
-            "llm_fallback": _fallback_status()}
+    prov = llm_provider()
+    state = llm_state()
+    if prov == "openai_api":
+        label, installed, connected = "API 키 (%s · %s)" % (llm_api.PRESETS[api["preset"]]["label"], api["model"]), True, api["has_key"]
+    else:
+        label, installed, connected = llm_opencode.LABEL, llm_opencode.installed(), state in ("ready", "blocked")
+    return {"provider": prov, "label": label, "state": state, "installed": bool(installed), "connected": bool(connected),
+            "model": _remote_model(), "login_url": LOGIN_URL,
+            # kept for older clients: one entry. "openai_api" (any OpenAI-compatible API + key) stays selectable through
+            # POST /llm; its settings are below. The offline local model is gone.
+            "options": [{"id": "opencode", "label": llm_opencode.LABEL, "available": bool(llm_opencode.installed())}],
+            "llm_fallback": _fallback_status(),
+            "notice": "ollama_removed" if CFG.get("llm_migrated_from") == "ollama" else "",
+            "openai_api": dict(api, label="API 키 (%s · %s)" % (llm_api.PRESETS[api["preset"]]["label"], api["model"]))}
 
 
 @app.get("/llm/models")
@@ -2770,6 +2653,8 @@ def llm_models(preset: str = "", key_source: str = ""):
 
 @app.post("/llm")
 def llm_set(req: LlmReq):
+    if req.provider == "ollama":
+        raise ApiError("오프라인 로컬 AI는 더 이상 지원하지 않아요.", 400, code="engine_removed")
     p = req.provider if req.provider in ENGINES else None
     if not p:
         raise ApiError("알 수 없는 AI 엔진이에요.", 400)
@@ -2794,12 +2679,9 @@ def llm_set(req: LlmReq):
             if req.api_key.strip():
                 CFG["openai_api"]["key_source"] = "secret"
     CFG["llm_provider"] = p
-    _llm_health.update(t=0.0, ok=False)
     llm_fallback.clear()  # choosing an engine again means: try it again now
     if not ARG_PORT:  # a side-by-side test server must not change the app's config
         save_config(CFG)
-    if p == "ollama":
-        threading.Thread(target=ensure_ollama, daemon=True).start()
     if p == "opencode":
         llm_opencode.prestart()
     return llm_get()
@@ -2809,14 +2691,11 @@ def llm_set(req: LlmReq):
 def llm_test():
     t0 = time.time()
     msgs = [{"role": "user", "content": 'Reply with JSON {"fix": "OK", "fix_ko": "확인"}.'}]
-    if using_remote():  # test the selected engine itself, never the local fallback
-        try:
-            d = _remote_json(msgs, FIX_SCHEMA, 0.0, 60)
-        except llm_common.LlmError as e:
-            raise ApiError(e.msg, e.status)
-        llm_fallback.clear()  # it answers again
-    else:
-        d = ollama_json(msgs, FIX_SCHEMA, temperature=0.0, num_predict=60)
+    try:   # test the selected engine itself
+        d = _remote_json(msgs, FIX_SCHEMA, 0.0, 60)
+    except llm_common.LlmError as e:
+        raise remote_failure(e)
+    llm_fallback.clear()  # it answers again
     return {"ok": True, "provider": llm_provider(), "seconds": round(time.time() - t0, 1), "reply": d}
 
 
@@ -2850,33 +2729,21 @@ if os.environ.get("HOEHWA_TEST_HOOKS") == "1":
                 "grammar": grammar.status()}
 
 
-def _ollama_installed():
-    return os.path.exists(os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe"))
-
-
 @app.get("/health")
 def health():
+    state = llm_state()
     return {"ok": True, "stt": _stt_model is not None, "tts": {"en": _tts_ready["en"], "ja": _tts_ready["ja"]}, "tts_device": _tts_device,
-            "llm": llm_available(), "llm_model": CFG["llm_model"], "llm_provider": llm_provider(), "score": _stt_model is not None and _ojt is not None,
+            "llm": state in ("ready", "blocked"), "llm_model": _remote_model(), "llm_provider": llm_provider(), "llm_state": state,
+            "score": _stt_model is not None and _ojt is not None,
             "phoneme": features.phoneme_ready(), "tatoeba": readmode.tatoeba_ready(),
             "grammar": grammar.installed(), "llm_fallback": _fallback_status(),
             "song": song.available(), "song_v": song.SONG_V, "song_identify": True}
 
 
 def _fallback_status():
-    if not using_remote():
-        return {"active": False, "until": None, "reason": ""}
-    if llm_provider() == "opencode" and not llm_opencode.available():
-        if local_llm_reachable():
-            return {"active": True, "until": None,
-                    "reason": "OpenCode가 설치되어 있지 않아서 무료 DeepSeek 대신 로컬 AI로 답해요. (npm install -g opencode-ai)"}
-        return {"active": True, "until": None,
-                "reason": "AI 엔진을 쓸 수 없어요: OpenCode가 설치되어 있지 않고 로컬 AI(Ollama)도 연결되지 않아요. "
-                          "문법 검사기만 쓸 수 있어요. (npm install -g opencode-ai)"}
-    st = llm_fallback.status(llm_provider())
-    if st["active"] and not local_llm_reachable():   # the remote engine is blocked and the local model cannot stand in
-        st = llm_fallback.status(llm_provider(), local_ok=False)
-    return st
+    """{"active", "until", "reason"}: a usage-limit / busy / rejected-key notice of the selected engine (llm_fallback.py).
+    Only a notice: the engine is still asked on every call."""
+    return llm_fallback.status(llm_provider())
 
 
 @app.get("/curriculum")
@@ -3196,10 +3063,19 @@ import song   # song study (/song/*): upload, job queue, result, enrich (docs/so
 
 practice.init(log=log, ApiError=ApiError, ja_reading=ja_reading, ja_pron=ja_pron, readmode=readmode, lesson_rules=lesson_rules, features=features)
 missions.init(log=log, ApiError=ApiError, ollama_json=ollama_json)
+def _persist_config(cfg):
+    """save_config for the llm routes: a test server (--port) changes its in-memory copy only and never writes config.json"""
+    if not ARG_PORT:
+        save_config(cfg)
+
+
+# POST /llm/connect, /llm/disconnect, /llm/install, GET /llm/install, POST /llm/notice/ack (llm_routes.py, local only)
+llm_routes.init(CFG, log, ApiError, lan._local_only, _fallback_status, _persist_config)
 song.init(log=log, ApiError=ApiError, readmode=readmode, ollama_json=ollama_json, ko_ok=ko_ok, ja_reading=ja_reading, ja_pron=ja_pron,
           ja_to_kata=ja_to_kata, get_model=get_stt, run_lock=_stt_run_lock, stt_info=_stt_info)
 app.include_router(practice.router)
 app.include_router(missions.router)
+app.include_router(llm_routes.router)
 app.include_router(song.router)
 
 

@@ -2,7 +2,7 @@
 """Tests the katakana pronunciation form `pron` that every Japanese `reading` now travels with (the app builds its Hangul
 sound spelling from it; the spelling-form reading cannot tell a topic は from a は inside a word).
 
-    .venv\\Scripts\\python.exe test_pron.py                       in-process only (no network, no Ollama, nothing on a port)
+    .venv\\Scripts\\python.exe test_pron.py                       in-process only (no network, no AI engine, nothing on a port)
     .venv\\Scripts\\python.exe test_pron.py --base http://127.0.0.1:18791   also checks a RUNNING test server:
                                                                   POST /lesson (tatoeba), GET /practice/sentences, POST /reading/gloss is not called (needs an LLM)
 
@@ -107,8 +107,7 @@ def test_values():
 
 
 def stub_engine():
-    server.llm_provider = lambda: "ollama"
-    server.remote_route_active = lambda: False
+    server.llm_provider = lambda: "openai_api"   # not "opencode": no per-conversation OpenCode session, ollama_json (stubbed below) answers
     server.translate_ko = lambda text, lang: ""
     server.correct_learner = lambda *a, **k: ("", "")
 

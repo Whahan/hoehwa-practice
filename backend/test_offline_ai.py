@@ -1,21 +1,29 @@
 # -*- coding: utf-8 -*-
-"""Tests for the "less AI" features against a RUNNING test server started with the test hooks on:
+"""Tests for the "less AI" features and the removal of the local model (Ollama) against a RUNNING test server started with
+the test hooks on and a FAKE OpenCode (HOEHWA_OPENCODE_EXE=<fake>; never the real one, never a real login):
 
     set HOEHWA_TEST_HOOKS=1
-    .venv\\Scripts\\python.exe server.py --port 8787 --tag gramcache --stt-cpu
-    .venv\\Scripts\\python.exe test_offline_ai.py --base http://127.0.0.1:8787 [--tag gramcache]
+    .venv\\Scripts\\python.exe server.py --port 18851 --tag gramcache --stt-cpu
+    .venv\\Scripts\\python.exe test_offline_ai.py --base http://127.0.0.1:18851 [--tag gramcache]
 
 (--base is REQUIRED: pass the URL of YOUR test server; there is deliberately no default, the app's own server must never
-be used by a test.)
+be used by a test.) Sections that need an AI that answers run only when /health.llm_state is "ready" (fake OpenCode logged in)
+and print SKIP otherwise; the checks for "not connected" run only when it is "not_connected" / "not_installed".
 
 1. LanguageTool grammar correction (/fix with AI polish off = LanguageTool only), English + Japanese
 2. /fix result cache: the second identical call is a cache hit (timing + server log line)
-3. usage limit of the remote engine (simulated) -> answered by the local model, /health.llm_fallback.active
+3. usage limit of the engine (simulated): the call fails with 429 ai_limit, a Korean notice shows in /health.llm_fallback
+   (llm_state "blocked", no word about a local AI), and the next call is NOT blocked (it is tried again)
 4. openai_api engine against a mock OpenAI-compatible server
-5. opencode engine (opencode serve + free DeepSeek V4.1 Flash): en/ja chat latency, /fix, /lesson source ai, limit fallback
-6. (--no-ai-server) a server whose OpenCode is hidden (APPDATA/PATH without it) and whose Ollama URL is closed:
-   /fix gives an empty fix (HTTP 200) when LanguageTool finds nothing, the LanguageTool fix when it does, and
-   /health.llm_fallback.reason does not claim that a local AI answers
+5. opencode engine with the REAL OpenCode login: only with --live-opencode (otherwise "SKIP live opencode")
+6. (--no-ai-server) a server whose AI is not installed / not connected: /fix gives an empty fix (HTTP 200) when LanguageTool
+   finds nothing, the LanguageTool fix when it does, and no notice claims that a local AI answers
+7. Ollama removed (docs/onetouch_install_design.md B2): /health and GET /llm shapes, POST /llm {"provider": "ollama"} -> 400
+   engine_removed, /chat -> 503 ai_not_connected / ai_not_installed (Korean) while LanguageTool, /lesson, /score still work
+8. (--spawn-legacy) its own test server (free port 18853..18859, config from a temp file with the old "ollama" keys whose
+   ollama_url points at a listener this test counts on a free 127.0.0.1 port of its own): migration to "opencode" with notice "ollama_removed",
+   /llm/notice/ack, config file unchanged, ZERO connections to the old Ollama address. The spawned server gets no OpenCode
+   (its path points nowhere: llm_state not_installed) unless --fake-opencode PATH names a fake one.
 
 The openai_api engine is tested ONLY against a local mock server and a key typed into the app (secrets.json); no test
 reads or uses the OpenCode login or any real API key.
@@ -35,7 +43,8 @@ except Exception:
     pass
 
 if "--base" not in sys.argv or sys.argv.index("--base") + 1 >= len(sys.argv):
-    print("usage: test_offline_ai.py --base http://127.0.0.1:<port of YOUR test server> [--tag TAG] [--no-api] [--no-opencode] [--no-ai-server]\n"
+    print("usage: test_offline_ai.py --base http://127.0.0.1:<port of YOUR test server> [--tag TAG] [--no-api] [--live-opencode] [--no-ai-server]\n"
+          "                          [--spawn-legacy [--fake-opencode PATH]]\n"
           "--base is required (there is no default: never test against the app's own server).")
     sys.exit(2)
 BASE = sys.argv[sys.argv.index("--base") + 1].rstrip("/")
@@ -103,8 +112,9 @@ JA = ["これわ ペンです", "私わ学生です", "昨日は映画を見ま�
 def main():
     print("Backend:", BASE, "| log:", LOG)
     h = call("GET", "/health")[0].json()
-    print("  health:", json.dumps({k: h.get(k) for k in ("llm", "llm_provider", "grammar", "llm_fallback")}, ensure_ascii=False))
+    print("  health:", json.dumps({k: h.get(k) for k in ("llm", "llm_provider", "llm_state", "grammar", "llm_fallback")}, ensure_ascii=False))
     check("health has grammar=true", h.get("grammar") is True, h.get("grammar"))
+    state = h.get("llm_state")
     check("health has llm_fallback {active, until, reason}", isinstance(h.get("llm_fallback"), dict)
           and has_keys(h["llm_fallback"], ("active", "until", "reason")), h.get("llm_fallback"))
     r = requests.post(BASE + "/debug/config", json={}, timeout=10)
@@ -112,8 +122,11 @@ def main():
         return 2
     requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
     test_no_credential_reads()
-    if "--no-ai-server" in sys.argv:   # server started without any usable AI engine: only section 6
+    if "--no-ai-server" in sys.argv:   # server started without any usable AI engine: only sections 6 and 7
         test_no_ai()
+        test_ollama_removed()
+        if "--spawn-legacy" in sys.argv:
+            test_spawn_legacy()
         return finish()
 
     # ------------------------------------------------------------------ 1. LanguageTool only
@@ -145,66 +158,92 @@ def main():
 
     # ------------------------------------------------------------------ 2. cache
     print("\n== 2. /fix cache (sentence LanguageTool does not catch -> AI)")
-    s = "There is many people in room %d" % random.randint(100, 999)
-    pos = log_size()
-    r1, dt1 = call("POST", "/fix", "fix AI first", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
-    r2, dt2 = call("POST", "/fix", "fix AI second (cache)", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
-    time.sleep(0.5)
-    lg = log_since(pos)
-    print("   %r -> %r | first %.2fs, second %.2fs" % (s, r1.json(), dt1, dt2))
-    for line in lg.splitlines():
-        if "llm cache" in line or "languagetool" in line:
-            print("   log:", line[20:].strip())
-    check("cache: same answer twice", r1.json() == r2.json() and r1.status_code == 200)
-    check("cache: second call much faster (< 1 s)", dt2 < 1.0 and dt2 < dt1 / 3, "%.2fs vs %.2fs" % (dt1, dt2))
-    check("cache: log shows MISS then HIT for fix", "llm cache MISS fix" in lg and "llm cache HIT fix" in lg)
+    if not ai_ready():
+        print("   SKIP: needs an AI that answers (fake OpenCode logged in); /health.llm_state is %r" % call("GET", "/health")[0].json().get("llm_state"))
+    else:
+        s = "There is many people in room %d" % random.randint(100, 999)
+        pos = log_size()
+        r1, dt1 = call("POST", "/fix", "fix AI first", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
+        r2, dt2 = call("POST", "/fix", "fix AI second (cache)", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
+        time.sleep(0.5)
+        lg = log_since(pos)
+        print("   %r -> %r | first %.2fs, second %.2fs" % (s, r1.json(), dt1, dt2))
+        for line in lg.splitlines():
+            if "llm cache" in line or "languagetool" in line:
+                print("   log:", line[20:].strip())
+        check("cache: same answer twice", r1.json() == r2.json() and r1.status_code == 200)
+        # (a fake engine answers at once: with a first call under 0.3 s there is nothing to compare, the log line below decides)
+        check("cache: second call fast (< 1 s) and much faster than a slow first call", dt2 < 1.0 and (dt1 < 0.3 or dt2 < dt1 / 3), "%.2fs vs %.2fs" % (dt1, dt2))
+        check("cache: log shows MISS then HIT for fix", "llm cache MISS fix" in lg and "llm cache HIT fix" in lg)
 
-    # ------------------------------------------------------------------ 3. remote engine limit -> local
-    print("\n== 3. simulated usage limit of the remote engine (OpenCode free DeepSeek) -> local model")
-    h = call("GET", "/health")[0].json()
-    if h.get("llm_provider") == "ollama":
-        print("   provider is ollama: the fallback does not apply (select the opencode engine to test it)")
+    # ------------------------------------------------------------------ 3. engine limit -> notice only, never blocked
+    print("\n== 3. simulated usage limit of the engine (OpenCode free DeepSeek): 429 ai_limit, a Korean notice, nothing blocked")
+    if not ai_ready():
+        print("   SKIP: needs an AI that answers (fake OpenCode logged in)")
     else:
         reset = int(time.time()) + 1800
         requests.post(BASE + "/debug/engine_limit", json={"message": "usage limit reached|%d" % reset}, timeout=10)
         pos = log_size()
-        # first the per-conversation OpenCode chat session path hits the limit
         scen = {"id": "cafe", "title": "카페에서 주문", "persona": "Emma, a friendly barista in Seattle", "scene": "The learner orders at the counter."}
-        r, dt = call("POST", "/chat", "chat during engine limit (local)", json={"lang": "en", "stage": 1, "month": 1, "week": 1, "scenario": scen,
-                                                                           "history": [], "conv_id": "fallback-test-%d" % reset})
+        chat_body = {"lang": "en", "stage": 1, "month": 1, "week": 1, "scenario": scen, "history": [], "conv_id": "limit-test-%d" % reset}
+        r, dt = call("POST", "/chat", "chat during engine limit", json=chat_body)
         d = r.json()
-        print("   /chat opening -> %s (%.1fs)" % (json.dumps(d, ensure_ascii=False)[:200], dt))
-        check("limit: /chat answers with the same shape", r.status_code == 200 and has_keys(d, CHAT_KEYS), r.text[:200])
-        # then a JSON call (/fix, sentence LanguageTool does not catch) goes straight to local
+        print("   /chat opening -> %s %s (%.1fs)" % (r.status_code, json.dumps(d, ensure_ascii=False)[:200], dt))
+        check("limit: /chat -> HTTP 429, code ai_limit, Korean message", r.status_code == 429 and d.get("code") == "ai_limit"
+              and bool(HANGUL.search(d.get("error", ""))), r.text[:200])
+        check("limit: the message names the time to try again (HH:MM)", bool(re.search(r"\d\d:\d\d", d.get("error", ""))), d.get("error"))
+        # a JSON call (/fix, a sentence LanguageTool does not catch) cannot reach the AI either: no fix, but HTTP 200
         s = "Yesterday I eat pizza with %d friends" % random.randint(10, 99)
-        r, dt = call("POST", "/fix", "fix during engine limit (local)", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
+        r, dt = call("POST", "/fix", "fix during engine limit", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
         d = r.json()
         print("   /fix %r -> %s (%.1fs)" % (s, d, dt))
         check("limit: /fix still answers (HTTP 200, same shape)", r.status_code == 200 and has_keys(d, FIX_KEYS), r.text[:200])
         h = call("GET", "/health")[0].json()
         fb = h.get("llm_fallback") or {}
-        print("   health.llm_fallback:", fb)
+        print("   health:", {k: h.get(k) for k in ("llm", "llm_state")}, "llm_fallback:", fb)
         check("limit: /health.llm_fallback.active true", fb.get("active") is True, fb)
         check("limit: until parsed from the message (~30 min)", bool(fb.get("until")) and abs(
             time.mktime(time.strptime(fb["until"][:19], "%Y-%m-%dT%H:%M:%S")) - reset) < 5, fb.get("until"))
+        check("limit: reason is Korean and says nothing about a local AI", bool(HANGUL.search(fb.get("reason", "")))
+              and "로컬" not in fb.get("reason", "") and "Ollama" not in fb.get("reason", ""), fb.get("reason"))
+        check("limit: /health.llm_state is blocked and llm stays true (the engine is still tried)", h.get("llm_state") == "blocked" and h.get("llm") is True,
+              {k: h.get(k) for k in ("llm", "llm_state")})
         g = call("GET", "/llm")[0].json()
-        check("limit: GET /llm has llm_fallback", (g.get("llm_fallback") or {}).get("active") is True, g.get("llm_fallback"))
+        check("limit: GET /llm has the same notice and state blocked", (g.get("llm_fallback") or {}).get("active") is True and g.get("state") == "blocked",
+              {"state": g.get("state"), "fb": g.get("llm_fallback")})
         lg = log_since(pos)
         for line in lg.splitlines():
-            if "unusable" in line or "call failed" in line or "chat failed" in line or "ollama call" in line:
+            if "unusable" in line or "call failed" in line or "chat failed" in line:
                 print("   log:", line[20:].strip()[:200])
-        check("limit: log shows the switch to the local model", "using local model" in lg and "ollama call" in lg)
-        if h.get("llm_provider") == "opencode":
-            check("limit: the OpenCode chat session path fell back too", "opencode chat failed (limit)" in lg)
-        requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
+        check("limit: server log never mentions ollama / a local model", "ollama" not in lg.lower() and "local model" not in lg.lower())
+        # the limit is over: the very next call is tried (not refused because of the notice) and answers
+        requests.post(BASE + "/debug/engine_limit", json={"message": ""}, timeout=10)   # simulation off, the notice is NOT cleared
         h = call("GET", "/health")[0].json()
-        check("limit cleared: llm_fallback.active false", (h.get("llm_fallback") or {}).get("active") is False)
+        check("not blocked: the notice is still showing before the next call", (h.get("llm_fallback") or {}).get("active") is True, h.get("llm_fallback"))
+        r, dt = call("POST", "/chat", "chat after engine limit", json=dict(chat_body, conv_id="limit-test-%d-b" % reset))
+        print("   /chat after the limit -> %s (%.1fs)" % (r.status_code, dt))
+        check("not blocked: the next /chat answers (HTTP 200, same shape)", r.status_code == 200 and has_keys(r.json(), CHAT_KEYS), r.text[:200])
+        h = call("GET", "/health")[0].json()
+        check("not blocked: a successful call ends the notice (active false, llm_state ready)", (h.get("llm_fallback") or {}).get("active") is False
+              and h.get("llm_state") == "ready", {k: h.get(k) for k in ("llm_state", "llm_fallback")})
+        requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
 
     if "--no-api" not in sys.argv:
         test_openai_api()
-    if "--no-opencode" not in sys.argv:
+    if "--live-opencode" in sys.argv:   # the REAL OpenCode login and the real free model: never part of a default run
         test_opencode()
+    else:
+        print("\n== 5. opencode engine\n   SKIP live opencode (pass --live-opencode to use the real OpenCode login and the real free model)")
+    test_ollama_removed()
+    if "--spawn-legacy" in sys.argv:
+        test_spawn_legacy()
     return finish()
+
+
+def ai_ready():
+    """True when the server's AI answers right now (fake OpenCode logged in): /health.llm_state is "ready"."""
+    requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
+    return call("GET", "/health")[0].json().get("llm_state") == "ready"
 
 
 def finish():
@@ -275,16 +314,17 @@ def test_lt_guard():
 
 
 def test_no_ai():
-    """Server without any AI engine (OpenCode hidden, Ollama unreachable): LanguageTool only, never an error."""
+    """Server whose AI is not installed / not connected: LanguageTool only, never an error."""
     print("\n== 6. no AI engine available (LanguageTool only)")
     h = call("GET", "/health")[0].json()
     fb = h.get("llm_fallback") or {}
     print("   health: llm=%s provider=%s llm_fallback=%s" % (h.get("llm"), h.get("llm_provider"), fb))
     check("no-AI: /health.llm is false", h.get("llm") is False, h.get("llm"))
-    check("no-AI: /health.llm_fallback.reason does not claim a local AI answers",
-          fb.get("active") is True and "로컬 AI로 답해요" not in fb.get("reason", "") and "AI 엔진을 쓸 수 없어요" in fb.get("reason", ""), fb)
+    check("no-AI: /health.llm_state is not_installed or not_connected (no limit notice, nothing about a local AI)",
+          h.get("llm_state") in ("not_installed", "not_connected") and fb.get("active") is False and "로컬" not in fb.get("reason", ""), {"state": h.get("llm_state"), "fb": fb})
     g = call("GET", "/llm")[0].json()
-    check("no-AI: GET /llm.llm_fallback.reason agrees", "로컬 AI로 답해요" not in (g.get("llm_fallback") or {}).get("reason", "") and g["llm_fallback"]["active"], g.get("llm_fallback"))
+    check("no-AI: GET /llm agrees (state, installed/connected, no notice)", g.get("state") == h.get("llm_state") and g.get("connected") is False
+          and g["llm_fallback"]["active"] is False and (g["state"] != "not_installed" or g.get("installed") is False), {"state": g.get("state"), "installed": g.get("installed"), "connected": g.get("connected")})
     requests.post(BASE + "/debug/config", json={"grammar_llm_polish": True}, timeout=10)
     for s in CORRECT_EN:
         r, dt = call("POST", "/fix", "no-AI fix correct", json={"lang": "en", "stage": 1, "text": s, "prev_ai": ""})
@@ -300,8 +340,7 @@ def test_no_ai():
         check("no-AI: LT fixes %r" % s, r.status_code == 200 and all(n.lower() in d.get("fix", "").lower() for n in need) and bool(HANGUL.search(d.get("fix_ko", ""))), d)
     r, dt = call("POST", "/fix", "no-AI fix, after the failures were recorded", json={"lang": "en", "stage": 1, "text": "I went to the store yesterday."})
     check("no-AI: a repeated call is still fast and empty (< 2 s)", r.status_code == 200 and r.json()["fix"] == "" and dt < 2.0, "%.2fs" % dt)
-    # an engine that is installed but fails (here: the API engine without a key) and no local AI: the recorded failure
-    # must not be reported as "local AI answers"
+    # the API engine without a key is "not connected" too: no fix from the AI, LanguageTool still answers, no notice about a local AI
     secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets.json")
     try:
         with open(secrets_path, encoding="utf-8") as f:
@@ -309,16 +348,19 @@ def test_no_ai():
     except Exception:
         has_real_key = False
     if has_real_key:
-        print("   secrets.json has an opencode_zen key: skipped the failing-API-engine check")
+        print("   secrets.json has an opencode_zen key: skipped the API-engine-without-a-key check")
         return
     requests.post(BASE + "/debug/config", json={"llm_provider": "openai_api"}, timeout=10)
     try:
         r, dt = call("POST", "/fix", "no-AI fix, failing API engine", json={"lang": "en", "stage": 1, "text": "I went to the store yesterday."})
         check("no-AI: failing engine -> /fix HTTP 200, empty fix", r.status_code == 200 and r.json() == {"fix": "", "fix_ko": ""}, r.text[:200])
-        fb = call("GET", "/health")[0].json().get("llm_fallback") or {}
-        print("   llm_fallback after the engine failure:", fb)
-        check("no-AI: failing engine -> reason says AI is unavailable, not that a local AI answers",
-              fb.get("active") is True and fb.get("reason", "").startswith("AI 엔진을 쓸 수 없어요") and "로컬 AI로 답해요" not in fb["reason"], fb)
+        h = call("GET", "/health")[0].json()
+        fb = h.get("llm_fallback") or {}
+        print("   health after the call: llm_state=%s llm_fallback=%s" % (h.get("llm_state"), fb))
+        check("no-AI: API engine without a key -> llm_state not_connected, llm false, nothing about a local AI",
+              h.get("llm_state") == "not_connected" and h.get("llm") is False and "로컬" not in fb.get("reason", ""), {"state": h.get("llm_state"), "fb": fb})
+        r, dt = call("POST", "/chat", "no-AI chat, API engine without a key", json={"lang": "en", "stage": 1, "history": [], "scenario": {"id": "x"}})
+        check("no-AI: API engine without a key -> /chat 503 ai_not_connected", r.status_code == 503 and r.json().get("code") == "ai_not_connected", r.text[:200])
         r, dt = call("POST", "/fix", "no-AI fix LT, failing API engine", json={"lang": "en", "stage": 1, "text": "I have a apple"})
         check("no-AI: failing engine -> LanguageTool fix still returned", r.status_code == 200 and "an apple" in r.json().get("fix", ""), r.text[:200])
     finally:
@@ -471,16 +513,19 @@ def test_openai_api():
         r, _ = call("POST", "/llm/test", "llm/test free tier")
         print("   FreeTierError ->", r.status_code, r.json())
         check("FreeTierError -> Korean explanation", r.status_code >= 400 and "OpenCode" in r.json().get("error", ""))
-        # 429 -> usage-limit fallback to local, Retry-After parsed
+        # 429 -> usage-limit notice (nothing answers in its place), Retry-After parsed
         requests.post(BASE + "/debug/config", json={"openai_api": {"model": "mock-limit"}, "llm_provider": "openai_api"}, timeout=10)
         s = "Yesterday I eat rice with %d friends" % random.randint(10, 99)
-        r, dt = call("POST", "/fix", "fix API 429 -> local", json={"lang": "en", "stage": 1, "text": s})
+        r, dt = call("POST", "/fix", "fix API 429", json={"lang": "en", "stage": 1, "text": s})
         h = call("GET", "/health")[0].json()
         fb = h.get("llm_fallback") or {}
         print("   /fix ->", r.json(), "(%.1fs)" % dt, "| llm_fallback:", fb)
-        check("API 429 -> /fix answered locally (HTTP 200)", r.status_code == 200 and has_keys(r.json(), FIX_KEYS), r.text[:200])
-        check("API 429 -> llm_fallback active, Korean reason", fb.get("active") is True and "API" in fb.get("reason", "")
-              and "로컬 AI" in fb.get("reason", ""), fb)
+        check("API 429 -> /fix still HTTP 200 (LanguageTool / empty fix)", r.status_code == 200 and has_keys(r.json(), FIX_KEYS), r.text[:200])
+        check("API 429 -> llm_fallback active, Korean reason naming the API engine, nothing about a local AI",
+              fb.get("active") is True and "API" in fb.get("reason", "") and bool(HANGUL.search(fb.get("reason", ""))) and "로컬" not in fb.get("reason", ""), fb)
+        r, dt = call("POST", "/chat", "chat API 429", json={"lang": "en", "stage": 1, "history": [], "scenario": scen})
+        check("API 429 -> /chat HTTP 429 with code ai_limit and a Korean message", r.status_code == 429 and r.json().get("code") == "ai_limit"
+              and bool(HANGUL.search(r.json().get("error", ""))), r.text[:200])
         check("API 429 -> until from Retry-After (~10 min)", bool(fb.get("until")) and 300 < time.mktime(time.strptime(fb["until"][:19], "%Y-%m-%dT%H:%M:%S")) - time.time() < 700, fb.get("until"))
         requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
         # key must not appear anywhere the server writes
@@ -503,7 +548,7 @@ def test_openai_api():
                     f.write(secrets_before)
         except OSError:
             pass
-        call("POST", "/llm", json={"provider": before or "ollama"})
+        call("POST", "/llm", json={"provider": before or "opencode"})
         requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
 
 
@@ -561,16 +606,183 @@ def test_opencode():
             for e in d.get("exercises", [])[:3]:
                 print("      ", json.dumps(e, ensure_ascii=False)[:200])
         check("opencode /lesson source ai", r.status_code == 200 and len(d.get("exercises", [])) >= 4, r.text[:200])
-        # free model limit -> local fallback with a Korean notice
+        # free model limit -> 429 ai_limit and a Korean notice
         requests.post(BASE + "/debug/engine_limit", json={"message": "429 Too Many Requests: rate limit, retry in 600 seconds"}, timeout=10)
-        r, dt = call("POST", "/chat", "opencode chat during limit (local)", json={"lang": "en", "stage": 1, "scenario": scen, "history": [], "conv_id": conv + "-lim"})
+        r, dt = call("POST", "/chat", "opencode chat during limit", json={"lang": "en", "stage": 1, "scenario": scen, "history": [], "conv_id": conv + "-lim"})
         fb = call("GET", "/health")[0].json().get("llm_fallback") or {}
         print("   [%.1fs] chat during limit -> %s | llm_fallback %s" % (dt, r.status_code, fb))
-        check("opencode limit -> chat answered locally, same shape", r.status_code == 200 and has_keys(r.json(), CHAT_KEYS), r.text[:200])
-        check("opencode limit -> Korean notice in llm_fallback.reason", fb.get("active") is True and "DeepSeek" in fb.get("reason", "") and "로컬 AI" in fb.get("reason", ""), fb)
+        check("opencode limit -> chat HTTP 429, code ai_limit", r.status_code == 429 and r.json().get("code") == "ai_limit", r.text[:200])
+        check("opencode limit -> Korean notice in llm_fallback.reason", fb.get("active") is True and "DeepSeek" in fb.get("reason", "") and "로컬" not in fb.get("reason", ""), fb)
     finally:
         requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
-        call("POST", "/llm", json={"provider": before or "ollama"})
+        call("POST", "/llm", json={"provider": before or "opencode"})
+
+
+# ---------------------------------------------------------------------------------------------- 7. Ollama removed
+LLM_STATES = ("ready", "not_connected", "not_installed", "blocked")
+HEALTH_KEYS = ("ok", "stt", "tts", "tts_device", "llm", "llm_model", "llm_provider", "llm_state", "score", "phoneme", "tatoeba", "grammar",
+               "llm_fallback", "song", "song_v", "song_identify")
+LLM_KEYS = ("provider", "label", "state", "installed", "connected", "model", "login_url", "options", "llm_fallback", "notice", "openai_api")
+
+
+def check_health_and_llm(h, g, tag):
+    """The shapes of GET /health and GET /llm (docs/onetouch_install_design.md 3.4.3)."""
+    check("%s: /health has every key" % tag, has_keys(h, HEALTH_KEYS), sorted(set(HEALTH_KEYS) - set(h)))
+    check("%s: /health.llm_state is one of ready/not_connected/not_installed/blocked" % tag, h.get("llm_state") in LLM_STATES, h.get("llm_state"))
+    check("%s: /health.llm is true exactly for ready/blocked" % tag, h.get("llm") is (h.get("llm_state") in ("ready", "blocked")), {k: h.get(k) for k in ("llm", "llm_state")})
+    check("%s: /health.llm_model is the free DeepSeek id" % tag, h.get("llm_provider") != "opencode" or h.get("llm_model") == "deepseek-v4.1-flash-free", h.get("llm_model"))
+    check("%s: /health.llm_fallback has active, until, reason" % tag, has_keys(h.get("llm_fallback"), ("active", "until", "reason")), h.get("llm_fallback"))
+    check("%s: GET /llm has every key" % tag, has_keys(g, LLM_KEYS), sorted(set(LLM_KEYS) - set(g)))
+    opts = g.get("options") or []
+    check("%s: GET /llm.options is one opencode entry with a Korean label, no ollama" % tag,
+          len(opts) == 1 and opts[0].get("id") == "opencode" and bool(HANGUL.search(opts[0].get("label", ""))) and "ollama" not in json.dumps(g).lower().replace("ollama_removed", ""), opts)
+    check("%s: GET /llm.state / installed / connected / login_url" % tag, g.get("state") == h.get("llm_state") and isinstance(g.get("installed"), bool)
+          and isinstance(g.get("connected"), bool) and g.get("login_url", "").startswith("https://"), {k: g.get(k) for k in ("state", "installed", "connected", "login_url")})
+    check("%s: GET /llm.notice is '' or 'ollama_removed'" % tag, g.get("notice") in ("", "ollama_removed"), g.get("notice"))
+    check("%s: GET /llm.openai_api is still there (developer engine)" % tag, isinstance(g.get("openai_api"), dict) and "presets" in g["openai_api"], list((g.get("openai_api") or {}))[:6])
+
+
+def test_ollama_removed():
+    print("\n== 7. Ollama removed: /health and GET /llm shapes, POST /llm, /chat without a connection, features that need no AI")
+    requests.post(BASE + "/debug/engine_limit", json={"message": "", "clear": True}, timeout=10)
+    requests.post(BASE + "/debug/config", json={"llm_provider": "opencode"}, timeout=10)
+    h = call("GET", "/health")[0].json()
+    g = call("GET", "/llm")[0].json()
+    check_health_and_llm(h, g, "7")
+    r, _ = call("POST", "/llm", json={"provider": "ollama"})
+    check("POST /llm ollama -> 400, code engine_removed, Korean message", r.status_code == 400 and r.json().get("code") == "engine_removed"
+          and bool(HANGUL.search(r.json().get("error", ""))), r.text[:200])
+    r, _ = call("POST", "/llm", json={"provider": "zzz"})
+    check("POST /llm with an unknown engine -> 400 (no engine_removed code)", r.status_code == 400 and r.json().get("code") != "engine_removed", r.text[:200])
+    r, _ = call("POST", "/llm", json={"provider": "opencode"})
+    check("POST /llm opencode -> 200 with the GET /llm shape", r.status_code == 200 and has_keys(r.json(), LLM_KEYS), r.text[:200])
+    state = call("GET", "/health")[0].json().get("llm_state")
+    scen = {"id": "cafe", "title": "카페에서 주문", "persona": "Emma, a friendly barista in Seattle", "scene": "The learner orders at the counter."}
+    body = {"lang": "en", "stage": 1, "month": 1, "week": 1, "scenario": scen, "history": [], "conv_id": "b2-%d" % random.randint(1000, 9999)}
+    if state in ("not_connected", "not_installed"):
+        r, dt = call("POST", "/chat", "chat %s" % state, json=body)
+        d = r.json()
+        print("   /chat while %s -> %s %s" % (state, r.status_code, json.dumps(d, ensure_ascii=False)[:160]))
+        check("%s: first /chat turn -> 503, code ai_%s, Korean message" % (state, state), r.status_code == 503 and d.get("code") == "ai_" + state
+              and bool(HANGUL.search(d.get("error", ""))), r.text[:200])
+        check("%s: a refused chat leaves no limit notice" % state, call("GET", "/health")[0].json()["llm_fallback"]["active"] is False)
+    elif state == "ready":
+        r, dt = call("POST", "/chat", "chat ready", json=body)
+        check("ready: first /chat turn -> 200, same shape", r.status_code == 200 and has_keys(r.json(), CHAT_KEYS), r.text[:200])
+    else:
+        print("   /health.llm_state is %r: the /chat check is skipped" % state)
+    # nothing below needs an AI
+    r, dt = call("POST", "/lesson", "lesson tatoeba (no AI)", json={"lang": "en", "month": 1, "week": 1, "stage": 1})
+    d = r.json()
+    check("/lesson (rule-based Tatoeba) -> 200 with exercises", r.status_code == 200 and len(d.get("exercises", [])) >= 4, r.text[:200])
+    r, dt = call("POST", "/fix", "fix (no AI)", json={"lang": "en", "stage": 1, "text": "He go to school yesterday", "prev_ai": ""})
+    check("/fix with a grammar mistake -> 200 and a fix (LanguageTool)", r.status_code == 200 and "went" in r.json().get("fix", ""), r.text[:200])
+    r, dt = call("POST", "/tts", "tts for score", json={"text": "Hello, how are you?", "lang": "en", "speed": 1.0})
+    if check("/tts -> audio for the score check", r.status_code == 200 and r.headers.get("content-type", "").startswith("audio/wav"), r.status_code):
+        import base64
+        r, dt = call("POST", "/score", "score (no AI)", json={"lang": "en", "target": "Hello, how are you?", "reading": "", "audio_b64": base64.b64encode(r.content).decode()})
+        d = r.json()
+        check("/score -> 200 with a score", r.status_code == 200 and isinstance(d.get("score"), (int, float)), r.text[:200])
+
+
+# ---------------------------------------------------------------------------------------------- 8. old config, own server
+def test_spawn_legacy():
+    import hashlib
+    import socket
+    import subprocess
+    import tempfile
+    import threading
+    print("\n== 8. old config.json with the ollama keys, own test server: migration, notice, file unchanged, zero Ollama connections")
+    here = os.path.dirname(os.path.abspath(__file__))
+    lsn = socket.socket()
+    lsn.bind(("127.0.0.1", 0))   # a port of its own (other test runs use 18851-18859 and sometimes probe them: they would be counted)
+    LPORT = lsn.getsockname()[1]
+    lsn.listen(8)
+    seen = {"n": 0}
+
+    def accept_loop():
+        while True:
+            try:
+                c, _ = lsn.accept()
+            except OSError:
+                return
+            seen["n"] += 1
+            seen.setdefault("peers", []).append(c.getpeername())
+            c.close()
+
+    threading.Thread(target=accept_loop, daemon=True).start()
+    port = None
+    for p in range(18853, 18860):
+        sk = socket.socket()
+        try:
+            sk.bind(("127.0.0.1", p))
+            port = p
+            sk.close()
+            break
+        except OSError:
+            sk.close()
+    tmp = tempfile.mkdtemp(prefix="b2legacy_")
+    proc = None
+    try:
+        if port is None:
+            check("a free test-server port in 18853..18859", False)
+            return
+        cfgp = os.path.join(tmp, "config.json")
+        legacy = {"port": 8770, "llm_provider": "ollama", "llm_model": "qwen3:8b", "ollama_url": "http://127.0.0.1:%d" % LPORT,
+                  "keep_alive": "30m", "num_ctx": 6144, "stt": {"model": "small", "device": "cpu", "compute_type": "int8"}}
+        with open(cfgp, "w", encoding="utf-8") as f:
+            json.dump(legacy, f, indent=2)
+        sha0 = hashlib.sha256(open(cfgp, "rb").read()).hexdigest()
+        fake = sys.argv[sys.argv.index("--fake-opencode") + 1] if "--fake-opencode" in sys.argv else os.path.join(tmp, "no-such-opencode.exe")
+        env = dict(os.environ, HOEHWA_TEST_HOOKS="1", HOEHWA_OPENCODE_EXE=fake, APPDATA=os.path.join(tmp, "appdata"))
+        env["PATH"] = os.pathsep.join(x for x in env.get("PATH", "").split(os.pathsep) if "opencode" not in x.lower() and not x.lower().endswith("npm"))
+        proc = subprocess.Popen([sys.executable, "-X", "utf8", os.path.join(here, "server.py"), "--port", str(port), "--tag", "b2legacy",
+                                 "--stt-cpu", "--config", cfgp], cwd=here, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        base = "http://127.0.0.1:%d" % port
+        up = False
+        for _ in range(90):
+            time.sleep(2)
+            try:
+                if requests.get(base + "/health", timeout=3).status_code == 200:
+                    up = True
+                    break
+            except requests.RequestException:
+                pass
+        if not check("own test server on %d is up (pid %d)" % (port, proc.pid), up):
+            return
+
+        def c(method, path, **kw):
+            return requests.request(method, base + path, timeout=300, **kw)
+
+        g = c("GET", "/llm").json()
+        h = c("GET", "/health").json()
+        print("   /llm:", {k: g.get(k) for k in ("provider", "state", "notice")})
+        check("old config 'ollama' -> GET /llm.provider is opencode, notice ollama_removed", g.get("provider") == "opencode" and g.get("notice") == "ollama_removed", g)
+        check("old config -> /health.llm_provider opencode, llm_model deepseek", h.get("llm_provider") == "opencode" and h.get("llm_model") == "deepseek-v4.1-flash-free", h)
+        check_health_and_llm(h, g, "8")
+        r = requests.post(base + "/llm/notice/ack", json={}, timeout=30)
+        check("POST /llm/notice/ack -> 200", r.status_code == 200 and r.json().get("ok") is True, r.text[:200])
+        check("after the ack the notice is ''", c("GET", "/llm").json().get("notice") == "")
+        state = h.get("llm_state")
+        if state in ("not_installed", "not_connected", "ready"):   # never "blocked" here, and the real OpenCode is hidden (fake path)
+            scen = {"id": "cafe", "persona": "Emma, a barista", "scene": "ordering"}
+            r = c("POST", "/chat", json={"lang": "en", "stage": 1, "history": [], "scenario": scen, "conv_id": "b2legacy"})
+            check("old config: /chat answers by the AI state (%s)" % state, (r.status_code == 200) if state == "ready" else (r.status_code == 503 and r.json().get("code") == "ai_" + state), r.text[:160])
+        c("POST", "/fix", json={"lang": "en", "stage": 1, "text": "He go to school yesterday", "prev_ai": ""})
+        c("POST", "/lesson", json={"lang": "en", "month": 1, "week": 1, "stage": 1})
+        c("POST", "/llm", json={"provider": "opencode"})
+        c("GET", "/llm")
+        c("GET", "/health")
+        check("Ollama listener on 127.0.0.1:%d got ZERO connections" % LPORT, seen["n"] == 0, seen.get("peers"))
+        sha1 = hashlib.sha256(open(cfgp, "rb").read()).hexdigest()
+        check("the test server never wrote its config file (SHA-256 unchanged, also after the ack)", sha0 == sha1)
+        check("no config.json.tmp was left", not os.path.exists(cfgp + ".tmp"))
+    finally:
+        if proc is not None:
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        lsn.close()
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -131,7 +131,7 @@ WAV = _wav()
 @app.get("/health")
 def health():
     return {"ok": True, "stub": True, "stt": True, "tts": {"en": True, "ja": True}, "tts_device": "cpu", "llm": True,
-            "llm_model": "stub", "llm_provider": "opencode", "score": True, "phoneme": True, "tatoeba": True, "grammar": True,
+            "llm_model": "deepseek-v4.1-flash-free", "llm_provider": "opencode", "llm_state": "ready", "score": True, "phoneme": True, "tatoeba": True, "grammar": True,
             "llm_fallback": {"active": False, "until": None, "reason": ""},
             **({"song": True, "song_v": song.SONG_V, "song_identify": True} if ARGS.song else {})}
 
@@ -245,7 +245,9 @@ def mic_cancel():
 
 @app.get("/llm")
 def llm_get():
-    return {"provider": "opencode", "options": [{"id": "opencode", "label": "stub", "available": True}], "llm_fallback": {"active": False}}
+    return {"provider": "opencode", "label": "stub", "state": "ready", "installed": True, "connected": True, "model": "deepseek-v4.1-flash-free",
+            "login_url": "https://opencode.ai/auth", "options": [{"id": "opencode", "label": "stub", "available": True}],
+            "llm_fallback": {"active": False, "until": None, "reason": ""}, "notice": ""}
 
 
 @app.post("/llm")

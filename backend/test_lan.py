@@ -348,6 +348,9 @@ def unit_checks():
           len(lan.ALLOW) == 35 and new_routes <= lan.ALLOW and song_routes <= lan.ALLOW and not any(p.startswith(("/song/purge", "/song/admin")) for _, p in lan.ALLOW)
           and not any(p.startswith("/practice") or p.startswith("/missions") for _, p in lan.ALLOW - new_routes) and not any(p.startswith(("/mic", "/llm", "/docs", "/debug")) for _, p in lan.ALLOW)
           and ("GET", "/lan") not in lan.ALLOW and ("POST", "/lan/code") not in lan.ALLOW)
+    llm_new = [("POST", "/llm/connect"), ("POST", "/llm/disconnect"), ("POST", "/llm/install"), ("GET", "/llm/install"), ("POST", "/llm/notice/ack")]
+    check("U-04b the AI connect routes (/llm/connect, /llm/disconnect, /llm/install, /llm/notice/ack) are NOT in the phone allow-list (keys never come from a phone)",
+          not any(r in lan.ALLOW for r in llm_new) and not any(p.startswith("/llm") for _, p in lan.ALLOW), [r for r in llm_new if r in lan.ALLOW])
 def core(T, ip2):
     """B-03 .. B-23 on target T (LAN off at the start). ip2 = a non-loopback IPv4 of this PC | None: the link is bound to the
     Tailscale address only (here: loopback through the test hook), so this other address of the PC must refuse"""
@@ -516,7 +519,9 @@ def core(T, ip2):
 
     # ---- B-12 forbidden
     forb = [("POST", "/mic/start", {}), ("GET", "/mic/devices", None), ("GET", "/mic/level", None), ("POST", "/mic/stop", {}), ("POST", "/mic/cancel", {}),
-            ("POST", "/llm", {"provider": "ollama"}), ("GET", "/llm", None), ("POST", "/llm/test", {}), ("GET", "/llm/models", None),
+            ("POST", "/llm", {"provider": "opencode"}), ("GET", "/llm", None), ("POST", "/llm/test", {}), ("GET", "/llm/models", None),
+            ("POST", "/llm/connect", {"key": "x" * 20}), ("POST", "/llm/disconnect", {}), ("POST", "/llm/install", {}), ("GET", "/llm/install", None),
+            ("POST", "/llm/notice/ack", {}),
             ("GET", "/docs", None), ("GET", "/openapi.json", None), ("GET", "/redoc", None), ("GET", "/debug/ping", None),
             ("GET", "/nope", None), ("GET", "/health/", None), ("HEAD", "/health", None), ("OPTIONS", "/health", None), ("DELETE", "/health", None),
             ("GET", "/HEALTH", None), ("POST", "/health", {})]

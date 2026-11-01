@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Usage-limit fallback: when the remote AI engine (OpenCode's free DeepSeek, or the OpenAI-compatible API) hits a
-usage/rate limit or loses access, server.py retries on the local Ollama model and routes later calls straight to
-local until the limit resets.
+"""Usage-limit notice: when the AI engine (OpenCode's free DeepSeek, or the OpenAI-compatible API) hits a usage/rate
+limit, is busy, or rejects the login, server.py records it here and /health.llm_fallback and GET /llm show a Korean notice
+until the reset time. There is no local model to answer in its place and calls are never blocked by the notice: every call
+is tried, a success (server.py) clears the notice. (The module name is historical.)
 
-State is in memory only (a restart tries the remote engine again). Reset time: parsed from the error text if present
+State is in memory only (a restart starts without a notice). Reset time: parsed from the error text if present
 ("...|1760000000", "resets 3pm", "try again in 2 hours 5 minutes", "retry in 41s"), else DEFAULT_MINUTES.
 """
 import datetime as _dt
@@ -82,10 +83,11 @@ def mark(provider, kind, raw, friendly="", label=None):
     if until is None:
         until = now + 60 * {"limit": DEFAULT_MINUTES, "auth": AUTH_MINUTES, "overload": OVERLOAD_MINUTES}.get(kind, DEFAULT_MINUTES)
     until = min(max(until, now + 60), now + MAX_SECONDS)
-    why = {"limit": "사용 한도에 도달해서", "auth": "로그인이나 사용 권한 문제로", "overload": "서버가 바빠서"}.get(kind, "호출에 실패해서")
-    cause = "%s %s" % (label or provider, why)
+    name = label or provider
     when = _dt.datetime.fromtimestamp(until).strftime("%H:%M" if until - now < 20 * 3600 else "%m/%d %H:%M")
-    reason = "%s %s까지 로컬 AI로 답해요." % (cause, when)
+    cause = {"limit": "%s 사용 한도에 도달했어요." % name, "auth": "%s 로그인이나 키에 문제가 있어요." % name,
+             "overload": "%s 서버가 바빠요." % name}.get(kind, "%s 호출에 실패했어요." % name)
+    reason = ("%s [AI 연결하기]로 다시 연결해 주세요." % cause) if kind == "auth" else ("%s %s 이후 다시 시도해요." % (cause, when))
     with _lock:
         _state.update(provider=provider, until=until, reason=reason, kind=kind, since=now, cause=cause, when=when,
                       message=(friendly or raw or "")[:300])
@@ -106,17 +108,20 @@ def clear():
         _state.update(provider=None, until=0.0, reason="", kind="", since=0.0, message="", cause="", when="")
 
 
-def status(provider=None, local_ok=True):
-    """{"active", "until" (ISO 8601 local time or None), "reason"} for /health and GET /llm.
-    local_ok=False: the local model cannot answer either, so the reason must not claim that it does."""
+def reset_text(provider=None):
+    """"HH:MM" (or "MM/DD HH:MM") when the notice for `provider` ends, "" if there is none."""
+    with _lock:
+        if _state["provider"] and time.time() < _state["until"] and (provider is None or _state["provider"] == provider):
+            return _state["when"]
+        return ""
+
+
+def status(provider=None):
+    """{"active", "until" (ISO 8601 local time or None), "reason"} for /health and GET /llm. `active` is true only while a
+    limit / busy / rejected-login notice is showing for `provider`."""
     with _lock:
         live = bool(_state["provider"]) and time.time() < _state["until"] and (provider is None or _state["provider"] == provider)
         if not live:
             return {"active": False, "until": None, "reason": ""}
         until = _dt.datetime.fromtimestamp(_state["until"]).astimezone().isoformat(timespec="seconds")
-        if local_ok:
-            reason = _state["reason"]
-        else:
-            reason = "AI 엔진을 쓸 수 없어요: %s %s까지 쓸 수 없고, 로컬 AI(Ollama)도 연결되지 않아요. 문법 검사기만 쓸 수 있어요." % (
-                _state["cause"], _state["when"])
-        return {"active": True, "until": until, "reason": reason}
+        return {"active": True, "until": until, "reason": _state["reason"]}

@@ -5,8 +5,9 @@ import re
 
 
 class LlmError(Exception):
-    """A remote engine failed. .kind ("limit" | "auth" | "overload" | None, see llm_fallback.classify) decides whether
-    server.py answers with the local model instead; .raw is the engine's own text (the reset time is parsed from it)."""
+    """An AI engine failed. .kind ("limit" | "auth" | "overload" | "not_connected" | "not_installed" | None, see
+    llm_fallback.classify) decides the code of the ApiError server.py raises (server.AI_ERRORS) and whether a notice is
+    recorded; .raw is the engine's own text (the reset time is parsed from it)."""
 
     def __init__(self, msg, status=502, kind=None, raw=""):
         super().__init__(msg)

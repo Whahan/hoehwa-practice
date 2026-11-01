@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Regression tests for the 1.1.1 backend-core fixes. Runs server.py's functions IN PROCESS with stub engines (no network,
-no Ollama, no OpenCode, nothing on a port):
+no OpenCode, nothing on a port):
 
     .venv\\Scripts\\python.exe test_fixcore.py [--only cache|espeak|opencode|reset|audio|align]
 
@@ -69,7 +69,7 @@ def clear_cache():
 
 
 class StubLlm:
-    """replaces the local engine: answers come from a list (the last one repeats)"""
+    """replaces the AI engine call (server._remote_json): answers come from a list (the last one repeats)"""
     def __init__(self, answers):
         self.answers = list(answers)
         self.calls = 0
@@ -81,8 +81,8 @@ class StubLlm:
 
 
 def with_stub(stub):
-    server.remote_route_active = lambda: False
-    server._ollama_chat_json = stub
+    server.llm_provider = lambda: "opencode"
+    server._remote_json = lambda messages, schema, temperature, num_predict: stub(messages, schema, temperature, num_predict, False)
 
 
 # ------------------------------------------------------------------------------------------------ 1. cache
@@ -143,13 +143,13 @@ def test_cache():
     # a bad entry that is already in the cache (written by older code / another path) is ignored on read
     clear_cache()
     opts = {"temperature": 0.2}
-    key = llm_cache.make_key("t", "ollama", "m", {}, [{"role": "user", "content": "x"}], dict(opts, cv=server.CACHE_VERSION))
-    llm_cache.put(key, "t", "ollama", "m", {"ko": "你好"})
-    out = server._with_cache("t", "ollama", "m", [{"role": "user", "content": "x"}], {}, opts, lambda: {"ko": "안녕"},
+    key = llm_cache.make_key("t", "engine", "m", {}, [{"role": "user", "content": "x"}], dict(opts, cv=server.CACHE_VERSION))
+    llm_cache.put(key, "t", "engine", "m", {"ko": "你好"})
+    out = server._with_cache("t", "engine", "m", [{"role": "user", "content": "x"}], {}, opts, lambda: {"ko": "안녕"},
                              lambda d: server.ko_ok(d.get("ko", ""), "en"))
     check("a stored bad entry is ignored and replaced by the fresh good answer", out == {"ko": "안녕"}, out)
     # and the cache key carries a version, so answers stored by the old unvalidated code are not reachable
-    old_key = llm_cache.make_key("t", "ollama", "m", {}, [{"role": "user", "content": "x"}], opts)
+    old_key = llm_cache.make_key("t", "engine", "m", {}, [{"role": "user", "content": "x"}], opts)
     check("cache key differs from the pre-1.1.1 key (version prefix)", old_key != key)
 
 
@@ -242,6 +242,7 @@ class FakeOC:
 
 
 def install_fake_oc(fake):
+    llm_opencode.state = lambda: "ready"   # chat_json / call_json look at the login state before they start a server (task B1)
     llm_opencode._need_server = lambda: None
     llm_opencode._new_session = fake.new_session
     llm_opencode._delete_session = fake.delete_session
@@ -288,7 +289,6 @@ def test_opencode():
                     '{"reply":"Nice to meet you.","ko":"만나서 반갑습니다.","reading":"","suggest":["a","b"]}']
     install_fake_oc(fake)
     server.llm_provider = lambda: "opencode"
-    server.remote_route_active = lambda: True
     server.llm_opencode.available = lambda: True
     local_calls = []
 
