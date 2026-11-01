@@ -35,6 +35,8 @@ var progress_text: String = ""
 var last_msg: String = ""
 var last_warnings: Array = []
 var request_count: int = 0 ## 이 탭이 보낸 /song/enrich 요청 수 (시험 확인용)
+## true 면 화면을 그리지 않는다: 외우기 화면이 같은 요청 로직(make_missing)을 눈에 안 보이게 쓸 때(SongMemoScreen 의 해석 안내 카드).
+var quiet: bool = false
 
 ## 시험 전용: PC 연결 판정을 바꾼다 (Callable() -> bool).
 static var pc_hook: Callable = Callable()
@@ -365,6 +367,8 @@ func add_line_card(i: int) -> int:
 # ---------------------------------------------------------------- 그리기
 
 func _render() -> void:
+	if quiet:
+		return
 	UI.clear(self)
 	_panels = {}
 	var ls: Variant = song.get("lines", [])
