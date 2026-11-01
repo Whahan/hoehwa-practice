@@ -231,6 +231,12 @@ func _compare() -> void:
 		var cur_n: int = int(cur["nodes"])
 		var cur_r: int = int(cur["res"])
 		var cur_b: float = float(cur["build_ms"])
+		if view == "lesson":
+			# lesson path (48 cells): absolute cap, see home_menu_design §13
+			ok(cur_n <= 600, "view lesson nodes %d <= 600 (absolute cap, base %d)" % [cur_n, base_n])
+			ok(cur_b <= 150.0, "view lesson build_ms %.2f <= 150 (absolute cap, base %.2f)" % [cur_b, base_b])
+			ok(cur_r <= 800, "view lesson res %d <= 800 (absolute cap, base %d)" % [cur_r, base_r])
+			continue
 		ok(cur_b <= base_b * _max_ratio, "view %s build_ms %.2f <= %.2f x %.2f (base %.2f)" % [view, cur_b, base_b, _max_ratio, base_b])
 		ok(cur_n <= int(ceil(float(base_n) * _max_ratio)), "view %s nodes %d <= %d x %.2f (base %d)" % [view, cur_n, base_n, _max_ratio, base_n])
 		ok(cur_r <= int(ceil(float(base_r) * _max_ratio)), "view %s res %d <= %d x %.2f (base %d)" % [view, cur_r, base_r, _max_ratio, base_r])

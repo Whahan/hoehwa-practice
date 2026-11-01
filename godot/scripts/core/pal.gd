@@ -15,7 +15,8 @@ const LIGHT := {
 	"EN": "#2C56C9", "EN_SOFT": "#E7ECFA", "JA": "#C4412A", "JA_SOFT": "#F8E8E3",
 	"OK": "#23855A", "OK_SOFT": "#E3F3EA", "BAD": "#B83A3A", "BAD_SOFT": "#F9E5E5",
 	"WARN": "#9A6A00", "WARN_SOFT": "#FFF3D6",
-	"PRIMARY": "#0A6BD6", "PRIMARY_SOFT": "#E8F1FC", "ON_ACCENT": "#FFFFFF",
+	"PRIMARY": "#0A726D", "PRIMARY_SOFT": "#E4F5F3", "ON_ACCENT": "#FFFFFF",
+	"REWARD": "#6C47D9", "REWARD_SOFT": "#EEE9FC", "REWARD_ON": "#5333B8",
 	"EN_ON": "#2C56C9", "JA_ON": "#A8351F", "OK_ON": "#1B6B49", "WARN_ON": "#7F5700", "BAD_ON": "#B83A3A",
 	"TOAST_BG": "#222A38", "TOAST_FG": "#FFFFFF", "TOAST_OK": "#1D6B49", "TOAST_ERR": "#8F2D2D",
 }
@@ -25,7 +26,8 @@ const DARK := {
 	"EN": "#8FA8F0", "EN_SOFT": "#1F2842", "JA": "#F08C78", "JA_SOFT": "#3A2420",
 	"OK": "#5FCB96", "OK_SOFT": "#1C3328", "BAD": "#F28B8B", "BAD_SOFT": "#3A2224",
 	"WARN": "#E3B34A", "WARN_SOFT": "#382E14",
-	"PRIMARY": "#7DB4FF", "PRIMARY_SOFT": "#12263F", "ON_ACCENT": "#101216",
+	"PRIMARY": "#4FD1C5", "PRIMARY_SOFT": "#10302E", "ON_ACCENT": "#101216",
+	"REWARD": "#B7A1FF", "REWARD_SOFT": "#241D4A", "REWARD_ON": "#B7A1FF",
 	"EN_ON": "#8FA8F0", "JA_ON": "#F08C78", "OK_ON": "#5FCB96", "WARN_ON": "#E3B34A", "BAD_ON": "#F28B8B",
 	"TOAST_BG": "#2E333C", "TOAST_FG": "#F2F3F5", "TOAST_OK": "#1D6B49", "TOAST_ERR": "#8F2D2D",
 }
@@ -50,8 +52,11 @@ static var WARN_SOFT: Color = Color("#FFF3D6")
 # -- new tokens (§5.1.2) --
 static var SURFACE_HI: Color = Color("#FFFFFF")   ## sheet, dialog, side nav
 static var LINE_STRONG: Color = Color("#7C8596")  ## input / chip / switch-track boundary (3:1)
-static var PRIMARY: Color = Color("#0A6BD6")      ## language-independent accent (decision B)
-static var PRIMARY_SOFT: Color = Color("#E8F1FC") ## selected item background
+static var PRIMARY: Color = Color("#0A726D")      ## language-independent accent: teal (home_menu_design D9)
+static var PRIMARY_SOFT: Color = Color("#E4F5F3") ## selected item background
+static var REWARD: Color = Color("#6C47D9")       ## "collected" things: streak, XP, stars (fill / line / dot; text: REWARD_ON)
+static var REWARD_SOFT: Color = Color("#EEE9FC")  ## reward chip / protected-day surface
+static var REWARD_ON: Color = Color("#5333B8")    ## text on REWARD_SOFT / SURFACE / BG
 static var ON_ACCENT: Color = Color("#FFFFFF")    ## text on a filled accent button
 static var EN_ON: Color = Color("#2C56C9")
 static var JA_ON: Color = Color("#A8351F")
@@ -99,6 +104,9 @@ static func use(scheme: String) -> void:
 	WARN_SOFT = Color(t["WARN_SOFT"])
 	PRIMARY = Color(t["PRIMARY"])
 	PRIMARY_SOFT = Color(t["PRIMARY_SOFT"])
+	REWARD = Color(t["REWARD"])
+	REWARD_SOFT = Color(t["REWARD_SOFT"])
+	REWARD_ON = Color(t["REWARD_ON"])
 	ON_ACCENT = Color(t["ON_ACCENT"])
 	EN_ON = Color(t["EN_ON"])
 	JA_ON = Color(t["JA_ON"])

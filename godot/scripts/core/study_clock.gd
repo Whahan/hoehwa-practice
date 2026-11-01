@@ -108,6 +108,7 @@ func tick(delta: float, active: bool) -> int:
 		var goal_sec: int = StudyLog.goal_minutes() * 60
 		var before: int = StudyLog.today_seconds(lang)
 		StudyLog.add_seconds(lang, current_view(), int(STEP))
+		StudyLog.note_resume(current_view(), lang) ## home "이어하기": only lesson/review/talk/practice/reading/song count
 		var after: int = StudyLog.today_seconds(lang)
 		written += after - before
 		if goal_sec > 0 and before < goal_sec and after >= goal_sec:

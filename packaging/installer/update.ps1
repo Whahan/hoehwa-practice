@@ -3,7 +3,8 @@
 # GitHub 의 최신 릴리스(release.json 의 repo)와 version.txt 를 비교해서, 새 버전이면 업데이트 zip 을 받아
 # SHA256 을 확인하고 적용합니다. 바뀐 파일은 backup\<이전 버전>\ 에 보관하고, 실패하면 되돌립니다.
 # 정리 정책: 백업은 직전 1개만 남기고, 내려받은 zip 과 임시 폴더는 성공/실패와 상관없이 지우고, pip 캐시는 쓰지 않고,
-# 새 잠금 목록(models.lock.json)에 없는 모델 파일과 옛 Ollama 모델은 지웁니다. 업데이트 전후 폴더 크기를 보여 줍니다.
+# 새 잠금 목록(models.lock.json)에 없는 모델 파일은 지웁니다. 업데이트 전후 폴더 크기를 보여 줍니다.
+# 설치 구성 요소(OpenCode, 자바)는 vendor\tools.lock.json 이 바뀌었을 때, 이미 설치돼 있는 것만 vendor\install_tools.py 로 맞춥니다(실패해도 업데이트는 성공).
 param(
     [switch]$Yes,                                  # 질문에 자동으로 Y
     [switch]$CheckOnly,                            # 새 버전이 있는지만 확인
@@ -39,7 +40,7 @@ try {
 $script:LogW = New-Object System.IO.StreamWriter($LogFile, $true, (New-Object System.Text.UTF8Encoding($false)))
 $script:LogW.AutoFlush = $true
 function Log([string]$m) { $script:LogW.WriteLine((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + " " + $m) }
-# 테스트용 환경변수(HOEHWA_UPDATE_SOURCE / HOEHWA_OLLAMA_EXE / HOEHWA_UPDATE_FAIL / HOEHWA_PIP_DRYRUN)는 HOEHWA_TEST_MODE=1 을 명시했을 때만 동작한다.
+# 테스트용 환경변수(HOEHWA_UPDATE_SOURCE / HOEHWA_UPDATE_FAIL / HOEHWA_PIP_DRYRUN)는 HOEHWA_TEST_MODE=1 을 명시했을 때만 동작한다.
 # 배포본을 쓰는 PC 에 우연히 남은 환경변수가 업데이트를 바꾸지 못하게 하기 위해서다.
 $TestMode = ($env:HOEHWA_TEST_MODE -eq "1")
 function Say([string]$m, [string]$color = "White") { Write-Host $m -ForegroundColor $color; Log $m }
@@ -115,28 +116,28 @@ function Get-TreeSize([string]$helper, [string[]]$Skip = @()) {
 }
 function Format-Size([int64]$b) { if ($b -lt 0) { return "?" }; return ("{0:N2} GB" -f ($b / 1GB)) }
 
-# Ollama (로컬 AI 를 쓰는 설치만 해당). HOEHWA_OLLAMA_EXE 는 테스트용(HOEHWA_TEST_MODE=1 일 때만)으로 다른 실행 파일을 가리킨다.
-function Find-OllamaExe {
-    if ($TestMode -and $env:HOEHWA_OLLAMA_EXE) { return $env:HOEHWA_OLLAMA_EXE }
-    $c = Get-Command ollama.exe -ErrorAction SilentlyContinue
-    if ($c) { return $c.Source }
-    foreach ($p in @((Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"), (Join-Path $env:ProgramFiles "Ollama\ollama.exe"))) {
-        if (Test-Path -LiteralPath $p) { return $p }
+# 설치 구성 요소(OpenCode, 포터블 자바) 맞추기. 잠금(vendor\tools.lock.json)이 바뀐 업데이트에서만 부른다.
+# 이미 설치돼 있는 것만 다시 맞춘다: 1.4.x 설치(npm 으로 설치한 OpenCode 를 쓰거나 자바가 없는 PC)에는 새로 받지 않는다.
+# 실패는 경고만 하고 업데이트는 계속된다 (앱에서 [AI 연결하기] 를 누를 때 다시 받을 수 있다).
+function Update-Tools {
+    $it = Join-Path $Vendor "install_tools.py"
+    $lock = Join-Path $Vendor "tools.lock.json"
+    if (-not (Test-Path -LiteralPath $it) -or -not (Test-Path -LiteralPath $lock)) { Warn "설치 구성 요소 정보(install_tools.py, tools.lock.json)가 없어 건너뜁니다."; return }
+    $todo = @()
+    $toolsDir = Join-Path $Backend "tools"
+    if (Test-Path -LiteralPath (Join-Path $toolsDir "opencode\opencode.exe")) { $todo += "opencode" }
+    if (Test-Path -LiteralPath $toolsDir) {
+        $jre = @(Get-ChildItem -LiteralPath $toolsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(?i)(jre|jdk)' -and (Test-Path -LiteralPath (Join-Path $_.FullName "bin\java.exe")) })
+        if ($jre.Count -gt 0) { $todo += "jre" }
     }
-    return $null
-}
-function Ensure-OllamaServing([string]$exe) {
-    if ($TestMode -and $env:HOEHWA_OLLAMA_EXE) { return $true }
-    $up = { try { Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 4 | Out-Null; return $true } catch { return $false } }
-    if (& $up) { return $true }
-    Start-Process -FilePath $exe -ArgumentList "serve" -WindowStyle Hidden | Out-Null
-    for ($i = 0; $i -lt 40; $i++) { Start-Sleep -Seconds 1; if (& $up) { return $true } }
-    return $false
-}
-function Get-OllamaNames([string]$exe) {
-    $code = Invoke-Native $exe @("list") -Quiet
-    if ($code -ne 0) { return $null }
-    return @($script:LastOutput | Select-Object -Skip 1 | ForEach-Object { ($_.Trim() -split "\s+")[0] } | Where-Object { $_ })
+    if ($todo.Count -eq 0) { Info "OpenCode·자바가 이 폴더에 설치돼 있지 않아 건너뜁니다."; return }
+    foreach ($t in $todo) {
+        try {
+            $code = Invoke-Native $Py @("-X", "utf8", $it, $lock, $Root, "--only", $t)
+            if ($code -eq 0) { Info "$t 확인 OK" }
+            else { Warn "$t 를 받거나 바꾸지 못했습니다 (종료 코드 $code). 업데이트는 계속합니다. 인터넷 연결을 확인한 뒤 다시 업데이트하면 다시 시도합니다." }
+        } catch { Warn ("$t 처리 중 오류(업데이트는 계속): " + $_.Exception.Message) }
+    }
 }
 
 # ---------------------------------------------------------------- 릴리스 정보
@@ -196,21 +197,17 @@ $exitCode = 0
 $phase = "check"
 $backup = $null
 $pipTouched = $false
-$localEngine = $false
-$ollamaExe = $null
-$pulledNew = $null        # 이번 실행에서 새로 받은 Ollama 모델 태그 (실패하면 지운다)
-$oldOllamaTag = $null     # 성공하면 지울 옛 모델 태그
 $sizeBefore = -1
 Log "==================== 업데이트 시작 ===================="
 if ($TestMode) { Say "[테스트 모드] HOEHWA_TEST_MODE=1: 테스트용 환경변수를 사용합니다. 평소에는 켜지 않습니다." "Yellow" }
-elseif ($env:HOEHWA_UPDATE_SOURCE -or $env:HOEHWA_OLLAMA_EXE -or $env:HOEHWA_UPDATE_FAIL -or $env:HOEHWA_PIP_DRYRUN) { Log "HOEHWA_* 테스트용 환경변수가 있지만 HOEHWA_TEST_MODE=1 이 아니라서 무시합니다." }
+elseif ($env:HOEHWA_UPDATE_SOURCE -or $env:HOEHWA_UPDATE_FAIL -or $env:HOEHWA_PIP_DRYRUN) { Log "HOEHWA_* 테스트용 환경변수가 있지만 HOEHWA_TEST_MODE=1 이 아니라서 무시합니다." }
 try {
     Say "=============================================" "Cyan"
     Say "   회화 연습 업데이트" "Cyan"
     Say "=============================================" "Cyan"
     $verFile = Join-Path $Root "version.txt"
     if (-not (Test-Path -LiteralPath $verFile) -or -not (Test-Path -LiteralPath $Py)) {
-        throw "설치가 끝나지 않은 폴더입니다. 먼저 설치.bat 으로 설치를 마쳐 주세요."
+        throw "설치가 끝나지 않은 폴더입니다. 먼저 설치 프로그램(hoehwa-practice-setup.exe 또는 설치.bat)으로 설치를 마쳐 주세요."
     }
     $curVerText = (Get-Content -LiteralPath $verFile -Raw).Trim()
     $curVer = Parse-Ver $curVerText
@@ -280,7 +277,7 @@ try {
         $ivf = Join-Path $StateDir "installer_version.txt"
         if (Test-Path -LiteralPath $ivf) { $instVer = [int](Get-Content -LiteralPath $ivf -Raw).Trim() }
         if ($instVer -lt [int]$man.min_installer_version) {
-            throw ("이 업데이트(v{0})는 새로 설치해야 합니다. https://github.com/{1}/releases/latest 에서 설치 파일을 받아 설치.bat 을 실행해 주세요. (학습 기록은 그대로 남습니다)" -f $newVerText, $relCfg.repo)
+            throw ("이 업데이트(v{0})는 새로 설치해야 합니다. https://github.com/{1}/releases/latest 에서 설치 파일(hoehwa-practice-setup.exe)을 받아 실행해 주세요. (학습 기록은 그대로 남습니다)" -f $newVerText, $relCfg.repo)
         }
         # 설치된 잠금 파일 해시 (새 helper 로 같은 방법으로 계산)
         $code = Invoke-Native $Py @("-X", "utf8", $helper, "lockinfo", $Vendor, $Backend) -Quiet
@@ -288,16 +285,8 @@ try {
         $oldLocks = ($script:LastOutput -join "`n") | ConvertFrom-Json
         $newLocks = $man.locks
         $chg = @{}
-        foreach ($k in @("requirements", "bootstrap", "models", "languagetool", "tatoeba_schema", "ollama")) { $chg[$k] = ("" + $oldLocks.$k) -ne ("" + $newLocks.$k) }
+        foreach ($k in @("requirements", "bootstrap", "models", "languagetool", "tatoeba_schema", "tools")) { $chg[$k] = ("" + $oldLocks.$k) -ne ("" + $newLocks.$k) }
         Log ("lock changes: " + (($chg.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join " "))
-        # 바꾸기 전에 기억해 둘 것: 로컬 AI 를 쓰는지, 지금 쓰는 Ollama 모델 태그
-        try {
-            $cfgNow = Get-Content -LiteralPath (Join-Path $Backend "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-            $engFile = Join-Path $StateDir "engine.txt"
-            $localEngine = ($cfgNow.llm_provider -eq "ollama") -or (-not $cfgNow.llm_provider -and (Test-Path -LiteralPath $engFile) -and ((Get-Content -LiteralPath $engFile -Raw).Trim() -eq "local"))
-            $oldLockFile = Join-Path $Vendor "models.lock.json"
-            if (Test-Path -LiteralPath $oldLockFile) { $oldOllamaTag = "" + (Get-Content -LiteralPath $oldLockFile -Raw -Encoding UTF8 | ConvertFrom-Json).ollama.model }
-        } catch { Log ("엔진 확인 실패: " + $_.Exception.Message) }
         $sizeBefore = Get-TreeSize $helper @("backup\_update_work")
 
         # ------------------------------------------------ 2. 실행 중인 프로그램 종료
@@ -380,7 +369,8 @@ try {
             Info "파이썬 패키지 목록이 바뀌었습니다. 바뀐 패키지만 설치합니다."
             $pipTouched = $true
             $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "pipsync",
-                (Join-Path $Vendor "requirements.lock.txt"), (Join-Path $Vendor "bootstrap.lock.txt"), (Join-Path $Vendor "wheels"))
+                (Join-Path $Vendor "requirements.lock.txt"), (Join-Path $Vendor "bootstrap.lock.txt"), (Join-Path $Vendor "wheels"),
+                "--gpu-file", (Join-Path $StateDir "gpu.txt"))   # gpu.txt = cpu 면 nvidia-* 패키지는 받지 않는다 (없으면 전부)
             if ($code -ne 0) { throw "파이썬 패키지 업데이트 실패" }
         } else { Info "파이썬 패키지: 변경 없음" }
         if ($TestMode -and $env:HOEHWA_UPDATE_FAIL -eq "after_packages") { throw "(테스트) 강제 실패: after_packages" }
@@ -405,47 +395,18 @@ try {
             $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Backend "tatoeba_build.py"))
             if ($code -ne 0) { Warn "예문 데이터베이스를 다시 만들지 못했습니다. 나중에 프로그램이 다시 시도합니다." }
         } else { Info "예문 데이터베이스: 변경 없음" }
-        # 로컬 AI(Ollama): 모델 태그가 바뀌면 새 모델을 받고 설정을 새 태그로 바꾼다. 옛 모델은 성공한 뒤에 지운다.
-        $newOllamaTag = $null
-        try { $newOllamaTag = "" + (Get-Content -LiteralPath (Join-Path $Vendor "models.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json).ollama.model } catch {}
-        if ($localEngine -and $newOllamaTag -and $oldOllamaTag -and $newOllamaTag -ne $oldOllamaTag) {
-            Info "로컬 AI 모델이 $oldOllamaTag 에서 $newOllamaTag 로 바뀌었습니다."
-            $ollamaExe = Find-OllamaExe
-            if (-not $ollamaExe) { throw "Ollama 를 찾지 못했습니다. Ollama 를 설치/실행한 뒤 다시 업데이트해 주세요." }
-            if (-not (Ensure-OllamaServing $ollamaExe)) { throw "Ollama 서버가 켜지지 않습니다. 시작 메뉴에서 Ollama 를 한 번 실행한 뒤 다시 시도해 주세요." }
-            $names = Get-OllamaNames $ollamaExe
-            if ($null -eq $names) { throw "Ollama 모델 목록을 읽지 못했습니다." }
-            if ($names -notcontains $newOllamaTag) {
-                Info "$newOllamaTag 모델을 받습니다 (수 GB, 시간이 걸립니다)."
-                $ok = $false
-                for ($try = 1; $try -le 3 -and -not $ok; $try++) {
-                    if ($try -gt 1) { Warn "다시 시도합니다 ($try/3)..."; Start-Sleep -Seconds 5 }
-                    $code = Invoke-Native $ollamaExe @("pull", $newOllamaTag)
-                    if ($code -eq 0) { $ok = $true }
-                }
-                if (-not $ok) { throw "$newOllamaTag 모델을 받지 못했습니다." }
-                $pulledNew = $newOllamaTag
-            } else { Info "$newOllamaTag 모델이 이미 있습니다." }
-            $cfgPath = Join-Path $Backend "config.json"
-            $cur = (Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json).llm_model
-            if (-not $cur -or $cur -eq $oldOllamaTag) {
-                $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "setcfg", $cfgPath, "llm_model", $newOllamaTag)
-                if ($code -ne 0) { throw "config.json 의 llm_model 을 바꾸지 못했습니다." }
-            }
-            $script:OldTagToRemove = $oldOllamaTag
-        } elseif ($chg.ollama -and $newLocks.ollama) {
-            Info "참고: 개발 PC 의 로컬 AI 모델 내용이 바뀌었습니다(같은 태그). 로컬 AI 를 쓰면 'ollama pull' 로 최신 모델을 받을 수 있습니다."
-        }
         if ($TestMode -and $env:HOEHWA_UPDATE_FAIL -eq "after_apply") { throw "(테스트) 강제 실패: after_apply" }
+        # 설치 구성 요소(OpenCode, 자바): 되돌릴 일이 모두 끝난 뒤에 한다. backend\tools 는 되돌리기 대상이 아니고, 실패는 경고만 한다.
+        if ($chg.tools) {
+            Info "설치 구성 요소(OpenCode·자바) 잠금이 바뀌었습니다."
+            Update-Tools
+        } else { Info "설치 구성 요소(OpenCode·자바): 변경 없음" }
 
         # 마무리: 버전 기록 (여기부터는 되돌리지 않는다)
         Copy-Item -LiteralPath $manPath -Destination (Join-Path $Root "manifest.json") -Force
         Write-Utf8 $verFile ($newVerText + "`r`n")
         New-Item -ItemType Directory -Force $StateDir | Out-Null
         Write-Utf8 (Join-Path $StateDir "installer_version.txt") ("" + $man.installer_version)
-        # 업데이트할 수 있었다 = 설치가 끝까지 됐다 = config.json 의 엔진은 이미 적혀 있다 (그 뒤 앱에서 바꿨을 수 있다).
-        # 표시 파일이 없던 v1.0.0 설치도 다시 설치할 때 앱에서 고른 엔진을 지키도록 install.ps1 의 표시를 만들어 둔다.
-        if (Test-Path -LiteralPath (Join-Path $StateDir "engine.txt")) { Write-Utf8 (Join-Path $StateDir "engine-config.ok") "1" }
         $phase = "done"
 
         # ------------------------------------------------ 정리: 쓰지 않는 것은 남기지 않는다
@@ -473,14 +434,6 @@ try {
                 $code = Invoke-Native $Py ($pruneArgs + @("--apply"))
                 if ($code -ne 0) { Warn "쓰지 않는 모델 파일을 정리하지 못했습니다." }
             } else { Info "음성 모델 정리: 필요 없음 (목록 변경 없음)" }
-            # 옛 Ollama 모델 (새 모델을 받은 뒤에만)
-            if ($script:OldTagToRemove -and $ollamaExe) {
-                $names = Get-OllamaNames $ollamaExe
-                if ($names -contains $script:OldTagToRemove -and $names -contains $newOllamaTag) {
-                    $code = Invoke-Native $ollamaExe @("rm", $script:OldTagToRemove)
-                    if ($code -eq 0) { Info "옛 로컬 AI 모델 삭제: $($script:OldTagToRemove)" } else { Warn "옛 로컬 AI 모델($($script:OldTagToRemove))을 지우지 못했습니다. 'ollama rm $($script:OldTagToRemove)' 로 직접 지울 수 있습니다." }
-                }
-            }
         } catch { Warn ("정리 중 오류(업데이트는 성공): " + $_.Exception.Message) }
         $sizeAfter = Get-TreeSize (Join-Path $Vendor "update_helper.py")
         Say ""
@@ -505,7 +458,7 @@ catch {
             # 모델 캐시의 refs\main 을 원래 값으로 (이전 버전 앱이 이전 모델 스냅샷을 찾도록). 파일을 되돌리기 전에 한다: 그때는 vendor\update_helper.py 가 아직 refrestore 를 아는 새 버전이다.
             if ($script:HfRefsFile -and (Test-Path -LiteralPath $script:HfRefsFile)) {
                 $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "refrestore", $script:HfRefsFile, $HfDir)
-                if ($code -ne 0) { Warn "모델 캐시의 refs\main 을 완전히 되돌리지 못했습니다. 설치.bat 을 다시 실행하면 복구됩니다." } else { Info "모델 캐시의 refs\main 을 원래 값으로 되돌렸습니다." }
+                if ($code -ne 0) { Warn "모델 캐시의 refs\main 을 완전히 되돌리지 못했습니다. 설치 프로그램을 다시 실행하면 복구됩니다." } else { Info "모델 캐시의 refs\main 을 원래 값으로 되돌렸습니다." }
             }
             foreach ($rel in @($st.replaced) + @($st.removed) + @($st.special)) {
                 $src = Join-Path $backup ($rel -replace "/", "\")
@@ -519,15 +472,14 @@ catch {
             if ($pipTouched) {
                 Info "파이썬 패키지를 이전 목록으로 되돌립니다..."
                 $code = Invoke-Native $Py @("-X", "utf8", (Join-Path $Vendor "update_helper.py"), "pipsync",
-                    (Join-Path $Vendor "requirements.lock.txt"), (Join-Path $Vendor "bootstrap.lock.txt"), (Join-Path $Vendor "wheels"))
-                if ($code -ne 0) { Warn "패키지를 완전히 되돌리지 못했습니다. 설치.bat 을 다시 실행하면 복구됩니다." }
+                    (Join-Path $Vendor "requirements.lock.txt"), (Join-Path $Vendor "bootstrap.lock.txt"), (Join-Path $Vendor "wheels"),
+                    "--gpu-file", (Join-Path $StateDir "gpu.txt"))
+                if ($code -ne 0) { Warn "패키지를 완전히 되돌리지 못했습니다. 설치 프로그램을 다시 실행하면 복구됩니다." }
             }
-            # 이번에 새로 받은 로컬 AI 모델은 쓰지 않으므로 지운다 (앱 크기가 늘지 않게)
-            if ($pulledNew -and $ollamaExe) { $null = Invoke-Native $ollamaExe @("rm", $pulledNew) -Quiet; Info "새로 받은 로컬 AI 모델($pulledNew)을 지웠습니다." }
             Say ("이전 버전(v{0})으로 되돌렸습니다. 프로그램은 그대로 쓸 수 있습니다." -f $curVerText) "Yellow"
             $rolledBack = $true
         } catch {
-            Say ("되돌리기 중 오류: " + $_.Exception.Message + "  -> backup\" + (Split-Path $backup -Leaf) + " 폴더에 이전 파일이 있습니다. 설치.bat 을 다시 실행해 주세요.") "Red"
+            Say ("되돌리기 중 오류: " + $_.Exception.Message + "  -> backup\" + (Split-Path $backup -Leaf) + " 폴더에 이전 파일이 있습니다. 설치 프로그램을 다시 실행해 주세요.") "Red"
         }
         # 되돌리기에 성공했으면 이번 시도의 백업은 지금 파일과 같으므로 지운다 (이전 업데이트의 백업은 그대로 둔다)
         if ($rolledBack) { Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue }

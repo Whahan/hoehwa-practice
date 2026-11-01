@@ -1,7 +1,7 @@
 extends Node
 ## Touch-scroll test (phone): a finger drag that starts ANYWHERE on a scrolling page must scroll it.
 ##   godot --headless --path godot res://tests/touch_scroll_test.tscn -- --phone
-## Walks the scrolling screens (오늘, 레슨, 대화, 읽기, 복습, 로드맵, 연습, 기록, 연결) in fixed states, and in every
+## Walks the scrolling screens (홈, 메뉴, 레슨, 대화, 읽기, 복습, 로드맵, 연습, 기록, 연결) in fixed states, and in every
 ## visible ScrollContainer drags the finger 300 px up from many start points (blank, card, button, label,
 ## rich text, line edit, check box / check label, other) and measures how far the page moved.
 ##
@@ -227,6 +227,21 @@ func _scenarios() -> Array:
 		v.refresh()})
 	list.append({"name": "settings", "setup": func() -> void: # the settings are a screen of their own (W4 shell)
 		main_node.show_view("settings")})
+	if views.has("menu"): # phone only: the 메뉴 screen, made long enough to scroll (a small phone / a big text size)
+		list.append({"name": "menu", "setup": func() -> void:
+			main_node.show_view("menu")
+			var mv: MenuView = views["menu"]
+			var rebuild := Callable(self, "_menu_rebuild")
+			if not mv.entry_chosen.is_connected(rebuild):
+				mv.entry_chosen.connect(rebuild) # a tap on a row does something visible (the page is built again)
+			var groups: Array = []
+			for g in 3:
+				var items: Array = []
+				for i in 8:
+					items.append({"key": "t%d_%d" % [g, i], "title": "메뉴 줄 %d-%d" % [g, i], "sub": "부연 설명이 있는 줄" if i % 3 == 0 else ""})
+				groups.append({"title": "묶음 %d" % g, "items": items})
+			mv.set_summary("연속 5일 · XP 240 · 별 6/48")
+			mv.set_entries(groups)})
 	list.append({"name": "lesson_home", "setup": func() -> void:
 		main_node.show_view("lesson")})
 	list.append({"name": "lesson_choice", "setup": func() -> void:
@@ -341,6 +356,11 @@ func _scenarios() -> Array:
 		main_node.show_view("stats")
 		(views["stats"] as StatsView).refresh()})
 	return list
+
+
+func _menu_rebuild(_key: String) -> void:
+	if main_node != null and main_node.views.has("menu"):
+		(main_node.views["menu"] as MenuView).refresh()
 
 
 func _run_scenario(sc: Dictionary) -> void:

@@ -156,6 +156,32 @@ func _sizes_test() -> void:
 	ok(_h(ps) >= 48.0 and _w(ps) >= 48.0, "pref_switch hit area %.1f x %.1f >= 48x48" % [_w(ps), _h(ps)])
 	ok(_h(items["check_row/CheckBox"]) >= _min and _w(items["check_row/CheckBox"]) >= _min, "check_row CheckBox hit area >= %.1f both ways" % _min)
 	ok(UI.fs(16) == 16 and Ds.fs(16) == UI.fs(16), "UI.fs is Ds.fs (16 -> %d)" % UI.fs(16))
+	# home_menu_design §5.6 (T0-7): phone primary >= Ds.CTA_H (56), soft / outline stay 48; PC forces nothing on primary
+	var prim: Control = items["button/primary"]
+	var small_ok: bool = _h(prim) >= 56.0
+	if _phone:
+		ok(small_ok, "primary >= 56 on the phone (%.1f)" % _h(prim))
+		ok((prim as Button).custom_minimum_size.y == 56.0, "phone primary custom_minimum_size.y == 56 (%.1f)" % (prim as Button).custom_minimum_size.y)
+		var h46 := UI.button("짧은 요청", "primary", Pal.PRIMARY, 46.0)
+		var h70 := UI.button("높은 요청", "primary", Pal.PRIMARY, 70.0)
+		ok(h46.custom_minimum_size.y == 56.0 and h70.custom_minimum_size.y == 70.0, "phone primary height is max(min_h, 56): 46 -> 56, 70 -> 70 (%.1f, %.1f)" % [h46.custom_minimum_size.y, h70.custom_minimum_size.y])
+		ok((items["button/soft"] as Control).custom_minimum_size.y == 48.0 and (items["button/outline"] as Control).custom_minimum_size.y == 48.0, "phone soft / outline stay 48 (%.1f / %.1f)" % [(items["button/soft"] as Control).custom_minimum_size.y, (items["button/outline"] as Control).custom_minimum_size.y])
+		ok((items["button/danger"] as Control).custom_minimum_size.y == 48.0 and (items["button/flat"] as Control).custom_minimum_size.y == 48.0, "phone danger / flat keep 48")
+		# the checker itself must be able to fail: a soft button is NOT >= 56
+		var soft_fails: bool = not (_h(items["button/soft"]) >= 56.0)
+		print("selfcheck %s soft button %.1f against the primary >= 56 rule" % ["FAIL-as-expected" if soft_fails else "UNEXPECTED-PASS", _h(items["button/soft"])])
+		ok(soft_fails, "selfcheck: a soft button fails the primary >= 56 rule")
+		h46.free()
+		h70.free()
+	else:
+		ok((prim as Button).custom_minimum_size.y == 0.0, "PC primary has no forced height (custom_minimum_size.y == 0)")
+		ok(_h(prim) >= 40.0 and _h(prim) < 56.0, "PC primary is not forced to 56 (%.1f, still >= 40)" % _h(prim))
+		var pc_min := UI.button("PC 요청", "primary", Pal.PRIMARY, 46.0)
+		ok(pc_min.custom_minimum_size.y == 46.0, "PC primary keeps an explicit min_h (46) and nothing more")
+		pc_min.free()
+		var forced_fails: bool = not ((prim as Button).custom_minimum_size.y >= 56.0)
+		print("selfcheck %s PC primary against the phone >= 56 rule" % ["FAIL-as-expected" if forced_fails else "UNEXPECTED-PASS"])
+		ok(forced_fails, "selfcheck: the PC primary fails the phone >= 56 rule (as it must)")
 	v.queue_free()
 	await _frames(2)
 

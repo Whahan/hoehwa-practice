@@ -5,6 +5,10 @@ extends Node
 signal changed ## progress changed
 signal prefs_changed
 signal navigate(view: String, lang: String)
+## Deep navigation: main.gd shows `view`, then calls views[view].open_target(args) (args.lang "en"/"ja" also switches the language).
+signal navigate_args(view: String, args: Dictionary)
+## Home / menu "AI 연결하기" was pressed (main.gd opens the connect screen or settings).
+signal ai_connect_requested
 signal curriculum_updated
 
 const PROGRESS_PATH := "user://progress.json"
@@ -176,6 +180,11 @@ func lang() -> String:
 
 func set_lang(l: String) -> void:
 	set_pref("lang", l)
+
+
+## Home / menu [AI 연결하기]: only announces the wish; main.gd decides what to open.
+func request_ai_connect() -> void:
+	ai_connect_requested.emit()
 
 
 # ---------------------------------------------------------------- curriculum

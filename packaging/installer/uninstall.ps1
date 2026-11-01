@@ -1,19 +1,26 @@
-﻿# 회화 연습 제거 스크립트. 보통은 제거.bat 을 더블클릭해서 실행합니다.
-# 지우는 것: 이 폴더 안의 runtime, backend\models, backend\logs, backend\cache, backend\tools(LanguageTool), backend\secrets.json(API 키), backend\lan_devices.json(연결된 휴대폰 목록), install.log
-# 지우지 않는 것: Ollama 와 AI 모델, OpenCode/Node.js, 학습 기록/설정(%APPDATA%\Godot\app_userdata\회화 연습), 프로그램 파일 자체
+﻿# 회화 연습 제거 스크립트 (zip 으로 설치한 폴더용). 보통은 제거.bat 을 더블클릭해서 실행합니다.
+# setup.exe 로 설치했다면(이 폴더에 unins000.exe 가 있으면) 이 스크립트는 아무것도 지우지 않고 안내만 합니다: 윈도우 설정 > 앱 에서 제거하세요.
+# 지우는 것: 이 폴더 안의 runtime, backend\models, backend\logs, backend\cache, backend\tools(OpenCode, 자바, LanguageTool), backend\secrets.json(API 키), backend\lan_devices.json(연결된 휴대폰 목록), install.log
+# 지우지 않는 것: 학습 기록/설정(%APPDATA%\Godot\app_userdata\회화 연습), OpenCode 로그인(이 PC 의 OpenCode 설정), 프로그램 파일 자체
 param([switch]$Yes)
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 $Root = $PSScriptRoot
 
 Write-Host "================ 회화 연습 제거 ================" -ForegroundColor Cyan
+if (Test-Path -LiteralPath (Join-Path $Root "unins000.exe")) {
+    Write-Host "이 폴더는 setup.exe 로 설치되었습니다. 여기서는 아무것도 지우지 않았습니다." -ForegroundColor Yellow
+    Write-Host "제거하려면 윈도우 설정 > 앱 > 설치된 앱 에서 '회화 연습' 을 제거하거나, 시작 메뉴의 '회화 연습 제거' 를 실행하세요." -ForegroundColor Yellow
+    Write-Host "(학습 기록은 지워지지 않습니다: %APPDATA%\Godot\app_userdata\회화 연습)" -ForegroundColor Gray
+    exit 0
+}
 Write-Host "다음 폴더/파일을 지웁니다 (설치 폴더: $Root)"
 $targets = @("runtime", "backend\models", "backend\logs", "backend\cache", "backend\tools", "backend\secrets.json", "backend\lan_devices.json", "backend\__pycache__", "install.log", "backup", "update.log", "version.txt")
 foreach ($t in $targets) {
     $p = Join-Path $Root $t
     if (Test-Path -LiteralPath $p) { Write-Host "  - $t" }
 }
-Write-Host "지우지 않는 것: Ollama 와 AI 모델, OpenCode/Node.js, 학습 기록과 설정, 프로그램(exe) 자체" -ForegroundColor Gray
+Write-Host "지우지 않는 것: 학습 기록과 설정, OpenCode 로그인, 프로그램(exe) 자체" -ForegroundColor Gray
 if (-not $Yes) {
     $a = Read-Host "정말 제거할까요? (Y/N)"
     if ($a -notmatch '^[yY]') { Write-Host "취소했습니다."; exit 0 }
@@ -40,4 +47,4 @@ foreach ($t in $targets) {
     if (Test-Path -LiteralPath $p) { Write-Host "    [주의] 완전히 지우지 못했습니다. 프로그램을 모두 끈 뒤 다시 실행해 주세요: $t" -ForegroundColor Yellow }
 }
 Write-Host "제거가 끝났습니다. 폴더 자체는 직접 지우셔도 됩니다." -ForegroundColor Green
-Write-Host "(Ollama 는 '설정 > 앱'에서, 학습 기록은 %APPDATA%\Godot\app_userdata\회화 연습 폴더를 지우면 제거됩니다)" -ForegroundColor Gray
+Write-Host "(학습 기록은 %APPDATA%\Godot\app_userdata\회화 연습 폴더를 지우면 제거됩니다. OpenCode 로그인은 OpenCode 가 관리합니다)" -ForegroundColor Gray

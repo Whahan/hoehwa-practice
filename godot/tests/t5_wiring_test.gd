@@ -95,6 +95,7 @@ func _ready() -> void:
 	await _test_navigation()
 	await _test_layout()
 	await _test_back()
+	await _test_shell()
 	await _test_hooks(args)
 	_finish()
 
@@ -107,7 +108,10 @@ func _finish() -> void:
 func _test_tabs() -> void:
 	var keys: Array = _main.tab_keys()
 	print("  tabs: ", keys)
-	ok(keys == ["today", "lesson", "talk", "review", "practice", "reading", "song", "stats", "roadmap", "settings"], "tab order: 오늘, 레슨, 대화, 복습, then 연습, 읽기, 노래, 기록, 로드맵, 설정 (W4 shell + song study U1)")
+	var want_keys: Array = ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "roadmap", "settings"]
+	if _phone:
+		want_keys.insert(want_keys.find("song") + 1, "menu") # the phone-only 메뉴 screen sits right behind 노래
+	ok(keys == want_keys, "tab order: 홈, 레슨, 복습, 노래, (phone: 메뉴,) 대화, 연습, 읽기, 기록, 로드맵, 설정 (home_menu_design §4.2) (%s)" % [keys])
 	ok(_main.views["practice"] is PracticeView and _main.views["stats"] is StatsView, "views: PracticeView and StatsView")
 	var labels := {}
 	for t in _main._tabs:
@@ -122,10 +126,23 @@ func _test_tabs() -> void:
 	ok(clocks == 1, "exactly one StudyClock under main (%d)" % clocks)
 	if _phone:
 		var bt: BottomTabs = _main._bottom_tabs
-		ok(bt.direct_keys() == ["today", "lesson", "talk", "review"] and bt.overflow_keys() == ["practice", "reading", "song", "stats", "roadmap", "settings"], "phone: 4 cells + 더보기 with 연습, 읽기, 노래, 기록, 로드맵, 설정 (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
-		ok(bt.cell_buttons().size() == 5, "phone: bar has 5 cells (4 tabs + 더보기)")
+		var bar_want: Array = ["today", "lesson", "review", "song", "menu"]
+		ok(_main.bar_keys() == bar_want and bt.direct_keys() == bar_want and bt.overflow_keys().is_empty(), "T3-1 phone: the bar tabs are 홈, 레슨, 복습, 노래, 메뉴 and nothing goes to a 더보기 sheet (%s | %s)" % [bt.direct_keys(), bt.overflow_keys()])
+		ok(bt.cell_buttons().size() == 5 and bt.max_direct == 5, "T3-1 phone: the bar has 5 cells and no 더보기 cell (%d)" % bt.cell_buttons().size())
+		var cell_texts: Array = []
+		for cb in bt.cell_buttons():
+			cell_texts.append((cb as Button).text)
+		ok(cell_texts == ["홈", "레슨", "복습", "노래", "메뉴"], "T3-1 phone: the cell labels are 홈, 레슨, 복습, 노래, 메뉴 (%s)" % [cell_texts])
 	else:
 		ok(_main._bottom_tabs == null and _main._side_nav.item_buttons().size() == 10, "PC: 10 side-nav items (9 tabs + 설정), no bottom bar")
+		ok(not _main.views.has("menu") and not (_main._side_nav.item_buttons() as Dictionary).has("menu"), "PC: no 메뉴 screen and no 메뉴 item")
+
+
+func _class_exists(cls: String) -> bool:
+	for d in ProjectSettings.get_global_class_list():
+		if str((d as Dictionary).get("class", "")) == cls:
+			return true
+	return false
 
 
 func _test_navigation() -> void:
@@ -150,8 +167,13 @@ func _test_navigation() -> void:
 	await _frames(4)
 	_main.show_view("today")
 	await _frames(3)
-	var gc := (_main.views["today"] as Control).find_children("*", "GoalCard", true, false)
-	ok(gc.size() == 1, "오늘: one compact GoalCard (%d)" % gc.size())
+	# home_menu_design §13: the home shows one GoalRing (a layout without it yet -- before the home work is merged -- still has the one GoalCard)
+	if _class_exists("GoalRing"):
+		var gr := (_main.views["today"] as Control).find_children("*", "GoalRing", true, false)
+		ok(gr.size() == 1, "홈: one GoalRing (%d)" % gr.size())
+	else:
+		var gc := (_main.views["today"] as Control).find_children("*", "GoalCard", true, false)
+		ok(gc.size() == 1, "오늘: one compact GoalCard (%d)" % gc.size())
 
 
 func _test_layout() -> void:
@@ -163,7 +185,10 @@ func _test_layout() -> void:
 			var r: Rect2 = (c as Control).get_global_rect()
 			right = maxf(right, r.end.x)
 			min_w = minf(min_w, r.size.x)
-		ok(right <= 412.5 and min_w >= 48.0, "phone: bottom cells inside 412 px and >= 48 px (right %.0f, min %.0f)" % [right, min_w])
+		var min_h := 1000.0
+		for c2 in bt.cell_buttons():
+			min_h = minf(min_h, (c2 as Control).get_global_rect().size.y)
+		ok(right <= 412.5 and min_w >= 48.0 and min_h >= 56.0, "phone: bottom cells inside 412 px and >= 48x56 px (right %.0f, min %.0f x %.0f)" % [right, min_w, min_h])
 		return
 	for w in [1280, 900, 640]:
 		get_window().min_size = Vector2i.ZERO # main.gd keeps the real window at >= 900; 640 only exercises a very narrow page
@@ -209,6 +234,64 @@ func _test_back() -> void:
 	await _frames(2)
 	_main.handle_back()
 	ok(_main.current == "today", "back from 기록 goes to 오늘")
+
+
+## home_menu_design §4 / §9.7 in the running app (with 노래): the lit tab, the 메뉴 rows, the PC menu groups, deep navigation.
+func _test_shell() -> void:
+	_main.show_view("today")
+	await _frames(2)
+	if _phone:
+		var bt: BottomTabs = _main._bottom_tabs
+		_main.show_view("talk")
+		await _frames(2)
+		ok(bt._current == "menu", "T3-5: a screen of the 메뉴 (대화) lights the 메뉴 tab (%s)" % bt._current)
+		_main.show_view("song")
+		await _frames(2)
+		ok(bt._current == "song", "T3-5: 노래 lights its own tab (%s)" % bt._current)
+		_main.show_view("today")
+		await _frames(2)
+		ok(bt._current == "today", "T3-5: 홈 lights 홈 (%s)" % bt._current)
+		_main.show_view("menu")
+		await _frames(3)
+		var mv: MenuView = _main.views["menu"]
+		ok(mv.entry_keys() == ["talk", "practice", "reading", "stats", "roadmap", "settings"], "T3-4: the 메뉴 lists 대화, 연습, 읽기, 기록, 로드맵, 설정 (%s)" % [mv.entry_keys()])
+		ok(mv.summary_card() != null and bt._current == "menu", "T3-4: the 내 기록 card is there and the 메뉴 tab is lit")
+		var picked: Array = []
+		var cb := func(k: String) -> void: picked.append(k)
+		mv.entry_chosen.connect(cb)
+		mv.choose("reading")
+		mv.entry_chosen.disconnect(cb)
+		await _frames(2)
+		ok(picked == ["reading"] and _main.current == "reading", "T3-4: choosing a row opens that screen (%s -> %s)" % [picked, _main.current])
+		_main.handle_back()
+		await _frames(2)
+		ok(_main.current == "menu", "T3-6: back from 읽기 (opened from 메뉴) returns to 메뉴 (%s)" % _main.current)
+		_main.handle_back()
+		await _frames(2)
+		ok(_main.current == "today", "T3-6: back from 메뉴 goes to 홈 (%s)" % _main.current)
+	else:
+		var nav: SideNav = _main._side_nav
+		var btns: Dictionary = nav.item_buttons()
+		var order: Array = ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "roadmap", "settings"]
+		var inc := true
+		for i in range(1, order.size()):
+			if (btns[order[i]] as Control).get_global_rect().position.y <= (btns[order[i - 1]] as Control).get_global_rect().position.y:
+				inc = false
+		ok(inc and (btns["today"] as Button).text == "홈", "T3-8: the side nav order is 홈 < 레슨 < 복습 < 노래 < 대화 < 연습 < 읽기 < 기록 < 로드맵 < 설정")
+		var heads: Array = []
+		for l in nav._list.find_children("*", "Label", true, false):
+			heads.append((l as Label).text)
+		ok(heads == ["공부", "말하기·읽기", "기록"], "T3-8: the group headers are 공부, 말하기·읽기, 기록 (%s)" % [heads])
+	# deep navigation: language + screen (the screen's open_target may or may not exist yet)
+	Store.navigate_args.emit("lesson", {"lang": "ja", "n": 2, "w": 3, "start": false})
+	await _frames(3)
+	ok(_main.current == "lesson" and Store.lang() == "ja", "T3-11: navigate_args switches the language and opens the screen (%s, %s)" % [_main.current, Store.lang()])
+	Store.navigate_args.emit("nope", {"lang": "en"})
+	await _frames(2)
+	ok(_main.current == "lesson" and Store.lang() == "ja", "T3-11: navigate_args to an unknown screen changes nothing")
+	Store.set_lang("en")
+	_main.show_view("today")
+	await _frames(2)
 
 
 func _wav_b64(args: PackedStringArray) -> String:

@@ -15,6 +15,9 @@ extends RefCounted
 ##    "missions": {"cafe_order": {"stars":2, "plays":3, "last":"2026-10-16", "done_goals":2}},
 ##    "kana": {"c": {"あ": [맞힌, 틀린], "ア": [3, 1]}, "runs":4, "ok":31, "total":40, "last":"2026-10-16"}}   (가나 익히기, 처음 풀 때 생긴다)
 ## "kana" 는 이 기기에만 저장된다: SyncDoc 는 days / phon / missions 만 주고받아서 기기 사이에 동기화되지 않는다.
+##   "path": {"cells": {"en": {"3-2": {"done":3, "ok":22, "total":30, "last":"2026-11-01"}}, "ja": {}},
+##            "last": {"en": "3-2", "ja": ""}, "resume": {"view":"lesson", "lang":"en", "at":1793500000}}   (길 기록·이어하기, 처음 쓸 때 생긴다)
+## "path" 도 이 기기 전용이다(동기화 안 됨). 키가 없는 파일을 읽어도 snapshot() 은 달라지지 않는다.
 
 const VERSION := 1
 const KEEP_DAYS := 400
@@ -25,10 +28,13 @@ const GOAL_DEFAULT_MIN := 10
 const LANGS := ["en", "ja"]
 const KINDS := ["lessons", "talks", "missions", "reviews", "shadow", "dictation", "drill"]
 const VIEWS := ["today", "lesson", "talk", "reading", "review", "roadmap", "practice", "stats"]
-const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions", "kana"]
+const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions", "kana", "path"]
 const MAX_MISSIONS := 200
 const MAX_KANA := 400 ## 글자 칸 수 (히라가나 104 + 가타카나 104 보다 넉넉히)
 const KEEP_BAD := 3 ## .bad, .bad.1, .bad.2
+const PATH_VIEWS := ["lesson", "review", "talk", "practice", "reading", "song"] ## screens that note_resume() accepts
+const MAX_PATH_DONE := 9999 ## finished lessons counted per path cell
+const RESUME_SAME_SEC := 60 ## note_resume(): the same view + language again within this many seconds changes nothing
 
 static var path := "user://studylog.json"
 ## Tests only: pretend today is this day number (Plan.days_from_civil). -1 = system clock.
@@ -37,6 +43,9 @@ static var today_override: int = -1
 static var last_load_status: String = ""
 ## Tests only: (path: String) -> FileAccess or null, replaces FileAccess.open(path, READ) when loading.
 static var open_hook: Callable = Callable()
+
+## Tests only: pretend "now" is this unix time for note_resume(). -1 = system clock.
+static var unix_override: int = -1
 
 static var _data: Dictionary = {}
 static var _loaded: bool = false
@@ -265,6 +274,8 @@ static func _normalize(raw: Variant) -> Dictionary:
 	out["missions"] = _norm_missions(src.get("missions", null))
 	if src.has("kana"):
 		out["kana"] = _norm_kana(src["kana"])
+	if src.has("path"):
+		out["path"] = _norm_path(src["path"])
 	return out
 
 
@@ -428,6 +439,74 @@ static func _norm_kana(v: Variant) -> Dictionary:
 	out["ok"] = mini(_n(src.get("ok", 0)), int(out["total"]))
 	var last_v: Variant = src.get("last", "")
 	out["last"] = last_v if (last_v is String and _iso_days(last_v) >= 0) else ""
+	return out
+
+
+static func _blank_path() -> Dictionary:
+	return {"cells": {"en": {}, "ja": {}}, "last": {"en": "", "ja": ""}, "resume": {}}
+
+
+## "3-2" (month 1..12, week 1..4) -> true. Anything else (13-9, 0-1, 03-2, abc, a number) -> false.
+static func _is_cell_key(k: Variant) -> bool:
+	if not (k is String):
+		return false
+	var parts: PackedStringArray = (k as String).split("-")
+	if parts.size() != 2:
+		return false
+	var n_s: String = parts[0]
+	var w_s: String = parts[1]
+	if not (n_s.is_valid_int() and w_s.is_valid_int()):
+		return false
+	var n: int = int(n_s)
+	var w: int = int(w_s)
+	return str(n) == n_s and str(w) == w_s and n >= 1 and n <= 12 and w >= 1 and w <= 4
+
+
+## Unix time for resume.at: int or finite number >= 0 -> int, anything else -> -1 (invalid).
+static func _resume_at(v: Variant) -> int:
+	if v is int:
+		return v if int(v) >= 0 else -1
+	if v is float:
+		var f: float = v
+		if is_nan(f) or is_inf(f) or f < 0.0:
+			return -1
+		return int(minf(f, 4.0e18))
+	return -1
+
+
+static func _norm_path_cell(v: Variant) -> Dictionary:
+	var d: Dictionary = v if v is Dictionary else {}
+	var last_v: Variant = d.get("last", "")
+	return {
+		"done": _n(d.get("done", 0), 0, MAX_PATH_DONE),
+		"ok": _n(d.get("ok", 0)),
+		"total": _n(d.get("total", 0)),
+		"last": last_v if (last_v is String and _iso_days(last_v) >= 0) else "",
+	}
+
+
+static func _norm_path(v: Variant) -> Dictionary:
+	var out: Dictionary = _blank_path()
+	if not (v is Dictionary):
+		return out
+	var src: Dictionary = v
+	var cin: Variant = src.get("cells", null)
+	var lin: Variant = src.get("last", null)
+	for l in LANGS:
+		var per: Variant = (cin as Dictionary).get(l, null) if cin is Dictionary else null
+		if per is Dictionary:
+			for k in (per as Dictionary).keys():
+				if _is_cell_key(k) and (per as Dictionary)[k] is Dictionary:
+					(out["cells"][l] as Dictionary)[k] = _norm_path_cell((per as Dictionary)[k])
+		var lv: Variant = (lin as Dictionary).get(l, "") if lin is Dictionary else ""
+		out["last"][l] = lv if _is_cell_key(lv) else ""
+	var rin: Variant = src.get("resume", null)
+	if rin is Dictionary:
+		var rv: Variant = (rin as Dictionary).get("view", null)
+		var rl: Variant = (rin as Dictionary).get("lang", null)
+		var ra: int = _resume_at((rin as Dictionary).get("at", null))
+		if rv is String and PATH_VIEWS.has(rv) and rl is String and LANGS.has(rl) and ra >= 0:
+			out["resume"] = {"view": rv, "lang": rl, "at": ra}
 	return out
 
 
@@ -649,6 +728,108 @@ static func kana_stats() -> Dictionary:
 static func kana_summary() -> Dictionary:
 	var k: Dictionary = _kana(false)
 	return {"runs": int(k["runs"]), "ok": int(k["ok"]), "total": int(k["total"]), "last": str(k["last"])}
+
+
+# ---------------------------------------------------------------- path (레슨 길 기록 · 이어하기) -- 이 기기 전용
+
+## The live "path" dictionary, created on the first write (a log that never recorded a path has no such key).
+static func _path_data(create: bool) -> Dictionary:
+	_ensure()
+	if not _data.has("path"):
+		if not create:
+			return _blank_path()
+		_data["path"] = _blank_path()
+	return _data["path"]
+
+
+static func _valid_cell(n: int, w: int) -> bool:
+	return n >= 1 and n <= 12 and w >= 1 and w <= 4
+
+
+## One finished lesson in path cell (month n 1..12, week w 1..4) of `lang`: done +1, ok/total added, last = today.
+## false for an unknown language or a cell outside 1..12 x 1..4 (nothing is changed).
+static func add_path_lesson(lang: String, n: int, w: int, ok: int, total: int) -> bool:
+	if not _valid_lang(lang) or not _valid_cell(n, w):
+		return false
+	var p: Dictionary = _path_data(true)
+	var key: String = "%d-%d" % [n, w]
+	var cells: Dictionary = p["cells"][lang]
+	if not cells.has(key):
+		cells[key] = _norm_path_cell({})
+	var c: Dictionary = cells[key]
+	var t: int = clampi(total, 0, 1000)
+	c["done"] = mini(int(c["done"]) + 1, MAX_PATH_DONE)
+	c["ok"] = mini(int(c["ok"]) + clampi(ok, 0, t), MAX_COUNT)
+	c["total"] = mini(int(c["total"]) + t, MAX_COUNT)
+	c["last"] = Plan.days_to_iso(today())
+	p["last"][lang] = key
+	_dirty = true
+	return true
+
+
+## Lessons finished in that cell on this device (0 = no record or invalid arguments).
+static func path_done(lang: String, n: int, w: int) -> int:
+	if not _valid_lang(lang) or not _valid_cell(n, w):
+		return 0
+	var c: Variant = ((_path_data(false)["cells"] as Dictionary)[lang] as Dictionary).get("%d-%d" % [n, w], null)
+	return int((c as Dictionary)["done"]) if c is Dictionary else 0
+
+
+## [n, w] of the cell the last lesson of `lang` was finished in, [] when there is none.
+static func path_last(lang: String) -> Array:
+	if not _valid_lang(lang):
+		return []
+	var k: String = str(((_path_data(false)["last"]) as Dictionary).get(lang, ""))
+	if not _is_cell_key(k):
+		return []
+	var parts: PackedStringArray = k.split("-")
+	return [int(parts[0]), int(parts[1])]
+
+
+## Copy of every cell record of `lang`: {"3-2": {done, ok, total, last}}.
+static func path_cells(lang: String) -> Dictionary:
+	if not _valid_lang(lang):
+		return {}
+	return ((_path_data(false)["cells"] as Dictionary)[lang] as Dictionary).duplicate(true)
+
+
+## Days (day number -> true) a streak-protection token covered for `lang` (freeze.<lang>.frozen). {} when none.
+static func frozen_days(lang: String) -> Dictionary:
+	var out := {}
+	if not _valid_lang(lang):
+		return out
+	for iso in (_freeze(lang)["frozen"] as Array):
+		var d: int = _iso_days(str(iso))
+		if d >= 0:
+			out[d] = true
+	return out
+
+
+static func _unix_now() -> int:
+	return unix_override if unix_override >= 0 else int(Time.get_unix_time_from_system())
+
+
+## Remembers the screen (one of PATH_VIEWS) the user is studying in, for the home "이어하기" card.
+## false = invalid view or language. true = the input is valid; the stored value is only rewritten (and the log made
+## dirty) when it is another view / language or the last note is RESUME_SAME_SEC seconds old or older.
+static func note_resume(view: String, lang: String) -> bool:
+	if not PATH_VIEWS.has(view) or not _valid_lang(lang):
+		return false
+	var cur: Dictionary = _path_data(false)["resume"]
+	var now: int = _unix_now()
+	if not cur.is_empty() and cur["view"] == view and cur["lang"] == lang:
+		var age: int = now - int(cur["at"])
+		if age >= 0 and age < RESUME_SAME_SEC:
+			return true
+	_path_data(true)["resume"] = {"view": view, "lang": lang, "at": now}
+	_dirty = true
+	return true
+
+
+## {"view", "lang", "at"} of the last study screen, {} when unknown. `at` may lie in the future (clock set back):
+## whether that is shown is up to HomeModel.
+static func resume() -> Dictionary:
+	return (_path_data(false)["resume"] as Dictionary).duplicate(true)
 
 
 # ---------------------------------------------------------------- goal / streak

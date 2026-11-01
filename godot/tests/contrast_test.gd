@@ -22,11 +22,15 @@ const TEXT_PAIRS := [
 	"OK_ON/SURFACE", "WARN_ON/WARN_SOFT", "WARN_ON/BG", "WARN_ON/SURFACE", "BAD_ON/BAD_SOFT", "BAD_ON/SURFACE",
 	"BAD_ON/BG", "ON_ACCENT/PRIMARY", "ON_ACCENT/EN", "ON_ACCENT/JA", "ON_ACCENT/OK", "ON_ACCENT/BAD",
 	"TOAST_FG/TOAST_BG", "TOAST_FG/TOAST_OK", "TOAST_FG/TOAST_ERR", "LEARN_FG/LEARN_BG",
+	# home_menu_design §5.3 (D9): the teal PRIMARY and the purple REWARD family
+	"REWARD_ON/REWARD_SOFT", "REWARD_ON/SURFACE", "REWARD_ON/BG", "REWARD_ON/SUNK", "MUTED/REWARD_SOFT",
+	"ON_ACCENT/REWARD", "PRIMARY/SUNK",
 ]
 ## Non-text pairs (dots, progress bars, borders, switch tracks): contrast >= 3.0.
 const NONTEXT_PAIRS := [
 	"LINE_STRONG/SURFACE", "LINE_STRONG/BG", "LINE_STRONG/SUNK", "OK/SURFACE", "BAD/SURFACE", "WARN/SURFACE",
 	"PRIMARY/SURFACE",
+	"REWARD/SURFACE", "LINE_STRONG/PRIMARY_SOFT", "LINE_STRONG/REWARD_SOFT",
 ]
 
 var passed: int = 0
@@ -95,6 +99,9 @@ static func tok(n: String) -> Color:
 		"TOAST_FG": return Pal.TOAST_FG
 		"TOAST_OK": return Pal.TOAST_OK
 		"TOAST_ERR": return Pal.TOAST_ERR
+		"REWARD": return Pal.REWARD
+		"REWARD_SOFT": return Pal.REWARD_SOFT
+		"REWARD_ON": return Pal.REWARD_ON
 		"LEARN_BG": return ReadingView.learn_bg() # 읽기: the "복습 중" word highlight (W9)
 		"LEARN_FG": return ReadingView.learn_fg()
 	push_error("contrast_test: unknown token " + n)
@@ -170,6 +177,26 @@ func _test_selfcheck() -> void:
 	# the new replacement of that pair really passes in the same code path
 	Pal.use("light")
 	ok(passes(Pal.JA_ON, Pal.JA_SOFT, 4.5), "JA_ON/JA_SOFT passes where legacy JA/JA_SOFT failed")
+	# home_menu_design D9: the same checker must reject a deliberately bad new-token pair and match the design table
+	var f4 := not passes(Pal.LINE_STRONG, Pal.REWARD_SOFT, 4.5)
+	print("selfcheck %s LINE_STRONG as text on REWARD_SOFT %.2f" % ["FAIL-as-expected" if f4 else "UNEXPECTED-PASS", ratio(Pal.LINE_STRONG, Pal.REWARD_SOFT)])
+	ok(f4, "selfcheck LINE_STRONG/REWARD_SOFT as text is FAIL (3.13 < 4.5)")
+	var f5 := not passes(Pal.LINE_STRONG, Pal.SURFACE, 4.5) # LINE_STRONG #7C8596 stands in for a low-contrast PRIMARY
+	print("selfcheck %s #7C8596 (low-contrast PRIMARY) on SURFACE %.2f" % ["FAIL-as-expected" if f5 else "UNEXPECTED-PASS", ratio(Pal.LINE_STRONG, Pal.SURFACE)])
+	ok(f5, "selfcheck a low-contrast PRIMARY (#7C8596) on SURFACE is FAIL")
+	var design_ok := true
+	var design_rows := [
+		["light", "PRIMARY", "SURFACE", 5.77], ["light", "REWARD_ON", "REWARD_SOFT", 6.99], ["light", "ON_ACCENT", "REWARD", 5.93],
+		["dark", "PRIMARY", "SURFACE", 8.95], ["dark", "REWARD_ON", "REWARD_SOFT", 7.08], ["dark", "ON_ACCENT", "PRIMARY", 10.05],
+	]
+	for row in design_rows:
+		Pal.use(String(row[0]))
+		var rr := ratio(tok(String(row[1])), tok(String(row[2])))
+		if absf(rr - float(row[3])) > 0.02:
+			design_ok = false
+			print("  design table mismatch %s %s/%s %.2f vs %.2f" % [row[0], row[1], row[2], rr, float(row[3])])
+	Pal.use("light")
+	ok(design_ok, "computed contrast matches the design table §5.3 (6 sample pairs, +-0.02)")
 
 
 func _test_legacy() -> void:
@@ -178,10 +205,13 @@ func _test_legacy() -> void:
 	for k in LEGACY.keys():
 		ok(tok(String(k)) == Color(LEGACY[k]), "LEGACY %s == %s" % [k, LEGACY[k]])
 	# decision B (2026-10-17): PRIMARY is the brighter blue, not the old EN blue. EN itself stays.
-	ok(Pal.PRIMARY == Color("#0A6BD6") and Pal.PRIMARY != Pal.EN, "INTENTIONAL CHANGE: PRIMARY is B #0A6BD6 (EN unchanged)")
-	ok(Pal.PRIMARY_SOFT == Color("#E8F1FC"), "INTENTIONAL CHANGE: PRIMARY_SOFT is B #E8F1FC")
+	# ... superseded by home_menu_design D9 (below): PRIMARY is now the teal #0A726D. EN itself stays.
+	ok(Pal.PRIMARY == Color("#0A726D") and Pal.PRIMARY != Pal.EN, "INTENTIONAL CHANGE (home_menu_design D9): PRIMARY is teal #0A726D (EN unchanged)")
+	ok(Pal.PRIMARY_SOFT == Color("#E4F5F3"), "INTENTIONAL CHANGE (home_menu_design D9): PRIMARY_SOFT is #E4F5F3")
+	ok(Pal.REWARD == Color("#6C47D9") and Pal.REWARD_SOFT == Color("#EEE9FC") and Pal.REWARD_ON == Color("#5333B8"), "new light REWARD / REWARD_SOFT / REWARD_ON values")
 	Pal.use("dark")
-	ok(Pal.PRIMARY == Color("#7DB4FF") and Pal.PRIMARY_SOFT == Color("#12263F"), "dark PRIMARY / PRIMARY_SOFT are the B values")
+	ok(Pal.PRIMARY == Color("#4FD1C5") and Pal.PRIMARY_SOFT == Color("#10302E"), "INTENTIONAL CHANGE (home_menu_design D9): dark PRIMARY / PRIMARY_SOFT are the teal values")
+	ok(Pal.REWARD == Color("#B7A1FF") and Pal.REWARD_SOFT == Color("#241D4A") and Pal.REWARD_ON == Color("#B7A1FF"), "new dark REWARD / REWARD_SOFT / REWARD_ON values")
 	ok(Pal.BG != Color(LEGACY["BG"]) and Pal.INK != Color(LEGACY["INK"]), "dark differs from light")
 	Pal.use("light")
 	ok(Pal.accent("ja") == Pal.JA and Pal.accent("en") == Pal.EN and Pal.soft("ja") == Pal.JA_SOFT and Pal.soft("en") == Pal.EN_SOFT, "accent / soft unchanged")
@@ -242,6 +272,9 @@ func _test_ds() -> void:
 	ok(Ds.type_size_for("Eyebrow", false) == 12 and Ds.type_size_for("Eyebrow", true) == 13, "Eyebrow 12 / 13")
 	ok(Ds.type_size_for("NoSuchVariation", false) == 16 and Ds.type_size_for("", true) == 17, "unknown variation -> base size 16 / 17")
 	ok(Ds.R_CARD == 24 and Ds.R_BTN == 18 and Ds.R_SHEET == 28 and Ds.S6 == 24 and Ds.REC_BIG_PC == Vector2(190, 58) and Ds.REC_SMALL_PC == Vector2(96, 44), "radii / spacing / recorder constants")
+	ok(Ds.CTA_H == 56.0 and Ds.HOME_CTA_H_PHONE == 60.0 and Ds.HOME_CTA_H_PC == 52.0 and Ds.RING_D_PHONE == 96.0 and Ds.RING_D_PC == 120.0 and Ds.RING_STROKE == 10.0, "home Ds constants: CTA / ring (§5.5)")
+	ok(Ds.NODE_D == 56.0 and Ds.NODE_D_CUR == 72.0 and Ds.NODE_STRIDE_PHONE == 112.0 and Ds.NODE_STRIDE_PC == 120.0 and Ds.NODE_AMP_MAX == 72.0 and Ds.PATH_TRACK_W == 10.0, "home Ds constants: path node (§5.5)")
+	ok(Ds.TASK_ROW_H == 56.0 and Ds.STONE_D == 28.0 and Ds.HOME_RIGHT_W == 340.0 and Ds.PATH_COL_W_PC == 520.0, "home Ds constants: task row / stone / columns (§5.5)")
 	var tm := Ds.touch_min()
 	ok(tm == (40.0 if not Platform.is_phone() else 48.0), "touch_min is 40 on PC, 48 on a desktop-phone test (%s)" % tm)
 	ok(PhoneLayout.BTN_H == 48.0 and PhoneLayout.LINK_H == 48.0, "PhoneLayout.BTN_H / LINK_H are 48")
@@ -403,6 +436,7 @@ func _test_glyph() -> void:
 		ok(g.custom_minimum_size == Vector2(24, 24), "GlyphIcon('%s') min size 24x24" % kind)
 		ok(g.mouse_filter == Control.MOUSE_FILTER_IGNORE, "GlyphIcon('%s') ignores the mouse" % kind)
 		host.add_child(g)
+	ok(GlyphIcon.KINDS.has("sparkle") and GlyphIcon.KINDS.has("star") and GlyphIcon.KINDS.has("lock"), "GlyphIcon.KINDS has sparkle / star / lock")
 	var d := GlyphIcon.new()
 	ok(d.custom_minimum_size == Vector2(20, 20) and d.kind == "chevron_right" and d.icon_color == Pal.INK, "defaults: chevron_right 20 px INK")
 	host.add_child(d)
