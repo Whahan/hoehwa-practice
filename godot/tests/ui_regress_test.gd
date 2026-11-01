@@ -265,6 +265,28 @@ func _main_back_paths() -> void:
 	await _frames(2)
 	ok(m.get("current") == "today", "bar back: from another tab it goes to 오늘 [%s]" % m.get("current"))
 	if _phone:
+		# home_menu_design §4.3 / T3-7: out of a screen of the 메뉴 the bar's arrow and the Android button both go back to the 메뉴
+		if m.call("is_connect_open"):
+			m.call("_close_connect_view")
+			await _frames(3)
+		m.call("show_view", "menu")
+		m.call("show_view", "roadmap")
+		await _frames(2)
+		press.call()
+		await _frames(2)
+		ok(m.get("current") == "menu", "bar back: from 로드맵 (opened from 메뉴) it goes back to 메뉴 [%s]" % m.get("current"))
+		press.call()
+		await _frames(2)
+		ok(m.get("current") == "today", "bar back: from the 메뉴 it goes to 홈 [%s]" % m.get("current"))
+		m.call("show_view", "menu")
+		m.call("show_view", "roadmap")
+		await _frames(2)
+		m.call("handle_back")
+		await _frames(2)
+		ok(m.get("current") == "menu", "handle_back: the same step from 로드맵 -> 메뉴 as the bar's arrow [%s]" % m.get("current"))
+		m.call("handle_back")
+		await _frames(2)
+		ok(m.get("current") == "today" and _exits == 0, "handle_back: 메뉴 -> 홈, no exit [%s, exits %d]" % [m.get("current"), _exits])
 		# settings -> [연결 변경] opens the connect screen (the settings screen's own connect_requested, wired by main)
 		if m.call("is_connect_open"): # a test run has no PC to talk to: the app opened the connect screen itself
 			m.call("_close_connect_view")

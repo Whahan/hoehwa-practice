@@ -1,38 +1,54 @@
 extends Control
-## Main scene: the shell of the app (docs/ui_redesign_design.md §4, §6.3-6.7). On the phone a fixed app bar on top and
-## the bottom tab bar (4 tabs + "더보기"); on the PC a navigation list on the left (SideNav). Both show the views,
-## the toast host, the backend splash and the banner.
+## Main scene: the shell of the app (docs/ui_redesign_design.md §4, §6.3-6.7; docs/home_menu_design.md §4). On the phone a
+## fixed app bar on top and the bottom tab bar (홈 · 레슨 · 복습 · 노래 · 메뉴: BAR_PHONE); on the PC a navigation list on the
+## left (SideNav, three groups: NAV_GROUPS). Both show the views, the toast host, the backend splash and the banner.
 ##
 ## Phone behaviour (Platform.is_phone(), docs/android_remote_design.md §5) is added next to the PC code.
 ##
 ## Adding a tab (English v1.1: "연습", "기록"): `add_tab(key, label, view, short_label, after_key)` after _ready.
 ## `add_v11_tabs()` adds those two (and the StudyClock); _ready calls it only when this scene is the running scene
 ## of the app, so the layout tests that load main.tscn as a child still see the original tabs.
-## "설정" is the last tab of the list: on the phone it sits in the "더보기" sheet, on the PC it is the item at the
-## bottom of the SideNav. A tab added without `after_key` goes in front of it.
+## "설정" is the last tab of the list: on the phone it is a row of the "메뉴" screen (MenuView, phone only), on the PC it is the
+## item at the bottom of the SideNav. A tab added without `after_key` goes in front of it.
 ## A view that has sub screens overrides AppView.go_back() so the Android back button can step out of them.
 ## The colour scheme and the text size are applied once at start (UiBoot): changing them in the settings needs a restart.
 
 signal exit_requested
 
 const TABS := [
-	["today", "오늘"],
+	["today", "홈"],
 	["lesson", "레슨"],
-	["talk", "원어민 대화"],
 	["review", "복습"],
+	["talk", "원어민 대화"],
 	["reading", "읽기"],
 	["roadmap", "로드맵"],
 	["settings", "설정"],
 ]
-## Shorter label of a tab in the phone bottom bar.
+## Shorter label of a tab in the phone bottom bar (and the 대화 label in lists that are short on room).
 const TAB_SHORT := {"talk": "대화"}
 const SETTINGS_KEY := "settings"
+const MENU_KEY := "menu"
 const BACK_EXIT_MSEC := 2000
-## Phone bottom bar: 4 tabs + "더보기" (the rest goes into the sheet).
+## Phone bottom bar: the tabs that have a cell, in this order (only the registered ones show: `bar_keys()`).
+## Phone bottom bar: at most this many cells (BottomTabs shows no "더보기" cell up to this many tabs).
 const PHONE_MAX_DIRECT := 5
-## PC SideNav: the order of the items in the two sections (a tab that is in neither list goes to the end of "기록").
-const NAV_LEARN := ["today", "lesson", "talk", "practice", "reading", "song", "review"]
-const NAV_RECORD := ["stats", "roadmap"]
+const BAR_PHONE := ["today", "lesson", "review", "song", "menu"]
+## Phone: the bottom-bar tab that is lit while a screen outside the bar is open.
+const TAB_PARENT := {"talk": "menu", "practice": "menu", "reading": "menu", "stats": "menu", "roadmap": "menu", "settings": "menu"}
+## PC SideNav: the order of the items in the three groups (a tab that is in no group goes to the end of "기록").
+const NAV_GROUPS := [
+	{"title": "공부", "keys": ["today", "lesson", "review", "song"]},
+	{"title": "말하기·읽기", "keys": ["talk", "practice", "reading"]},
+	{"title": "기록", "keys": ["stats", "roadmap"]},
+]
+## Phone "메뉴" screen: the rows of the screens that are not in the bottom bar.
+const MENU_GROUPS := [
+	{"title": "말하기·읽기", "keys": ["talk", "practice", "reading"]},
+	{"title": "기록", "keys": ["stats", "roadmap"]},
+	{"title": "앱", "keys": ["settings"]},
+]
+const MENU_AI_KEY := "__ai"
+const MENU_SUB := {"practice": "미션·쉐도잉·받아쓰기"}
 ## Views that draw their own title / back / action row while a sub screen is open (the chat, a practice screen): the
 ## phone app bar then shows only its tab name and the connection chip, so nothing appears twice.
 const OWN_HEADER := ["talk", "practice", "song"]
@@ -46,6 +62,7 @@ var quit_on_exit: bool = true ## tests switch the real quit off
 var _tabs: Array = TABS.duplicate(true)
 var _tab_short: Dictionary = TAB_SHORT.duplicate()
 var _phone: bool = false
+var _origin: String = "" ## phone: the bar tab a screen outside the bar was opened from (the back button returns there)
 
 var _root: BoxContainer
 var _app_bar: AppBar            ## phone
@@ -171,7 +188,7 @@ func _ready() -> void:
 	if _phone:
 		_bottom_tabs = BottomTabs.new()
 		_bottom_tabs.max_direct = PHONE_MAX_DIRECT
-		_bottom_tabs.set_tabs(_tabs, _tab_short)
+		_bottom_tabs.set_tabs(_bar_tabs(), _tab_short)
 		_bottom_tabs.tab_selected.connect(show_view)
 		_root.add_child(_bottom_tabs)
 
@@ -187,6 +204,10 @@ func _ready() -> void:
 		(views["reading"] as ReadingView).bar_hosted = true # the app bar shows the reader's back button, title and action
 	for k in views.keys():
 		_register_view(views[k] as AppView)
+	if _phone:
+		# the phone-only "메뉴" screen: the 5th bar tab (docs/home_menu_design.md §4.2, §9.7)
+		add_tab(MENU_KEY, "메뉴", MenuView.new(), "메뉴", "review")
+		(views[MENU_KEY] as MenuView).entry_chosen.connect(_on_menu_entry)
 
 	_toast_host = ToastHost.new()
 	add_child(_toast_host)
@@ -204,6 +225,11 @@ func _ready() -> void:
 	_register_view(views[SETTINGS_KEY] as AppView)
 
 	Store.navigate.connect(_on_navigate)
+	Store.navigate_args.connect(_on_navigate_args)
+	Store.ai_connect_requested.connect(_on_ai_connect)
+	Store.changed.connect(_update_review_badge)
+	Store.prefs_changed.connect(_update_review_badge)
+	Backend.status_changed.connect(_on_status_for_menu)
 	Backend.status_changed.connect(_on_backend_status)
 	if _phone:
 		Route.mode_changed.connect(_on_route_mode) # the badge depends on the mode too
@@ -247,20 +273,21 @@ func add_tab(key: String, label: String, view: AppView, short_label: String = ""
 	views[key] = view
 	_register_view(view)
 	if _phone:
-		_bottom_tabs.set_tabs(_tabs, _tab_short)
-		_bottom_tabs.set_current(current)
+		_bottom_tabs.set_tabs(_bar_tabs(), _tab_short)
+		_style_tabs()
 	else:
 		_rebuild_nav()
 
 
-## English v1.1: 연습 after 복습, 기록 after 읽기, and the study clock (StudyLog writer). 노래 (song study, docs/song_study_design.md) after 읽기.
+## English v1.1: 연습 after 대화, 기록 after 읽기, and the study clock (StudyLog writer). 노래 (song study, docs/song_study_design.md)
+## after 복습: the 4th bar tab on the phone, the last item of the "공부" group on the PC.
 func add_v11_tabs() -> void:
 	if views.has("practice"):
 		return
 	add_child(StudyClock.new())
-	add_tab("practice", "연습", PracticeView.new(), "연습", "review")
+	add_tab("practice", "연습", PracticeView.new(), "연습", "talk")
 	add_tab("stats", "기록", StatsView.new(), "기록", "reading")
-	add_tab("song", "노래", SongView.new(), "노래", "reading") # PC: after 읽기 in the side nav; phone: inside 더보기
+	add_tab("song", "노래", SongView.new(), "노래", "review")
 
 
 ## 1.2: learning-record sync (timers, app lifecycle, first-connection dialog). Like the StudyClock it is only added when this
@@ -276,6 +303,36 @@ func tab_keys() -> Array:
 	for t in _tabs:
 		out.append(str((t as Array)[0]))
 	return out
+
+
+## Phone: the keys of the bottom-bar cells, in BAR_PHONE order (only the tabs that are registered: a layout test that loads
+## this scene as a child has no 노래, so it shows 4).
+func bar_keys() -> Array:
+	var have: Array = tab_keys()
+	var out: Array = []
+	for k in BAR_PHONE:
+		if have.has(k):
+			out.append(k)
+	return out
+
+
+func _bar_tabs() -> Array:
+	var out: Array = []
+	for k in bar_keys():
+		out.append([k, _tab_label(k)])
+	return out
+
+
+## Where the back button / the app bar arrow goes from the current screen ("" = nowhere: this is the home screen).
+## A bar tab goes home; a screen outside the bar goes back to the tab it was opened from (`_origin`), else to "메뉴".
+func back_target() -> String:
+	if current == "" or current == "today":
+		return ""
+	if bar_keys().has(current):
+		return "today"
+	if _origin != "" and _origin != current and views.has(_origin):
+		return _origin
+	return MENU_KEY if views.has(MENU_KEY) else "today"
 
 
 func _tab_label(key: String) -> String:
@@ -305,22 +362,29 @@ func _build_side_nav() -> void:
 	_side_nav.set_footer(foot)
 
 
-## The SideNav items from the tab list: "학습" (오늘 ... 복습) and "기록" (기록, 로드맵); "설정" is its footer item.
+## The SideNav items from the tab list, in the three NAV_GROUPS ("공부", "말하기·읽기", "기록"); "설정" is its footer item.
+## A tab that is in no group (a test adds "log") goes to the end of "기록". An empty group has no header.
 func _rebuild_nav() -> void:
 	if _side_nav == null:
 		return
-	var learn: Array = []
-	var record: Array = []
-	for k in NAV_LEARN:
-		if tab_keys().has(k):
-			learn.append([k, _tab_label(k)])
-	for k in NAV_RECORD:
-		if tab_keys().has(k):
-			record.append([k, _tab_label(k)])
-	for k in tab_keys():
-		if k != SETTINGS_KEY and not NAV_LEARN.has(k) and not NAV_RECORD.has(k):
-			record.append([k, _tab_label(k)])
-	_side_nav.set_items([{"title": "학습", "items": learn}, {"title": "기록", "items": record}])
+	var have: Array = tab_keys()
+	var known: Array = [SETTINGS_KEY, MENU_KEY]
+	var sections: Array = []
+	for g in NAV_GROUPS:
+		var items: Array = []
+		for k in (g as Dictionary)["keys"]:
+			known.append(k)
+			if have.has(k):
+				items.append([k, _tab_label(k)])
+		sections.append({"title": str((g as Dictionary)["title"]), "items": items})
+	for k in have:
+		if not known.has(k):
+			((sections.back() as Dictionary)["items"] as Array).append([k, _tab_label(k)])
+	var shown: Array = []
+	for sec in sections:
+		if not ((sec as Dictionary)["items"] as Array).is_empty():
+			shown.append(sec)
+	_side_nav.set_items(shown)
 	_side_nav.set_current(current)
 
 
@@ -367,8 +431,9 @@ func _on_view_bar_changed(v: AppView) -> void:
 func _on_bar_back() -> void:
 	if views.has(current) and (views[current] as AppView).go_back():
 		return
-	if current != "today":
-		show_view("today")
+	var t: String = back_target()
+	if t != "":
+		show_view(t)
 
 
 func _on_bar_action(id: String) -> void:
@@ -389,28 +454,133 @@ func show_view(name: String) -> void:
 		return
 	if _phone and _bottom_tabs != null:
 		_bottom_tabs.close_more()
+	if current != name:
+		_track_origin(name)
 	if current != "" and views.has(current) and current != name:
 		(views[current] as AppView).on_hide()
 		(views[current] as AppView).visible = false
 	current = name
 	var v: AppView = views[name]
 	v.visible = true
+	if name == MENU_KEY:
+		_update_menu()
 	v.refresh()
 	_style_tabs()
+	_update_review_badge()
 	_refresh_bar()
+
+
+## Phone: leaving a bar tab for a screen outside the bar remembers that tab; a bar tab clears it; outside -> outside keeps it.
+func _track_origin(next: String) -> void:
+	if not _phone:
+		return
+	var bar: Array = bar_keys()
+	if bar.has(next):
+		_origin = ""
+	elif current != "" and bar.has(current):
+		_origin = current
 
 
 func _style_tabs() -> void:
 	if _bottom_tabs != null:
-		_bottom_tabs.set_current(current)
+		_bottom_tabs.set_current(_lit_tab())
 	if _side_nav != null:
 		_side_nav.set_current(current)
+
+
+## The bar tab to light for the current screen: itself, or "메뉴" while a screen of the menu is open.
+func _lit_tab() -> String:
+	var bar: Array = bar_keys()
+	var k: String = str(TAB_PARENT.get(current, current))
+	if bar.has(k):
+		return k
+	if bar.has(current):
+		return current
+	return MENU_KEY if bar.has(MENU_KEY) else current
 
 
 func _on_navigate(view: String, lang: String) -> void:
 	if lang == "en" or lang == "ja":
 		Store.set_lang(lang)
 	show_view(view)
+
+
+## Deep navigation (Store.navigate_args): the language, the screen, then the screen reads the rest of `args`.
+func _on_navigate_args(view: String, args: Dictionary) -> void:
+	if not views.has(view):
+		return
+	var l: Variant = args.get("lang", "")
+	if l is String and (l == "en" or l == "ja"):
+		Store.set_lang(l)
+	show_view(view)
+	(views[view] as AppView).open_target(args)
+
+
+## [AI 연결하기] on the home screen / the menu (Store.ai_connect_requested): the phone opens the connect screen, the PC the
+## settings (its first section is the connection). The install work replaces this body.
+func _on_ai_connect() -> void:
+	if _phone:
+		_open_connect_view()
+	else:
+		show_view(SETTINGS_KEY)
+
+
+## A dot on the 복습 tab while cards are due (phone).
+func _update_review_badge() -> void:
+	if _bottom_tabs != null:
+		_bottom_tabs.set_badge("review", Store.due_count(Store.lang()) > 0)
+
+
+# ---------------------------------------------------------------- phone: the "메뉴" screen
+
+func _on_menu_entry(key: String) -> void:
+	if key == MENU_AI_KEY:
+		Store.request_ai_connect()
+	elif views.has(key):
+		show_view(key)
+
+
+func _on_status_for_menu() -> void:
+	if current == MENU_KEY:
+		_update_menu()
+		(views[MENU_KEY] as AppView).refresh()
+
+
+## The rows of the menu: the screens that are not in the bottom bar (only the registered ones), the "AI 연결" row when the
+## home's AI slot shows, and the one-line summary card that opens 기록.
+func _update_menu() -> void:
+	var mv := views.get(MENU_KEY, null) as MenuView
+	if mv == null:
+		return
+	var have: Array = tab_keys()
+	var bar: Array = bar_keys()
+	var placed: Array = [MENU_KEY]
+	var groups: Array = []
+	for g in MENU_GROUPS:
+		var items: Array = []
+		if str((g as Dictionary)["title"]) == "앱":
+			var slot: Dictionary = HomeAi.slot()
+			if bool(slot.get("show", false)):
+				items.append({"key": MENU_AI_KEY, "title": "AI 연결", "sub": str(slot.get("title", ""))})
+		for k in (g as Dictionary)["keys"]:
+			placed.append(k)
+			if have.has(k) and not bar.has(k):
+				items.append({"key": k, "title": _tab_label(k), "sub": str(MENU_SUB.get(k, ""))})
+		groups.append({"title": str((g as Dictionary)["title"]), "items": items})
+	for k in have: # a tab nobody placed (a test adds "log") goes to the end of "기록"
+		if not placed.has(k) and not bar.has(k):
+			(((groups[1] as Dictionary)["items"]) as Array).append({"key": k, "title": _tab_label(k), "sub": ""})
+	mv.set_entries(groups)
+	mv.set_summary(_menu_summary() if views.has("stats") else "")
+
+
+func _menu_summary() -> String:
+	var l: String = Store.lang()
+	var stars: int = 0
+	for f in PathModel.done_flags(l):
+		if f:
+			stars += 1
+	return "연속 %d일 · XP %d · 별 %d/%d" % [int(StudyLog.settle(l)["streak"]), Store.xp(l), stars, PathModel.CELLS]
 
 
 # ---------------------------------------------------------------- banner / status
@@ -664,8 +834,9 @@ func _keep_focus_visible() -> void:
 		PhoneLayout.ensure_visible(fo)
 
 
-## Android back button: the first-connection question, then an open sheet / dialog, then one step back out of a sub
-## screen, else to 오늘, else (twice within 2 s) quit.
+## Android back button: the first-connection question, then an open sheet / dialog, the connect screen, one step back out of
+## a sub screen, then `back_target()` (a screen outside the bar -> where it was opened from / 메뉴, a bar tab -> 홈), else
+## (on 홈, twice within 2 s) quit.
 func handle_back() -> void:
 	if SyncManager.current != null and SyncManager.current.consume_back():
 		return # the first-connection question is open: answer it first
@@ -675,13 +846,11 @@ func handle_back() -> void:
 		_connect_dismissed = true
 		_close_connect_view()
 		return
-	if _bottom_tabs != null and _bottom_tabs.is_more_open():
-		_bottom_tabs.close_more()
-		return
 	if views.has(current) and (views[current] as AppView).go_back():
 		return
-	if current != "today":
-		show_view("today")
+	var t: String = back_target()
+	if t != "":
+		show_view(t)
 		return
 	var now: int = Time.get_ticks_msec()
 	if now - _last_back_msec <= BACK_EXIT_MSEC:
