@@ -88,6 +88,7 @@ func _build() -> void:
 	c.add_child(top)
 
 	c.add_child(GoalCard.full(lang))
+	c.add_child(FunParts.report_card(WeekReport.for_lang(lang))) ## 이번 주 리포트 (v1.6.0), 목표 카드 바로 아래
 	if not StudyLog.has_data(lang):
 		c.add_child(UI.label("아직 기록이 없어요. 레슨, 원어민 대화, 복습으로 연습하면 이곳에 공부 시간과 점수가 쌓여요.", "Muted"))
 
