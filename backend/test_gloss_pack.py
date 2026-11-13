@@ -9,6 +9,9 @@ word) and every `ko` (Hangul present, 1..60 characters), and the two manifest en
 Part 2 runs the same checker on tampered copies (a ko without Hangul, a 61-character ko, a missing key), which must fail.
 Part 3 unit-tests the tool's answer parser (bad positions, wrong words, empty answers are dropped) and runs the tool against
 a closed port: it must exit != 0 and write nothing (A2g-3).
+Part 4 checks the correction file backend/tools/gloss_fixes.tsv (the re-check of the dictionary): its parser rejects bad rows,
+the fixes apply only to matching entries, `--from-pack` rewrites a base pack and refuses a bad fix file without writing, and every
+row of the real file is reflected in the pack.
 Last line: `== test_gloss_pack: N passed, 0 failed ==`. Nothing here starts a server or opens a port other than 127.0.0.1:9.
 The real pack folder is only read; part 3 writes to temporary folders.
 """
@@ -329,6 +332,122 @@ def part3():
     check("검수 목록: 100개이고 같은 입력이면 같은 결과(고정 시드)", len(s1) == 100 and s1 == s2)
 
 
+def _write(path, text):
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+
+
+def _fix_raises(path):
+    try:
+        B.load_fixes(path)
+    except B.FixError:
+        return True
+    return False
+
+
+def part4(pack_dir):
+    print("== part 4: correction file (gloss_fixes.tsv) ==")
+    tmp = tempfile.mkdtemp(prefix="gloss_test_fixes_")
+    try:
+        good = os.path.join(tmp, "good.tsv")
+        _write(good, "# comment\n\nen\tmaze\t정글\t미로\nja\t姫\t여왕\t공주\n")
+        fx = B.load_fixes(good)
+        check("교정 파일: 정상 행 읽기(주석·빈 줄 건너뜀)",
+              fx == {"en": {"maze": ("정글", "미로")}, "ja": {"姫": ("여왕", "공주")}}, "fx=%r" % (fx,))
+        bad_rows = {
+            "열 수가 3": "en\tmaze\t미로\n",
+            "열 수가 5": "en\tmaze\t정글\t미로\t기타\n",
+            "모르는 언어": "ko\tmaze\t정글\t미로\n",
+            "빈 새 뜻": "en\tmaze\t정글\t\n",
+            "한글 없는 새 뜻": "en\tmaze\t정글\t123\n",
+            "라틴 문자 새 뜻": "en\tmaze\t정글\tmaze 미로\n",
+            "가나 섞인 새 뜻": "en\tmaze\t정글\t미ロ\n",
+            "61자 새 뜻": "en\tmaze\t정글\t" + "가" * 61 + "\n",
+            "빈 옛 뜻": "en\tmaze\t\t미로\n",
+            "빈 단어": "en\t\t정글\t미로\n",
+            "옛 뜻과 같음": "en\tmaze\t정글\t정글\n",
+            "같은 단어 중복": "en\tmaze\t정글\t미로\nen\tmaze\t정글\t미궁\n",
+        }
+        for name, text in bad_rows.items():
+            bp = os.path.join(tmp, "bad.tsv")
+            _write(bp, text)
+            check("교정 파일: %s 이면 거부" % name, _fix_raises(bp))
+
+        base = {"maze": {"pos": "명사", "ko": "정글", "ipa": "meɪz"}, "dog": {"pos": "명사", "ko": "개", "ipa": "dɔɡ"}}
+        out, n = B.apply_fixes("en", base, fx)
+        check("교정 적용: 맞는 행만 ko 를 바꾸고 pos·ipa·다른 단어는 그대로",
+              n == 1 and out["maze"] == {"pos": "명사", "ko": "미로", "ipa": "meɪz"} and out["dog"] == base["dog"]
+              and base["maze"]["ko"] == "정글")
+        check("교정 적용: pack 에 없는 단어 행은 오류",
+              _raises(lambda: B.apply_fixes("en", base, {"en": {"nosuchword": ("가", "나")}}), B.FixError))
+        check("교정 적용: 옛 뜻이 pack 과 다른 행은 오류",
+              _raises(lambda: B.apply_fixes("en", base, {"en": {"maze": ("다른 뜻", "미로")}}), B.FixError))
+
+        # --from-pack end to end: tiny base pack + manifest
+        bdir = os.path.join(tmp, "base")
+        odir = os.path.join(tmp, "out")
+        os.makedirs(bdir)
+        os.makedirs(odir)
+        B.write_json_atomic(os.path.join(bdir, "gloss_en.json"), base)
+        B.write_json_atomic(os.path.join(bdir, "gloss_ja.json"), {"姫": {"pos": "명사", "ko": "여왕", "ipa": "ヒメ"}})
+        man = '{"v":1,"built":"x","files":[],"sources":[]}'
+        _write(os.path.join(odir, "manifest.json"), man)
+        tool = os.path.join(TOOLS, "build_gloss_pack.py")
+
+        def run(fixes_path):
+            return subprocess.run([sys.executable, "-I", tool, "--from-pack", bdir, "--out", odir, "--fixes", fixes_path],
+                                  capture_output=True, timeout=300)
+
+        r = run(good)
+        ok_files = os.path.isfile(os.path.join(odir, "gloss_en.json")) and os.path.isfile(os.path.join(odir, "gloss_ja.json"))
+        check("--from-pack: 정상 교정 파일이면 exit 0, 두 gloss 파일과 manifest 항목을 씀", r.returncode == 0 and ok_files,
+              "rc=%s out=%s" % (r.returncode, r.stdout[-300:]))
+        check("--from-pack: 출력 pack 의 뜻이 교정되고 manifest 해시·records 가 맞음",
+              ok_files and not manifest_problems_for(odir)
+              and json.load(open(os.path.join(odir, "gloss_en.json"), encoding="utf-8"))["maze"]["ko"] == "미로"
+              and json.load(open(os.path.join(odir, "gloss_ja.json"), encoding="utf-8"))["姫"]["ko"] == "공주")
+        before = {n: open(os.path.join(odir, n), "rb").read() for n in os.listdir(odir)}
+        for name, text in (("없는 단어", "en\tnosuchword\t개\t고양이\n"),
+                           ("옛 뜻 불일치", "en\tmaze\t다른 뜻\t미로\n"),
+                           ("빈 뜻", "en\tmaze\t정글\t\n"),
+                           ("형식 깨진 줄", "en maze 정글 미로\n")):
+            bp = os.path.join(tmp, "bad2.tsv")
+            _write(bp, text)
+            r = run(bp)
+            after = {n: open(os.path.join(odir, n), "rb").read() for n in os.listdir(odir)}
+            check("--from-pack: %s 교정 행이면 exit 2 이고 출력 파일을 바꾸지 않음" % name,
+                  r.returncode == 2 and after == before, "rc=%s" % r.returncode)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    fp = B.DEFAULT_FIXES
+    if not os.path.isfile(fp):
+        check("교정 파일: backend/tools/gloss_fixes.tsv 가 있음", False, fp)
+        return
+    try:
+        fx = B.load_fixes(fp)
+    except B.FixError as e:
+        check("교정 파일: 실제 파일이 읽힘", False, str(e))
+        return
+    total = sum(len(v) for v in fx.values())
+    check("교정 파일: 실제 파일이 읽히고 행이 있음", total > 0, "rows=%d" % total)
+    wrong = []
+    for lang in ("en", "ja"):
+        with open(os.path.join(pack_dir, FILES[lang]), "r", encoding="utf-8") as f:
+            d = json.load(f)
+        for w, (old, new) in fx[lang].items():
+            if w not in d:
+                wrong.append("%s %s 없음" % (lang, w))
+            elif d[w]["ko"] != new:
+                wrong.append("%s %s: pack 뜻 %r != 교정 %r" % (lang, w, d[w]["ko"], new))
+    check("교정 파일: 모든 행이 pack 에 반영됨(뜻이 새 뜻과 같음)", not wrong, "; ".join(wrong[:5]))
+
+
+def manifest_problems_for(d):
+    """manifest check of a pack folder that holds only the two gloss files (records, bytes, sha256)"""
+    return manifest_problems(d)
+
+
 REPO_PACK = None
 
 
@@ -353,6 +472,7 @@ def main(argv):
     part1(pack)
     part2()
     part3()
+    part4(pack)
     print("== test_gloss_pack: %d passed, %d failed ==" % (passed, failed))
     return 0 if failed == 0 else 1
 

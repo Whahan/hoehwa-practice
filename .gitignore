@@ -30,6 +30,7 @@ backend/tools/*
 !backend/tools/make_mission_golden.py
 !backend/tools/make_reading_golden.py
 !backend/tools/build_gloss_pack.py
+!backend/tools/gloss_fixes.tsv
 !backend/tools/make_song_fixtures.py
 !backend/tools/song_bench.py
 godot/tests/fixtures/song/_gen/
