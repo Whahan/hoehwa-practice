@@ -18,6 +18,12 @@ extends SceneTree
 ##    (착=ちゃく·원=いん 같은 한자 한 글자 음독 조각이 걸러진다).
 ##  - 일본어: 한자 한 글자 표제어는 v(교차 확인)를 통과하거나 "뜻 2글자 이상 + 읽기가 그 달 문장 읽기에 있음"일 때만 파일에 넣는다
 ##    ("会=회", "英=영" 처럼 음독 소리값이 뜻으로 적힌 경우가 많다).
+## 뜻 오답 정리(Q1 fix, 검토에서 v=true 오답이 나왔다):
+##  - DROP_WORDS: 뜻이 틀렸거나 확신이 없는 단어는 파일에서 아예 뺀다(en kobe=이름, ja 寝/書=들어, 慣れ=관련 …).
+##  - FIX_KO    : 올바른 뜻을 확신할 수 있는 단어는 뜻을 바꾼다(바꾼 뜻으로 v 를 다시 계산한다).
+##  - 영어 고유명사(문장 중간에서 늘 대문자로만 나오는 말: Tokyo·Kobe·Jackson …)는 v=false (EN_COMMON_CAPS 는 예외).
+##  - 일본어 한자 한 글자 표제어는 앞뒤가 모두 한자가 아닌 자리에서 한 번이라도 나와야 v=true
+##    (名·医·校 처럼 名前·医者·学校 의 조각일 뿐인 글자를 거른다).
 ##  v 가 아닌 단어는 파일에 남지만 SpeedPool.build 는 통과 단어가 모자랄 때만 섞는다(설계 §10 Q3).
 
 const BANK_PATH := "res://data/pack/lesson_bank_%s.json"
@@ -28,6 +34,18 @@ const POS_OK := ["명사", "동사", "형용사", "부사"]
 const KO_MAX := 12
 const MONTHS := 12
 const SPLIT_CHARS := ",·/;~"  # 뜻 조각 나누는 글자(SpeedPool.ko_tokens 와 같은 규칙)
+## 뜻이 틀렸거나 확신이 없어 파일에서 뺀 단어(언어별). speed_words_test 가 이 상수를 읽어 파일에 없는지 확인한다.
+const DROP_WORDS := {
+	"en": ["kobe", "assembly", "championship", "taste", "web"],
+	"ja": ["寝", "書", "慣れ", "入り", "出来"],
+}
+## 올바른 뜻이 확실해서 고친 단어(언어별 단어 -> 뜻). 파일에는 고친 뜻이 들어간다.
+const FIX_KO := {
+	"en": {"spoke": "말했다", "headache": "두통"},
+	"ja": {"食べ物": "음식", "こないだ": "지난번", "きっと": "분명히", "テレビ": "텔레비전", "月曜": "월요일"},
+}
+## 늘 대문자로 나오지만 고유명사가 아닌 영어 단어(v=false 로 내리지 않는다).
+const EN_COMMON_CAPS := ["sunday", "english", "vietnamese", "christmas", "tv", "university", "library", "internet"]
 
 
 func _init() -> void:
@@ -109,20 +127,31 @@ func build_lang(lang: String) -> Array:
 	var found: Array = []  # [m, gloss 순서, 항목]
 	var order := 0
 	var seen := {}
+	var drop: Array = DROP_WORDS.get(lang, [])
+	var fix: Dictionary = FIX_KO.get(lang, {})
 	if lang == "en":
 		var first := {}
+		var capmid := {}    # 문장 중간에서 대문자로 나온 단어
+		var lower_seen := {}  # 소문자로 나온 적이 있는 단어
 		for m in range(1, MONTHS + 1):
 			for s in sent[m]:
 				for w in _en_words(str(s).to_lower()):
 					if not first.has(w):
 						first[w] = m
+				_scan_case(str(s), capmid, lower_seen)
 		for w in (gloss as Dictionary).keys():
 			order += 1
 			var g: Variant = (gloss as Dictionary)[w]
-			if not first.has(w) or seen.has(w) or not _gloss_ok(g):
+			if not first.has(w) or seen.has(w) or str(w) in drop or not _gloss_ok(g):
 				continue
 			seen[w] = true
-			found.append([first[w], order, _entry(lang, str(w), g as Dictionary, first[w], kor, "")])
+			var gd: Dictionary = (g as Dictionary).duplicate()
+			if fix.has(str(w)):
+				gd["ko"] = fix[str(w)]
+			var e := _entry(lang, str(w), gd, first[w], kor, "")
+			if capmid.has(w) and not lower_seen.has(w) and not (str(w) in EN_COMMON_CAPS):
+				e["v"] = false  # 고유명사(이름·나라·도시): 교차 확인 대상에서 뺀다
+			found.append([first[w], order, e])
 	else:
 		var joined: Array = [""]
 		var rjoined: Array = [""]
@@ -133,7 +162,7 @@ func build_lang(lang: String) -> Array:
 			order += 1
 			var g: Variant = (gloss as Dictionary)[w]
 			var ws := str(w)
-			if seen.has(ws) or not _gloss_ok(g) or not _ja_headword_ok(ws):
+			if seen.has(ws) or ws in drop or not _gloss_ok(g) or not _ja_headword_ok(ws):
 				continue
 			if ws.length() <= 2 and not _has_kanji(ws) and not tokens.has(ws):
 				continue
@@ -142,7 +171,12 @@ func build_lang(lang: String) -> Array:
 				continue
 			for m in range(1, MONTHS + 1):
 				if (joined[m] as String).contains(ws):
-					var e := _entry(lang, ws, g as Dictionary, m, kor, rjoined[m])
+					var gd: Dictionary = (g as Dictionary).duplicate()
+					if fix.has(ws):
+						gd["ko"] = fix[ws]
+					var e := _entry(lang, ws, gd, m, kor, rjoined[m])
+					if ws.length() == 1 and not _isolated(joined[m], ws):
+						e["v"] = false  # 한자 한 글자가 다른 한자 옆에서만 나오면 단어가 아니라 조각이다
 					if ws.length() == 1 and not e["v"] and not (str(e["ko"]).length() >= 2 and (rjoined[m] as String).contains(_to_hira(rd))):
 						break  # 한자 한 글자는 v 를 통과하거나, 뜻이 2글자 이상이고 읽기가 그 달 문장 읽기에 있어야만 넣는다(한 글자 조각 뜻은 음독 소리값("회"·"영")인 경우가 많다)
 					seen[ws] = true
@@ -178,6 +212,50 @@ func _collect(lang: String, ex: Dictionary, sent: Array, kor: Array) -> void:
 		"speak":
 			sent.append(str(ex.get("text", "")))
 			kor.append(str(ex.get("ko", "")))
+
+
+## 영어 문장 하나에서 대문자 사용을 모은다: capmid = 문장 중간(앞 단어와 . ! ? 줄바꿈으로 갈리지 않은 자리)에서
+## 대문자로 시작한 단어, lower_seen = 소문자로 시작한 적이 있는 단어(둘 다 소문자 키).
+func _scan_case(s: String, capmid: Dictionary, lower_seen: Dictionary) -> void:
+	var i := 0
+	var n := s.length()
+	var start := true
+	while i < n:
+		var c := s.unicode_at(i)
+		if (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 39:
+			var j := i
+			while j < n:
+				var d := s.unicode_at(j)
+				if (d >= 65 and d <= 90) or (d >= 97 and d <= 122) or d == 39:
+					j += 1
+				else:
+					break
+			var tok := s.substr(i, j - i)
+			var low := tok.to_lower()
+			var is_cap := c >= 65 and c <= 90
+			if is_cap:
+				if not start:
+					capmid[low] = true
+			else:
+				lower_seen[low] = true
+			start = false
+			i = j
+		else:
+			if c == 46 or c == 33 or c == 63 or c == 10:  # . ! ? 줄바꿈
+				start = true
+			i += 1
+
+
+## 한자 한 글자 ch 가 text 안에서 앞뒤 글자가 모두 한자가 아닌 자리(문장 끝·가나·기호 옆)에 한 번이라도 나오나.
+func _isolated(text: String, ch: String) -> bool:
+	var i := text.find(ch)
+	while i >= 0:
+		var prev_ok := i == 0 or not _is_kanji(text.unicode_at(i - 1))
+		var next_ok := i + 1 >= text.length() or not _is_kanji(text.unicode_at(i + 1))
+		if prev_ok and next_ok:
+			return true
+		i = text.find(ch, i + 1)
+	return false
 
 
 ## options[answer] (번호가 틀리면 빈 문자열).

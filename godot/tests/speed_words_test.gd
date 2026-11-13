@@ -13,6 +13,7 @@ const MIN_EN := 500
 const MIN_JA := 600
 const MAX_BYTES := 400000
 const MONTH_MIN := 15
+const TOOL := "res://tools/build_speed_words.gd"
 
 var passed: int = 0
 var failed: int = 0
@@ -116,6 +117,54 @@ func _test_data_file() -> void:
 				print("  NOTE  %s: month %d has only %d words (< %d)" % [lang, m, int(per.get(m, 0)), MONTH_MIN])
 		print("  INFO  %s: total=%d verified(v=true)=%d rest=%d per-month=%s small-months=%s" % [lang, n, vtrue, n - vtrue, str(per), str(small_months)])
 		ok(vtrue > 0 and vtrue < n, "%s: some verified, some not (v is meaningful)" % lang)
+		# 어느 달이든(누적 m <= 달+1) 통과 단어만으로 PREFER_POOL 이상이라 비통과 단어가 섞이지 않는다.
+		var min_cum := 99999
+		var min_month := 0
+		for month in range(1, 13):
+			var cum := 0
+			for e in (arr as Array if arr is Array else []):
+				if e["v"] == true and int(e["m"]) <= month + 1:
+					cum += 1
+			if cum < min_cum:
+				min_cum = cum
+				min_month = month
+		print("  INFO  %s: min verified pool over months = %d (month %d)" % [lang, min_cum, min_month])
+		ok(min_cum >= SpeedPool.PREFER_POOL, "%s: every month has >= %d verified words (min %d)" % [lang, SpeedPool.PREFER_POOL, min_cum])
+		var ex_errs := check_excluded(arr, lang)
+		ok(ex_errs.is_empty(), "%s: no excluded (wrong-meaning) word is in the file as v=true %s" % [lang, str(ex_errs.slice(0, 3))])
+
+
+## 도구의 제외·교정 목록(DROP_WORDS / FIX_KO)을 읽는다(스크립트 상수만 읽고 인스턴스는 만들지 않는다).
+func _tool_const(name: String) -> Dictionary:
+	var sc: Variant = load(TOOL)
+	if sc == null:
+		return {}
+	var c: Dictionary = (sc as Script).get_script_constant_map()
+	return c.get(name, {}) if c.get(name, {}) is Dictionary else {}
+
+
+## 제외 목록 단어가 v=true 로 남아 있거나(또는 파일에 있거나), 교정 목록 단어가 옛 뜻이 아니라 고친 뜻이 아닌 채 v=true 인 곳.
+func check_excluded(arr: Variant, lang: String, drop_all: Dictionary = {}, fix_all: Dictionary = {}) -> Array:
+	var errs: Array = []
+	var drop_d: Dictionary = drop_all if not drop_all.is_empty() else _tool_const("DROP_WORDS")
+	var fix_d: Dictionary = fix_all if not fix_all.is_empty() else _tool_const("FIX_KO")
+	var drop: Array = drop_d.get(lang, [])
+	var fix: Dictionary = fix_d.get(lang, {})
+	if drop.is_empty() or fix.is_empty():
+		return ["exclusion list is empty or unreadable"]
+	if not (arr is Array):
+		return ["not an array"]
+	for e in arr:
+		if not (e is Dictionary):
+			continue
+		var w := str(e.get("w", ""))
+		if w in drop and e.get("v", false) == true:
+			errs.append("%s is excluded but v=true" % w)
+		elif w in drop:
+			errs.append("%s is excluded but still in the file" % w)
+		if fix.has(w) and str(e.get("ko", "")) != str(fix[w]):
+			errs.append("%s has ko %s, expected %s" % [w, str(e.get("ko", "")), str(fix[w])])
+	return errs
 
 
 ## 검사 함수가 일부러 틀린 입력을 실제로 거르는지.
@@ -138,6 +187,14 @@ func _selfcheck() -> void:
 	ok(not check_words([{"w": "学校", "rd": "gakkou", "ko": "학교", "pos": "명사", "m": 1, "v": true}], "ja").is_empty(),
 		"selfcheck FAIL-as-expected: ja rd not kana")
 	ok(not check_words("nope", "en").is_empty(), "selfcheck FAIL-as-expected: not an array")
+	var drop_en: Array = _tool_const("DROP_WORDS").get("en", [])
+	var revived := [{"w": str(drop_en[0]) if not drop_en.is_empty() else "kobe", "ko": "이름", "pos": "명사", "m": 7, "v": true}]
+	ok(not check_excluded(revived, "en").is_empty(), "selfcheck FAIL-as-expected: excluded word revived as v=true")
+	var drop_ja: Array = _tool_const("DROP_WORDS").get("ja", [])
+	ok(not check_excluded([{"w": str(drop_ja[0]) if not drop_ja.is_empty() else "寝", "rd": "ね", "ko": "들어", "pos": "동사", "m": 2, "v": true}], "ja").is_empty(),
+		"selfcheck FAIL-as-expected: excluded ja word revived as v=true")
+	ok(not check_excluded([{"w": "spoke", "ko": "말하다", "pos": "동사", "m": 2, "v": true}], "en").is_empty(),
+		"selfcheck FAIL-as-expected: corrected word back to the old meaning")
 
 
 func _test_load_words() -> void:
