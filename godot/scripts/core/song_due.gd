@@ -10,13 +10,15 @@ extends RefCounted
 
 const MIN_GAP_SEC := 30 ## 마지막 읽기에서 이만큼 안 지났으면 홈은 다시 읽지 않는다
 const MAX_COUNT := 1000000 ## 곡 하나의 줄 수 상한(깨진 값 방어)
+const DONE_MIN_LINES := 4 ## 이 줄 수 미만인 곡은 "다 외움"으로 세지 않는다
 
-## at 0 = 아직 안 읽음. songs = 곡 수, lyrics = 그 중 가사 곡 수, due = 지금 외울 줄 합, fresh = 아직 안 외운 새 줄 합
-static var cache: Dictionary = {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "at": 0}
+## at 0 = 아직 안 읽음. songs = 곡 수, lyrics = 그 중 가사 곡 수, due = 지금 외울 줄 합, fresh = 아직 안 외운 새 줄 합,
+## done = 다 외운 가사 곡 수(줄이 DONE_MIN_LINES 개 이상이고 전부 memorized, 업적 배지 "song_done" 용)
+static var cache: Dictionary = {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "done": 0, "at": 0}
 
 
 static func _blank(at: int) -> Dictionary:
-	return {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "at": at}
+	return {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "done": 0, "at": at}
 
 
 static func _count(v: Variant) -> int:
@@ -86,6 +88,9 @@ static func _tally(raw: Variant, now: int) -> Dictionary:
 		if m is Dictionary:
 			res["due"] = int(res["due"]) + _count((m as Dictionary).get("due", 0))
 			res["fresh"] = int(res["fresh"]) + _count((m as Dictionary).get("fresh", 0))
+			var total: int = _count((m as Dictionary).get("total", 0))
+			if total >= DONE_MIN_LINES and _count((m as Dictionary).get("memorized", 0)) == total:
+				res["done"] = int(res["done"]) + 1
 	return res
 
 
