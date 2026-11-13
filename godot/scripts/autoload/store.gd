@@ -10,6 +10,9 @@ signal navigate_args(view: String, args: Dictionary)
 ## Home / menu "AI 연결하기" was pressed (main.gd opens the connect screen or settings).
 signal ai_connect_requested
 signal curriculum_updated
+## "One unit of study just ended" (a quiz run, a kana test, a finished lesson ...): the badge watcher evaluates then.
+## kind is one of lesson | review | talk | mission | kana | speed | song | other. Send it through note_activity().
+signal activity(kind: String)
 
 const PROGRESS_PATH := "user://progress.json"
 const PREFS_PATH := "user://prefs.json"
@@ -135,6 +138,11 @@ func save_prefs() -> void:
 func set_pref(key: String, value: Variant) -> void:
 	prefs[key] = value
 	save_prefs()
+
+
+## Announces that one unit of study ended (see the `activity` signal). Does not save anything.
+func note_activity(kind: String) -> void:
+	activity.emit(kind)
 
 
 ## SyncEngine: replaces the progress with `p` (normalized), saves it atomically and emits `changed`.
@@ -398,6 +406,7 @@ func add_review(items: Array) -> int:
 	for r in review:
 		seen["%s|%s" % [(r as Dictionary)["lang"], (r as Dictionary)["target"]]] = true
 	var added := 0
+	var added_by_lang := {}
 	for it in items:
 		var d: Dictionary = it
 		var target: String = str(d.get("target", "")).strip_edges()
@@ -419,6 +428,9 @@ func add_review(items: Array) -> int:
 		item.merge(FSRS.new_card(now())) # new FSRS card, due now
 		review.append(item)
 		added += 1
+		added_by_lang[lang] = int(added_by_lang.get(lang, 0)) + 1
+	for l in added_by_lang.keys(): ## cards that are new on this device (cards that arrive through sync are not counted)
+		StudyLog.add_event(l, "newcards", int(added_by_lang[l]))
 	if review.size() > Progress.MAX_REVIEW:
 		progress["review"] = review.slice(review.size() - Progress.MAX_REVIEW)
 	return added

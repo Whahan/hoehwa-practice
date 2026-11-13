@@ -18,6 +18,11 @@ extends RefCounted
 ##   "path": {"cells": {"en": {"3-2": {"done":3, "ok":22, "total":30, "last":"2026-11-01"}}, "ja": {}},
 ##            "last": {"en": "3-2", "ja": ""}, "resume": {"view":"lesson", "lang":"en", "at":1793500000}}   (길 기록·이어하기, 처음 쓸 때 생긴다)
 ## "path" 도 이 기기 전용이다(동기화 안 됨). 키가 없는 파일을 읽어도 snapshot() 은 달라지지 않는다.
+##   "speed": {"en": {"plays":12, "ok":160, "total":190, "last":"2026-11-20", "best": {"score":540, "correct":24, "total":27, "combo":12, "date":"2026-11-20"}}, "ja": {...}}   (60초 스피드 퀴즈)
+##   "badges": {"got": {"first_lesson": {"at":"2026-11-02", "retro":true}}, "seen": ["first_lesson"]}   (받은 배지)
+##   "kana_course": {"done": {"h1":"2026-11-12"}, "best": {"h1":93}, "tries": {"h1":2}}   (가나 코스 단계 기록)
+## "speed", "badges", "kana_course" 도 이 기기 전용이다(SyncDoc 는 읽지 않고 apply_sync 는 지우지 않는다). 키가 없는 파일을 읽어도
+## snapshot() 에 생기지 않는다(첫 기록 때 생김). days.*.n.newcards(복습 카드가 새로 들어간 수)만 동기화된다(n 의 숫자 잎 합산).
 
 const VERSION := 1
 const KEEP_DAYS := 400
@@ -26,12 +31,16 @@ const MAX_COUNT := 1000000
 const GOAL_MAX_MIN := 240
 const GOAL_DEFAULT_MIN := 10
 const LANGS := ["en", "ja"]
-const KINDS := ["lessons", "talks", "missions", "reviews", "shadow", "dictation", "drill"]
+const KINDS := ["lessons", "talks", "missions", "reviews", "shadow", "dictation", "drill", "newcards"]
 const VIEWS := ["today", "lesson", "talk", "reading", "review", "roadmap", "practice", "stats"]
-const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions", "kana", "path"]
+const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions", "kana", "path", "speed", "badges", "kana_course"]
 const MAX_MISSIONS := 200
 const MAX_KANA := 400 ## 글자 칸 수 (히라가나 104 + 가타카나 104 보다 넉넉히)
 const KEEP_BAD := 3 ## .bad, .bad.1, .bad.2
+const MAX_BADGES := 100 ## badges.got entries (also ids this version does not know: another version made them)
+const SPEED_MIN_ANSWERED := 5 ## a speed run with fewer answers than this is not recorded
+const MAX_SPEED_SCORE := 100000
+const MAX_SPEED_COUNT := 1000 ## best.correct / best.total / best.combo, and the most answers one run may report
 const PATH_VIEWS := ["lesson", "review", "talk", "practice", "reading", "song"] ## screens that note_resume() accepts
 const MAX_PATH_DONE := 9999 ## finished lessons counted per path cell
 const RESUME_SAME_SEC := 60 ## note_resume(): the same view + language again within this many seconds changes nothing
@@ -276,6 +285,12 @@ static func _normalize(raw: Variant) -> Dictionary:
 		out["kana"] = _norm_kana(src["kana"])
 	if src.has("path"):
 		out["path"] = _norm_path(src["path"])
+	if src.has("speed"):
+		out["speed"] = _norm_speed(src["speed"])
+	if src.has("badges"):
+		out["badges"] = _norm_badges(src["badges"])
+	if src.has("kana_course"):
+		out["kana_course"] = _norm_kana_course(src["kana_course"])
 	return out
 
 
@@ -510,6 +525,152 @@ static func _norm_path(v: Variant) -> Dictionary:
 	return out
 
 
+## `v` as a count: an int or a finite float clamped into [lo, hi]. Anything else (string, NaN, null ...) -> -1 (not a number).
+static func _num_or_neg(v: Variant, lo: int, hi: int) -> int:
+	if v is int or (v is float and is_finite(v)):
+		return _n(v, lo, hi)
+	return -1
+
+
+static func _date_or_empty(v: Variant) -> String:
+	return v if (v is String and _iso_days(v) >= 0) else ""
+
+
+static func _blank_speed_lang() -> Dictionary:
+	return {"plays": 0, "ok": 0, "total": 0, "last": "", "best": {}}
+
+
+static func _blank_speed() -> Dictionary:
+	return {"en": _blank_speed_lang(), "ja": _blank_speed_lang()}
+
+
+## best = {} or {score, correct, total, combo, date}. A best needs a real number as its score; correct is cut down to total.
+static func _norm_speed_best(v: Variant) -> Dictionary:
+	if not (v is Dictionary):
+		return {}
+	var d: Dictionary = v
+	var score: int = _num_or_neg(d.get("score", null), 0, MAX_SPEED_SCORE)
+	if score < 0:
+		return {}
+	var total: int = _n(d.get("total", 0), 0, MAX_SPEED_COUNT)
+	return {
+		"score": score,
+		"correct": mini(_n(d.get("correct", 0), 0, MAX_SPEED_COUNT), total),
+		"total": total,
+		"combo": _n(d.get("combo", 0), 0, MAX_SPEED_COUNT),
+		"date": _date_or_empty(d.get("date", "")),
+	}
+
+
+static func _norm_speed_lang(v: Variant) -> Dictionary:
+	var out: Dictionary = _blank_speed_lang()
+	if not (v is Dictionary):
+		return out
+	var d: Dictionary = v
+	out["total"] = _n(d.get("total", 0))
+	out["ok"] = mini(_n(d.get("ok", 0)), int(out["total"]))
+	out["plays"] = _n(d.get("plays", 0))
+	out["last"] = _date_or_empty(d.get("last", ""))
+	out["best"] = _norm_speed_best(d.get("best", null))
+	return out
+
+
+static func _norm_speed(v: Variant) -> Dictionary:
+	var out: Dictionary = _blank_speed()
+	if not (v is Dictionary):
+		return out
+	for l in LANGS:
+		out[l] = _norm_speed_lang((v as Dictionary).get(l, null))
+	return out
+
+
+## Badge id: 1..32 characters of a-z, 0-9 and _.
+static func _is_badge_id(k: Variant) -> bool:
+	if not (k is String):
+		return false
+	var s: String = k
+	if s.length() < 1 or s.length() > 32:
+		return false
+	for i in range(s.length()):
+		var c: int = s.unicode_at(i)
+		if not ((c >= 97 and c <= 122) or (c >= 48 and c <= 57) or c == 95):
+			return false
+	return true
+
+
+static func _blank_badges() -> Dictionary:
+	return {"got": {}, "seen": []}
+
+
+static func _norm_badges(v: Variant) -> Dictionary:
+	var out: Dictionary = _blank_badges()
+	if not (v is Dictionary):
+		return out
+	var src: Dictionary = v
+	var got: Dictionary = out["got"]
+	var gin: Variant = src.get("got", null)
+	if gin is Dictionary:
+		for id in (gin as Dictionary).keys():
+			if got.size() >= MAX_BADGES:
+				break
+			if not _is_badge_id(id):
+				continue
+			var e: Variant = (gin as Dictionary)[id]
+			if not (e is Dictionary):
+				continue
+			var at: String = _date_or_empty((e as Dictionary).get("at", ""))
+			if at == "":
+				continue
+			var rv: Variant = (e as Dictionary).get("retro", false)
+			got[id] = {"at": at, "retro": rv is bool and rv}
+	var seen: Array = out["seen"]
+	var sin: Variant = src.get("seen", null)
+	if sin is Array:
+		for id in (sin as Array):
+			if id is String and got.has(id) and not seen.has(id):
+				seen.append(id)
+	return out
+
+
+## Course stage id: h1..h11, k1..k11, p_h, p_k (checked here, not through KanaCourse: no dependency cycle, like _is_kana_key).
+static func _is_stage_id(k: Variant) -> bool:
+	if not (k is String):
+		return false
+	var s: String = k
+	if s == "p_h" or s == "p_k":
+		return true
+	if s.length() < 2 or s.length() > 3 or (s[0] != "h" and s[0] != "k"):
+		return false
+	var num: String = s.substr(1)
+	if not num.is_valid_int() or str(int(num)) != num:
+		return false
+	return int(num) >= 1 and int(num) <= 11
+
+
+static func _blank_kana_course() -> Dictionary:
+	return {"done": {}, "best": {}, "tries": {}}
+
+
+static func _norm_kana_course(v: Variant) -> Dictionary:
+	var out: Dictionary = _blank_kana_course()
+	if not (v is Dictionary):
+		return out
+	var src: Dictionary = v
+	var din: Variant = src.get("done", null)
+	if din is Dictionary:
+		for k in (din as Dictionary).keys():
+			if _is_stage_id(k) and _date_or_empty((din as Dictionary)[k]) != "":
+				(out["done"] as Dictionary)[k] = (din as Dictionary)[k]
+	for part in [["best", 100], ["tries", MAX_COUNT]]:
+		var pin: Variant = src.get(part[0], null)
+		if pin is Dictionary:
+			for k in (pin as Dictionary).keys():
+				var x: int = _num_or_neg((pin as Dictionary)[k], 0, int(part[1]))
+				if _is_stage_id(k) and x >= 0:
+					(out[part[0]] as Dictionary)[k] = x
+	return out
+
+
 ## "YYYY-MM-DD" -> day number, -1 when it is not a real calendar date.
 static func _iso_days(s: String) -> int:
 	if s.length() != 10 or s[4] != "-" or s[7] != "-":
@@ -730,6 +891,161 @@ static func kana_summary() -> Dictionary:
 	return {"runs": int(k["runs"]), "ok": int(k["ok"]), "total": int(k["total"]), "last": str(k["last"])}
 
 
+# ---------------------------------------------------------------- speed quiz (60초 스피드 퀴즈) -- 이 기기 전용
+
+## The live "speed" dictionary, created on the first recorded run (a log that never played has no such key).
+static func _speed(create: bool) -> Dictionary:
+	_ensure()
+	if not _data.has("speed"):
+		if not create:
+			return _blank_speed()
+		_data["speed"] = _blank_speed()
+	return _data["speed"]
+
+
+## One finished 60-second run of `lang`. Fewer than SPEED_MIN_ANSWERED answers, an unknown language, correct > total or a
+## negative number -> {"recorded": false, ...} and nothing is changed. new_best = the score beats the old best (the first
+## recorded run always does). The best record never goes down. prev_best = the old best score (0 when there was none).
+static func add_speed_run(lang: String, score: int, correct: int, total: int, combo: int) -> Dictionary:
+	var prev: int = int(speed_best(lang).get("score", 0))
+	var res := {"recorded": false, "new_best": false, "prev_best": prev}
+	if not _valid_lang(lang) or total < SPEED_MIN_ANSWERED or total > MAX_SPEED_COUNT:
+		return res
+	if correct < 0 or correct > total or score < 0 or combo < 0:
+		return res
+	var rec: Dictionary = (_speed(true)[lang]) as Dictionary
+	rec["plays"] = mini(int(rec["plays"]) + 1, MAX_COUNT)
+	rec["total"] = mini(int(rec["total"]) + total, MAX_COUNT)
+	rec["ok"] = mini(int(rec["ok"]) + correct, int(rec["total"]))
+	rec["last"] = Plan.days_to_iso(today())
+	var sc: int = mini(score, MAX_SPEED_SCORE)
+	var best: Dictionary = rec["best"]
+	var is_best: bool = best.is_empty() or sc > int(best.get("score", 0))
+	if is_best:
+		rec["best"] = {"score": sc, "correct": correct, "total": total, "combo": mini(combo, MAX_SPEED_COUNT), "date": str(rec["last"])}
+	_dirty = true
+	res["recorded"] = true
+	res["new_best"] = is_best
+	return res
+
+
+## Copy of the best run of `lang` ({score, correct, total, combo, date}), {} when there is none.
+static func speed_best(lang: String) -> Dictionary:
+	if not _valid_lang(lang):
+		return {}
+	return (((_speed(false)[lang]) as Dictionary)["best"] as Dictionary).duplicate(true)
+
+
+## {plays, ok, total, last} over all recorded runs of `lang` (zeros / "" when there are none).
+static func speed_summary(lang: String) -> Dictionary:
+	if not _valid_lang(lang):
+		return {"plays": 0, "ok": 0, "total": 0, "last": ""}
+	var rec: Dictionary = (_speed(false)[lang]) as Dictionary
+	return {"plays": int(rec["plays"]), "ok": int(rec["ok"]), "total": int(rec["total"]), "last": str(rec["last"])}
+
+
+# ---------------------------------------------------------------- badges (업적 배지) -- 이 기기 전용
+
+## The live "badges" dictionary, created on the first write (init_badge_record / grant_badge).
+static func _badges(create: bool) -> Dictionary:
+	_ensure()
+	if not _data.has("badges"):
+		if not create:
+			return _blank_badges()
+		_data["badges"] = _blank_badges()
+	return _data["badges"]
+
+
+## id -> {at, retro} (copy). Ids this version does not know are kept too.
+static func badges_got() -> Dictionary:
+	return (_badges(false)["got"] as Dictionary).duplicate(true)
+
+
+## True when the "badges" key exists (= badges were evaluated here before; the first evaluation grants retroactively).
+static func has_badge_record() -> bool:
+	_ensure()
+	return _data.has("badges")
+
+
+## Makes an empty record when there is none (so an evaluation that finds nothing still counts as "evaluated").
+static func init_badge_record() -> void:
+	_ensure()
+	if _data.has("badges"):
+		return
+	_data["badges"] = _blank_badges()
+	_dirty = true
+
+
+## true = newly received. false = already had it, the id has a wrong form, or MAX_BADGES are full (nothing changed).
+static func grant_badge(id: String, retro: bool = false) -> bool:
+	if not _is_badge_id(id):
+		return false
+	var got: Dictionary = _badges(false)["got"]
+	if got.has(id) or got.size() >= MAX_BADGES:
+		return false
+	(_badges(true)["got"] as Dictionary)[id] = {"at": Plan.days_to_iso(today()), "retro": retro}
+	_dirty = true
+	return true
+
+
+## Ids whose "new" mark was already seen (copy).
+static func badges_seen() -> Array:
+	return (_badges(false)["seen"] as Array).duplicate()
+
+
+## Marks badges as seen. Ids that were never received (or are not strings) are ignored; nothing to add = no change.
+static func mark_badges_seen(ids: Array) -> void:
+	var b: Dictionary = _badges(false)
+	var got: Dictionary = b["got"]
+	var add: Array = []
+	for id in ids:
+		if id is String and got.has(id) and not (b["seen"] as Array).has(id) and not add.has(id):
+			add.append(id)
+	if add.is_empty():
+		return
+	(_badges(true)["seen"] as Array).append_array(add)
+	_dirty = true
+
+
+# ---------------------------------------------------------------- kana course (가나 기초 코스) -- 이 기기 전용
+
+## The live "kana_course" dictionary, created on the first recorded try.
+static func _kana_course(create: bool) -> Dictionary:
+	_ensure()
+	if not _data.has("kana_course"):
+		if not create:
+			return _blank_kana_course()
+		_data["kana_course"] = _blank_kana_course()
+	return _data["kana_course"]
+
+
+## One stage test: `correct` of `total`. tries +1, best = max(old, round(100 * correct / total)); `passed` sets done[stage]
+## to today (an older date stays). false (nothing changed) for a stage id of the wrong form or impossible numbers.
+static func add_kana_course_try(stage: String, correct: int, total: int, passed: bool) -> bool:
+	if not _is_stage_id(stage) or total <= 0 or total > 1000 or correct < 0 or correct > total:
+		return false
+	var kc: Dictionary = _kana_course(true)
+	var tries: Dictionary = kc["tries"]
+	tries[stage] = mini(int(tries.get(stage, 0)) + 1, MAX_COUNT)
+	var pct: int = clampi(roundi(100.0 * float(correct) / float(total)), 0, 100)
+	var best: Dictionary = kc["best"]
+	best[stage] = maxi(int(best.get(stage, 0)), pct)
+	if passed and not (kc["done"] as Dictionary).has(stage):
+		(kc["done"] as Dictionary)[stage] = Plan.days_to_iso(today())
+	_dirty = true
+	return true
+
+
+## stage id -> iso date of the first pass (copy).
+static func kana_course_done() -> Dictionary:
+	return (_kana_course(false)["done"] as Dictionary).duplicate(true)
+
+
+## stage id -> best score 0..100 (copy).
+static func kana_course_best() -> Dictionary:
+	return (_kana_course(false)["best"] as Dictionary).duplicate(true)
+
+
 # ---------------------------------------------------------------- path (레슨 길 기록 · 이어하기) -- 이 기기 전용
 
 ## The live "path" dictionary, created on the first write (a log that never recorded a path has no such key).
@@ -912,6 +1228,40 @@ static func streak(lang: String) -> int:
 
 static func tokens(lang: String) -> int:
 	return int(settle(lang)["tokens"])
+
+
+## Longest run of study days (progress.days marks of `lang`) up to today. A streak-protection day (freeze.<lang>.frozen)
+## bridges a gap but is not counted itself (the StreakCalc rule); days after today are ignored. 0 when nothing was studied.
+## Reads only: unlike settle() it never spends or pays tokens.
+static func longest_streak(lang: String) -> int:
+	if not _valid_lang(lang):
+		return 0
+	var t: int = today()
+	var frozen: Dictionary = frozen_days(lang)
+	var days: Array = []
+	for d in _done_days(lang).keys():
+		if int(d) <= t:
+			days.append(int(d))
+	days.sort()
+	var best: int = 0
+	var run: int = 0
+	var prev: int = 0
+	for i in range(days.size()):
+		var d: int = days[i]
+		if i == 0:
+			run = 1
+		else:
+			var bridged: bool = true
+			var x: int = prev + 1
+			while x < d: ## stops at the first day that is neither studied nor protected, so it is bounded by the protected days
+				if not frozen.has(x):
+					bridged = false
+					break
+				x += 1
+			run = run + 1 if bridged else 1
+		best = maxi(best, run)
+		prev = d
+	return best
 
 
 # ---------------------------------------------------------------- reading back

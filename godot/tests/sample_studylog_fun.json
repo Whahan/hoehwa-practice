@@ -1,0 +1,53 @@
+{
+ "v": 1,
+ "saved": 1760700000,
+ "days": {},
+ "future_feature": {"level": 3},
+ "speed": {
+  "en": {
+   "plays": "x",
+   "ok": 50,
+   "total": 10,
+   "last": "2026-13-40",
+   "best": {"score": 1e12, "correct": 99, "total": 20, "combo": 5, "date": "2026-02-30", "junk": 1}
+  },
+  "ja": {
+   "plays": -5,
+   "ok": 3,
+   "total": 4,
+   "last": "2026-11-20",
+   "best": {"score": 200, "correct": 5, "total": 6, "combo": 3, "date": "2026-11-19"}
+  },
+  "fr": {"plays": 9, "ok": 9, "total": 9}
+ },
+ "badges": {
+  "got": {
+   "first_lesson": {"at": "2026-11-02", "retro": true, "junk": 1},
+   "streak_7": {"at": "2026-11-09", "retro": "yes"},
+   "Bad ID!": {"at": "2026-11-09", "retro": false},
+   "abcdefghijklmnopqrstuvwxyz0123456": {"at": "2026-11-09", "retro": false},
+   "abcdefghijklmnopqrstuvwxyz012345": {"at": "2026-11-09", "retro": false},
+   "text_value": "2026-11-09",
+   "bad_date": {"at": "2026-13-40", "retro": false},
+   "no_date": {"retro": true},
+   "from_newer_version": {"at": "2026-11-10", "retro": false}
+  },
+  "seen": ["first_lesson", "first_lesson", "not_got", 5, "from_newer_version"]
+ },
+ "kana_course": {
+  "done": {
+   "h1": "2026-11-12",
+   "p_h": "2026-11-13",
+   "zz": "2026-11-12",
+   "h12": "2026-11-12",
+   "h0": "2026-11-12",
+   "h01": "2026-11-12",
+   "p_x": "2026-11-12",
+   "k11": "2026-02-30",
+   "k3": 5
+  },
+  "best": {"h1": 150, "h2": 93, "k3": -4, "zz": 5, "p_k": "x"},
+  "tries": {"h1": 2, "h0": 5, "k3": -4, "k4": 1e99},
+  "mystery": {"x": 1}
+ }
+}
