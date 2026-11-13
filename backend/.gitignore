@@ -14,5 +14,6 @@ tools/*
 !tools/make_mission_golden.py
 !tools/make_reading_golden.py
 !tools/build_gloss_pack.py
+!tools/gloss_fixes.tsv
 !tools/make_song_fixtures.py
 !tools/song_bench.py

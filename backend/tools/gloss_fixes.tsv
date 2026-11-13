@@ -1,0 +1,164 @@
+# Korean-meaning corrections of the gloss dictionaries (re-check with local qwen3:8b, branch fix/gloss-recheck).
+# lang<TAB>word<TAB>old ko<TAB>new ko. A row is applied only when both independent judgments said the old meaning is wrong,
+# the two proposals agreed, and a back-translation check passed. Applied by build_gloss_pack.py (--fixes, default this file):
+#   python -I backend\tools\build_gloss_pack.py --from-pack <uncorrected pack dir> --out godot\data\pack
+en	membership	구독권	회원자격
+en	motor	기관	모터
+en	raw	생소한	조리되지 않은
+en	regardless	간과하지 말고	무관하게
+en	sight	눈에 보이기	시력
+en	suspect	심사하다	의심하다
+en	boost	부상시키다	증가시키다
+en	castle	성당	성
+en	crack	거칠다	균열
+en	dragon	용사	용
+en	newly	새로운	최근에
+en	refer	말하다	언급하다
+en	script	본문	스크립트
+en	apparent	보여짐	분명한
+en	bloody	거친	피로 덮인
+en	dec	10월	12월
+en	disorder	질서	질서 없음
+en	fool	도적	바보
+en	globe	구름	지구
+en	knight	영웅	기사
+en	mainstream	대중적인	주류
+en	turkish	트리키의	터키의
+en	worship	배경하다	예배하다
+en	bless	복수	복을 주다
+en	brick	돌	벽돌
+en	casual	부드러운	비공식적인
+en	excitement	기쁨	흥분
+en	forty	40개의	사십
+en	liver	간장	간
+en	mar	달리다	손상시키다
+en	palm	손	손바닥
+en	sunshine	해양	태양빛
+en	tourist	투어이스트	여행객
+en	trace	추적	흔적
+en	array	열거	배열
+en	closure	결론	폐쇄
+en	hull	선박	선체
+en	preference	호의	선호도
+en	riot	리오	폭동
+en	cannon	포효	대포
+en	coincidence	결합	우연한 일
+en	doctrine	이론	교리
+en	reasoning	이유	논리적 사고
+en	secular	현대적인	비종교적인
+en	appetite	간절함	식욕
+en	bomber	항공기	폭격기
+en	consist	일치하다	구성하다
+en	grove	나무 그루브	나무 숲
+en	intersection	차선	교차점
+en	judiciary	법정	사법부
+en	monk	모스크	승려
+en	runway	도로	활주로
+en	seoul	이름	서울
+en	tribunal	판사	법정
+en	bryant	브레인트	브라이언트
+en	clifford	이름	클리포드
+en	cody	이름	코디
+en	dye	색을 변하게 하다	염료
+en	endure	지탱하다	견디다
+en	floyd	이름	플로이드
+en	forbes	이름	포브스
+en	fortress	성당	성
+en	gandhi	이름	간디
+en	halo	호일	빛의 고리
+en	hammond	햄프던	해몬드
+en	hans	단어	한스
+en	nationally	국제적으로	국가적으로
+en	notorious	유명한	악명을 자랑하는
+en	qb	포워드	쿼터백
+en	remarkably	놀라운	놀랄 정도로
+en	seventy	70개	칠십
+en	abnormal	정상적인	정상이 아닌
+en	almighty	모든 것의	전능한
+en	enlightenment	명상	깨달음
+en	ghetto	지하도	빈민가
+en	istanbul	도시 이름	이스탄불
+en	johannesburg	도시 이름	요하네스버그
+en	julius	이름	줄리우스
+en	millionaire	유명한 사람	백만장자
+en	preacher	강론자	설교자
+en	softball	야구	소프트볼
+en	tidal	호수의	조석의
+en	torres	트레스	토레스
+en	trivial	무의미한	중요하지 않은
+en	amelia	그 사람	아멜리아
+en	crescent	달걀 모양	달 모양의
+en	cultivation	양육	작물 재배
+en	kitten	유아	고양이 새끼
+en	mushroom	토마토	버섯
+en	pavilion	피바리온	파빌리온
+en	pineapple	수박	파인애플
+en	sewage	오염된 물	하수
+en	shameful	열등한	수치스러운
+en	toni	이름	토니
+en	zurich	도시	취리히
+en	avalanche	눈먼 바람	눈사태
+en	backbone	등등	등뼈
+en	bryce	브레이스	브라이스
+en	catchy	캐치리	기억하기 쉬운
+en	despicable	거룩하지 않은	증오할 만한
+en	epilepsy	경련	간질
+en	finely	정확히	정교하게
+en	hive	벌	벌집
+en	interpreter	해설자	통역자
+ja	機	기회	기계
+ja	開発	발전	개발
+ja	正直	직설	솔직한
+ja	聞く	들어다	듣다
+ja	よろしく	잘	잘 부탁합니다
+ja	賞	상금	상
+ja	物語	물가	이야기
+ja	いくら	어쨌든	얼마
+ja	兄	형제	형
+ja	殺し	살다	죽이다
+ja	復活	복화	부활
+ja	さっき	그제	방금
+ja	姫	여왕	공주
+ja	連中	연중	사람들
+ja	券	권	티켓
+ja	父親	부모	아버지
+ja	掃除	소독	청소
+ja	中身	중신	내용
+ja	共	공	함께
+ja	妄想	무리하게 생각	망상
+ja	だらけ	많다	가득한
+ja	床	침대	바닥
+ja	備え	비상	준비
+ja	影	그림	그림자
+ja	もはや	이제는	더 이상
+ja	任務	작업	임무
+ja	狼	여우	늑대
+ja	羽	깃발	깃털
+ja	うるさい	가짜	소란스러운
+ja	田舎	도시 외곽	농촌
+ja	浮気	이혼	불륜
+ja	決まり	결말	규칙
+ja	泉	천	샘물
+ja	稼ぐ	일하다	돈 벌다
+ja	割合	가비	비율
+ja	ハンター	해커	사냥꾼
+ja	向き	향기	방향
+ja	止める	지금	정지하다
+ja	答える	말하다	답하다
+ja	あえて	아주	의도적으로
+ja	チェーン	가죽끈	체인
+ja	ドーム	구형	돔
+ja	仮	가짜	임시
+ja	桃	도	복숭아
+ja	土産	도시락	기념품
+ja	性的	성별	성적
+ja	勃起	부기	발기
+ja	帝	제국	황제
+ja	曖昧	암호	모호한
+ja	住人	주인	거주자
+ja	梨	사과	배
+ja	花嫁	꽃신	신부
+ja	蔵	고장	창고
+ja	銀河	우주	은하
+ja	芝居	무대	연극
+ja	頂く	예배하다	받다

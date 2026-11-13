@@ -17,11 +17,16 @@ vocabulary lists, and writes the answers into the pack.
     --sample FILE     write the fixed-seed 100-word review list (word / ko / empty check column) from the built files
     --retry-missing   ask again only the blank words (2 passes), cached answers stay
     --offline         no backend call: build the files from the cache only (exit 1 if a word was never asked)
+    --fixes FILE      correction file (default backend\\tools\\gloss_fixes.tsv when it exists): rows `lang<TAB>word<TAB>old ko<TAB>new ko`,
+                      applied after MANUAL_FIX; a bad row (unknown lang, word not in the pack, old ko differs, new ko not a valid
+                      Korean meaning, duplicate row, wrong column count) stops the run with exit 2 and writes nothing
+    --from-pack DIR   no vocab, cache or backend: take the gloss_*.json already in DIR, apply the --fixes rows to them and write
+                      the result to --out (DIR may be --out); the pack is reproduced from the uncorrected pack + the fix file
 
 Flow: the first 100 words computed in this run are timed, the estimate is printed, and the run goes on only when the estimate
 fits --max-hours. Every call is appended to the cache at once. The gloss files and the manifest are written only when every
 word of the selected languages has been asked.
-Exit codes: 0 ok, 1 some calls failed for good (nothing written, rerun resumes), 2 missing input, 3 backend not reachable
+Exit codes: 0 ok, 1 some calls failed for good (nothing written, rerun resumes), 2 missing or bad input (incl. a bad fix row), 3 backend not reachable
 (the first call failed, or 3 calls in a row failed), 4 estimate above --max-hours (the full run was not started).
 A pack entry is {"<lemma>": {"pos", "ko", "ipa"}}; an answer is dropped when its ko has no Hangul or is not 1..60 characters,
 when its position does not match the word sent, or when the backend gives no answer for the word.
@@ -404,6 +409,62 @@ def apply_manual_fix(lang, obj):
     return out, applied, absent
 
 
+DEFAULT_FIXES = os.path.join(HERE, "gloss_fixes.tsv")
+
+
+class FixError(Exception):
+    pass
+
+
+def ko_for_pack(ko):
+    """a Korean meaning that the pack accepts: valid_ko, only KO_ALLOWED characters, no Latin letter"""
+    return valid_ko(ko) and KO_ALLOWED.fullmatch(ko) is not None and LATIN.search(ko) is None
+
+
+def load_fixes(path):
+    """reads the correction TSV: `lang<TAB>word<TAB>old ko<TAB>new ko`, blank lines and lines starting with # skipped.
+    returns {lang: {word: (old, new)}}; raises FixError (with the line number) on any bad row"""
+    out = {lang: {} for lang in LANGS}
+    with open(path, "r", encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.rstrip("\r\n")
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            cols = line.split("\t")
+            if len(cols) != 4:
+                raise FixError("%s:%d: 4 tab-separated columns needed, found %d" % (path, n, len(cols)))
+            lang, word, old, new = cols
+            if lang not in LANGS:
+                raise FixError("%s:%d: unknown language %r" % (path, n, lang))
+            if not word or word != word.strip():
+                raise FixError("%s:%d: empty word or spaces around it %r" % (path, n, word))
+            if not old.strip():
+                raise FixError("%s:%d: empty old meaning" % (path, n))
+            if not ko_for_pack(new) or new != " ".join(new.split()):
+                raise FixError("%s:%d: new meaning %r is not a valid Korean meaning" % (path, n, new))
+            if new == old:
+                raise FixError("%s:%d: new meaning equals the old one" % (path, n))
+            if word in out[lang]:
+                raise FixError("%s:%d: duplicate row for %s %r" % (path, n, lang, word))
+            out[lang][word] = (old, new)
+    return out
+
+
+def apply_fixes(lang, obj, fixes):
+    """sets the Korean meaning of every fixed word of `lang`; every row must match: the word is in obj and its current ko is the
+    row's old ko (a stale or invented row is an error, not skipped). returns (new dict, number applied)"""
+    out = dict(obj)
+    applied = 0
+    for w, (old, new) in fixes.get(lang, {}).items():
+        if w not in out:
+            raise FixError("%s: fix for %r, which is not in the pack" % (lang, w))
+        if out[w]["ko"] != old:
+            raise FixError("%s: fix for %r expects the old meaning %r but the pack has %r" % (lang, w, old, out[w]["ko"]))
+        out[w] = dict(out[w], ko=new)
+        applied += 1
+    return out, applied
+
+
 def normalize_pos(obj):
     """POS_FIX on the part of speech. returns (new dict, number of changed values)"""
     out = {}
@@ -480,6 +541,9 @@ def main(argv=None):
                     help="ask again only the blank words (asked before, no accepted answer); cached answers stay; 2 passes")
     ap.add_argument("--offline", action="store_true",
                     help="no backend call: build the files from the cache only (exit 1 if a word was never asked)")
+    ap.add_argument("--fixes", default=None, help="correction TSV (default tools/gloss_fixes.tsv when it exists)")
+    ap.add_argument("--from-pack", default=None,
+                    help="apply the fixes to the gloss_*.json already in this folder (no cache, no backend)")
     args = ap.parse_args(argv)
     if args.offline and args.retry_missing:
         say("[오류] --offline 과 --retry-missing 은 함께 쓸 수 없다")
@@ -493,6 +557,53 @@ def main(argv=None):
     if not langs or any(x not in LANGS for x in langs):
         say("[오류] --lang 은 en, ja 중에서 고른다")
         return 2
+
+    fixes = {lang: {} for lang in LANGS}
+    fix_path = args.fixes if args.fixes is not None else (DEFAULT_FIXES if os.path.isfile(DEFAULT_FIXES) else None)
+    if fix_path is not None:
+        try:
+            fixes = load_fixes(fix_path)
+        except (FixError, OSError, UnicodeDecodeError) as e:
+            say("[오류] 교정 파일: %s" % e)
+            return 2
+        say("[교정] %s: en %d, ja %d행" % (fix_path, len(fixes["en"]), len(fixes["ja"])))
+
+    if args.from_pack is not None:
+        if args.vocab_dir is not None or args.offline or args.retry_missing:
+            say("[오류] --from-pack 은 --vocab-dir / --offline / --retry-missing 과 함께 쓸 수 없다")
+            return 2
+        loaded = {}
+        for lang in langs:
+            bp = os.path.join(args.from_pack, PACK_FILE[lang])
+            if not os.path.isfile(bp):
+                say("[오류] 기준 pack 파일이 없음: %s" % bp)
+                return 2
+            with open(bp, "r", encoding="utf-8") as f:
+                base = json.load(f)
+            try:
+                fixed, applied = apply_fixes(lang, base, fixes)
+            except FixError as e:
+                say("[오류] 교정 파일: %s" % e)
+                return 2
+            kept, counts, dropped = filter_entries(lang, fixed)
+            if dropped:
+                say("[오류] %s: 교정 후 거름 규칙에 걸린 항목 %d개 (%s ...)" % (lang, len(dropped), dropped[0][0]))
+                return 2
+            loaded[lang] = (kept, applied)
+        entries = {}
+        for lang in langs:   # nothing is written before every language passed
+            kept, applied = loaded[lang]
+            fp = os.path.join(args.out, PACK_FILE[lang])
+            write_json_atomic(fp, kept)
+            entries[PACK_FILE[lang]] = {"bytes": os.path.getsize(fp), "sha256": sha256_file(fp), "records": len(kept)}
+            say("[결과] %s: 기준 pack %d 항목, 교정 %d 적용 -> %s" % (lang, len(kept), applied, fp))
+        update_manifest(args.out, entries)
+        say("[결과] manifest.json 항목 갱신: %s" % ", ".join(sorted(entries)))
+        if args.sample:
+            n = write_sample(args.out, args.sample)
+            say("[결과] 검수 목록 %d행: %s" % (n, args.sample))
+        say("[완료]")
+        return 0
 
     if args.vocab_dir is None:
         if args.sample:
@@ -565,6 +676,11 @@ def main(argv=None):
             got_obj = {w: c.got[w] for w in vocab[lang] if w in c.got}   # every accepted answer
             fixed, applied, absent = apply_manual_fix(lang, got_obj)
             fixed, pos_changed = normalize_pos(fixed)
+            try:
+                fixed, fixes_applied = apply_fixes(lang, fixed, fixes)
+            except FixError as e:
+                say("[오류] 교정 파일: %s" % e)
+                return 2
             empty_pos = sum(1 for v in fixed.values() if not v["pos"])
             out_obj, counts, dropped = filter_entries(lang, fixed)
             fp = os.path.join(args.out, PACK_FILE[lang])
@@ -577,8 +693,8 @@ def main(argv=None):
                     f.write("%s\t%s\t%s\n" % (w, rule, fixed[w]["ko"]))
             blank = len(vocab[lang]) - len(got_obj)  # words of the list with no accepted answer
             say("[결과] %s: 어휘 %d, 응답 뜻 %d, 빈칸 %d" % (lang, len(vocab[lang]), len(got_obj), blank))
-            say("[결과] %s 교정표 적용 %d (대상 중 목록에 없음: %s), 품사 정규화 %d, 빈 품사 %d" % (
-                lang, applied, ", ".join(absent) or "없음", pos_changed, empty_pos))
+            say("[결과] %s 교정표 적용 %d (대상 중 목록에 없음: %s), 품사 정규화 %d, 빈 품사 %d, 교정 파일 %d" % (
+                lang, applied, ", ".join(absent) or "없음", pos_changed, empty_pos, fixes_applied))
             say("[결과] %s 거른 규칙별: junk %d, latin_in_ko %d, other_char_in_ko %d, blocked_word %d -> 저장 %d (%s)" % (
                 lang, counts["junk"], counts["latin_in_ko"], counts["other_char_in_ko"], counts["blocked_word"],
                 len(out_obj), fp))
