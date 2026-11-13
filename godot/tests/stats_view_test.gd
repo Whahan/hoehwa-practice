@@ -34,6 +34,7 @@ func _ready() -> void:
 		for sz in SIZES:
 			await _combo(dataset, sz)
 	await _test_switching()
+	await _test_report_once()
 	await _test_goal_card()
 	await _test_chart_robustness()
 	await _test_lifecycle()
@@ -212,7 +213,12 @@ func _combo(dataset: String, sz: Vector2) -> void:
 	if ri >= 0:
 		ok(_any_text(kids[ri], "이번 주 리포트") and _any_text(kids[ri], "(영어)"), "%s: report card is titled for the week and the language" % tag)
 		if dataset == "empty":
-			ok(bool(kids[ri].get_meta("empty")) and _any_text(kids[ri], "아직 기록이 없어요"), "%s: empty data -> the report card says there is no record yet" % tag)
+			ok(bool(kids[ri].get_meta("empty")) and not _any_text(kids[ri], "아직 기록이 없어요") and _any_text(kids[ri], "쌓여요"), "%s: empty data -> the report card keeps quiet (the page's own line says it once)" % tag)
+			var page_lines := 0
+			for k in kids:
+				if k is Label and "아직 기록이 없어요" in (k as Label).text:
+					page_lines += 1
+			ok(page_lines == 1, "%s: empty data -> exactly one page-level 'no record yet' line (got %d)" % [tag, page_lines])
 		else:
 			ok(not bool(kids[ri].get_meta("empty")) and _any_text(kids[ri], "새 카드") and _any_text(kids[ri], "발음 점수") and _any_text(kids[ri], "정답률"), "%s: rich data -> the report card shows cards, pronunciation and accuracy" % tag)
 
@@ -266,6 +272,29 @@ func _test_switching() -> void:
 		ok(_nav.size() == 1 and _nav[0][0] == "practice" and _nav[0][1] == "en", "pressing it asks main to open the practice tab (%s)" % str(_nav))
 	holder.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- report card: the "no record yet" line appears once
+
+func _test_report_once() -> void:
+	print("[report card: no duplicate empty text]")
+	_load_dataset("rich")
+	StudyLog.today_override = D + 60 ## old records exist, but nothing in the last 7 days
+	var made: Array = await _make(SIZES[0])
+	var holder: Control = made[0]
+	var v: StatsView = made[1]
+	var rep: Control = null
+	var page_lines := 0
+	for ch in v._scroll.content.get_children():
+		if ch.has_meta("report"):
+			rep = ch
+		elif ch is Label and "아직 기록이 없어요" in (ch as Label).text:
+			page_lines += 1
+	ok(rep != null and bool(rep.get_meta("empty")) and _any_text(rep, "아직 기록이 없어요"), "records exist but the week is empty: the report card says so itself")
+	ok(page_lines == 0, "... and the page does not repeat it with its own line (got %d)" % page_lines)
+	holder.queue_free()
+	await _frames(2)
+	StudyLog.today_override = D
 
 
 # ---------------------------------------------------------------- GoalCard

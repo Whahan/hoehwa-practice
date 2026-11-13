@@ -87,6 +87,8 @@ func _ready() -> void:
 	await _test_new_dots()
 	await _test_layout()
 	await _test_garbage()
+	await _test_progress_text()
+	await _test_real_engine()
 	_test_file_rules()
 
 	BadgeView.provider = _saved_provider
@@ -234,6 +236,10 @@ func _test_grid_and_filter() -> void:
 	ok(_any_text(open_tile, "3/46") and _any_text(open_tile, "히라가나 청음 마스터"), "open tile: name + progress '3/46'")
 	ok(_glyph_kinds(open_tile).has("lock") and not _glyph_kinds(got_tile).has("lock"), "open tile draws a lock, a received one does not")
 	ok(_glyph_kinds(got_tile).has("star"), "received tile draws its badge glyph (star)")
+	# time badges: seconds are shown as minutes / hours, never as raw seconds
+	ok(_any_text(v.tile("time_1h"), "0분 / 1시간") and not _any_text(v.tile("time_1h"), "3600"), "time_1h tile: '0분 / 1시간' (value 3 s), no raw 3600")
+	ok(_any_text(v.tile("time_10h"), "0분 / 10시간") and not _any_text(v.tile("time_10h"), "36000"), "time_10h tile: '0분 / 10시간', no raw 36000")
+	ok(_any_text(v.tile("kana_hira"), "3/46"), "a non-time badge keeps 'value/target' (3/46)")
 	# 필터
 	v.set_filter("speed")
 	await _frames(3)
@@ -258,6 +264,14 @@ func _test_grid_and_filter() -> void:
 	await _frames(3)
 	ok(v.visible_ids().size() == 3 and v.filter() == "speed", "pressing the chip filters")
 	ok(v.chips().size() == 7, "7 chips: 전체 + 6 categories")
+	var chip_names: Array = []
+	for b in v.chips():
+		chip_names.append((b as Button).text)
+	var want_names: Array = ["전체"]
+	for c in BadgeDefs.categories():
+		want_names.append(c[1])
+	ok(chip_names == want_names, "chip labels and order come from BadgeDefs.categories(): %s" % str(chip_names))
+	fails(chip_names != ["전체", "습관", "레슨·복습", "말하기", "노래", "가나"], "chip-order check would notice a missing last category")
 	var cats_ok := true
 	for b in v.chips():
 		cats_ok = cats_ok and (b as Button).size.y >= 31.5
@@ -284,11 +298,17 @@ func _test_sheet() -> void:
 	var sh: Sheet = _sheet_node()
 	ok(sh != null and sh.title_label != null and sh.title_label.text == "히라가나 청음 마스터", "sheet title is the badge name")
 	ok(sh != null and _any_text(sh, "히라가나 청음 마스터 조건 설명"), "sheet shows the description")
-	ok(sh != null and _any_text(sh, "진행 3 / 46"), "open badge: sheet shows the progress '진행 3 / 46'")
+	ok(sh != null and _any_text(sh, "진행 3/46"), "open badge: sheet shows the progress '진행 3/46'")
 	ok(sh != null and _glyph_kinds(sh).has("lock"), "open badge: big lock in the sheet")
 	Sheet.close_top()
 	await _frames(3)
 	ok(Sheet.depth() == 0 and not Sheet.is_open(), "closing the sheet: depth 0")
+	(v.tile("time_10h") as Button).pressed.emit()
+	await _frames(4)
+	sh = _sheet_node()
+	ok(sh != null and _any_text(sh, "진행 0분 / 10시간") and not _any_text(sh, "36000"), "time badge sheet: '진행 0분 / 10시간', no raw seconds")
+	Sheet.close_top()
+	await _frames(3)
 	# 받은 배지 (소급)
 	(v.tile("first_lesson") as Button).pressed.emit()
 	await _frames(4)
@@ -513,6 +533,87 @@ func _test_garbage() -> void:
 	v3.on_hide()
 	v3.free()
 	ok(true, "refresh()/on_hide() before the view is in the tree are harmless")
+
+
+# ---------------------------------------------------------------- 진행 문구: 초는 분·시간으로
+
+func _expect_progress(id: String, value: int, target: int, want: String) -> void:
+	var got: String = FunParts.progress_text({"id": id, "value": value, "target": target})
+	ok(got == want, "progress_text(%s, %d, %d) = '%s' (want '%s')" % [id, value, target, got, want])
+
+
+func _test_progress_text() -> void:
+	print("[progress text]")
+	var cases: Array = [[0, "0분 / 10시간"], [59, "0분 / 10시간"], [60, "1분 / 10시간"], [3599, "59분 / 10시간"], [3600, "1시간 / 10시간"],
+		[5400, "1.5시간 / 10시간"], [7200, "2시간 / 10시간"], [9000, "2.5시간 / 10시간"], [36000, "10시간 / 10시간"], [40000, "10시간 / 10시간"]]
+	for c in cases:
+		_expect_progress("time_10h", c[0], 36000, c[1])
+	_expect_progress("time_1h", 720, 3600, "12분 / 1시간")
+	_expect_progress("time_1h", 3600, 3600, "1시간 / 1시간")
+	_expect_progress("time_1h", 40000, 3600, "1시간 / 1시간")
+	_expect_progress("kana_hira", 3, 46, "3/46")
+	_expect_progress("lessons_10", 99, 10, "10/10")
+	_expect_progress("kana_all", -4, 208, "0/208")
+	ok(FunParts.duration_text(7199) == "1.9시간" and FunParts.duration_text(-5) == "0분" and FunParts.duration_text(3601) == "1시간", "duration_text rounds down: 7199 -> 1.9시간, -5 -> 0분, 3601 -> 1시간")
+	ok(FunParts.progress_text(null) == "0/0" and FunParts.progress_text({"id": "time_x", "value": "a", "target": NAN}) == "0분 / 0분", "progress_text(null) and (junk time item) do not fail")
+	# 검사기: 원본 초 숫자 검사기가 실제로 걸린다
+	var rx := RegEx.new()
+	rx.compile("[0-9]{4}")
+	fails(rx.search("3/3600") != null and rx.search("0/36000") != null and rx.search("0분 / 1시간") == null, "raw-seconds checker flags '3/3600' and '0/36000' but not '0분 / 1시간'")
+	# 타일에서도 같은 함수를 쓴다
+	var t: Button = FunParts.badge_tile({"id": "time_1h", "name": "공부 1시간", "got": false, "value": 720, "target": 3600}, Callable())
+	add_child(t)
+	ok(_any_text(t, "12분 / 1시간") and not _any_text(t, "720"), "tile shows the same text as progress_text")
+	t.queue_free()
+	await _frames(1)
+
+
+## 실제 BadgeEngine.ui_list 를 provider 로 꽂는다(가짜 스냅샷: 공부 시간만 바꾼다). 23개 타일 어디에도 초 원본이 없어야 한다.
+func _test_real_engine() -> void:
+	print("[real BadgeEngine.ui_list]")
+	var old_path: String = StudyLog.path
+	var old_prov: Callable = BadgeEngine.provider
+	var log_path := "user://test_fun_b2_log.json"
+	StudyLog.path = log_path
+	_rm(log_path)
+	StudyLog.load_from_disk()
+	var sz := Vector2(412, 915) if _phone else Vector2(1280, 800)
+	var rx := RegEx.new()
+	rx.compile("[0-9]{4}")
+	for secs in [0, 720, 5400, 20000]:
+		var sec_now: int = secs
+		BadgeEngine.provider = func() -> Dictionary: return {"study_sec_total": sec_now}
+		BadgeView.provider = BadgeEngine.ui_list
+		var made: Array = await _make(sz)
+		var v: BadgeView = made[1]
+		var tiles: Array = v.find_children("*", "Button", true, false).filter(func(b: Node) -> bool: return (b as Button).has_meta("id"))
+		var raw: Array = []
+		for t in tiles:
+			for tx in _texts(t):
+				if rx.search(str(tx)) != null:
+					raw.append(str(tx))
+		ok(tiles.size() == 23, "real ui_list (study %d s): 23 tiles (%d)" % [secs, tiles.size()])
+		ok(raw.is_empty(), "real ui_list (study %d s): no raw 4+ digit number on any tile %s" % [secs, str(raw.slice(0, 3))])
+		var want1: String = "%s / 1시간" % FunParts.duration_text(mini(secs, 3600))
+		var want10: String = "%s / 10시간" % FunParts.duration_text(secs)
+		ok(_any_text(v.tile("time_1h"), want1) and _any_text(v.tile("time_10h"), want10), "real ui_list (study %d s): '%s' and '%s'" % [secs, want1, want10])
+		(v.tile("time_10h") as Button).pressed.emit()
+		await _frames(4)
+		var sh: Sheet = _sheet_node()
+		ok(sh != null and _any_text(sh, "진행 " + want10) and rx.search(" ".join(_texts(sh))) == null, "real ui_list (study %d s): sheet '진행 %s', no raw number" % [secs, want10])
+		Sheet.close_top()
+		await _frames(3)
+		(made[0] as Control).queue_free()
+		await _frames(2)
+	BadgeEngine.provider = old_prov
+	_rm(log_path)
+	StudyLog.load_from_disk() ## empty state while the path is still the temp one
+	StudyLog.path = old_path
+
+
+func _rm(p: String) -> void:
+	if FileAccess.file_exists(p):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 
 
 func _test_file_rules() -> void:

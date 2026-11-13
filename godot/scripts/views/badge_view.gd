@@ -9,7 +9,6 @@ extends AppView
 const COLS_PHONE := 3
 const COLS_WIDE := 5
 const WIDE_MIN := 700.0
-const CATS := [["habit", "습관"], ["learn", "레슨·복습"], ["speak", "말하기"], ["song", "노래"], ["kana", "가나"], ["speed", "스피드"]]
 const NOTE_DEVICE := "일부 배지(가나·스피드·노래)는 이 기기의 기록으로 받아요."
 
 static var provider: Callable = Callable()
@@ -80,7 +79,7 @@ func visible_ids() -> Array:
 ## "" = 전체. 모르는 분류도 전체로 본다.
 func set_filter(cat: String) -> void:
 	var known := false
-	for c in CATS:
+	for c in BadgeDefs.categories():
 		if c[0] == cat:
 			known = true
 	_filter = cat if known else ""
@@ -174,7 +173,7 @@ func _build() -> void:
 
 	var fl := UI.flow(8, 8)
 	fl.add_child(_chip("전체", ""))
-	for cat in CATS:
+	for cat in BadgeDefs.categories():
 		fl.add_child(_chip(str(cat[1]), str(cat[0])))
 	c.add_child(fl)
 
@@ -234,7 +233,7 @@ func _open_sheet(id: String) -> void:
 		if bool(info["retro"]):
 			body.add_child(UI.label("예전 기록으로 받았어요", "Small"))
 	else:
-		body.add_child(UI.label("진행 %d / %d" % [int(info["value"]), int(info["target"])], "Strong"))
+		body.add_child(UI.label("진행 " + FunParts.progress_text(info), "Strong"))
 		body.add_child(UI.progress_bar(float(info["value"]) / float(info["target"]), Pal.REWARD, 10.0))
 	UI.fix_cjk(body)
 	_sheet = Sheet.open(self, str(info["name"]), body, [{"id": "close", "text": "닫기", "kind": "soft"}])

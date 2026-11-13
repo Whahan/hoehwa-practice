@@ -67,8 +67,9 @@ static func numbers_line(report: Variant) -> String:
 # ---------------------------------------------------------------- 주간 리포트 카드 (§4.5)
 
 ## compact=false: 전체 카드(공부한 날, 공부 시간, 레슨, 새 카드, 발음 점수, 규칙 문구). compact=true: 숫자 3개 한 줄만.
+## quiet=true: 기록 없음일 때 "아직 기록이 없어요" 문장을 빼고 제목과 작은 안내만(화면에 같은 문장이 이미 있을 때: StatsView).
 ## meta "report" = 받은 사전(복사), "empty" = 기록 없음 여부, "line" = compact 의 한 줄 글자.
-static func report_card(report: Variant, compact: bool = false) -> CardBox:
+static func report_card(report: Variant, compact: bool = false, quiet: bool = false) -> CardBox:
 	var card := UI.card("Card", Ds.S3)
 	var rep: Dictionary = (report as Dictionary).duplicate(true) if report is Dictionary else {}
 	var empty: bool = report_is_empty(rep)
@@ -95,7 +96,8 @@ static func report_card(report: Variant, compact: bool = false) -> CardBox:
 		var ls: Variant = rep.get("lines", null)
 		if ls is Array and (ls as Array).size() > 0 and str((ls as Array)[0]) != "":
 			msg = str((ls as Array)[0])
-		card.body.add_child(UI.label(msg, "Muted"))
+		if not quiet:
+			card.body.add_child(UI.label(msg, "Muted"))
 		card.body.add_child(UI.label("공부 시간 · 레슨 · 새 카드 · 발음 점수가 여기에 쌓여요", "Small"))
 		return card
 
@@ -278,7 +280,7 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 	if got:
 		sub = _md(d.get("at", ""))
 	else:
-		sub = "%d/%d" % [value, target]
+		sub = progress_text(d)
 
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
@@ -351,6 +353,28 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 		if on_tap.is_valid():
 			on_tap.call())
 	return b
+
+
+## 진행 문구 하나(타일 아래 글자와 시트의 "진행 ..." 가 같이 쓴다). value 는 0..target 으로 자른다.
+## id 가 "time_" 로 시작하면 초를 사람이 읽는 단위로: "12분 / 1시간", "2.5시간 / 10시간". 그 밖은 "3/46".
+static func progress_text(info: Variant) -> String:
+	var d: Dictionary = info if info is Dictionary else {}
+	var target: int = maxi(0, _i(d.get("target", 0)))
+	var value: int = clampi(_i(d.get("value", 0)), 0, target) if target > 0 else maxi(0, _i(d.get("value", 0)))
+	if str(d.get("id", "")).begins_with("time_"):
+		return "%s / %s" % [duration_text(value), duration_text(target)]
+	return "%d/%d" % [value, target]
+
+
+## 초 -> "N분"(3600초 미만, 내림) / "N시간"(소수 첫째 자리까지 내림, ".0" 은 뺀다). 음수·이상한 값은 0분.
+static func duration_text(sec: int) -> String:
+	var s: int = maxi(0, sec)
+	if s < 3600:
+		return "%d분" % (s / 60)
+	var tenths: int = s * 10 / 3600
+	if tenths % 10 == 0:
+		return "%d시간" % (tenths / 10)
+	return "%d.%d시간" % [tenths / 10, tenths % 10]
 
 
 static func _tile_a11y(nm: String, got: bool, sub: String, is_new: bool) -> String:
