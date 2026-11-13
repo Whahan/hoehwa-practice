@@ -40,6 +40,7 @@ static func no_sound_text() -> String:
 
 
 var lang: String = "ja"
+var opened_as_course: bool = false ## open(view=course) 로 코스 목록에서 시작했고 아직 표로 가지 않았다: 코스 목록에서 뒤로 = 허브
 var stage: String = "table" ## table | setup | quiz | result | course | stage_intro | pairs | stage_test | stage_result | unsupported
 var table_script: String = "hira" ## 표에 보이는 글자 종류: hira | kata
 var cfg: Dictionary = {"kind": "read", "script": "hira", "rows": [], "focus": false, "group": ""}
@@ -101,6 +102,7 @@ func open(l: String, args: Dictionary = {}) -> void:
 	if s == "hira" or s == "kata":
 		table_script = s
 	stage = "course" if str(args.get("view", "table")) == "course" else "table"
+	opened_as_course = stage == "course"
 	_render()
 
 
@@ -109,7 +111,7 @@ func on_hide() -> void:
 	StudyLog.flush()
 
 
-## 뒤로: 퀴즈 · 결과 · 설정 -> 표 -> 허브. 단계 소개 · 단계 시험 · 단계 결과 -> 코스 목록 -> 표
+## 뒤로: 퀴즈 · 결과 · 설정 -> 표 -> 허브 (코스로 바로 열었으면 코스 목록 -> 허브). 단계 소개 · 단계 시험 · 단계 결과 -> 코스 목록 -> 표
 ## (짝 연습 중이면 짝 고르기로). 중간에 나간 단계 시험은 시도로 세지 않는다.
 func go_back() -> bool:
 	match stage:
@@ -130,6 +132,9 @@ func go_back() -> bool:
 			return true
 		"course":
 			Tts.stop()
+			if opened_as_course:
+				closed.emit() # 코스로 바로 열었다: 뒤로 한 번에 허브로
+				return true
 			stage = "table"
 			_render()
 			return true
@@ -316,6 +321,7 @@ func _on_view_switch(v: String) -> void:
 
 func open_table() -> void:
 	Tts.stop()
+	opened_as_course = false
 	stage = "table"
 	_render()
 

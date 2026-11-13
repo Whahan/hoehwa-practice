@@ -388,10 +388,9 @@ func _test_hub() -> void:
 	await _frames(4)
 	var ks: Control = pv.current_screen()
 	ok(ks is KanaScreen and (ks as KanaScreen).stage == "course", "W-5: the hub kana card opens the course page, not the table (%s)" % [str((ks as KanaScreen).stage) if ks is KanaScreen else "-"])
-	pv.go_back() # KanaScreen: course -> table
-	pv.go_back() # table -> hub
+	pv.go_back() # opened directly as the course: one back returns to the hub
 	await _frames(3)
-	ok(pv.current_screen() == null, "W-5: two backs from the course page return to the hub")
+	ok(pv.current_screen() == null, "W-5: one back from the directly opened course page returns to the hub")
 	Store.set_lang("en")
 	_main.show_view("today")
 	await _frames(2)
