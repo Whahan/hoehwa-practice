@@ -453,7 +453,7 @@ func _hub_test() -> void:
 	host.add_child(v)
 	v.size = host.size
 	await _frames(4)
-	ok(v.card_kinds() == ["mission", "shadow", "dictation", "phoneme", "kana"], "hub cards in order: %s" % str(v.card_kinds()))
+	ok(v.card_kinds() == ["mission", "shadow", "dictation", "phoneme", "kana", "speed"], "hub cards in order: %s" % str(v.card_kinds()))
 	for k in v.card_kinds():
 		ok(PracticeView.KINDS.has(k), "card kind %s is in KINDS" % k)
 		ok(v._make_screen(k) != null, "_make_screen(%s) builds a screen" % k)
@@ -495,7 +495,7 @@ func _hub_test() -> void:
 	ok(v.page_title() == "받아쓰기", "sub screen title for the bar (%s)" % v.page_title())
 	ok(v.go_back(), "go_back closes the sub screen")
 	await _frames(3)
-	ok(v.current_screen() == null and v.card_kinds().size() == 5, "back at the hub with its cards")
+	ok(v.current_screen() == null and v.card_kinds().size() == 6, "back at the hub with its cards")
 	# the widget test of the phone: touch targets on the hub
 	if _phone:
 		var small := 0

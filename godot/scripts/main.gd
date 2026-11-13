@@ -34,21 +34,21 @@ const PHONE_MAX_DIRECT := 5
 ## Phone bottom bar: the tabs that have a cell, in this order (only the registered ones show: `bar_keys()`).
 const BAR_PHONE := ["today", "lesson", "review", "song", "menu"]
 ## Phone: the bottom-bar tab that is lit while a screen outside the bar is open.
-const TAB_PARENT := {"talk": "menu", "practice": "menu", "reading": "menu", "stats": "menu", "roadmap": "menu", "settings": "menu"}
+const TAB_PARENT := {"talk": "menu", "practice": "menu", "reading": "menu", "stats": "menu", "roadmap": "menu", "badges": "menu", "settings": "menu"}
 ## PC SideNav: the order of the items in the three groups (a tab that is in no group goes to the end of "기록").
 const NAV_GROUPS := [
 	{"title": "공부", "keys": ["today", "lesson", "review", "song"]},
 	{"title": "말하기·읽기", "keys": ["talk", "practice", "reading"]},
-	{"title": "기록", "keys": ["stats", "roadmap"]},
+	{"title": "기록", "keys": ["stats", "roadmap", "badges"]},
 ]
 ## Phone "메뉴" screen: the rows of the screens that are not in the bottom bar.
 const MENU_GROUPS := [
 	{"title": "말하기·읽기", "keys": ["talk", "practice", "reading"]},
-	{"title": "기록", "keys": ["stats", "roadmap"]},
+	{"title": "기록", "keys": ["stats", "roadmap", "badges"]},
 	{"title": "앱", "keys": ["settings"]},
 ]
 const MENU_AI_KEY := "__ai"
-const MENU_SUB := {"practice": "미션·쉐도잉·받아쓰기"}
+const MENU_SUB := {"practice": "미션·쉐도잉·받아쓰기", "badges": "받은 배지와 진행"}
 ## Views that draw their own title / back / action row while a sub screen is open (the chat, a practice screen): the
 ## phone app bar then shows only its tab name and the connection chip, so nothing appears twice.
 const OWN_HEADER := ["talk", "practice", "song"]
@@ -218,6 +218,7 @@ func _ready() -> void:
 	_build_splash()
 	if get_tree().current_scene == self:
 		add_v11_tabs()
+		add_v16_tabs()
 		add_sync()
 	# The settings screen is built after add_sync(): its SyncPanel looks for the SyncManager once, when it is made.
 	var settings := SettingsView.new()
@@ -291,6 +292,33 @@ func add_v11_tabs() -> void:
 	add_tab("practice", "연습", PracticeView.new(), "연습", "talk")
 	add_tab("stats", "기록", StatsView.new(), "기록", "reading")
 	add_tab("song", "노래", SongView.new(), "노래", "review")
+
+
+## 1.6.0: 배지 화면("기록" 묶음 끝: 폰 메뉴 · PC 왼쪽 메뉴, 하단 탭은 그대로 5개)과 배지 평가 노드(BadgeWatcher).
+## 화면은 BadgeEngine 을 모른 채 provider / on_seen 으로 받는다(여기서 꽂는다). 시작하자마자 평가를 한 번 부탁해서, 업그레이드한 사용자의
+## 소급 알림("이미 달성한 배지 N개를 모았어요")이 첫 활동을 기다리지 않고 나온다(기록은 Store 가 _ready 에서 이미 읽었다).
+## add_v11_tabs 처럼 이 씬이 실행 씬일 때만 부른다(main.tscn 을 자식으로 불러오는 레이아웃 시험의 탭 목록은 그대로).
+func add_v16_tabs() -> void:
+	if views.has("badges"):
+		return
+	BadgeView.provider = BadgeEngine.ui_list
+	BadgeView.on_seen = BadgeEngine.mark_all_seen
+	add_tab("badges", "배지", BadgeView.new(), "배지", "stats")
+	var watcher := BadgeWatcher.new()
+	watcher.evaluator = _evaluate_badges
+	add_child(watcher)
+	watcher.request.call_deferred()
+
+
+## BadgeWatcher 의 평가 한 번 = BadgeEngine.evaluate(저장·토스트 포함). 새 배지가 생겼고 홈이나 배지 화면이 열려 있으면 그 화면의 숫자가
+## 낡지 않게 다시 그린다(시작 직후 소급 평가는 홈이 이미 그려진 뒤에 끝난다).
+func _evaluate_badges(source: String) -> void:
+	var fresh: Array = BadgeEngine.evaluate(source)
+	if fresh.is_empty():
+		return
+	for k in ["today", "badges"]:
+		if current == k and views.has(k):
+			(views[k] as AppView).refresh()
 
 
 ## 1.2: learning-record sync (timers, app lifecycle, first-connection dialog). Like the StudyClock it is only added when this

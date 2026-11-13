@@ -108,10 +108,10 @@ func _finish() -> void:
 func _test_tabs() -> void:
 	var keys: Array = _main.tab_keys()
 	print("  tabs: ", keys)
-	var want_keys: Array = ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "roadmap", "settings"]
+	var want_keys: Array = ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "badges", "roadmap", "settings"]
 	if _phone:
 		want_keys.insert(want_keys.find("song") + 1, "menu") # the phone-only 메뉴 screen sits right behind 노래
-	ok(keys == want_keys, "tab order: 홈, 레슨, 복습, 노래, (phone: 메뉴,) 대화, 연습, 읽기, 기록, 로드맵, 설정 (home_menu_design §4.2) (%s)" % [keys])
+	ok(keys == want_keys, "tab order: 홈, 레슨, 복습, 노래, (phone: 메뉴,) 대화, 연습, 읽기, 기록, 배지, 로드맵, 설정 (home_menu_design §4.2) (%s)" % [keys])
 	ok(_main.views["practice"] is PracticeView and _main.views["stats"] is StatsView, "views: PracticeView and StatsView")
 	var labels := {}
 	for t in _main._tabs:
@@ -134,7 +134,7 @@ func _test_tabs() -> void:
 			cell_texts.append((cb as Button).text)
 		ok(cell_texts == ["홈", "레슨", "복습", "노래", "메뉴"], "T3-1 phone: the cell labels are 홈, 레슨, 복습, 노래, 메뉴 (%s)" % [cell_texts])
 	else:
-		ok(_main._bottom_tabs == null and _main._side_nav.item_buttons().size() == 10, "PC: 10 side-nav items (9 tabs + 설정), no bottom bar")
+		ok(_main._bottom_tabs == null and _main._side_nav.item_buttons().size() == 11, "PC: 11 side-nav items (10 tabs incl. 배지 + 설정), no bottom bar")
 		ok(not _main.views.has("menu") and not (_main._side_nav.item_buttons() as Dictionary).has("menu"), "PC: no 메뉴 screen and no 메뉴 item")
 
 
@@ -193,7 +193,7 @@ func _test_layout() -> void:
 				right = maxf(right, b.get_global_rect().end.x)
 		var status_right: float = _main._status_text.get_global_rect().end.x
 		print("  width %d: visible nav items %d, right edge %.0f, status right %.0f, nav width %.0f" % [w, vis.size(), right, status_right, nav.size.x])
-		ok(vis.size() == 10, "width %d: every tab and 설정 is a visible side-nav item (no 더보기 menu, %d)" % [w, vis.size()])
+		ok(vis.size() == 11, "width %d: every tab and 설정 is a visible side-nav item (no 더보기 menu, %d)" % [w, vis.size()])
 		ok(right <= float(w) + 0.5 and status_right <= float(w) + 0.5, "width %d: nothing is cut off at the right edge" % w)
 		ok(nav.size.x >= 223.0 and nav.size.x <= 225.0 and nav.get_global_rect().end.x <= _main._content.get_global_rect().position.x + 0.5, "width %d: the 224 px side nav does not overlap the page" % w)
 		for k in _main.tab_keys(): # the items work at every width
@@ -243,7 +243,7 @@ func _test_shell() -> void:
 		_main.show_view("menu")
 		await _frames(3)
 		var mv: MenuView = _main.views["menu"]
-		ok(mv.entry_keys() == ["talk", "practice", "reading", "stats", "roadmap", "settings"], "T3-4: the 메뉴 lists 대화, 연습, 읽기, 기록, 로드맵, 설정 (%s)" % [mv.entry_keys()])
+		ok(mv.entry_keys() == ["talk", "practice", "reading", "stats", "roadmap", "badges", "settings"], "T3-4: the 메뉴 lists 대화, 연습, 읽기, 기록, 로드맵, 배지, 설정 (%s)" % [mv.entry_keys()])
 		ok(mv.summary_card() != null and bt._current == "menu", "T3-4: the 내 기록 card is there and the 메뉴 tab is lit")
 		var picked: Array = []
 		var cb := func(k: String) -> void: picked.append(k)
@@ -261,12 +261,12 @@ func _test_shell() -> void:
 	else:
 		var nav: SideNav = _main._side_nav
 		var btns: Dictionary = nav.item_buttons()
-		var order: Array = ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "roadmap", "settings"]
+		var order: Array = ["today", "lesson", "review", "song", "talk", "practice", "reading", "stats", "roadmap", "badges", "settings"]
 		var inc := true
 		for i in range(1, order.size()):
 			if (btns[order[i]] as Control).get_global_rect().position.y <= (btns[order[i - 1]] as Control).get_global_rect().position.y:
 				inc = false
-		ok(inc and (btns["today"] as Button).text == "홈", "T3-8: the side nav order is 홈 < 레슨 < 복습 < 노래 < 대화 < 연습 < 읽기 < 기록 < 로드맵 < 설정")
+		ok(inc and (btns["today"] as Button).text == "홈", "T3-8: the side nav order is 홈 < 레슨 < 복습 < 노래 < 대화 < 연습 < 읽기 < 기록 < 로드맵 < 배지 < 설정")
 		var heads: Array = []
 		for l in nav._list.find_children("*", "Label", true, false):
 			heads.append((l as Label).text)
