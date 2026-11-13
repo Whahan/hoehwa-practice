@@ -88,7 +88,10 @@ func _build() -> void:
 	c.add_child(top)
 
 	c.add_child(GoalCard.full(lang))
-	if not StudyLog.has_data(lang):
+	var has_data: bool = StudyLog.has_data(lang)
+	## 이번 주 리포트 (v1.6.0), 목표 카드 바로 아래. 기록이 하나도 없으면 아래 기존 안내가 같은 말을 하므로 카드는 그 문장을 뺀다.
+	c.add_child(FunParts.report_card(WeekReport.for_lang(lang), false, not has_data))
+	if not has_data:
 		c.add_child(UI.label("아직 기록이 없어요. 레슨, 원어민 대화, 복습으로 연습하면 이곳에 공부 시간과 점수가 쌓여요.", "Muted"))
 
 	c.add_child(_week_card())

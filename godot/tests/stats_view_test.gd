@@ -34,6 +34,7 @@ func _ready() -> void:
 		for sz in SIZES:
 			await _combo(dataset, sz)
 	await _test_switching()
+	await _test_report_once()
 	await _test_goal_card()
 	await _test_chart_robustness()
 	await _test_lifecycle()
@@ -196,6 +197,30 @@ func _combo(dataset: String, sz: Vector2) -> void:
 		ok(_any_text(v, "집중 연습"), "%s: practice button" % tag)
 	ok(_any_text(v, "연속 3일") and _any_text(v, "보호권 1개"), "%s: goal card shows streak 3 and 1 token" % tag)
 	ok(_any_text(v, "/ 15분"), "%s: goal card shows the 15 minute goal" % tag)
+	# v1.6.0: the weekly report card sits right under the goal card and above the weekly bar card
+	var kids: Array = v._scroll.content.get_children()
+	var gi := -1
+	var ri := -1
+	var wi := -1
+	for i in kids.size():
+		if kids[i] is GoalCard:
+			gi = i
+		elif kids[i].has_meta("report"):
+			ri = i
+		elif kids[i] is CardBox and _any_text(kids[i], "이번 주 공부 시간"):
+			wi = i
+	ok(gi >= 0 and ri == gi + 1 and wi > ri, "%s: report card is the block right after the goal card (goal %d, report %d, week bars %d)" % [tag, gi, ri, wi])
+	if ri >= 0:
+		ok(_any_text(kids[ri], "이번 주 리포트") and _any_text(kids[ri], "(영어)"), "%s: report card is titled for the week and the language" % tag)
+		if dataset == "empty":
+			ok(bool(kids[ri].get_meta("empty")) and not _any_text(kids[ri], "아직 기록이 없어요") and _any_text(kids[ri], "쌓여요"), "%s: empty data -> the report card keeps quiet (the page's own line says it once)" % tag)
+			var page_lines := 0
+			for k in kids:
+				if k is Label and "아직 기록이 없어요" in (k as Label).text:
+					page_lines += 1
+			ok(page_lines == 1, "%s: empty data -> exactly one page-level 'no record yet' line (got %d)" % [tag, page_lines])
+		else:
+			ok(not bool(kids[ri].get_meta("empty")) and _any_text(kids[ri], "새 카드") and _any_text(kids[ri], "발음 점수") and _any_text(kids[ri], "정답률"), "%s: rich data -> the report card shows cards, pronunciation and accuracy" % tag)
 
 	# resize to the other size and back: columns follow, no overflow
 	var other: Vector2 = SIZES[1] if sz == SIZES[0] else SIZES[0]
@@ -222,6 +247,11 @@ func _test_switching() -> void:
 	ok(v.lang == "ja" and Store.lang() == "ja", "set_lang('ja') switches the page and the app language")
 	ok(not _any_text(v, "약한 소리 TOP 3") and _any_text(v, "영어에서만"), "Japanese page: no weak-sound / mission cards, a note instead")
 	ok(_charts(v).size() == 3, "Japanese page: 3 charts from the ja records")
+	var rep_ja: Control = null
+	for ch in v._scroll.content.get_children():
+		if ch.has_meta("report"):
+			rep_ja = ch
+	ok(rep_ja != null and _any_text(rep_ja, "(일본어)"), "Japanese page: the report card is for Japanese")
 	await _layout_checks(v, SIZES[0], "ja 412")
 	v.set_lang("xx")
 	ok(v.lang == "ja", "unknown language ignored")
@@ -242,6 +272,29 @@ func _test_switching() -> void:
 		ok(_nav.size() == 1 and _nav[0][0] == "practice" and _nav[0][1] == "en", "pressing it asks main to open the practice tab (%s)" % str(_nav))
 	holder.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- report card: the "no record yet" line appears once
+
+func _test_report_once() -> void:
+	print("[report card: no duplicate empty text]")
+	_load_dataset("rich")
+	StudyLog.today_override = D + 60 ## old records exist, but nothing in the last 7 days
+	var made: Array = await _make(SIZES[0])
+	var holder: Control = made[0]
+	var v: StatsView = made[1]
+	var rep: Control = null
+	var page_lines := 0
+	for ch in v._scroll.content.get_children():
+		if ch.has_meta("report"):
+			rep = ch
+		elif ch is Label and "아직 기록이 없어요" in (ch as Label).text:
+			page_lines += 1
+	ok(rep != null and bool(rep.get_meta("empty")) and _any_text(rep, "아직 기록이 없어요"), "records exist but the week is empty: the report card says so itself")
+	ok(page_lines == 0, "... and the page does not repeat it with its own line (got %d)" % page_lines)
+	holder.queue_free()
+	await _frames(2)
+	StudyLog.today_override = D
 
 
 # ---------------------------------------------------------------- GoalCard
