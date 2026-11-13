@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/speed_screen_test.gd" id="1_speedscreen"]
+
+[node name="SpeedScreenTest" type="Node"]
+script = ExtResource("1_speedscreen")
