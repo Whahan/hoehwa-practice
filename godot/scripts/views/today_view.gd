@@ -88,7 +88,7 @@ func is_wide() -> bool:
 	return (not Platform.is_phone()) and size.x >= WIDE_MIN
 
 
-## "tasks" | "resume" | "streak" | "ai" | "shortcuts"; null when that card is not shown.
+## "tasks" | "resume" | "streak" | "fun" | "ai" | "shortcuts"; null when that card is not shown.
 func card(id: String) -> Control:
 	var c: Variant = _cards.get(id, null)
 	return c if (c != null and is_instance_valid(c)) else null
@@ -224,6 +224,9 @@ func _build() -> void:
 		Store.toggle_today(lang)
 		refresh())
 	_cards["streak"] = streak_card
+	# "이번 주" 카드(v1.6.0): 연속 카드 바로 아래. 주간 리포트 숫자 + 60초 퀴즈 · 가나 코스 · 배지 바로가기.
+	var fun_card: Control = FunParts.home_card(lang, WeekReport.for_lang(lang), BadgeEngine.counts(), _on_fun_open)
+	_cards["fun"] = fun_card
 	var ai_card: Control = null
 	var slot: Dictionary = HomeAi.slot()
 	var ai_prominent: bool = bool(slot.get("prominent", false))
@@ -250,6 +253,7 @@ func _build() -> void:
 		if resume_card != null:
 			left.add_child(resume_card)
 		right.add_child(streak_card)
+		right.add_child(fun_card)
 		if ai_card != null and not ai_prominent:
 			right.add_child(ai_card)
 		_body.add_child(left)
@@ -263,6 +267,7 @@ func _build() -> void:
 		if resume_card != null:
 			_body.add_child(resume_card)
 		_body.add_child(streak_card)
+		_body.add_child(fun_card)
 		if ai_card != null and not ai_prominent:
 			_body.add_child(ai_card)
 		if phone:
@@ -371,6 +376,22 @@ func _make_ring() -> Control:
 
 
 # ---------------------------------------------------------------- navigation
+
+## "이번 주" 카드의 바로가기(FunParts.home_card 의 on_open). 스피드·가나 코스는 연습 허브의 pending 계약으로, 배지·리포트는 화면 이름으로 간다.
+func _on_fun_open(kind: String) -> void:
+	var lang: String = Store.lang()
+	match kind:
+		"speed":
+			PracticeView.pending = {"kind": "speed"}
+			Store.navigate.emit("practice", lang)
+		"kana":
+			PracticeView.pending = {"kind": "kana", "view": "course"}
+			Store.navigate.emit("practice", "ja")
+		"badges":
+			Store.navigate.emit("badges", lang)
+		"report":
+			Store.navigate.emit("stats", lang)
+
 
 ## target = {"view", "args"}. Lesson: navigate_args (lang, n, w, start); the others: navigate(view, lang).
 func _go(target: Variant) -> void:

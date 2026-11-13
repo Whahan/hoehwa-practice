@@ -72,6 +72,7 @@ func _ready() -> void:
 	await _test_structure()
 	await _test_goal_ring()
 	await _test_cards_order()
+	await _test_fun_card()
 	await _test_layout()
 	await _test_touch_sizes()
 	await _test_streak()
@@ -399,6 +400,61 @@ func _test_cards_order() -> void:
 	tv = await _make()
 	ok(tv.card("ai") == null, "HomeAi.dismiss_today() done: card('ai') == null")
 	await _drop(tv)
+	_reset()
+
+
+# ---------------------------------------------------------------- v1.6.0 "이번 주" card (v160_fun_design §4.6, §6.5 W-3)
+
+func _test_fun_card() -> void:
+	print("[v1.6.0 fun card]")
+	_reset()
+	var tv := await _make()
+	var fun: Control = tv.card("fun")
+	ok(fun != null and fun.get_meta("card_id", "") == "fun", "card('fun') exists even with no record at all")
+	ok(fun != null and tv.card("streak") != null and fun.get_parent() == tv.card("streak").get_parent() and fun.get_index() == tv.card("streak").get_index() + 1, "the fun card sits right after the streak card, in its column")
+	ok(fun != null and _y(fun) > _y(tv.card("streak")) and _y(fun) > _y(tv.card("tasks")) - 1.0, "the fun card is below the streak card (y %.0f > %.0f)" % [_y(fun) if fun != null else -1.0, _y(tv.card("streak"))])
+	if _phone and fun != null:
+		ok(tv.card("shortcuts") != null and _y(tv.card("shortcuts")) > _y(fun), "phone: the shortcut tiles come after the fun card")
+	ok(fun != null and _label_with(fun, "공부를 시작하면 이번 주 기록이 여기에 쌓여요") != null, "no record: the empty one-liner instead of numbers")
+	ok(fun != null and _button_with(fun, "60초 퀴즈") != null and _button_with(fun, "가나 코스") == null, "english: [60초 퀴즈] yes, [가나 코스] no")
+	ok(tv.hero_button() != null and _y(tv.hero_button()) <= 480.0, "the start button stays at y <= 480 with the fun card there (%.0f)" % _y(tv.hero_button()))
+	# the buttons jump: speed -> pending + navigate("practice"), badges -> navigate("badges"), body -> navigate("stats")
+	_events.clear()
+	PracticeView.pending = {}
+	_tap(_button_with(fun, "60초 퀴즈"))
+	ok(PracticeView.pending == {"kind": "speed"} and _events == [["navigate", "practice", "en"]], "[60초 퀴즈]: pending speed + navigate practice (%s | %s)" % [str(PracticeView.pending), str(_events)])
+	PracticeView.pending = {}
+	_events.clear()
+	_tap(_button_starting(fun, "배지"))
+	ok(_events == [["navigate", "badges", "en"]], "[배지]: navigate badges (%s)" % str(_events))
+	await _drop(tv)
+
+	# a record: numbers instead of the empty line; the card stays above a non-prominent AI card
+	_reset()
+	StudyLog.add_event("en", "lessons", 2)
+	StudyLog.add_seconds("en", "lesson", 600)
+	HomeAi.provider = func() -> Dictionary: return {"show": true, "state": "off", "title": "AI 연결 안 됨", "body": "", "action": "AI 연결하기", "prominent": false, "dismissible": true}
+	tv = await _make()
+	fun = tv.card("fun")
+	ok(fun != null and _label_with(fun, "공부를 시작하면 이번 주 기록이 여기에 쌓여요") == null and _label_with(fun, "공부 10분 · 레슨 2개 · 새 카드 0") != null, "with a record: the numbers line (공부 10분 · 레슨 2개 · 새 카드 0)")
+	ok(fun != null and tv.card("ai") != null and _y(tv.card("ai")) > _y(fun), "a non-prominent AI card comes after the fun card")
+	await _drop(tv)
+
+	# japanese: the 가나 코스 button jumps to the course
+	_reset("ja")
+	tv = await _make()
+	fun = tv.card("fun")
+	var kb: Button = _button_with(fun, "가나 코스") if fun != null else null
+	ok(kb != null, "japanese: [가나 코스] is there")
+	if kb != null:
+		_events.clear()
+		PracticeView.pending = {}
+		_tap(kb)
+		ok(PracticeView.pending == {"kind": "kana", "view": "course"} and _events == [["navigate", "practice", "ja"]], "[가나 코스]: pending kana/course + navigate practice ja (%s | %s)" % [str(PracticeView.pending), str(_events)])
+	PracticeView.pending = {}
+	await _drop(tv)
+	# the checks can say no: a missing button text is not found
+	ok(_button_with(Control.new(), "60초 퀴즈") == null, "selfcheck FAIL-as-expected: no 60초 퀴즈 button in an empty control")
 	_reset()
 
 
