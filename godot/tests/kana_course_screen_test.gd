@@ -76,6 +76,7 @@ func _ready() -> void:
 	await _test_type_question()
 	await _test_no_sound()
 	await _test_pairs()
+	await _test_ui_runs()
 	await _test_back_navigation()
 	await _test_bad_input()
 	await _test_quiz_setup_type()
@@ -190,7 +191,7 @@ func _glyph_kinds(n: Node, out: Array) -> void:
 		_glyph_kinds(c, out)
 
 
-func _shot(name: String) -> void:
+func _shot(name: String, plain: bool = false) -> void:
 	if _shots_dir == "":
 		return
 	await _frames(3)
@@ -199,7 +200,7 @@ func _shot(name: String) -> void:
 		print("  (no image for shot %s: headless?)" % name)
 		return
 	DirAccess.make_dir_recursive_absolute(_shots_dir)
-	var path := "%s/%s_%s_f%d.png" % [_shots_dir, name, _scheme, roundi(Ds.font_scale * 100.0)]
+	var path := "%s/%s.png" % [_shots_dir, name] if plain else "%s/%s_%s_f%d.png" % [_shots_dir, name, _scheme, roundi(Ds.font_scale * 100.0)]
 	print("  shot ", path, " err=", img.save_png(path))
 
 
@@ -630,6 +631,124 @@ func _test_pairs() -> void:
 	ok(s.last_passed and StudyLog.kana_course_done().has("p_h"), "p_h passes with 13/15 and is recorded")
 	# 가타카나 짝
 	ok(s.open_stage("p_k") and s.pair_chips.size() == 11, "katakana pair stage has 11 pair chips")
+
+
+# ---------------------------------------------------------------- 화면 버튼으로 끝까지 (코드로 answer/next 를 부르지 않는다)
+
+func _footer_buttons(s: KanaScreen) -> Array:
+	return _buttons(s._shell["footer_col"])
+
+
+## 화면 버튼만 눌러 한 판을 끝까지 푼다. 앞의 n_right 개는 정답, 나머지는 오답(입력은 틀린 글, 일부는 [모르겠어요]).
+## 문제마다: 답한 뒤 피드백 상자가 보이고, 아래 줄에 다음(결과 보기) 버튼이 있고, 입력칸은 잠기며, 다음 버튼으로 진행한다.
+## 돌려주는 값: 실제로 끝까지 간 문제 수.
+func _play_ui(s: KanaScreen, n_right: int, label: String) -> int:
+	var n: int = s.questions.size()
+	var done_n := 0
+	var all_feedback := true
+	var all_next := true
+	var all_locked := true
+	var all_progress := true
+	var skip_used := 0
+	for i in n:
+		if s.stage != "stage_test":
+			break
+		var q: Dictionary = s.current()
+		var want_ok: bool = i < n_right
+		if str(q["kind"]) == "type":
+			var tb: KanaTypeBox = s.type_box
+			if want_ok:
+				tb.set_text(str(q["ro"]))
+				tb.confirm.pressed.emit()
+			elif skip_used < 1:
+				skip_used += 1
+				tb.skip.pressed.emit() ## [모르겠어요]
+			else:
+				tb.set_text("zzz")
+				tb.confirm.pressed.emit()
+		else:
+			var a: int = int(q["answer"])
+			(s.option_buttons[a if want_ok else (a + 1) % 4] as Button).pressed.emit()
+		if not s.is_answered():
+			all_progress = false
+			break
+		if s._feedback_box == null or s._feedback_box.get_child_count() == 0:
+			all_feedback = false
+		var holder: Control = s._shell["footer_holder"]
+		var btns: Array = _footer_buttons(s)
+		if not holder.visible or btns.is_empty():
+			all_next = false
+		if str(q["kind"]) == "type" and (s.type_box.edit.editable or not s.type_box.locked):
+			all_locked = false
+		if btns.is_empty():
+			break
+		await get_tree().create_timer(0.3).timeout ## 다음 버튼은 연타 방지로 0.25초 잠긴다
+		(btns.back() as Button).pressed.emit()
+		await _frames(2)
+		done_n += 1
+	ok(done_n == n, "%s: all %d questions were completed with button presses only (%d)" % [label, n, done_n])
+	ok(all_feedback, "%s: after every answer the feedback box had content" % label)
+	ok(all_next, "%s: after every answer the footer shows a next / result button" % label)
+	ok(all_locked, "%s: every typed answer locked the input box" % label)
+	ok(all_progress, "%s: every answer was accepted (the run never got stuck)" % label)
+	return done_n
+
+
+func _test_ui_runs() -> void:
+	print("[full runs with button presses only]")
+	_reset_state()
+	var s := _make_screen()
+	s.open("ja", {"view": "course"})
+	ok(s.start_stage("h1", 7), "start h1 stage test")
+	await _frames(3)
+	# 첫 문제에 화면 버튼으로 답한 직후의 화면 (피드백 상자 + 다음 버튼)
+	var q0: Dictionary = s.current()
+	if str(q0["kind"]) == "type":
+		s.type_box.set_text(str(q0["ro"]))
+		s.type_box.confirm.pressed.emit()
+	else:
+		(s.option_buttons[int(q0["answer"])] as Button).pressed.emit()
+	await _frames(3)
+	ok(s.is_answered() and s._feedback_box.get_child_count() > 0 and not _footer_buttons(s).is_empty(), "stage test: right after the first answer the feedback box and the next button are there")
+	await _shot("stage_after_answer", true)
+	s.start_stage("h1", 7)
+	await _frames(3)
+	var before_kana: int = _kana_total()
+	await _play_ui(s, 12, "stage h1")
+	await _frames(2)
+	ok(s.stage == "stage_result" and s.correct_count() == 12 and s.last_passed, "stage h1 by buttons: result screen, 12 right, passed")
+	ok(_kana_total() == before_kana + 15, "stage h1 by buttons: 15 letter answers counted")
+	ok(StudyLog.kana_course_done().has("h1"), "stage h1 by buttons: done.h1 recorded")
+	await _shot("stage_after_answer_result")
+	# 짝 연습
+	s.open("ja", {"view": "course"})
+	s.open_stage("p_h")
+	ok(s.start_pairs([], 4), "start a pair run")
+	await _frames(3)
+	await _play_ui_pairs(s)
+	# 입력 문제 [모르겠어요]
+	s.open("ja")
+	ok(s.start_quiz({"kind": "type", "script": "hira", "only": ["し"], "rows": [], "focus": false}, 3), "start a type quiz for skip test")
+	await _frames(3)
+	ok(s.type_box != null and s.type_box.skip != null and s.type_box.skip.visible and not s.type_box.skip.disabled, "the type question has an enabled [모르겠어요] button")
+	ok(s.type_box.skip.size.y >= 48.0 - 0.5, "[모르겠어요] is >= 48 high (%.1f)" % s.type_box.skip.size.y)
+	s.type_box.skip.pressed.emit()
+	await _frames(2)
+	ok(s.is_answered() and not bool(s.answers[0]["ok"]), "[모르겠어요] answers the question as wrong")
+	ok(StudyLog.kana_stat("し") == {"ok": 0, "bad": 1}, "[모르겠어요] counted a miss for し")
+	var acl: Label = _find(_holder, "AcceptedAnswers") as Label
+	ok(acl != null and acl.text.contains("shi") and acl.text.contains("시"), "[모르겠어요] reveals the accepted answers")
+	ok(s.type_box.locked and not s.type_box.edit.editable and not s.type_box.skip.visible, "after [모르겠어요] the box is locked and the button hidden")
+	ok(not s.type_box.give_up() and StudyLog.kana_stat("し") == {"ok": 0, "bad": 1}, "pressing it again counts nothing")
+	ok(not _footer_buttons(s).is_empty(), "after [모르겠어요] the next button is available")
+	await _shot("type_skipped")
+
+
+func _play_ui_pairs(s: KanaScreen) -> void:
+	ok(s.stage == "stage_test" and s.run_kind == "pairs" and s.questions.size() == 10, "pair run is on the screen with 10 questions")
+	await _play_ui(s, 7, "pairs")
+	await _frames(2)
+	ok(s.stage == "stage_result" and s.run_kind == "pairs" and s.correct_count() == 7, "pairs by buttons: result screen, 7 right")
 
 
 # ---------------------------------------------------------------- 뒤로 가기 (K2-9)

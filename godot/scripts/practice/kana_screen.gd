@@ -839,6 +839,7 @@ func _build_quiz(c: VBoxContainer) -> void:
 	if kind == "type":
 		type_box = KanaTypeBox.new(acc)
 		type_box.submitted.connect(func(t: String) -> void: answer_text(t))
+		type_box.skipped.connect(func() -> void: answer_text(""))
 		card.body.add_child(type_box)
 		card.body.add_child(UI.label("소리를 로마자(예: shi)나 한글(예: 시)로 써요.", "Small"))
 	c.add_child(card)
@@ -878,7 +879,7 @@ func _pair_tip(q: Dictionary) -> String:
 
 ## 보기 색 · 피드백 상자 · 아래 "다음" 줄을 지금 상태로.
 func _render_quiz_state() -> void:
-	if stage != "quiz" or current().is_empty():
+	if not _playing() or current().is_empty():
 		return
 	var q: Dictionary = current()
 	var a: Dictionary = answers[idx]
