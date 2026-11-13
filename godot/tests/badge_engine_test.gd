@@ -597,7 +597,7 @@ func _test_readonly() -> void:
 # ---------------------------------------------------------------- B1-15 performance
 
 func _test_perf() -> void:
-	print("[B1-15 performance: snapshot() + evaluate() on 400 days x 2 languages]")
+	print("[B1-15 performance: snapshot() + evaluate() on 400 days x 2 languages + 208 letters]")
 	_fresh()
 	for i in range(StudyLog.KEEP_DAYS):
 		StudyLog.today_override = D - i
@@ -605,40 +605,52 @@ func _test_perf() -> void:
 			StudyLog.add_seconds(lang, "lesson", 600)
 			StudyLog.add_lesson(lang, 8, 10)
 			StudyLog.add_event(lang, "reviews", 5)
-			StudyLog.add_score_any(lang, {"transcript": "hi", "units": [], "score": 70 + (i % 10)}, "t")
+			for k in range(3):
+				StudyLog.add_score_any(lang, {"transcript": "hi", "units": [], "score": 85}, "t")
 			Store.progress["days"][Plan.days_to_iso(D - i)] = {"en": true, "ja": true}
 	StudyLog.today_override = D
 	var cards: Array = []
 	for i in range(300):
 		cards.append({"lang": "en", "target": "w%d" % i})
 	Store.progress["review"] = cards
+	(Store.progress["stats"]["en"] as Dictionary)["lessons"] = 60
+	(Store.progress["stats"]["en"] as Dictionary)["talks"] = 2
+	for id in BadgeRules.MISSION_IDS:
+		StudyLog.add_mission("en", id, 3, 3)
+	StudyLog.add_speed_run("en", 600, 20, 22, 12)
+	SongDue.cache = {"songs": 1, "lyrics": 1, "due": 0, "fresh": 0, "done": 1, "at": 1}
 	for e in KanaData.entries("both"):
 		for k in range(4):
 			StudyLog.add_kana(str((e as Dictionary)["ch"]), true)
 	var snap_rec: Dictionary = BadgeEngine.snapshot()
-	ok(snap_rec["streak_best"] == 400 and snap_rec["study_sec_total"] == 400 * 2 * 600 and snap_rec["reviews_total"] == 400 * 2 * 5, "the big state is read correctly (streak 400, seconds %d, reviews %d)" % [snap_rec["study_sec_total"], snap_rec["reviews_total"]])
-	var tp: int = Time.get_ticks_usec()
-	for i in range(20):
-		StudyLog.range_summary("en", StudyLog.KEEP_DAYS)
-	print("perf part: range_summary(en, 400) %.3f ms" % (float(Time.get_ticks_usec() - tp) / 1000.0 / 20.0))
-	tp = Time.get_ticks_usec()
-	for i in range(20):
-		StudyLog.longest_streak("en")
-	print("perf part: longest_streak(en) %.3f ms" % (float(Time.get_ticks_usec() - tp) / 1000.0 / 20.0))
-	tp = Time.get_ticks_usec()
-	for i in range(20):
-		StudyLog.kana_stats()
-		KanaData.entries("both")
-	print("perf part: kana_stats + entries %.3f ms" % (float(Time.get_ticks_usec() - tp) / 1000.0 / 20.0))
-	var t0: int = Time.get_ticks_usec()
+	ok(snap_rec["streak_best"] == 400 and snap_rec["study_sec_total"] == 400 * 2 * 600 and snap_rec["reviews_total"] == 400 * 2 * 5 and snap_rec["pron_day_best"] == 85, "the big state is read correctly (streak 400, seconds %d, reviews %d, best day 85)" % [snap_rec["study_sec_total"], snap_rec["reviews_total"]])
+	# the first evaluation earns everything this state can earn (and writes the 400-day file once)
+	var first: Array = BadgeEngine.evaluate()
+	ok(first.size() == 23, "the big state earns all 23 badges on the first evaluation (got %d)" % first.size())
 	var runs: int = 100
+	var t0: int = Time.get_ticks_usec()
 	for i in range(runs):
 		BadgeEngine.snapshot()
 		BadgeEngine.evaluate()
 	var avg_ms: float = float(Time.get_ticks_usec() - t0) / 1000.0 / float(runs)
 	print("perf: snapshot()+evaluate() average %.3f ms over %d runs (PC headless; the phone value is not measured here)" % [avg_ms, runs])
-	ok(avg_ms < 20.0, "average %.2f ms < 20 ms" % avg_ms)
-	ok(StudyLog.badges_got().size() >= 10, "the big state earned many badges (%d)" % StudyLog.badges_got().size())
+	ok(avg_ms < 20.0, "snapshot() + evaluate(): average %.2f ms < 20 ms" % avg_ms)
+	# worst case = a full snapshot (nothing skipped), e.g. for a user who has not received the slow-to-compute badges yet
+	t0 = Time.get_ticks_usec()
+	for i in range(runs):
+		BadgeEngine.snapshot()
+	var snap_ms: float = float(Time.get_ticks_usec() - t0) / 1000.0 / float(runs)
+	print("perf: one full snapshot() (nothing skipped) average %.3f ms over %d runs" % [snap_ms, runs])
+	ok(snap_ms < 20.0, "a full snapshot() alone: average %.2f ms < 20 ms" % snap_ms)
+	var only_ms: float = 0.0
+	t0 = Time.get_ticks_usec()
+	for i in range(runs):
+		BadgeEngine.snapshot(["lessons_total", "speed_plays"])
+	only_ms = float(Time.get_ticks_usec() - t0) / 1000.0 / float(runs)
+	print("perf: snapshot(only the cheap measures) average %.3f ms" % only_ms)
+	ok(only_ms < snap_ms, "snapshot(only) is cheaper than the full snapshot (%.3f < %.3f ms)" % [only_ms, snap_ms])
+	var sk: Dictionary = BadgeEngine.snapshot(["lessons_total"])
+	ok(sk["lessons_total"] == 60 and sk["streak_best"] == 0 and sk["study_sec_total"] == 0, "a skipped measure is 0 (streak_best / study_sec_total not computed), a wanted one is real")
 
 
 # ---------------------------------------------------------------- B1-13 BadgeWatcher

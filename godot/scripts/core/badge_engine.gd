@@ -18,11 +18,15 @@ static var provider: Callable = Callable()
 # ---------------------------------------------------------------- snapshot
 
 ## 실제 값으로 만든 스냅샷({측정 이름: 정수}, 이름 = BadgeRules.MEASURES). 값은 BadgeRules.clean 으로 한 번 더 청소된다.
-static func snapshot() -> Dictionary:
+## only 가 비어 있지 않으면 그 이름의 값만 계산한다(비싼 것: 연속 일수·400일 합계를 이미 다 받은 배지는 건너뛰려는 것).
+## 계산하지 않은 이름은 사전에 없다(= 0). 평가(evaluate)는 아직 못 받은 배지의 이름만 넘긴다.
+static func snapshot(only: Array = []) -> Dictionary:
 	if provider.is_valid():
 		var r: Variant = provider.call()
 		return (r as Dictionary).duplicate(true) if r is Dictionary else {}
 	var s := {}
+	var want_streak: bool = _want(only, "streak_best")
+	var want_days: bool = _want(only, "study_sec_total") or _want(only, "reviews_total") or _want(only, "pron_day_best")
 	var lessons: int = 0
 	var talks: int = 0
 	var streak: int = 0
@@ -32,14 +36,16 @@ static func snapshot() -> Dictionary:
 	for lang in StudyLog.LANGS:
 		lessons += Store.stat(lang, "lessons")
 		talks += Store.stat(lang, "talks")
-		streak = maxi(streak, StudyLog.longest_streak(lang))
-		for r in StudyLog.range_summary(lang, StudyLog.KEEP_DAYS):
-			var day: Dictionary = r
-			secs += int(day.get("sec", 0))
-			reviews += int((day.get("n", {}) as Dictionary).get("reviews", 0))
-			var sn: int = int(day.get("score_n", 0))
-			if sn >= PRON_MIN_SCORES:
-				pron = maxi(pron, int(day.get("score_sum", 0)) / sn) ## 정수 나눗셈 = 내림 -> 평균이 80.0 이상일 때만 80
+		if want_streak:
+			streak = maxi(streak, StudyLog.longest_streak(lang))
+		if want_days:
+			for r in StudyLog.range_summary(lang, StudyLog.KEEP_DAYS):
+				var day: Dictionary = r
+				secs += int(day.get("sec", 0))
+				reviews += int((day.get("n", {}) as Dictionary).get("reviews", 0))
+				var sn: int = int(day.get("score_n", 0))
+				if sn >= PRON_MIN_SCORES:
+					pron = maxi(pron, int(day.get("score_sum", 0)) / sn) ## 정수 나눗셈 = 내림 -> 평균이 80.0 이상일 때만 80
 	s["lessons_total"] = lessons
 	s["talks_total"] = talks
 	s["streak_best"] = streak
@@ -100,6 +106,10 @@ static func snapshot() -> Dictionary:
 const PRON_MIN_SCORES := 3
 
 
+static func _want(only: Array, measure: String) -> bool:
+	return only.is_empty() or only.has(measure)
+
+
 static func _mastery(stats: Dictionary, ch: String) -> int:
 	var v: Variant = stats.get(ch, null)
 	if v is Array and (v as Array).size() >= 2:
@@ -114,11 +124,15 @@ static func _mastery(stats: Dictionary, ch: String) -> int:
 static func evaluate(_source: String = "") -> Array:
 	if StudyLog.is_read_only():
 		return []
-	var snap: Dictionary = snapshot()
 	var retro: bool = not StudyLog.has_badge_record()
 	var changed: bool = retro
 	StudyLog.init_badge_record()
 	var got: Dictionary = StudyLog.badges_got()
+	var need: Array = []
+	for d in BadgeDefs.all():
+		if not got.has((d as Dictionary)["id"]) and not need.has((d as Dictionary)["measure"]):
+			need.append((d as Dictionary)["measure"])
+	var snap: Dictionary = snapshot(need) if not need.is_empty() else {}
 	var fresh: Array = []
 	for id in BadgeRules.earned_ids(snap):
 		if got.has(id):
