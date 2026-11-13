@@ -981,7 +981,7 @@ func _test_touch_or_click() -> void:
 		ok(DisplayServer.is_touchscreen_available(), "touchscreen available (emulated)")
 	_watch(s)
 	# --- 칸 위에서 300px 끌기
-	var starts: Array = ["か", "ま", "し", "は"]
+	var starts: Array = ["か", "た", "し", "は"] ## K2: 표 위에 [표 | 코스] 줄이 더해져 표가 아래로 밀렸다 -> 화면 밖으로 밀린 "ま" 대신 "た" (단언은 그대로)
 	for ch in starts:
 		page.scroll_vertical = 0
 		await _frames(3)
