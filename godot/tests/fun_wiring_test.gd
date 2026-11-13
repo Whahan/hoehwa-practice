@@ -384,6 +384,14 @@ func _test_hub() -> void:
 	ok(pv.current_screen() is SpeedScreen, "W-5: the speed card opens SpeedScreen in japanese")
 	pv.go_back()
 	await _frames(3)
+	(pv._cards["kana"] as Button).pressed.emit()
+	await _frames(4)
+	var ks: Control = pv.current_screen()
+	ok(ks is KanaScreen and (ks as KanaScreen).stage == "course", "W-5: the hub kana card opens the course page, not the table (%s)" % [str((ks as KanaScreen).stage) if ks is KanaScreen else "-"])
+	pv.go_back() # KanaScreen: course -> table
+	pv.go_back() # table -> hub
+	await _frames(3)
+	ok(pv.current_screen() == null, "W-5: two backs from the course page return to the hub")
 	Store.set_lang("en")
 	_main.show_view("today")
 	await _frames(2)

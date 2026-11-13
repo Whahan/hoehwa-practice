@@ -271,7 +271,9 @@ func _card(it: Dictionary) -> CardBox:
 		card.body.add_child(extra as Control)
 	var b := UI.button(str(it["btn"]), "primary", Pal.accent(lang), 48)
 	b.disabled = not bool(it["enabled"])
-	b.pressed.connect(func() -> void: open_screen(kind))
+	# 가나 카드는 이름이 "코스"라서 50음도 표가 아니라 코스 화면을 바로 연다(표는 화면 위 [표|코스] 전환으로).
+	var args: Dictionary = {"view": "course"} if kind == "kana" else {}
+	b.pressed.connect(func() -> void: open_screen(kind, args))
 	card.body.add_child(b)
 	_cards[kind] = b
 	return card

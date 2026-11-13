@@ -484,6 +484,12 @@ func _hub_test() -> void:
 	v.open_screen("kana")
 	ok(v.current_screen() is KanaScreen, "japanese: the kana card opens KanaScreen")
 	v.go_back()
+	(v._cards["kana"] as Button).pressed.emit()
+	await _frames(3)
+	ok(v.current_screen() is KanaScreen and (v.current_screen() as KanaScreen).stage == "course", "japanese: the hub kana card button opens the course page (stage course)")
+	v.go_back() # KanaScreen: the course page steps back to the table first, then the table closes
+	v.go_back()
+	await _frames(2)
 	ok(v.current_screen() == null, "japanese: back from the kana screen returns to the hub")
 	# a sub screen: title / subtitle contract and back
 	Store.prefs["lang"] = "en"
