@@ -19,6 +19,7 @@ func _ready() -> void:
 	_initial_cache()
 	_lister_cases()
 	_bad_lister_values()
+	_done_cases()
 	_blocked_guard()
 	_real_read_path()
 	_gap()
@@ -66,7 +67,7 @@ func _selfcheck() -> void:
 func _initial_cache() -> void:
 	print("[cache]")
 	# 이 시험은 scan() 을 한 번도 부르기 전의 값이 아니라(_selfcheck 가 불렀다) 모양만 본다.
-	ok(SongDue.cache.keys().size() == 5 and SongDue.cache.has("songs") and SongDue.cache.has("lyrics") and SongDue.cache.has("due") and SongDue.cache.has("fresh") and SongDue.cache.has("at"), "cache has the 5 keys")
+	ok(SongDue.cache.keys().size() == 6 and SongDue.cache.has("songs") and SongDue.cache.has("lyrics") and SongDue.cache.has("due") and SongDue.cache.has("fresh") and SongDue.cache.has("done") and SongDue.cache.has("at"), "cache has the 6 keys (songs, lyrics, due, fresh, done, at)")
 	ok(SongDue.due_lines() == int(SongDue.cache["due"]), "due_lines() reads cache.due")
 
 
@@ -115,6 +116,32 @@ func _bad_lister_values() -> void:
 	eqc(SongDue.scan(lister_of({"list": [{"id": "s_a", "kind": "lyrics"}], "memo": {"s_a": {"due": 2.0, "fresh": 1.0}}})), [1, 1, 2, 1], "float counts are accepted")
 	eqc(SongDue.scan(lister_of({"list": [{"id": "s_a", "kind": "lyrics"}], "memo": {"s_a": {"due": 1.0e99, "fresh": NAN}}})), [1, 1, SongDue.MAX_COUNT, 0], "huge / NAN counts are capped / zero")
 	eqc(SongDue.scan(Callable()), [0, 0, 0, 0], "an empty Callable goes down the default path (blocked here) without error")
+
+
+func done_of(total: Variant, memorized: Variant, kind: String = "lyrics") -> int:
+	var r: Dictionary = SongDue.scan(lister_of({"list": [{"id": "s_a", "kind": kind}], "memo": {"s_a": {"total": total, "memorized": memorized, "due": 0, "fresh": 0}}}))
+	return int(r["done"])
+
+
+func _done_cases() -> void:
+	print("[done = songs memorized to the last line (B1)]")
+	ok(done_of(6, 6) == 1, "total 6 memorized 6 -> done 1")
+	ok(done_of(4, 4) == 1, "total 4 memorized 4 (the smallest song that counts) -> done 1")
+	ok(done_of(3, 3) == 0, "total 3 memorized 3 (< 4 lines) -> done 0")
+	ok(done_of(6, 5) == 0, "memorized 5 of 6 -> done 0")
+	ok(done_of(6, 7) == 0, "memorized more than total (broken) -> done 0")
+	ok(done_of(0, 0) == 0, "an empty song -> done 0")
+	ok(done_of(6, 6, "audio") == 0, "an audio song never counts")
+	ok(done_of("6", "6") == 0 and done_of(null, null) == 0 and done_of(-6, -6) == 0 and done_of([6], [6]) == 0, "string / null / negative / array counts -> done 0")
+	ok(done_of(NAN, NAN) == 0, "NaN counts -> done 0")
+	var two := {"list": [{"id": "s_a", "kind": "lyrics"}, {"id": "s_b", "kind": "lyrics"}, {"id": "s_c", "kind": "lyrics"}],
+		"memo": {"s_a": {"total": 5, "memorized": 5}, "s_b": {"total": 8, "memorized": 8}, "s_c": {"total": 8, "memorized": 7}}}
+	var r: Dictionary = SongDue.scan(lister_of(two))
+	ok(int(r["done"]) == 2 and int(SongDue.cache["done"]) == 2, "two finished songs of three -> done 2 (also in the cache)")
+	eqc(r, [3, 3, 0, 0], "the old keys keep their meaning (songs, lyrics, due, fresh)")
+	var wrong: bool = done_of(3, 3) == 1
+	print("selfcheck %s done_of(3, 3) == 1" % ("FAIL-as-expected" if not wrong else "UNEXPECTED-PASS"))
+	ok(not wrong, "done_of() comparison rejects a wrong expectation (a 3-line song is not done)")
 
 
 func _blocked_guard() -> void:
