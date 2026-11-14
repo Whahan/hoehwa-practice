@@ -341,6 +341,7 @@ def test_canary():
             hits = log_hits()
             check("[%s] %s private: 200 and an answer" % (lang, name), r.status_code == 200 and "fix" in d, d)
             check("[%s] %s private: fix is as expected" % (lang, name), d.get("fix", "") == expect_fix, d.get("fix"))
+            check("[%s] %s private: LanguageTool was asked, and always with quiet=True" % (lang, name), bool(ENG.lt_calls) and all(q is True for _l, _t, q in ENG.lt_calls), ENG.lt_calls and [q for _l, _t, q in ENG.lt_calls])
             check("[%s] %s private: cache rows unchanged (0)" % (lang, name), cache_count() == 0, cache_count())
             check("[%s] %s private: no canary in the cache DB bytes" % (lang, name), not found(cache_blob()))
             check("[%s] %s private: no canary in any log record" % (lang, name), not hits, hits)
@@ -348,6 +349,7 @@ def test_canary():
             # --- same request, private missing: the old behaviour (positive control)
             clear_state(True)
             r = run_path(lang, lt, ai, None, polish)
+            check("[%s] %s no private: LanguageTool is asked with quiet=False (positive control)" % (lang, name), bool(ENG.lt_calls) and all(q is False for _l, _t, q in ENG.lt_calls), [q for _l, _t, q in ENG.lt_calls])
             if name in ("LT fix + AI polish", "LT fix + AI agrees", "LT none + AI fix (AI alone)", "LT none + AI says nothing to fix"):
                 # the paths that ask the AI: its answer is cached ("nothing to fix" too: it is a complete answer)
                 check("[%s] %s no private: the AI answer IS cached (positive control)" % (lang, name), cache_count() == 1, cache_count())
@@ -576,6 +578,22 @@ def test_grammar_quiet():
         clear_state()
         res = REAL_CORRECT("en", text, quiet=True)
         check("grammar.correct quiet=True with a real fix: fix returned, log has rule id only", bool(res) and "went" in res["fix"] and not log_hits() and any("R_FIX" in l for l in COLLECT.lines), [l[:120] for l in COLLECT.lines])
+        # only the SECOND check (of the fixed sentence) fails: HTTP 400 whose body repeats the fixed sentence
+        def post_second_fails(url, data=None, timeout=None, **k):
+            t = data["text"]
+            if "yesterday i go" in t:
+                return post_fix(url, data=data, timeout=timeout)
+            return FakeResp(400, "Error: bad input: " + t)
+        grammar.requests.post = post_second_fails
+        for quiet in (True, False):
+            clear_state()
+            res = REAL_CORRECT("en", text, quiet=quiet)
+            second = [l for l in COLLECT.lines if "languagetool HTTP 400" in l]
+            if quiet:
+                check("grammar.correct quiet=True, only the 2nd check fails (HTTP 400, body repeats the fixed sentence): fix kept, the 400 is logged, no canary", bool(res) and "went" in res["fix"] and len(second) == 1 and not log_hits(), [l[:120] for l in COLLECT.lines])
+            else:
+                check("grammar.correct quiet=False, only the 2nd check fails: the log line repeats the fixed sentence (positive control)", bool(res) and len(second) == 1 and bool(log_hits()), [l[:120] for l in COLLECT.lines])
+        grammar.requests.post = post_fix
         # and the 'no fix' line
         clear_state()
         res = REAL_CORRECT("en", "ZZ_MARK_9731 all good here", quiet=True)
@@ -698,6 +716,22 @@ def test_live_lt():
             pass
 
 
+def cleanup_temp():
+    """remove this run's temp folder and the folders earlier runs of this test left in %TEMP% (name pattern hoehwa_fixprivate_ only)"""
+    import glob
+    import shutil
+    with llm_cache._lock:
+        if llm_cache._conn is not None:
+            llm_cache._conn.close()
+            llm_cache._conn = None
+    logging.shutdown()
+    for p in glob.glob(os.path.join(tempfile.gettempdir(), "hoehwa_fixprivate_*")):
+        shutil.rmtree(p, ignore_errors=True)
+    left = glob.glob(os.path.join(tempfile.gettempdir(), "hoehwa_fixprivate_*"))
+    print("temp folders hoehwa_fixprivate_* left after cleanup: %d" % len(left))
+    return not left
+
+
 if __name__ == "__main__":
     test_selfcheck()
     clear_state()
@@ -715,4 +749,5 @@ if __name__ == "__main__":
         print("  FAIL:", n)
     print("live LanguageTool section: %s" % ("run, no canary in languagetool.log" if lt_ok is True else
           ("canary FOUND in languagetool.log or could not run" if LT_DIR_ARG else "not run (no --lt-dir): 미검증")))
-    sys.exit(1 if bad or (LT_DIR_ARG and lt_ok is not True) else 0)
+    clean = cleanup_temp()
+    sys.exit(1 if bad or not clean or (LT_DIR_ARG and lt_ok is not True) else 0)
