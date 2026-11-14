@@ -36,14 +36,20 @@ const MONTHS := 12
 const SPLIT_CHARS := ",·/;~"  # 뜻 조각 나누는 글자(SpeedPool.ko_tokens 와 같은 규칙)
 ## 뜻이 틀렸거나 확신이 없어 파일에서 뺀 단어(언어별). speed_words_test 가 이 상수를 읽어 파일에 없는지 확인한다.
 const DROP_WORDS := {
-	"en": ["kobe", "assembly", "championship", "taste", "web"],
+	"en": ["kobe", "assembly", "championship", "taste", "web", "william", "samsung"],
 	"ja": ["寝", "書", "慣れ", "入り", "出来"],
 }
 ## 올바른 뜻이 확실해서 고친 단어(언어별 단어 -> 뜻). 파일에는 고친 뜻이 들어간다.
 const FIX_KO := {
-	"en": {"spoke": "말했다", "headache": "두통"},
-	"ja": {"食べ物": "음식", "こないだ": "지난번", "きっと": "분명히", "テレビ": "텔레비전", "月曜": "월요일"},
+	"en": {"spoke": "말했다", "headache": "두통", "vietnamese": "베트남어"},
+	"ja": {"食べ物": "음식", "こないだ": "지난번", "きっと": "분명히", "テレビ": "텔레비전", "月曜": "월요일", "電車": "전철", "髪": "머리카락"},
 }
+## 사전의 품사가 틀려서 고친 단어(언어별 단어 -> 품사). 월요일은 명사다(사전에는 형용사로 적혀 있다).
+const FIX_POS := {
+	"ja": {"月曜": "명사"},
+}
+## 영어 사람·회사 이름이 문장 맨 앞에서만 대문자로 나오면(William is ... / Samsung is ...) 아래 "문장 중간 대문자" 규칙이 못 거르니
+## DROP_WORDS 에 직접 넣는다(en william·samsung). 새 이름이 생기면 같은 곳에 더한다.
 ## 늘 대문자로 나오지만 고유명사가 아닌 영어 단어(v=false 로 내리지 않는다).
 const EN_COMMON_CAPS := ["sunday", "english", "vietnamese", "christmas", "tv", "university", "library", "internet"]
 
@@ -129,6 +135,7 @@ func build_lang(lang: String) -> Array:
 	var seen := {}
 	var drop: Array = DROP_WORDS.get(lang, [])
 	var fix: Dictionary = FIX_KO.get(lang, {})
+	var fix_pos: Dictionary = FIX_POS.get(lang, {})
 	if lang == "en":
 		var first := {}
 		var capmid := {}    # 문장 중간에서 대문자로 나온 단어
@@ -148,6 +155,8 @@ func build_lang(lang: String) -> Array:
 			var gd: Dictionary = (g as Dictionary).duplicate()
 			if fix.has(str(w)):
 				gd["ko"] = fix[str(w)]
+			if fix_pos.has(str(w)):
+				gd["pos"] = fix_pos[str(w)]
 			var e := _entry(lang, str(w), gd, first[w], kor, "")
 			if capmid.has(w) and not lower_seen.has(w) and not (str(w) in EN_COMMON_CAPS):
 				e["v"] = false  # 고유명사(이름·나라·도시): 교차 확인 대상에서 뺀다
@@ -174,6 +183,8 @@ func build_lang(lang: String) -> Array:
 					var gd: Dictionary = (g as Dictionary).duplicate()
 					if fix.has(ws):
 						gd["ko"] = fix[ws]
+					if fix_pos.has(ws):
+						gd["pos"] = fix_pos[ws]
 					var e := _entry(lang, ws, gd, m, kor, rjoined[m])
 					if ws.length() == 1 and not _isolated(joined[m], ws):
 						e["v"] = false  # 한자 한 글자가 다른 한자 옆에서만 나오면 단어가 아니라 조각이다

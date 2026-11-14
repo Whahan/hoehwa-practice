@@ -14,6 +14,13 @@ const MIN_JA := 600
 const MAX_BYTES := 400000
 const MONTH_MIN := 15
 const TOOL := "res://tools/build_speed_words.gd"
+## 1.6.1 U2 에서 고친 뜻·품사와 뺀 이름(도구 상수가 아니라 시험이 직접 아는 기대값).
+const MUST_FIX_KO := {
+	"en": {"vietnamese": "베트남어", "spoke": "말했다", "headache": "두통"},
+	"ja": {"電車": "전철", "髪": "머리카락", "月曜": "월요일", "食べ物": "음식"},
+}
+const MUST_FIX_POS := {"ja": {"月曜": "명사"}}
+const MUST_ABSENT := {"en": ["william", "samsung", "kobe"]}
 
 var passed: int = 0
 var failed: int = 0
@@ -132,6 +139,18 @@ func _test_data_file() -> void:
 		ok(min_cum >= SpeedPool.PREFER_POOL, "%s: every month has >= %d verified words (min %d)" % [lang, SpeedPool.PREFER_POOL, min_cum])
 		var ex_errs := check_excluded(arr, lang)
 		ok(ex_errs.is_empty(), "%s: no excluded (wrong-meaning) word is in the file as v=true %s" % [lang, str(ex_errs.slice(0, 3))])
+		# 도구 상수와 별개로 시험이 직접 아는 뜻·제외 단어(상수에서 지워져도 잡는다).
+		var by_w := {}
+		for e in (arr as Array if arr is Array else []):
+			by_w[str(e["w"])] = e
+		for w in MUST_FIX_KO.get(lang, {}):
+			var got: Variant = by_w.get(w, null)
+			ok(got != null and str(got["ko"]) == str(MUST_FIX_KO[lang][w]), "%s: %s has ko %s" % [lang, w, str(MUST_FIX_KO[lang][w])])
+		for w in MUST_FIX_POS.get(lang, {}):
+			var got: Variant = by_w.get(w, null)
+			ok(got != null and str(got["pos"]) == str(MUST_FIX_POS[lang][w]), "%s: %s has pos %s" % [lang, w, str(MUST_FIX_POS[lang][w])])
+		for w in MUST_ABSENT.get(lang, []):
+			ok(not by_w.has(w), "%s: %s (person/company name) is not in the file" % [lang, w])
 
 
 ## 도구의 제외·교정 목록(DROP_WORDS / FIX_KO)을 읽는다(스크립트 상수만 읽고 인스턴스는 만들지 않는다).
@@ -154,6 +173,7 @@ func check_excluded(arr: Variant, lang: String, drop_all: Dictionary = {}, fix_a
 		return ["exclusion list is empty or unreadable"]
 	if not (arr is Array):
 		return ["not an array"]
+	var fixp: Dictionary = _tool_const("FIX_POS").get(lang, {})
 	for e in arr:
 		if not (e is Dictionary):
 			continue
@@ -164,6 +184,8 @@ func check_excluded(arr: Variant, lang: String, drop_all: Dictionary = {}, fix_a
 			errs.append("%s is excluded but still in the file" % w)
 		if fix.has(w) and str(e.get("ko", "")) != str(fix[w]):
 			errs.append("%s has ko %s, expected %s" % [w, str(e.get("ko", "")), str(fix[w])])
+		if fixp.has(w) and str(e.get("pos", "")) != str(fixp[w]):
+			errs.append("%s has pos %s, expected %s" % [w, str(e.get("pos", "")), str(fixp[w])])
 	return errs
 
 
@@ -195,6 +217,16 @@ func _selfcheck() -> void:
 		"selfcheck FAIL-as-expected: excluded ja word revived as v=true")
 	ok(not check_excluded([{"w": "spoke", "ko": "말하다", "pos": "동사", "m": 2, "v": true}], "en").is_empty(),
 		"selfcheck FAIL-as-expected: corrected word back to the old meaning")
+	ok(not check_excluded([{"w": "vietnamese", "ko": "베트남", "pos": "형용사", "m": 9, "v": true}], "en").is_empty(),
+		"selfcheck FAIL-as-expected: vietnamese back to the old meaning (베트남)")
+	ok(not check_excluded([{"w": "電車", "rd": "でんしゃ", "ko": "전차", "pos": "명사", "m": 4, "v": true}], "ja").is_empty(),
+		"selfcheck FAIL-as-expected: 電車 back to the old meaning (전차)")
+	ok(not check_excluded([{"w": "髪", "rd": "かみ", "ko": "머리", "pos": "명사", "m": 11, "v": true}], "ja").is_empty(),
+		"selfcheck FAIL-as-expected: 髪 back to the old meaning (머리)")
+	ok(not check_excluded([{"w": "月曜", "rd": "げつよう", "ko": "월요일", "pos": "형용사", "m": 7, "v": true}], "ja").is_empty(),
+		"selfcheck FAIL-as-expected: 月曜 back to the old pos (형용사)")
+	ok(not check_excluded([{"w": "william", "ko": "윌리엄", "pos": "명사", "m": 6, "v": true}, {"w": "samsung", "ko": "삼성", "pos": "명사", "m": 10, "v": true}], "en").is_empty(),
+		"selfcheck FAIL-as-expected: william/samsung revived as v=true")
 
 
 func _test_load_words() -> void:
