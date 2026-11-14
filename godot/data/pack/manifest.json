@@ -1,6 +1,6 @@
 {
  "v": 1,
- "built": "2026-10-24T09:22:58+09:00",
+ "built": "2026-11-14T23:11:56+09:00",
  "files": [
   {
    "path": "examples_en.json",
@@ -52,9 +52,9 @@
   },
   {
    "path": "missions.json",
-   "bytes": 77626,
-   "sha256": "6f6be80f56f2fee5f609ece27a1b649fb77b47752eb132fec8ecb434f29b1c44",
-   "records": 8
+   "bytes": 174453,
+   "sha256": "3c89d619e110637021cfc863d13a8da1ac84565407fc3d3936c7f020b675ec1d",
+   "records": 16
   },
   {
    "path": "phoneme_drills.json",
