@@ -4,18 +4,21 @@ extends Node
 ##   godot --headless --path <project> --resolution 412x915 res://tests/badge_engine_test.tscn -- --phone
 ## 종료 코드 0 = 전부 통과. 마지막 줄: "== badge_engine: N passed, 0 failed =="
 ## 화면이 없는 시험이라 PC 한 번이면 되지만 --phone 으로 돌려도 같다(약 3초: 감시자 시험이 실제 타이머를 기다린다).
-## 실제 user:// 기록은 읽지도 쓰지도 않는다: Store.prefs_path / progress_path / StudyLog.path 를 user://test_fun_b1_* 로 바꿨다가 끝나면 되돌린다.
+## 실제 user:// 기록은 읽지도 쓰지도 않는다: Store.prefs_path / progress_path / StudyLog.path / DiaryStore.path 를 user://test_fun_b1_* 로 바꿨다가 끝나면 되돌린다.
 ## SongDue.cache 와 BadgeEngine.provider 도 끝나면 원래대로 되돌린다. 서버·네트워크는 쓰지 않는다.
 ## selfcheck FAIL-as-expected: 검사 함수(same_ids)에 일부러 틀린 값을 넣어 실제로 실패로 판정되는지 확인하는 줄.
 
 const LOG_PATH := "user://test_fun_b1_studylog.json"
 const PROG_PATH := "user://test_fun_b1_progress.json"
 const PREFS_PATH := "user://test_fun_b1_prefs.json"
+const DIARY_PATH := "user://test_fun_b1_diary.json"
+const MARK := "ZZ_MARK_9731" ## 일기 글에 넣는 표시: 배지 스냅샷·알림·출력 어디에도 나오면 안 된다
 
 var passed: int = 0
 var failed: int = 0
 var D: int = 0 ## fixed "today"
 var _old_paths: Array = []
+var _old_diary_path: String = ""
 var _old_song_cache: Dictionary = {}
 var _toasts: Array = [] ## [[text, kind], ...]
 var _changed_count: int = 0
@@ -25,6 +28,8 @@ func _ready() -> void:
 	print("== badge_engine start ==")
 	D = Plan.days_from_civil(2026, 11, 20)
 	_old_paths = [Store.prefs_path, Store.progress_path, StudyLog.path]
+	_old_diary_path = DiaryStore.path
+	DiaryStore.path = DIARY_PATH
 	_old_song_cache = SongDue.cache.duplicate()
 	Store.prefs_path = PREFS_PATH
 	Store.progress_path = PROG_PATH
@@ -43,6 +48,10 @@ func _ready() -> void:
 	_test_kana()
 	_test_song()
 	_test_speed_and_multi_toast()
+	_test_missions_all_star3()
+	_test_star3_garbage()
+	_test_diary_badges()
+	_test_old_badges_kept()
 	_test_ui_list_counts()
 	_test_provider_garbage()
 	_test_readonly()
@@ -60,6 +69,9 @@ func _ready() -> void:
 	Store.prefs_path = _old_paths[0]
 	Store.progress_path = _old_paths[1]
 	StudyLog.path = _old_paths[2]
+	DiaryStore.today_override = -1
+	DiaryStore.forget()
+	DiaryStore.path = _old_diary_path
 	print("== badge_engine: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -104,7 +116,7 @@ func rm(p: String) -> void:
 
 
 func _cleanup() -> void:
-	for p in [LOG_PATH, LOG_PATH + ".bad", LOG_PATH + ".bad.1", LOG_PATH + ".bad.2", LOG_PATH + ".bad.3", LOG_PATH + ".tmp", PROG_PATH, PROG_PATH + ".tmp", PREFS_PATH]:
+	for p in [LOG_PATH, LOG_PATH + ".bad", LOG_PATH + ".bad.1", LOG_PATH + ".bad.2", LOG_PATH + ".bad.3", LOG_PATH + ".tmp", PROG_PATH, PROG_PATH + ".tmp", PREFS_PATH, DIARY_PATH, DIARY_PATH + ".bad", DIARY_PATH + ".tmp"]:
 		rm(p)
 
 
@@ -117,6 +129,8 @@ func _fresh() -> void:
 	Store.progress_read_only = false
 	StudyLog.today_override = D
 	StudyLog.load_from_disk()
+	DiaryStore.today_override = -1
+	DiaryStore.forget()
 	SongDue.cache = {"songs": 0, "lyrics": 0, "due": 0, "fresh": 0, "done": 0, "at": 0}
 	_toasts.clear()
 
@@ -363,8 +377,8 @@ func _test_never_revoked() -> void:
 	BadgeEngine.evaluate()
 	ok(StudyLog.badges_got().has("from_the_future"), "an unknown id stays in got")
 	var c: Dictionary = BadgeEngine.counts()
-	ok(c["got"] == 7 and c["total"] == 23, "counts() ignores the unknown id: got 7 of 23 (got %s)" % str(c))
-	ok(BadgeEngine.ui_list().size() == 23, "ui_list() shows only the 23 known badges")
+	ok(c["got"] == 7 and c["total"] == 25, "counts() ignores the unknown id: got 7 of 25 (got %s)" % str(c))
+	ok(BadgeEngine.ui_list().size() == 25, "ui_list() shows only the 25 known badges")
 	# MAX_BADGES full: grant returns false and evaluate does not fail
 	_fresh()
 	for i in range(StudyLog.MAX_BADGES):
@@ -498,6 +512,257 @@ func _test_speed_and_multi_toast() -> void:
 	ok(s["speed_plays"] == 2 and s["speed_combo"] == 12 and s["speed_score"] == 700, "en + ja: plays 2, best combo 12, best score 700")
 
 
+# ---------------------------------------------------------------- v1.7.0 S-3 mission_all_star3 = "한 언어의 8개 모두"
+
+func _stars(ids: Array, n: int, stars: int = 3) -> void:
+	for i in n:
+		StudyLog.add_mission("ja" if str(ids[i]).begins_with("ja_") else "en", str(ids[i]), stars, 1)
+
+
+## 스냅샷에서 본 미션 배지 값과, 규칙이 주는 배지 id 목록
+func _eval_missions() -> Dictionary:
+	var snap: Dictionary = BadgeEngine.snapshot()
+	return {"all": snap["mission_all_star3"], "star3": snap["mission_star3"], "earned": BadgeRules.earned_ids(snap)}
+
+
+func _test_missions_all_star3() -> void:
+	print("[v1.7.0 S-3 mission_all_star3: one language's 8]")
+	var en: Array = BadgeRules.MISSION_IDS
+	var ja: Array = BadgeRules.MISSION_IDS_JA
+	_fresh()
+	var r: Dictionary = _eval_missions()
+	ok(r["all"] == 0 and r["star3"] == 0 and r["earned"].is_empty(), "no mission record -> 0 / 0, nothing earned")
+	# 영어: 7개 -> 못 받음(목표 - 1), 8개 -> 받음(목표)
+	_fresh()
+	_stars(en, 7)
+	r = _eval_missions()
+	ok(r["all"] == 7 and not r["earned"].has("mission_all_star3") and r["earned"].has("mission_star3"), "English 7 of 8 at 3 stars -> 7, no mission_all_star3 (target - 1), mission_star3 yes")
+	StudyLog.add_mission("en", en[7], 3, 1)
+	r = _eval_missions()
+	ok(r["all"] == 8 and r["earned"].has("mission_all_star3"), "English 8 of 8 -> 8, mission_all_star3 earned (target)")
+	# 일본어: 7개 -> 못 받음, 8개 -> 받음
+	_fresh()
+	_stars(ja, 7)
+	r = _eval_missions()
+	ok(r["all"] == 7 and not r["earned"].has("mission_all_star3") and r["earned"].has("mission_star3"), "Japanese 7 of 8 -> 7, no mission_all_star3 (target - 1), mission_star3 yes (1 mission in any language is enough)")
+	StudyLog.add_mission("ja", ja[7], 3, 1)
+	r = _eval_missions()
+	ok(r["all"] == 8 and r["earned"].has("mission_all_star3"), "Japanese 8 of 8 -> 8, mission_all_star3 earned")
+	# 영어 7 + 일본어 7 -> 못 받음(합쳐 14 이라도 한 언어의 8개가 아니다)
+	_fresh()
+	_stars(en, 7)
+	_stars(ja, 7)
+	r = _eval_missions()
+	ok(r["all"] == 7 and r["star3"] == 14 and not r["earned"].has("mission_all_star3"), "English 7 + Japanese 7 -> 7 (the larger of the two, not the sum 14), no mission_all_star3")
+	# 영어 8 중 하나가 별 2 + 일본어 8 별 3 -> 받음
+	_fresh()
+	for i in 8:
+		StudyLog.add_mission("en", en[i], 2 if i == 3 else 3, 1)
+	_stars(ja, 8)
+	r = _eval_missions()
+	ok(r["all"] == 8 and r["earned"].has("mission_all_star3"), "English 8 with one at 2 stars + Japanese 8 at 3 stars -> earned (Japanese completes it)")
+	# 영어 8 중 하나가 별 2, 일본어 기록 없음 -> 못 받음
+	_fresh()
+	for i in 8:
+		StudyLog.add_mission("en", en[i], 2 if i == 3 else 3, 1)
+	r = _eval_missions()
+	ok(r["all"] == 7 and not r["earned"].has("mission_all_star3"), "English 8 with one at 2 stars, no Japanese -> 7, not earned")
+	# 목록에 없는 id 는 8개에 안 센다(미션 별 3개 배지에는 센다)
+	_fresh()
+	_stars(en, 7)
+	StudyLog.add_mission("en", "not_a_listed_mission", 3, 1)
+	StudyLog.add_mission("ja", "ja_not_listed", 3, 1)
+	r = _eval_missions()
+	ok(r["all"] == 7 and r["star3"] == 9 and not r["earned"].has("mission_all_star3"), "unlisted ids (plain and ja_) count for mission_star3 only: all 7 / star3 9")
+	# 영어 4 + 일본어 4 -> 못 받음
+	_fresh()
+	_stars(en, 4)
+	_stars(ja, 4)
+	r = _eval_missions()
+	ok(r["all"] == 4 and not r["earned"].has("mission_all_star3"), "English 4 + Japanese 4 -> 4, not earned")
+	# 첫 평가(소급): 일본어 8개 기록이 이미 있으면 소급으로 받는다
+	_fresh()
+	_stars(ja, 8)
+	var fresh: Array = BadgeEngine.evaluate()
+	ok(fresh.has("mission_all_star3") and fresh.has("mission_star3") and bool(StudyLog.badges_got()["mission_all_star3"]["retro"]), "first evaluation with Japanese 8 stars: mission_all_star3 granted retroactively (retro == true)")
+	# 설명만 바뀌었다(id, 이름, 측정 이름, 목표는 그대로)
+	var d: Dictionary = BadgeDefs.by_id("mission_all_star3")
+	ok(d["name"] == "미션 8개 모두 별 3개" and d["measure"] == "mission_all_star3" and int(d["target"]) == 8, "mission_all_star3 keeps its id / name / measure / target 8")
+
+
+func _test_star3_garbage() -> void:
+	print("[v1.7.0 S-7 star counting with bad records]")
+	var ids: Array = BadgeRules.MISSION_IDS_JA
+	var good := {}
+	for id in ids:
+		good[id] = {"stars": 3}
+	ok(BadgeEngine.star3_in(ids, good) == 8, "star3_in: 8 clean records -> 8")
+	for bad_v in ["3", -3, 4, 2, NAN, INF, null, true, [3], {"a": 3}, 2.9]:
+		var recs: Dictionary = good.duplicate(true)
+		(recs[ids[0]] as Dictionary)["stars"] = bad_v
+		var got: int = BadgeEngine.star3_in(ids, recs)
+		var shown: String = var_to_str(bad_v).replace("\n", " ")
+		print("selfcheck %s star3_in with stars=%s counts %d (7 expected)" % ["FAIL-as-expected" if got == 7 else "UNEXPECTED-PASS", shown, got])
+		ok(got == 7, "star3_in: stars = %s is not 3 stars -> 7" % shown)
+	var missing: Dictionary = good.duplicate(true)
+	missing.erase(ids[1])
+	missing[ids[2]] = "oops"
+	missing[ids[3]] = null
+	ok(BadgeEngine.star3_in(ids, missing) == 5, "star3_in: a missing record / a string / null record are skipped -> 5")
+	ok(BadgeEngine.star3_in(ids, null) == 0 and BadgeEngine.star3_in(ids, "x") == 0 and BadgeEngine.star3_in(ids, []) == 0 and BadgeEngine.star3_in([], good) == 0, "star3_in: bests that is not a dictionary / no ids -> 0")
+	ok(BadgeEngine.star3_in(["nope", "ja_nope"], good) == 0, "star3_in: unknown ids -> 0")
+	# 실제 StudyLog 에 모르는 id 만 있어도 에러 없이 0
+	_fresh()
+	StudyLog.add_mission("ja", "ja_unknown_mission", 3, 1)
+	var s: Dictionary = BadgeEngine.snapshot()
+	ok(s["mission_all_star3"] == 0 and s["mission_star3"] == 1, "a record for an unknown id only: mission_all_star3 0, mission_star3 1, no error")
+
+
+# ---------------------------------------------------------------- v1.7.0 S-6 일기 배지
+
+## n 개의 서로 다른 날(오늘부터 과거로)에 일기를 하나씩 쓴다. fix 가 참이면 모두 고친 상태로.
+func _diary_days(n: int, fix: bool) -> void:
+	for i in n:
+		DiaryStore.today_override = D - i
+		var r: Dictionary = DiaryStore.add("ja", "%s きょうは %d です。" % [MARK, i])
+		if fix and bool(r["ok"]):
+			DiaryStore.set_fixed(str(r["id"]), [])
+	DiaryStore.today_override = D
+
+
+func _test_diary_badges() -> void:
+	print("[v1.7.0 S-6 diary badges: diary_first / diary_7]")
+	_fresh()
+	var s: Dictionary = BadgeEngine.snapshot()
+	ok(s["diary_fixed"] == 0 and s["diary_days"] == 0 and s.size() == BadgeRules.MEASURES.size(), "no diary -> diary_fixed 0, diary_days 0")
+	# 쓰기만 하고 고치지 않음 -> diary_first 못 받음(목표 - 1), 날짜 수는 센다
+	var r: Dictionary = DiaryStore.add("ja", MARK + " きのう えいがをみた。")
+	ok(bool(r["ok"]), "(precondition) one entry saved")
+	s = BadgeEngine.snapshot()
+	ok(s["diary_fixed"] == 0 and s["diary_days"] == 1 and not BadgeRules.earned_ids(s).has("diary_first"), "one saved, not fixed entry -> diary_fixed 0 (no diary_first), diary_days 1")
+	DiaryStore.set_fixed(str(r["id"]), [])
+	s = BadgeEngine.snapshot()
+	ok(s["diary_fixed"] == 1 and BadgeRules.earned_ids(s).has("diary_first") and not BadgeRules.earned_ids(s).has("diary_7"), "after the fix -> diary_fixed 1 -> diary_first (target), not diary_7")
+	# 서로 다른 날 6일 -> diary_7 못 받음, 7일 -> 받음. 같은 날 여러 개는 1일
+	_fresh()
+	_diary_days(6, false)
+	DiaryStore.add("en", MARK + " second entry on the same day as day 0")
+	DiaryStore.add("ja", MARK + " third entry on the same day as day 0")
+	s = BadgeEngine.snapshot()
+	ok(s["diary_days"] == 6 and not BadgeRules.earned_ids(s).has("diary_7"), "6 different days (+ 2 more entries on a day already counted) -> diary_days 6, no diary_7 (target - 1)")
+	DiaryStore.today_override = D - 6
+	DiaryStore.add("ja", MARK + " day seven")
+	DiaryStore.today_override = D
+	s = BadgeEngine.snapshot()
+	ok(s["diary_days"] == 7 and BadgeRules.earned_ids(s).has("diary_7") and not BadgeRules.earned_ids(s).has("diary_first"), "7 different days -> diary_7 (target), still no diary_first (nothing fixed)")
+	# 일기 글은 스냅샷·알림·배지 목록 어디에도 나오지 않는다
+	var all_text: String = JSON.stringify(s)
+	_toasts.clear()
+	var fresh: Array = BadgeEngine.evaluate()
+	for t in _toasts:
+		all_text += str(t[0])
+	for e in BadgeEngine.ui_list():
+		all_text += JSON.stringify(e)
+	ok(MARK not in all_text and fresh.has("diary_7"), "the diary text marker is in no snapshot, toast or badge row; diary_7 granted by evaluate()")
+	# 첫 평가: 일기 배지도 소급(retro == true)
+	_fresh()
+	_diary_days(7, true)
+	fresh = BadgeEngine.evaluate()
+	ok(same_ids(fresh, ["diary_first", "diary_7"]) and bool(StudyLog.badges_got()["diary_first"]["retro"]) and bool(StudyLog.badges_got()["diary_7"]["retro"]), "first evaluation with 7 fixed days -> diary_first + diary_7 granted retroactively")
+	ok(_toasts.size() == 1 and _toasts[0][0] == "이미 달성한 배지 2개를 모았어요", "...with one toast: '%s'" % (_toasts[0][0] if _toasts.size() > 0 else "-"))
+	# 일기를 지워도 받은 배지는 그대로
+	var before: String = JSON.stringify(StudyLog.badges_got())
+	DiaryStore.clear()
+	var s2: Dictionary = BadgeEngine.snapshot()
+	var again: Array = BadgeEngine.evaluate()
+	ok(s2["diary_fixed"] == 0 and s2["diary_days"] == 0 and again.is_empty() and JSON.stringify(StudyLog.badges_got()) == before, "after DiaryStore.clear() the counts are 0 but both diary badges stay")
+	# 처음 평가한 뒤에 일기를 고치면 retro == false + 이름 알림
+	_fresh()
+	BadgeEngine.evaluate()
+	_toasts.clear()
+	var r3: Dictionary = DiaryStore.add("en", MARK + " I went to school.")
+	DiaryStore.set_fixed(str(r3["id"]), [])
+	fresh = BadgeEngine.evaluate()
+	ok(fresh == ["diary_first"] and StudyLog.badges_got()["diary_first"]["retro"] == false and _toasts.size() == 1 and _toasts[0][0] == "배지를 받았어요: 첫 일기 고침", "a later fix -> diary_first with retro == false and the toast with its name")
+	# 쓰레기: counts 가 {} / null / 문자열 / 이상한 값 -> 0, 에러 없음 (selfcheck)
+	for junk in [{}, null, "x", 5, [1], {"fixed": "3", "days": [7]}, {"fixed": -4, "days": NAN}, {"fixed": true, "days": INF}]:
+		var m: Dictionary = BadgeEngine.diary_measures(junk)
+		var shown: String = var_to_str(junk).replace("\n", " ")
+		var zero: bool = m["diary_fixed"] == 0 and m["diary_days"] == 0
+		print("selfcheck %s diary_measures(%s) = %s" % ["FAIL-as-expected" if zero else "UNEXPECTED-PASS", shown, str(m)])
+		ok(zero and BadgeRules.earned_ids(m).is_empty(), "diary_measures(%s) is 0 -> no badge by accident" % shown)
+	var huge: Dictionary = BadgeEngine.diary_measures({"fixed": 1.0e99, "days": 1.0e99})
+	ok(huge["diary_fixed"] == BadgeRules.MAX_VALUE and huge["diary_days"] == BadgeRules.MAX_VALUE, "diary_measures with a huge number is capped at MAX_VALUE (no crash)")
+	var dm: Dictionary = BadgeEngine.diary_measures({"entries": 3, "days": 2, "fixed": 1})
+	ok(dm == {"diary_fixed": 1, "diary_days": 2}, "diary_measures({entries 3, days 2, fixed 1}) -> {diary_fixed 1, diary_days 2}")
+	# 깨진 일기 파일(JSON 아님)이어도 평가는 죽지 않고 0 으로 본다
+	_fresh()
+	write_text(DIARY_PATH, "{ this is not json " + MARK)
+	DiaryStore.forget()
+	var sb: Dictionary = BadgeEngine.snapshot()
+	var eb: Array = BadgeEngine.evaluate()
+	ok(sb["diary_fixed"] == 0 and sb["diary_days"] == 0 and eb.is_empty(), "a broken diary file -> counts 0, evaluate() does not fail, nothing granted")
+	# snapshot(only): 일기 값은 일기 배지가 아직 없을 때만 읽는다
+	var only: Dictionary = BadgeEngine.snapshot(["lessons_total"])
+	ok(not only.has("diary_fixed") and not only.has("diary_days"), "snapshot(only lessons_total) skips the diary counts")
+	var only_d: Dictionary = BadgeEngine.snapshot(["diary_days"])
+	ok(only_d.has("diary_days") and only_d.has("diary_fixed"), "snapshot(only diary_days) reads the diary counts")
+
+
+# ---------------------------------------------------------------- v1.7.0: 이미 받은 23개는 사라지지 않는다
+
+const OLD_23 := ["first_lesson", "lessons_10", "lessons_50", "first_talk", "cards_20", "reviews_100", "streak_3", "streak_7", "streak_30", "time_1h", "time_10h",
+	"mission_star3", "mission_all_star3", "pron_80", "song_first", "song_done", "kana_hira", "kana_kata", "kana_all", "kana_pairs", "speed_first", "speed_combo_10", "speed_score_500"]
+
+
+func _test_old_badges_kept() -> void:
+	print("[v1.7.0 the 23 old badges are kept]")
+	ok(OLD_23.size() == 23 and BadgeDefs.ids().slice(0, 23) == OLD_23, "(precondition) the first 23 ids of the table are exactly the 1.6.x ids, in order")
+	var lost: Array = []
+	for id in OLD_23:
+		if not BadgeDefs.has(id):
+			lost.append(id)
+	ok(lost.is_empty(), "no old badge id was removed or renamed %s" % str(lost))
+	# 1.6.x 가 쓴 모양의 기록: 23개를 모두 받은 파일을 읽는다 -> 1.7.0 이 평가해도 23개 그대로
+	_fresh()
+	StudyLog.init_badge_record()
+	for id in OLD_23:
+		StudyLog.grant_badge(id, str(id).begins_with("kana"))
+	StudyLog.flush()
+	var disk_before: String = JSON.stringify(StudyLog.badges_got())
+	StudyLog.load_from_disk() ## 파일에서 다시 읽는다 = 업데이트 뒤 첫 실행
+	ok(StudyLog.badges_got().size() == 23, "(precondition) the file holds the 23 old badges")
+	var fresh: Array = BadgeEngine.evaluate() ## 기록이 비어 있으니 새로 받을 것은 없다
+	ok(fresh.is_empty(), "evaluating with the new badge table grants nothing new on empty records")
+	var got: Dictionary = StudyLog.badges_got()
+	var missing: Array = []
+	for id in OLD_23:
+		if not got.has(id):
+			missing.append(id)
+	ok(missing.is_empty() and got.size() == 23 and JSON.stringify(got) == disk_before, "all 23 old badges are still there, unchanged (missing %s)" % str(missing))
+	var c: Dictionary = BadgeEngine.counts()
+	ok(c["got"] == 23 and c["total"] == 25, "counts(): got 23 of 25 (got %s)" % str(c))
+	var got_rows := 0
+	for e in BadgeEngine.ui_list():
+		if bool((e as Dictionary)["got"]):
+			got_rows += 1
+	ok(got_rows == 23, "ui_list(): 23 rows are marked received, the 2 diary rows are still open")
+	# 같은 사람이 일기를 쓰고 고치면 24번째로 받는다
+	var r: Dictionary = DiaryStore.add("ja", MARK + " あたらしい にっき。")
+	DiaryStore.set_fixed(str(r["id"]), [])
+	fresh = BadgeEngine.evaluate()
+	ok(fresh == ["diary_first"] and BadgeEngine.counts()["got"] == 24, "then a fixed diary entry gives the 24th badge (diary_first)")
+	# 파일에서 다시 읽어도 24개, 옛 23개 모두 포함
+	StudyLog.load_from_disk()
+	var all_old := true
+	for id in OLD_23:
+		all_old = all_old and StudyLog.badges_got().has(id)
+	ok(StudyLog.badges_got().size() == 24 and all_old, "after reading the file again: 24 badges, all 23 old ones included")
+	# 이 버전이 모르는 id 는 지워지지 않고 세지도 않는다
+	StudyLog.grant_badge("from_the_future_2", false)
+	ok(BadgeEngine.counts()["total"] == 25 and StudyLog.badges_got().has("from_the_future_2"), "an unknown id is kept and the total stays 25")
+
+
 # ---------------------------------------------------------------- B1-12 ui_list / counts
 
 func _test_ui_list_counts() -> void:
@@ -506,9 +771,9 @@ func _test_ui_list_counts() -> void:
 	_fill_rich()
 	BadgeEngine.evaluate()
 	var list: Array = BadgeEngine.ui_list()
-	ok(list.size() == 23, "ui_list() has 23 entries")
+	ok(list.size() == 25, "ui_list() has 25 entries")
 	var order_ok: bool = true
-	for i in range(23):
+	for i in range(25):
 		if str((list[i] as Dictionary)["id"]) != str(BadgeDefs.ids()[i]):
 			order_ok = false
 	ok(order_ok, "in table order")
@@ -525,7 +790,7 @@ func _test_ui_list_counts() -> void:
 			keys_ok = false
 	ok(keys_ok, "every entry has id, name, desc, cat, glyph, got, at, retro, value, target, is_new")
 	var c: Dictionary = BadgeEngine.counts()
-	ok(c["got"] == 7 and c["total"] == 23 and c["unseen"] == 7, "counts(): got 7, total 23, unseen 7 (got %s)" % str(c))
+	ok(c["got"] == 7 and c["total"] == 25 and c["unseen"] == 7, "counts(): got 7, total 25, unseen 7 (got %s)" % str(c))
 	var dirty_before: bool = StudyLog.is_dirty()
 	BadgeEngine.ui_list()
 	BadgeEngine.counts()
@@ -618,6 +883,7 @@ func _test_perf() -> void:
 	for id in BadgeRules.MISSION_IDS:
 		StudyLog.add_mission("en", id, 3, 3)
 	StudyLog.add_speed_run("en", 600, 20, 22, 12)
+	_diary_days(7, true) ## 서로 다른 7일, 모두 고침 -> diary_first + diary_7
 	SongDue.cache = {"songs": 1, "lyrics": 1, "due": 0, "fresh": 0, "done": 1, "at": 1}
 	for e in KanaData.entries("both"):
 		for k in range(4):
@@ -626,7 +892,7 @@ func _test_perf() -> void:
 	ok(snap_rec["streak_best"] == 400 and snap_rec["study_sec_total"] == 400 * 2 * 600 and snap_rec["reviews_total"] == 400 * 2 * 5 and snap_rec["pron_day_best"] == 85, "the big state is read correctly (streak 400, seconds %d, reviews %d, best day 85)" % [snap_rec["study_sec_total"], snap_rec["reviews_total"]])
 	# the first evaluation earns everything this state can earn (and writes the 400-day file once)
 	var first: Array = BadgeEngine.evaluate()
-	ok(first.size() == 23, "the big state earns all 23 badges on the first evaluation (got %d)" % first.size())
+	ok(first.size() == 25, "the big state earns all 25 badges on the first evaluation (got %d)" % first.size())
 	var runs: int = 100
 	var t0: int = Time.get_ticks_usec()
 	for i in range(runs):

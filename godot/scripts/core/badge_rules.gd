@@ -8,10 +8,13 @@ const MAX_VALUE := 1000000000 ## 측정값 상한(깨진 값 방어)
 ## 스냅샷 키 전부(BadgeEngine.snapshot() 이 모두 만든다. BadgeDefs 의 measure 는 이 중 하나여야 한다)
 const MEASURES := ["lessons_total", "talks_total", "streak_best", "study_sec_total", "reviews_total", "cards_count",
 	"mission_star3", "mission_all_star3", "pron_day_best", "song_lyrics", "song_done",
-	"kana_hira_seion", "kana_kata_seion", "kana_all", "kana_pairs", "speed_plays", "speed_combo", "speed_score"]
+	"kana_hira_seion", "kana_kata_seion", "kana_all", "kana_pairs", "speed_plays", "speed_combo", "speed_score",
+	"diary_fixed", "diary_days"]
 
-## "미션 8개 모두 별 3개" 가 세는 미션 id(StatsView.MISSION_ORDER 와 같아야 한다: 시험이 대조)
+## "미션 8개 모두 별 3개" 가 세는 영어 미션 id(StatsView.MISSION_ORDER 와 같아야 한다: 시험이 대조)
 const MISSION_IDS := ["cafe_order", "self_intro", "hotel_checkin", "ask_directions", "restaurant", "pharmacy_doctor", "return_item", "job_interview"]
+## 일본어 미션 8개(StatsView.MISSION_ORDER_JA 와 같아야 한다: 시험이 대조). 배지는 "한 언어의 8개 모두"로 센다(영어 8 또는 일본어 8).
+const MISSION_IDS_JA := ["ja_konbini", "ja_ramen", "ja_ask_way", "ja_hotel_checkin", "ja_station_ticket", "ja_clinic", "ja_shopping", "ja_self_intro"]
 
 
 ## 어떤 값이든 0..MAX_VALUE 정수로 청소한다. 정수와 유한한 실수만 숫자로 친다(bool·문자열·null·배열·NaN·INF 는 0).

@@ -3,7 +3,7 @@ extends RefCounted
 ## 배지 엔진(docs/v160_fun_design.md §5.3, §5.5, §6.5 B1): 실제 기록에서 스냅샷을 만들고, BadgeRules 로 판정해서
 ## 새로 받은 배지를 StudyLog.badges 에 영구 저장하고 알림(토스트)을 최대 1개 띄운다.
 ##
-## 읽는 곳은 snapshot() 한 곳뿐이다(Store / StudyLog / KanaData / KanaCourse(짝 글자) / SongDue.cache).
+## 읽는 곳은 snapshot() 한 곳뿐이다(Store / StudyLog / KanaData / KanaCourse(짝 글자) / SongDue.cache / DiaryStore.counts() = 일기 개수만, 글은 읽지 않는다).
 ## 쓰는 곳은 StudyLog.init_badge_record / grant_badge / mark_badges_seen / flush 뿐이다. 배지는 한 번 받으면 회수하지 않는다
 ## (기록이 지워지거나 값이 내려가거나 시계를 되돌려도 got·at 은 그대로).
 ##
@@ -58,12 +58,8 @@ static func snapshot(only: Array = []) -> Dictionary:
 	for id in StudyLog.mission_ids():
 		if int(StudyLog.mission_best(str(id)).get("stars", 0)) == 3:
 			star3 += 1
-	var all3: int = 0
-	for id in BadgeRules.MISSION_IDS:
-		if int(StudyLog.mission_best(id).get("stars", 0)) == 3:
-			all3 += 1
 	s["mission_star3"] = star3
-	s["mission_all_star3"] = all3
+	s["mission_all_star3"] = maxi(_star3_count(BadgeRules.MISSION_IDS), _star3_count(BadgeRules.MISSION_IDS_JA)) ## 한 언어의 8개 모두
 	s["song_lyrics"] = int(SongDue.cache.get("lyrics", 0))
 	s["song_done"] = int(SongDue.cache.get("done", 0))
 	var stats: Dictionary = StudyLog.kana_stats()
@@ -99,7 +95,35 @@ static func snapshot(only: Array = []) -> Dictionary:
 	s["speed_plays"] = plays
 	s["speed_combo"] = combo
 	s["speed_score"] = score
+	if _want(only, "diary_fixed") or _want(only, "diary_days"):
+		s.merge(diary_measures(DiaryStore.counts())) ## 개수만 읽는다(일기 글은 읽지 않는다)
 	return s
+
+
+## ids 중 별 3개를 받은 미션 수(기록은 StudyLog 에서).
+static func _star3_count(ids: Array) -> int:
+	var bests := {}
+	for id in ids:
+		bests[str(id)] = StudyLog.mission_best(str(id))
+	return star3_in(ids, bests)
+
+
+## 순수 계산: bests = {미션 id: {"stars": n, ...}}. 별이 정확히 3 인 id 만 센다. 기록이 없음·사전이 아님·별이 문자열/음수/4/NaN 이면 세지 않는다.
+static func star3_in(ids: Array, bests: Variant) -> int:
+	if not (bests is Dictionary):
+		return 0
+	var n: int = 0
+	for id in ids:
+		var b: Variant = (bests as Dictionary).get(str(id), null)
+		if b is Dictionary and BadgeRules.clean((b as Dictionary).get("stars", 0)) == 3:
+			n += 1
+	return n
+
+
+## DiaryStore.counts() 모양({"entries","days","fixed"})에서 일기 배지 측정값 둘. 사전이 아니거나 키가 없거나 쓰레기면 0.
+static func diary_measures(counts: Variant) -> Dictionary:
+	var c: Dictionary = counts if counts is Dictionary else {}
+	return {"diary_fixed": BadgeRules.clean(c.get("fixed", 0)), "diary_days": BadgeRules.clean(c.get("days", 0))}
 
 
 ## 하루 점수 평균을 따질 때 그날 채점이 이만큼은 있어야 한다(한두 번 운 좋은 점수로 받지 않게).

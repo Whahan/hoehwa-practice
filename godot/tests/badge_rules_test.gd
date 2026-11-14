@@ -1,5 +1,5 @@
 extends Node
-## v1.6.0 B1 (배지 엔진) 규칙 시험: BadgeDefs 23개 = 설계 §5.5 표, BadgeRules 경계값, 쓰레기 스냅샷.
+## v1.6.0 B1 (배지 엔진) 규칙 시험: BadgeDefs 25개(§5.5 의 23개 + v1.7.0 일기 배지 2개) = 표, BadgeRules 경계값, 쓰레기 스냅샷.
 ##   godot --headless --path <project> res://tests/badge_rules_test.tscn
 ## 종료 코드 0 = 전부 통과. 마지막 줄: "== badge_rules: N passed, 0 failed =="
 ## 화면이 없는 순수 계산 시험이라 PC 한 번이면 된다. 파일·서버·사용자 폴더는 건드리지 않는다.
@@ -31,6 +31,8 @@ const TABLE := [
 	["speed_first", "첫 스피드 퀴즈", "speed", "speed_plays", 1],
 	["speed_combo_10", "콤보 10", "speed", "speed_combo", 10],
 	["speed_score_500", "스피드 500점", "speed", "speed_score", 500],
+	["diary_first", "첫 일기 고침", "learn", "diary_fixed", 1],
+	["diary_7", "일기 7일", "learn", "diary_days", 7],
 ]
 
 var passed: int = 0
@@ -98,8 +100,13 @@ func _selfcheck() -> void:
 	var short: Array = TABLE.duplicate(true)
 	short.pop_back()
 	why = table_matches(defs, short)
-	print("selfcheck %s table_matches vs 22 rows: %s" % ["FAIL-as-expected" if why != "" else "UNEXPECTED-PASS", why])
-	ok(why != "", "table_matches() rejects a table with 22 rows")
+	print("selfcheck %s table_matches vs 24 rows: %s" % ["FAIL-as-expected" if why != "" else "UNEXPECTED-PASS", why])
+	ok(why != "", "table_matches() rejects a table with 24 rows")
+	var wrong_diary: Array = TABLE.duplicate(true)
+	(wrong_diary[24] as Array)[4] = 6 # diary_7 의 목표를 6 으로 틀리게
+	why = table_matches(defs, wrong_diary)
+	print("selfcheck %s table_matches vs diary_7 target 6: %s" % ["FAIL-as-expected" if why != "" else "UNEXPECTED-PASS", why])
+	ok(why != "", "table_matches() rejects a table whose diary_7 target is 6")
 	var shifted: Dictionary = (defs[7] as Dictionary).duplicate(true)
 	shifted["target"] = 6 # 코드 상수를 틀리게 한 것처럼
 	why = boundary_ok(shifted)
@@ -113,9 +120,9 @@ func _selfcheck() -> void:
 func _defs_vs_table() -> void:
 	print("[defs == design table]")
 	var defs: Array = BadgeDefs.all()
-	ok(defs.size() == 23, "BadgeDefs.all() has 23 badges")
+	ok(defs.size() == 25, "BadgeDefs.all() has 25 badges")
 	var why: String = table_matches(defs, TABLE)
-	ok(why == "", "id / name / cat / measure / target equal design 5.5 (all 23 rows)" if why == "" else "table differs: " + why)
+	ok(why == "", "id / name / cat / measure / target equal the table (all 25 rows: design 5.5 + 2 diary)" if why == "" else "table differs: " + why)
 	ok(BadgeDefs.pair_letter_count() == 37, "pair letters = 37 (hira 17 + kata 20)")
 	ok(BadgeDefs.KANA_ALL_COUNT == KanaData.entries("both").size(), "KANA_ALL_COUNT == KanaData both entries (%d)" % KanaData.entries("both").size())
 	ok(BadgeDefs.SEION_COUNT == KanaData.section_entries("hira", "seion").size() and BadgeDefs.SEION_COUNT == KanaData.section_entries("kata", "seion").size(), "SEION_COUNT == seion letters per script")
@@ -166,7 +173,7 @@ func _defs_sanity() -> void:
 	ok(used.size() == 6, "every category has at least one badge")
 	ok(BadgeDefs.by_id("streak_7").get("target", 0) == 7 and BadgeDefs.by_id("nope").is_empty(), "by_id() finds a badge / returns {} for an unknown id")
 	ok(BadgeDefs.has("kana_all") and not BadgeDefs.has("nope"), "has()")
-	ok(BadgeDefs.ids().size() == 23 and BadgeDefs.ids()[0] == "first_lesson", "ids() in table order")
+	ok(BadgeDefs.ids().size() == 25 and BadgeDefs.ids()[0] == "first_lesson" and BadgeDefs.ids()[24] == "diary_7", "ids() in table order (25)")
 
 
 func _mission_ids() -> void:
@@ -178,6 +185,32 @@ func _mission_ids() -> void:
 	var same: bool = JSON.stringify(wrong) == JSON.stringify(StatsView.MISSION_ORDER)
 	print("selfcheck %s order comparison vs a reversed list" % ("FAIL-as-expected" if not same else "UNEXPECTED-PASS"))
 	ok(not same, "the MISSION_IDS comparison rejects a reordered list")
+	# v1.7.0: 일본어 8개
+	ok(JSON.stringify(BadgeRules.MISSION_IDS_JA) == JSON.stringify(StatsView.MISSION_ORDER_JA), "BadgeRules.MISSION_IDS_JA == StatsView.MISSION_ORDER_JA")
+	ok(BadgeRules.MISSION_IDS_JA.size() == 8, "8 Japanese missions")
+	var overlap := 0
+	for id in BadgeRules.MISSION_IDS_JA:
+		if BadgeRules.MISSION_IDS.has(id):
+			overlap += 1
+	ok(overlap == 0, "no id is in both the English and the Japanese list (overlap %d)" % overlap)
+	var all_ja := true
+	for id in BadgeRules.MISSION_IDS_JA:
+		all_ja = all_ja and str(id).begins_with("ja_") and StatsView.MISSION_NAME_JA.has(id)
+	ok(all_ja and StatsView.MISSION_NAME_JA.size() == 8, "every Japanese id starts with ja_ and has a name (8 names)")
+	var wrong_ja: Array = BadgeRules.MISSION_IDS_JA.duplicate()
+	wrong_ja.reverse()
+	var same_ja: bool = JSON.stringify(wrong_ja) == JSON.stringify(StatsView.MISSION_ORDER_JA)
+	print("selfcheck %s Japanese order comparison vs a reversed list" % ("FAIL-as-expected" if not same_ja else "UNEXPECTED-PASS"))
+	ok(not same_ja, "the MISSION_IDS_JA comparison rejects a reordered list")
+	var one_off: Array = BadgeRules.MISSION_IDS_JA.duplicate()
+	one_off[3] = "ja_hotel_checkin_x"
+	var same_off: bool = JSON.stringify(one_off) == JSON.stringify(StatsView.MISSION_ORDER_JA)
+	print("selfcheck %s Japanese comparison vs a list with one changed id" % ("FAIL-as-expected" if not same_off else "UNEXPECTED-PASS"))
+	ok(not same_off, "the MISSION_IDS_JA comparison rejects a list with one id changed")
+	# 설명만 바뀐 mission_all_star3: id · 이름 · 측정 이름 · 목표는 그대로(TABLE 비교가 따로 본다)
+	var d: Dictionary = BadgeDefs.by_id("mission_all_star3")
+	ok(d["name"] == "미션 8개 모두 별 3개" and d["measure"] == "mission_all_star3" and int(d["target"]) == 8 and d["desc"] == "한 언어의 미션 8개 모두에서 별 3개를 받았어요.", "mission_all_star3: same id / name / measure / target 8, new description (one language)")
+	ok(BadgeDefs.by_id("diary_first")["desc"] != "" and BadgeDefs.by_id("diary_7")["desc"] != "", "the two diary badges have a description")
 
 
 # ---------------------------------------------------------------- 경계
@@ -194,7 +227,7 @@ func _boundaries() -> void:
 	var all_snap := {}
 	for m in BadgeRules.MEASURES:
 		all_snap[m] = 1000000
-	ok(BadgeRules.earned_ids(all_snap).size() == 23, "every measure huge -> all 23 earned")
+	ok(BadgeRules.earned_ids(all_snap).size() == 25, "every measure huge -> all 25 earned")
 	ok(BadgeRules.earned_ids({}).is_empty(), "empty snapshot -> nothing")
 
 
@@ -218,6 +251,9 @@ func _garbage_snapshots() -> void:
 	var got2: Array = BadgeRules.earned_ids(mixed)
 	ok(JSON.stringify(got2) == JSON.stringify(["first_talk", "cards_20"]), "mixed snapshot: only the two valid keys earn (first_talk, cards_20) got=%s" % str(got2))
 	ok(BadgeRules.earned_ids(null).is_empty() and BadgeRules.earned_ids("x").is_empty() and BadgeRules.earned_ids([1, 2]).is_empty(), "a non-dictionary snapshot (null / string / array) earns nothing")
+	var diary_junk := {"diary_fixed": "3", "diary_days": [7], "lessons_total": 0}
+	ok(BadgeRules.earned_ids(diary_junk).is_empty(), "diary measures as a string / array earn nothing")
+	ok(BadgeRules.earned_ids({"diary_fixed": 1}) == ["diary_first"] and BadgeRules.earned_ids({"diary_days": 6}).is_empty() and BadgeRules.earned_ids({"diary_days": 7}) == ["diary_7"], "diary_fixed 1 -> diary_first only; diary_days 6 -> none, 7 -> diary_7")
 	var partial := {"streak_best": 7}
 	ok(JSON.stringify(BadgeRules.earned_ids(partial)) == JSON.stringify(["streak_3", "streak_7"]), "missing keys count as 0: streak_best 7 -> streak_3 + streak_7")
 	# 검사기가 틀린 입력을 실제로 막는지: 같은 쓰레기를 '받는다' 고 기대하면 FAIL
@@ -258,5 +294,5 @@ func _progress_and_misc() -> void:
 		var l: String = line
 		var h: int = l.find("#")
 		code += (l if h < 0 else l.substr(0, h)) + "\n" ## 주석은 빼고 코드만 본다
-	ok(code.find("StudyLog") == -1 and code.find("Store.") == -1 and code.find("FileAccess") == -1 and code.find("Toast") == -1, "badge_rules.gd code never touches StudyLog / Store / files / Toast")
+	ok(code.find("StudyLog") == -1 and code.find("Store.") == -1 and code.find("DiaryStore") == -1 and code.find("FileAccess") == -1 and code.find("Toast") == -1, "badge_rules.gd code never touches StudyLog / Store / files / Toast")
 	ok(code.find("BadgeDefs") != -1, "(the check reads real code: BadgeDefs is referenced)")

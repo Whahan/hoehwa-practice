@@ -1,6 +1,6 @@
 class_name StatsView
 extends AppView
-## 기록 탭: 오늘 목표·연속·보호권, 이번 주 공부 시간, 레슨 정답률, 발음 점수, 약한 소리, 미션 별점.
+## 기록 탭: 오늘 목표·연속·보호권, 이번 주 공부 시간, 레슨 정답률, 발음 점수, 약한 소리, 미션 별점(영어·일본어 각각, v1.7.0).
 ## 모든 숫자는 StudyLog 에서 읽는다. 폰 세로(412)와 PC(1280) 공용: 폭 700 미만이면 차트를 세로로 쌓는다.
 
 const WD_KO := ["월", "화", "수", "목", "금", "토", "일"]
@@ -15,6 +15,19 @@ const MISSION_NAME := {
 	"return_item": "환불·교환",
 	"job_interview": "면접",
 }
+## 일본어 미션 8개(BadgeRules.MISSION_IDS_JA 와 같아야 한다: 시험이 대조)
+const MISSION_ORDER_JA := ["ja_konbini", "ja_ramen", "ja_ask_way", "ja_hotel_checkin", "ja_station_ticket", "ja_clinic", "ja_shopping", "ja_self_intro"]
+const MISSION_NAME_JA := {
+	"ja_konbini": "편의점",
+	"ja_ramen": "라멘집",
+	"ja_ask_way": "길 묻기",
+	"ja_hotel_checkin": "호텔",
+	"ja_station_ticket": "역 매표소",
+	"ja_clinic": "병원 접수",
+	"ja_shopping": "쇼핑 계산",
+	"ja_self_intro": "자기소개",
+}
+const JA_PREFIX := "ja_" ## 일본어 미션 id 의 접두어(영어 미션 id 에는 없다)
 const TOUCH_MIN := 44.0
 const WIDE_MIN := 700.0
 const LESSON_DAYS := 14
@@ -103,11 +116,8 @@ func _build() -> void:
 	_grid.add_child(_lesson_card())
 	_grid.add_child(_score_card())
 	c.add_child(_grid)
-	if lang == "en":
-		c.add_child(_weak_card())
-		c.add_child(_mission_card())
-	else:
-		c.add_child(UI.label("약한 소리와 미션 기록은 영어에서만 쌓여요.", "Small"))
+	c.add_child(_weak_card())
+	c.add_child(_mission_card())
 	_touch(c)
 	UI.fix_cjk(c)
 	_built = true
@@ -212,9 +222,12 @@ func _score_card() -> Control:
 
 func _weak_card() -> Control:
 	var card := _card("약한 소리 TOP 3", "최근 30번 기준 틀린 비율")
-	var weak: Array = StudyLog.weak_phonemes("en", 3)
+	var weak: Array = StudyLog.weak_phonemes(lang, 3)
 	if weak.is_empty():
-		_empty(card, "표본이 더 쌓이면 약한 소리를 찾아 드려요. 레슨이나 쉐도잉에서 따라 말해 보세요.")
+		if lang == "ja":
+			_empty(card, "표본이 더 쌓이면 약한 소리를 찾아 드려요. 일본어 약한 소리 연습이나 따라 말하기를 해 보세요.")
+		else:
+			_empty(card, "표본이 더 쌓이면 약한 소리를 찾아 드려요. 레슨이나 쉐도잉에서 따라 말해 보세요.")
 		return card
 	var chips := UI.flow(8, 8)
 	for w in weak:
@@ -224,30 +237,56 @@ func _weak_card() -> Control:
 			if int(w["heard"][hk]) > best_c:
 				best_c = int(w["heard"][hk])
 				heard_txt = " · %s로 들림" % str(hk)
-		chips.add_child(UI.chip_kind("/%s/ %d%%%s" % [str(w["p"]), roundi(float(w["rate"]) * 100.0), heard_txt], "bad"))
+		chips.add_child(UI.chip_kind(weak_chip_text(lang, str(w["p"]), float(w["rate"]), heard_txt), "bad"))
 	card.body.add_child(chips)
 	var first_p: String = str(weak[0]["p"])
-	var b := UI.button("집중 연습", "soft", Pal.accent("en"), 48.0)
+	var b := UI.button("집중 연습", "soft", Pal.accent(lang), 48.0)
 	b.pressed.connect(func() -> void: go_practice(first_p))
 	card.body.add_child(b)
 	return card
 
 
+## 약한 소리 칩 글: 영어 "/θ/ 40%", 일본어 "장음 (ー) 틀림 40%". 비율은 0~100 정수 퍼센트.
+static func weak_chip_text(l: String, p: String, rate: float, heard_txt: String = "") -> String:
+	var pct: int = clampi(roundi(rate * 100.0), 0, 100)
+	if l == "ja":
+		return "%s 틀림 %d%%%s" % [JaSounds.label_of(p), pct, heard_txt]
+	return "/%s/ %d%%%s" % [p, pct, heard_txt]
+
+
+## 이 언어에서 칩으로 보일 미션 id 순서: 그 언어의 정해진 8개 + 기록에 있는 다른 id(같은 언어 접두어일 때만).
+static func mission_ids_for(l: String, recorded: Array) -> Array:
+	var ids: Array = (MISSION_ORDER_JA if l == "ja" else MISSION_ORDER).duplicate()
+	for id in recorded:
+		var sid: String = str(id)
+		if ids.has(sid):
+			continue
+		if sid.begins_with(JA_PREFIX) == (l == "ja"):
+			ids.append(sid)
+	return ids
+
+
+## "3번 도전". 이상하게 큰 값(기록이 깨진 경우)도 5자리 숫자가 보이지 않게 "999번 넘게 도전"으로.
+static func plays_text(n: int) -> String:
+	return "999번 넘게 도전" if n > 999 else "%d번 도전" % maxi(n, 0)
+
+
+static func mission_name(l: String, id: String) -> String:
+	var names: Dictionary = MISSION_NAME_JA if l == "ja" else MISSION_NAME
+	return str(names.get(id, id))
+
+
 func _mission_card() -> Control:
 	var card := _card("미션 별점")
-	var ids: Array = MISSION_ORDER.duplicate()
-	for id in StudyLog.mission_ids():
-		if not ids.has(id):
-			ids.append(id)
 	var played := 0
 	var chips := UI.flow(8, 8)
-	for id in ids:
+	for id in mission_ids_for(lang, StudyLog.mission_ids()):
 		var best: Dictionary = StudyLog.mission_best(str(id))
 		if best.is_empty():
 			continue
 		played += 1
 		var stars: int = clampi(int(best.get("stars", 0)), 0, 3)
-		chips.add_child(UI.chip_kind("%s %s%s" % [MISSION_NAME.get(id, str(id)), "★".repeat(stars), "☆".repeat(3 - stars)], "warn", "%d번 도전" % int(best.get("plays", 0))))
+		chips.add_child(UI.chip_kind("%s %s%s" % [mission_name(lang, str(id)), "★".repeat(stars), "☆".repeat(3 - stars)], "warn", plays_text(int(best.get("plays", 0)))))
 	if played == 0:
 		_empty(card, "아직 한 미션이 없어요")
 	else:
