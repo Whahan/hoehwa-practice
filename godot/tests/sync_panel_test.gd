@@ -535,6 +535,7 @@ func _t_today_view() -> void:
 	var joined := "\n".join(tx)
 	ok(joined.contains(sync_text), "sync on: the §4.8 sentence is in the confirm row")
 	ok(joined.contains(base_text), "the plain question stays")
+	ok(joined.contains("배지·스피드 퀴즈 기록·가나 코스 진행도 함께 지워져요"), "sync on: the confirm row also says badges, speed quiz record and kana course progress go too")
 	var yes := _button(tv, "지우기")
 	yes.pressed.emit()
 	ok(e.unlink_calls == 1, "[지우기] -> engine.unlink_for_reset() before the reset")
@@ -548,6 +549,7 @@ func _t_today_view() -> void:
 	_button(tv2, "모든 기록 지우기").pressed.emit()
 	var j2 := "\n".join(_texts(tv2))
 	ok(not j2.contains("동기화가 켜져 있어요") and j2.contains(base_text), "sync off: the usual sentence only")
+	ok(j2.contains("배지·스피드 퀴즈 기록·가나 코스 진행도 함께 지워져요"), "sync off: the confirm row also says badges, speed quiz record and kana course progress go too")
 	tv2.queue_free()
 	_drop(m)
 	Store.progress_path = old_pp

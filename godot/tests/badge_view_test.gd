@@ -86,6 +86,7 @@ func _ready() -> void:
 	await _test_sheet()
 	await _test_new_dots()
 	await _test_layout()
+	await _test_time_tile_wrap()
 	await _test_garbage()
 	await _test_progress_text()
 	await _test_real_engine()
@@ -149,9 +150,11 @@ func _texts(node: Node) -> Array:
 	return out
 
 
+## 타일 진행 글은 폭이 모자라면 "/" 뒤에서 두 줄이 되므로("12분 /<줄바꿈>1시간"), 줄바꿈은 공백으로 보고 찾는다.
+## (글 내용은 그대로 단언한다. 줄이 어디서 나뉘는지는 _test_time_tile_wrap 이 따로 본다.)
 func _any_text(node: Node, part: String) -> bool:
 	for t in _texts(node):
-		if part in str(t):
+		if part in str(t).replace("\n", " "):
 			return true
 	return false
 
@@ -441,6 +444,78 @@ func _test_layout() -> void:
 	ok(wide2.is_empty(), "after resizing nothing sticks out %s" % str(wide2.slice(0, 3)))
 	holder.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- 1.6.1 U1: 진행 글이 숫자·단위 중간에서 끊기지 않는다
+
+## 진행 글 라벨 sl 의 문제 목록(비면 합격). 규칙: (1) 자동 줄바꿈이 없다(보이는 줄 수 == 직접 넣은 줄바꿈 수 + 1),
+## (2) 직접 넣은 줄바꿈은 "/" 바로 뒤뿐이다, (3) 줄을 합치면 plain 과 같다, (4) 가장 긴 줄이 라벨 폭 안이다,
+## (5) 라벨이 타일 폭 밖으로 나가지 않는다, (6) 글자 크기 12 이상.
+func _sub_problems(sl: Label, plain: String, tile: Control) -> Array:
+	var bad: Array = []
+	var t: String = sl.text
+	var lines: PackedStringArray = t.split("\n")
+	if sl.get_line_count() != lines.size():
+		bad.append("auto-wrapped: %d visual lines for %d explicit '%s'" % [sl.get_line_count(), lines.size(), t.replace("\n", "|")])
+	for i in range(lines.size() - 1):
+		if not lines[i].ends_with("/"):
+			bad.append("line break not after a slash: '%s'" % lines[i])
+	if " ".join(lines) != plain:
+		bad.append("text changed: '%s' vs '%s'" % [" ".join(lines), plain])
+	var font: Font = sl.get_theme_font("font")
+	var fs: int = sl.get_theme_font_size("font_size")
+	var widest := 0.0
+	for ln in lines:
+		widest = maxf(widest, font.get_string_size(ln, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	if widest > sl.size.x + 0.5:
+		bad.append("line %.1f px wider than the label %.1f px" % [widest, sl.size.x])
+	var r: Rect2 = sl.get_global_rect()
+	var tr: Rect2 = tile.get_global_rect()
+	if r.position.x < tr.position.x - 0.5 or r.end.x > tr.end.x + 0.5:
+		bad.append("label %s sticks out of the tile %s" % [str(r), str(tr)])
+	if fs < 12:
+		bad.append("font size %d < 12" % fs)
+	return bad
+
+
+func _test_time_tile_wrap() -> void:
+	print("[time progress does not break inside a number or unit]")
+	# 검사기 자체 점검: 예전 방식(자동 줄바꿈을 켠 라벨)은 폭이 모자라면 걸려야 한다
+	var old_holder := Control.new()
+	old_holder.size = Vector2(90, 200)
+	add_child(old_holder)
+	var old_sl := UI.label("1.3시간 / 10시간", "Small")
+	old_sl.custom_minimum_size.x = 90.0
+	old_holder.add_child(old_sl)
+	old_sl.size = Vector2(90, 20)
+	await _frames(3)
+	fails(not _sub_problems(old_sl, "1.3시간 / 10시간", old_holder).is_empty(), "wrap checker flags an auto-wrapping label that is too narrow for '1.3시간 / 10시간'")
+	old_holder.queue_free()
+	for w in [412.0, 360.0]:
+		var list: Array = _make_list(0)
+		for it in list:
+			if it["id"] == "time_10h":
+				it["value"] = 4680 # 1.3시간 / 10시간
+			elif it["id"] == "time_1h":
+				it["value"] = 720 # 12분 / 1시간
+		_install(list)
+		var made: Array = await _make(Vector2(w, 915))
+		await _frames(4)
+		var v: BadgeView = made[1]
+		for id in ["time_1h", "time_10h"]:
+			var t: Control = v.tile(id)
+			var sl: Label = t.get_meta("sub_label") as Label if t != null else null
+			var plain := ""
+			for d in _fake:
+				if d["id"] == id:
+					plain = FunParts.progress_text(d)
+			ok(sl != null and plain != "", "%s tile at %d px wide has a progress label ('%s')" % [id, w, plain])
+			if sl == null:
+				continue
+			var bad: Array = _sub_problems(sl, plain, t)
+			ok(bad.is_empty(), "%s at %d px wide (scale %s): '%s' is not cut inside a number or unit %s" % [id, w, str(_scale), sl.text.replace("\n", "|"), str(bad)])
+		(made[0] as Control).queue_free()
+		await _frames(2)
 
 
 # ---------------------------------------------------------------- B2-8 일부러 틀린 입력

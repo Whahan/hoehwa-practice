@@ -9,6 +9,8 @@ extends RefCounted
 const TILE_ICON := 36.0
 const TILE_PAD := 8.0
 const TILE_NAME_LINES := 3
+## 타일 진행 글을 줄일 수 있는 가장 작은 글자 크기(px).
+const SUB_MIN_FONT := 12
 const DOT_D := 12.0
 const NOTE_FIRST_WEEK := "새 카드는 1.6.0부터 세요"
 const NOTE_NO_RECORD := "아직 기록이 없어요. 오늘 10분만 해 볼까요?"
@@ -329,9 +331,14 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 	nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(nl)
 	var sl := UI.label(sub, "Small")
+	# 진행 글은 자동 줄바꿈을 끈다. 한글은 음절 사이 어디서나 끊겨 "10시|간" 이 되기 때문이다.
+	# 대신 폭이 모자라면 "/" 뒤에서만 두 줄로 나누고, 그래도 모자라면 글자를 줄인다(_fit_sub).
+	sl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	sl.clip_text = true
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sl.add_theme_color_override("font_color", Pal.MUTED)
 	sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sl.resized.connect(func() -> void: _fit_sub(sl, sub))
 	vb.add_child(sl)
 	b.add_child(vb)
 	b.set_meta("name_label", nl)
@@ -353,6 +360,46 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 		if on_tap.is_valid():
 			on_tap.call())
 	return b
+
+
+## 타일 아래 글자 `plain` 을 라벨 폭 안에 넣는다. 한 줄 -> " / " 뒤에서만 두 줄 -> 글자 줄이기(최소 SUB_MIN_FONT) 순으로,
+## 글자 크기를 먼저 지키는 쪽을 고른다. 숫자·단위 중간에서는 끊지 않는다. 폭이 아직 없으면(배치 전) 아무것도 안 한다.
+static func _fit_sub(sl: Label, plain: String) -> void:
+	if not is_instance_valid(sl) or sl.size.x < 1.0:
+		return
+	if not sl.has_meta("base_fs"):
+		sl.set_meta("base_fs", sl.get_theme_font_size("font_size"))
+	var base: int = int(sl.get_meta("base_fs"))
+	var font: Font = sl.get_theme_font("font")
+	var cands: Array = [plain]
+	if plain.contains(" / "):
+		cands.append(plain.replace(" / ", " /\n"))
+	var pick_text: String = cands[cands.size() - 1]
+	var pick_fs: int = mini(base, SUB_MIN_FONT)
+	var found := false
+	var fs: int = base
+	while fs >= SUB_MIN_FONT and not found:
+		for c in cands:
+			if _widest_line(font, str(c), fs) <= sl.size.x:
+				pick_text = str(c)
+				pick_fs = fs
+				found = true
+				break
+		fs -= 1
+	if sl.text != pick_text:
+		sl.text = pick_text
+	if pick_fs >= base:
+		if sl.has_theme_font_size_override("font_size"):
+			sl.remove_theme_font_size_override("font_size")
+	elif sl.get_theme_font_size("font_size") != pick_fs:
+		sl.add_theme_font_size_override("font_size", pick_fs)
+
+
+static func _widest_line(font: Font, text: String, fs: int) -> float:
+	var w := 0.0
+	for line in text.split("\n"):
+		w = maxf(w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	return w
 
 
 ## 진행 문구 하나(타일 아래 글자와 시트의 "진행 ..." 가 같이 쓴다). value 는 0..target 으로 자른다.

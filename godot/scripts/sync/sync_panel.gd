@@ -42,6 +42,8 @@ const TOAST_RESTORED := "되돌렸어요. 자동 동기화를 껐어요. 다시 
 ## 설계 §4.8: "모든 기록 지우기" 확인 문구(동기화가 켜져 있을 때)
 const RESET_SYNC_TEXT := "동기화가 켜져 있어요. 지우면 이 기기의 동기화 연결이 끊기고, PC 보관함에 올라간 기록은 그대로 남아요. (PC 보관함까지 지우려면 PC의 backend\\data\\sync 폴더를 지우세요.)"
 const RESET_BASE_TEXT := "정말 지울까요? 되돌릴 수 없어요."
+## 1.6.1: 이 버튼은 Store.reset_progress() 로 배지·스피드 퀴즈 기록·가나 코스 진행까지 지운다. 확인 문구 맨 앞에 그 범위를 적는다.
+const RESET_SCOPE_TEXT := "배지·스피드 퀴즈 기록·가나 코스 진행도 함께 지워져요."
 
 # 설계에 없는 보조 문구(이 파일이 정한다)
 const DIALOG_WORKING := "합치는 중…"
@@ -363,21 +365,21 @@ static func reason_label(reason: String) -> String:
 
 # ---------------------------------------------------------------- "모든 기록 지우기" 연동 (today_view.gd 가 부른다)
 
-## 동기화가 켜져 있으면 §4.8 문구를 앞에 붙인다.
+## 지워지는 범위("배지·스피드 퀴즈 기록·가나 코스 진행"까지)를 먼저 알리고, 마지막 줄에 묻는다.
+## 동기화가 켜져 있으면 §4.8 문구를 맨 앞에 붙인다.
 static func reset_confirm_text() -> String:
+	var t: String = RESET_SCOPE_TEXT + "\n" + RESET_BASE_TEXT
 	var m: SyncManager = SyncManager.current
 	if m != null and m.engine != null and bool(m.status().get("enabled", false)):
-		return RESET_SYNC_TEXT + "\n" + RESET_BASE_TEXT
-	return RESET_BASE_TEXT
+		return RESET_SYNC_TEXT + "\n" + t
+	return t
 
 
-## 확인 줄 라벨의 문구를 정한다. 동기화 문구가 붙어 길어지면 줄바꿈을 켠다.
+## 확인 줄 라벨의 문구를 정한다. 문구가 여러 문장이라 항상 줄바꿈을 켠다.
 static func apply_reset_text(label: Label) -> void:
-	var t: String = reset_confirm_text()
-	label.text = t
-	if t != RESET_BASE_TEXT:
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = reset_confirm_text()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
 ## 지우기 직전: 동기화 연결을 끊는다(백업 `unlink`, 스위치 끔, 몫 정보 비움). 매니저가 없으면 아무것도 안 한다.
