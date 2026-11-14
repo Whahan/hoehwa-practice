@@ -1,7 +1,7 @@
 {
  "v": 1,
  "source": "backend/content/missions.json",
- "source_sha256": "418379f5c04184bdc1911161072129b3e5700aac4459af53a48b0d52ad589661",
+ "source_sha256": "3c89d619e110637021cfc863d13a8da1ac84565407fc3d3936c7f020b675ec1d",
  "generator": "backend/tools/make_mission_golden.py",
  "entries": [
   {
@@ -1641,7 +1641,6 @@
    "text": "まっすぐいって、ひだりですね？ありがとうございます",
    "norm": "まっすぐいってひだりですねありがとうございます",
    "reached": [
-    "confirm_route",
     "thank_bye"
    ]
   },
