@@ -91,10 +91,10 @@ server.log.setLevel(logging.DEBUG)
 grammar.init(log=server.log)
 
 
-def found(blob):
+def found(blob, tokens=None):
     """tokens of the canary that appear in a str / bytes"""
     out = []
-    for t in TOKENS:
+    for t in (tokens or TOKENS):
         if isinstance(blob, bytes):
             if t.encode("utf-8") in blob:
                 out.append(t)
@@ -127,19 +127,19 @@ def cache_count():
         return llm_cache._db().execute("SELECT COUNT(*) FROM llm_cache").fetchone()[0]
 
 
-def scan_folder(root, limit=64 * 1024 * 1024):
+def scan_folder(root, limit=64 * 1024 * 1024, tokens=None):
     """canary tokens found in any file under root (file names too)"""
     hits = []
     for d, _dirs, files in os.walk(root):
         for fn in files:
             p = os.path.join(d, fn)
-            if found(fn):
+            if found(fn, tokens):
                 hits.append((p, "name"))
             try:
                 if os.path.getsize(p) > limit:
                     continue
                 with open(p, "rb") as f:
-                    t = found(f.read())
+                    t = found(f.read(), tokens)
                 if t:
                     hits.append((p, t))
             except OSError:
@@ -650,7 +650,7 @@ def test_files():
         if not os.path.isdir(p):
             print("  [INFO] %s: no such folder (nothing to scan)" % p)
             continue
-        h = scan_folder(p)
+        h = scan_folder(p, tokens=[MARK])   # the unique marker only: a real folder may hold ordinary sentences
         check("real backend\\%s has no canary (%d files scanned)" % (sub, sum(len(f) for _d, _s, f in os.walk(p))), not h, h[:3])
     check("nothing printed with the canary during the whole run", not found("\n".join(PRINTED)))
 
