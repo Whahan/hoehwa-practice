@@ -1,0 +1,338 @@
+{
+ "lang": "ja",
+ "unsupported": false,
+ "missions": [
+  {
+   "id": "ja_konbini",
+   "title_ko": "편의점에서 계산하기",
+   "situation_ko": "도쿄의 편의점 계산대. 물건 위치를 묻고, 살 것을 말하고, 결제하고 인사하세요.",
+   "min_stage": 1,
+   "max_turns": 10,
+   "opening": "いらっしゃいませ。何かお探しですか。",
+   "opening_rd": "いらっしゃいませ。なにかおさがしですか。",
+   "opening_pr": "イラッシャイマセ。ナニカオサガシデスカ。",
+   "goals": [
+    {
+     "id": "find_item",
+     "label_ko": "찾는 물건이 어디 있는지 묻기",
+     "hint_en": "すみません、おにぎりはどこですか。",
+     "hint_rd": "すみません、おにぎりはどこですか。"
+    },
+    {
+     "id": "buy_item",
+     "label_ko": "살 물건 말하기",
+     "hint_en": "このおにぎりをください。",
+     "hint_rd": "このおにぎりをください。"
+    },
+    {
+     "id": "pay",
+     "label_ko": "결제 방법 말하기",
+     "hint_en": "カードで払います。",
+     "hint_rd": "かーどではらいます。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사",
+     "hint_en": "ありがとうございました。",
+     "hint_rd": "ありがとうございました。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_konbini",
+    "title": "편의점에서 계산하기",
+    "persona": "Tanaka-san, a polite clerk at a convenience store in Tokyo",
+    "scene": "The learner is a customer. Speak polite Japanese, short."
+   },
+   "script": [
+    {
+     "ai": "いらっしゃいませ。何かお探しですか。",
+     "goal": "find_item",
+     "model": "すみません、おにぎりはどこですか。",
+     "ai_rd": "いらっしゃいませ。なにかおさがしですか。",
+     "ai_pr": "イラッシャイマセ。ナニカオサガシデスカ。",
+     "model_rd": "すみません、おにぎりはどこですか。",
+     "model_pr": "スミマセン、オニギリワドコデスカ。"
+    },
+    {
+     "ai": "おにぎりはあちらです。どれにしますか。",
+     "goal": "buy_item",
+     "model": "このおにぎりをください。",
+     "ai_rd": "おにぎりはあちらです。どれにしますか。",
+     "ai_pr": "オニギリワアチラデス。ドレニシマスカ。",
+     "model_rd": "このおにぎりをください。",
+     "model_pr": "コノオニギリヲクダサイ。"
+    },
+    {
+     "ai": "温めますか。お支払いはどうしますか。",
+     "goal": "pay",
+     "model": "カードで払います。",
+     "ai_rd": "あたためますか。おしはらいはどうしますか。",
+     "ai_pr": "アタタメマスカ。オシハライワドウシマスカ。",
+     "model_rd": "かーどではらいます。",
+     "model_pr": "カードデハライマス。"
+    },
+    {
+     "ai": "ありがとうございます。またどうぞ。",
+     "goal": "thank",
+     "model": "ありがとうございました。",
+     "ai_rd": "ありがとうございます。またどうぞ。",
+     "ai_pr": "アリガトウゴザイマス。マタドウゾ。",
+     "model_rd": "ありがとうございました。",
+     "model_pr": "アリガトウゴザイマシタ。"
+    }
+   ]
+  },
+  {
+   "id": "ja_ramen",
+   "title_ko": "라멘집에서 주문하기",
+   "situation_ko": "라멘집 카운터. 인원과 주문, 면 굳기를 말하고 계산하세요.",
+   "min_stage": 1,
+   "max_turns": 10,
+   "opening": "いらっしゃいませ。何名様ですか。",
+   "opening_rd": "いらっしゃいませ。なんめいさまですか。",
+   "opening_pr": "イラッシャイマセ。ナンメイサマデスカ。",
+   "goals": [
+    {
+     "id": "seat_party",
+     "label_ko": "인원·자리 말하기",
+     "hint_en": "二人です。",
+     "hint_rd": "ふたりです。"
+    },
+    {
+     "id": "order_ramen",
+     "label_ko": "라멘 주문",
+     "hint_en": "しょうゆラーメンをください。",
+     "hint_rd": "しょうゆらーめんをください。"
+    },
+    {
+     "id": "customize",
+     "label_ko": "양·맵기·면 굳기 요청",
+     "hint_en": "麺は固めでお願いします。",
+     "hint_rd": "めんはかためでおねがいします。"
+    },
+    {
+     "id": "ask_bill",
+     "label_ko": "계산 요청",
+     "hint_en": "お会計をお願いします。",
+     "hint_rd": "おかいけいをおねがいします。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "ごちそうさま·감사",
+     "hint_en": "ごちそうさまでした。",
+     "hint_rd": "ごちそうさまでした。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_ramen",
+    "title": "라멘집에서 주문하기",
+    "persona": "Sato-san, a cheerful ramen shop staff member in Osaka",
+    "scene": "The learner is a customer. Speak polite Japanese, short."
+   },
+   "script": []
+  },
+  {
+   "id": "ja_ask_way",
+   "title_ko": "길 묻기",
+   "situation_ko": "역 앞에서 길을 묻는 상황.",
+   "min_stage": 2,
+   "max_turns": 10,
+   "opening": "すみません、駅はどこですか。",
+   "goals": [
+    {
+     "id": "call_out",
+     "label_ko": "말 걸기",
+     "hint_en": "すみません。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사",
+     "hint_en": "ありがとうございます。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_ask_way",
+    "title": "길 묻기",
+    "persona": "Staff, polite",
+    "scene": "Polite Japanese, short."
+   },
+   "script": [
+    {
+     "ai": "すみません、駅はどこですか。",
+     "goal": "call_out",
+     "model": "すみません。"
+    }
+   ]
+  },
+  {
+   "id": "ja_hotel_checkin",
+   "title_ko": "호텔 체크인",
+   "situation_ko": "호텔 프런트에서 체크인.",
+   "min_stage": 2,
+   "max_turns": 10,
+   "opening": "いらっしゃいませ。ご予約ですか。",
+   "goals": [
+    {
+     "id": "reservation",
+     "label_ko": "예약 확인",
+     "hint_en": "予約しています。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사",
+     "hint_en": "ありがとうございます。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_hotel_checkin",
+    "title": "호텔 체크인",
+    "persona": "Staff, polite",
+    "scene": "Polite Japanese, short."
+   },
+   "script": [
+    {
+     "ai": "いらっしゃいませ。ご予約ですか。",
+     "goal": "reservation",
+     "model": "予約しています。"
+    }
+   ]
+  },
+  {
+   "id": "ja_station_ticket",
+   "title_ko": "역 매표소에서 표 사기",
+   "situation_ko": "역 매표소에서 표를 산다.",
+   "min_stage": 2,
+   "max_turns": 10,
+   "opening": "どちらまで行きますか。",
+   "goals": [
+    {
+     "id": "dest_ticket",
+     "label_ko": "목적지·표 말하기",
+     "hint_en": "新宿まで一枚ください。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사",
+     "hint_en": "ありがとうございます。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_station_ticket",
+    "title": "역 매표소에서 표 사기",
+    "persona": "Staff, polite",
+    "scene": "Polite Japanese, short."
+   },
+   "script": [
+    {
+     "ai": "どちらまで行きますか。",
+     "goal": "dest_ticket",
+     "model": "新宿まで一枚ください。"
+    }
+   ]
+  },
+  {
+   "id": "ja_clinic",
+   "title_ko": "병원 접수",
+   "situation_ko": "병원 접수 창구.",
+   "min_stage": 3,
+   "max_turns": 10,
+   "opening": "今日はどうされましたか。",
+   "goals": [
+    {
+     "id": "first_visit",
+     "label_ko": "처음 방문·접수 의사",
+     "hint_en": "初めてです。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사",
+     "hint_en": "ありがとうございます。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_clinic",
+    "title": "병원 접수",
+    "persona": "Staff, polite",
+    "scene": "Polite Japanese, short."
+   },
+   "script": [
+    {
+     "ai": "今日はどうされましたか。",
+     "goal": "first_visit",
+     "model": "初めてです。"
+    }
+   ]
+  },
+  {
+   "id": "ja_shopping",
+   "title_ko": "쇼핑 계산",
+   "situation_ko": "옷가게에서 가격을 묻는다.",
+   "min_stage": 2,
+   "max_turns": 10,
+   "opening": "いらっしゃいませ。",
+   "goals": [
+    {
+     "id": "ask_price",
+     "label_ko": "가격 묻기",
+     "hint_en": "これはいくらですか。"
+    },
+    {
+     "id": "thank",
+     "label_ko": "감사 인사",
+     "hint_en": "ありがとうございます。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_shopping",
+    "title": "쇼핑 계산",
+    "persona": "Staff, polite",
+    "scene": "Polite Japanese, short."
+   },
+   "script": [
+    {
+     "ai": "いらっしゃいませ。",
+     "goal": "ask_price",
+     "model": "これはいくらですか。"
+    }
+   ]
+  },
+  {
+   "id": "ja_self_intro",
+   "title_ko": "자기소개",
+   "situation_ko": "처음 만난 사람에게 자기소개를 하세요.",
+   "min_stage": 1,
+   "max_turns": 10,
+   "opening": "はじめまして。お名前は?",
+   "goals": [
+    {
+     "id": "say_name",
+     "label_ko": "이름 말하기",
+     "hint_en": "私は田中です。"
+    },
+    {
+     "id": "nice_meet",
+     "label_ko": "はじめまして·よろしく",
+     "hint_en": "よろしくお願いします。"
+    }
+   ],
+   "scenario": {
+    "id": "mission:ja_self_intro",
+    "title": "자기소개",
+    "persona": "Yamada-san, a friendly new neighbor",
+    "scene": "Casual first meeting. Polite Japanese."
+   },
+   "script": [
+    {
+     "ai": "はじめまして。お名前は?",
+     "goal": "say_name",
+     "model": "私は田中です。"
+    },
+    {
+     "ai": "よろしくお願いします。",
+     "goal": "nice_meet",
+     "model": "よろしくお願いします。"
+    }
+   ]
+  }
+ ]
+}

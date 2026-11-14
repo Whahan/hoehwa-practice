@@ -1,6 +1,6 @@
 class_name MissionScreen
 extends Control
-## 롤플레이 미션 화면 (영어). 목록 -> 설명 -> 대화 -> 결과.
+## 롤플레이 미션 화면 (영어·일본어). 목록 -> 설명 -> 대화 -> 결과. 일본어는 같은 화면에 읽기 줄(히라가나 + 한글 소리)이 붙는다.
 ## 계약: 설계 8.3 (신호 closed, open(lang, args), 선택 on_hide()). 하위 단계로 돌아가는 go_back() -> bool.
 ##
 ## AI 호출: 말할 때마다 /missions/check (규칙, AI 없음) 와 /chat 을 동시에 보낸다. 체크 결과가 항상 먼저 반영된다.
@@ -12,7 +12,8 @@ signal closed
 
 const WIDE_MIN := 700.0         ## 이 폭 이상(폰이 아닐 때)이면 목표가 오른쪽 패널
 const SIDE_W := 300.0
-const JA_NOTE := "일본어 미션은 다음 버전에서 만들 예정이에요. 영어로 바꿔서 연습해 보세요."
+const JA_NOTE := "일본어 미션은 다음 버전에서 만들 예정이에요. 영어로 바꿔서 연습해 보세요."  ## 옛 서버가 unsupported 로 답할 때의 기본 문구(호환)
+const OTHER_LANG_NOTE := "이 언어의 미션은 아직 없어요."
 const OLD_SERVER := "이 PC 프로그램은 미션을 아직 지원하지 않아요. PC 프로그램을 최신 버전으로 업데이트해 주세요."
 const EMPTY_NOTE := "지금 연습할 수 있는 미션이 없어요. PC 프로그램이 최신 버전인지 확인해 주세요."
 
@@ -93,6 +94,7 @@ func open(l: String, args: Dictionary = {}) -> void:
 		_open_args = [l, args]
 		return
 	lang = l
+	_apply_accent()
 	_reset_run()
 	var want: String = str(args.get("mission_id", ""))
 	_load_list(want)
@@ -246,7 +248,7 @@ func _build_chat_root() -> void:
 	b.add_child(_aux)
 	_comp_row = UI.hbox(8)
 	_input = LineEdit.new()
-	_input.placeholder_text = "영어로 말하거나 입력하기"
+	_input.placeholder_text = _ph_talk()
 	_input.max_length = MissionLogic.MAX_TEXT
 	_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_input.custom_minimum_size = Vector2(0, 48)
@@ -326,6 +328,29 @@ func _is_phone() -> bool:
 
 func _is_wide() -> bool:
 	return not _is_phone() and size.x >= WIDE_MIN
+
+
+## 언어 강조색(영어 파랑 / 일본어). 화면이 만들어진 뒤에 언어가 정해지므로 open() 에서 한 번 다시 칠한다.
+func _acc() -> Color:
+	return Pal.accent(lang)
+
+
+func _apply_accent() -> void:
+	if _send == null:
+		return
+	UI.style_button(_end_btn, "soft", _acc())
+	UI.style_button(_send, "primary", _acc())
+	_mic.accent = _acc()
+	_mic.set_enabled(false)  # 다시 칠하려는 것뿐: 대화 화면이 열릴 때 _update_composer 가 알맞게 켠다
+
+
+func _ph_talk() -> String:
+	return "일본어로 말하거나 입력하기" if lang == "ja" else "영어로 말하거나 입력하기"
+
+
+## 읽기 줄(히라가나 + 한글 소리) 하나를 box 에 더한다. 일본어가 아니거나 읽기가 없으면 아무것도 만들지 않는다.
+func _add_reading(box: Node, reading: String, pron: String = "", max_w: float = 0.0) -> void:
+	ReadingLine.add(box, reading, lang, Store.pref_bool("show_reading"), max_w, pron)
 
 
 func _stage() -> int:
@@ -469,16 +494,16 @@ func _load_list(want_id: String = "") -> void:
 	list_error = false
 	list_note = ""
 	missions = []
-	if lang != "en":
+	if lang != "en" and lang != "ja":
 		status = "list"
-		list_note = JA_NOTE
+		list_note = OTHER_LANG_NOTE
 		_update_pages()
 		_render_list()
 		return
 	status = "loading"
 	_update_pages()
 	_render_list()
-	var res: Dictionary = await _wait(_req("GET", "/missions?lang=en", null, Api.TIMEOUT_SHORT))
+	var res: Dictionary = await _wait(_req("GET", "/missions?lang=" + lang, null, Api.TIMEOUT_SHORT))
 	if serial != _list_serial:
 		return
 	if res.get("cancelled", false):
@@ -595,7 +620,11 @@ func _render_brief() -> void:
 		var hv := UI.vbox(4)
 		for g in _goals():
 			var gd: Dictionary = g
-			hv.add_child(UI.label("%s → %s" % [gd["label_ko"], gd["hint_en"]] if str(gd["hint_en"]) != "" else str(gd["label_ko"])))
+			var one := UI.vbox(2)
+			one.add_child(UI.label("%s → %s" % [gd["label_ko"], gd["hint_en"]] if str(gd["hint_en"]) != "" else str(gd["label_ko"])))
+			if str(gd["hint_en"]) != "":
+				_add_reading(one, str(gd.get("hint_rd", "")))
+			hv.add_child(one)
 		hp.add_child(hv)
 		card.body.add_child(hp)
 	card.body.add_child(UI.label("말하는 횟수는 %d번까지예요. 상대의 첫 마디는 바로 나와요." % int(mission["max_turns"]), "Small"))
@@ -631,15 +660,22 @@ func _start(new_mode: String) -> void:
 	mode = new_mode
 	conv_id = "m%d-%d" % [Time.get_ticks_usec(), randi()]
 	var first: String = str(mission["opening"])
+	var first_rd: String = str(mission.get("opening_rd", ""))
+	var first_pr: String = str(mission.get("opening_pr", ""))
 	if mode == "script":
 		if _script().is_empty():
 			mode = "ai"
 		else:
 			script_state = MissionLogic.script_new()
-			first = str((_script()[0] as Dictionary)["ai"])
+			var l0: Dictionary = _script()[0]
+			first = str(l0["ai"])
+			first_rd = str(l0.get("ai_rd", ""))
+			first_pr = str(l0.get("ai_pr", ""))
 	if first == "":
-		first = "Hello! Shall we begin?"
-	msgs.append({"role": "ai", "reply": first, "ko": ""})
+		first = "こんにちは。はじめましょうか。" if lang == "ja" else "Hello! Shall we begin?"
+		first_rd = "こんにちは。はじめましょうか。" if lang == "ja" else ""
+		first_pr = ""
+	msgs.append({"role": "ai", "reply": first, "ko": "", "reading": first_rd, "pron": first_pr})
 	status = "talk"
 	_speak(first)
 	_update_pages()
@@ -749,7 +785,7 @@ func _after_chat(res: Dictionary) -> void:
 	else:
 		var d: Dictionary = data
 		var reply: String = str(d["reply"]).strip_edges()
-		msgs.append({"role": "ai", "reply": reply, "ko": str(d.get("ko", ""))})
+		msgs.append({"role": "ai", "reply": reply, "ko": str(d.get("ko", "")), "reading": str(d.get("reading", "")), "pron": str(d.get("pron", ""))})
 		var chunks: Variant = d.get("tts_chunks", null)
 		if Store.pref_bool("auto_speak"):
 			if chunks is Array and not (chunks as Array).is_empty():
@@ -783,7 +819,7 @@ func _script_turn(text: String) -> void:
 	var reached: Array = []
 	if res.get("ok", false) and not res.get("cancelled", false):
 		reached = MissionLogic.reached_ids(_goals(), res.get("data", null))
-	var passed: bool = MissionLogic.script_passes(text, line, reached)
+	var passed: bool = MissionLogic.script_passes(text, line, reached, lang)
 	var fresh: Array = []
 	var line_goal: String = str(line.get("goal", ""))
 	if passed and line_goal != "" and MissionLogic.goal_ids(_goals()).has(line_goal) and not reached.has(line_goal):
@@ -802,15 +838,16 @@ func _script_turn(text: String) -> void:
 		var n: int = int(script_state["fails"])
 		msgs.append({"role": "note", "text": "조금 달라요. 다시 말해 보세요 (%d/%d) · 목표: %s" % [n, MissionLogic.MAX_FAILS, _goal_label(line_goal)]})
 	elif outcome == "miss":
-		msgs.append({"role": "model", "text": "이렇게 말할 수 있어요: " + str(line.get("model", ""))})
+		msgs.append({"role": "model", "text": "이렇게 말할 수 있어요: " + str(line.get("model", "")), "reading": str(line.get("model_rd", "")), "pron": str(line.get("model_pr", ""))})
 	status = "talk"
 	var limit: int = maxi(int(mission["max_turns"]), lines.size())
 	if bool(step["finished"]) or MissionLogic.should_end(done.size(), _goals().size(), turns, limit):
 		_finish()
 		return
 	if outcome == "pass" or outcome == "miss":
-		var next_line: String = str((lines[int(script_state["idx"])] as Dictionary)["ai"])
-		msgs.append({"role": "ai", "reply": next_line, "ko": ""})
+		var nl: Dictionary = lines[int(script_state["idx"])]
+		var next_line: String = str(nl["ai"])
+		msgs.append({"role": "ai", "reply": next_line, "ko": "", "reading": str(nl.get("ai_rd", "")), "pron": str(nl.get("ai_pr", ""))})
 		_speak(next_line)
 	_render_chat()
 
@@ -867,7 +904,7 @@ func _update_composer() -> void:
 	_mic.busy_text = busy_text_for_mic()
 	_mic.set_enabled(talk and not stt_busy)
 	if talk:
-		_input.placeholder_text = "영어로 말하거나 입력하기"
+		_input.placeholder_text = _ph_talk()
 	else:
 		_input.placeholder_text = "답을 기다리는 중…"
 	_status_label.text = "말한 내용을 글자로 바꾸는 중…" if stt_busy else ""
@@ -944,7 +981,10 @@ func _render_msgs() -> void:
 				c.add_child(_ai_row(m, i, max_w))
 			"model":
 				var p := UI.tinted_panel(Pal.OK_SOFT, Color(0, 0, 0, 0), 0, Ds.R_S, 12, 8)
-				p.add_child(UI.colored(str(m["text"]), Pal.OK_ON))
+				var pv := UI.vbox(2)
+				pv.add_child(UI.colored(str(m["text"]), Pal.OK_ON))
+				_add_reading(pv, str(m.get("reading", "")), str(m.get("pron", "")))
+				p.add_child(pv)
 				c.add_child(p)
 			_:
 				c.add_child(UI.label(str(m.get("text", "")), "Muted"))
@@ -967,7 +1007,7 @@ func _render_msgs() -> void:
 		acts.add_child(retry)
 		var has_script: bool = not _script().is_empty()
 		if mode == "ai" and has_script:
-			var sb := UI.button("대본 모드로 연습", "soft", Pal.EN, 44)
+			var sb := UI.button("대본 모드로 연습", "soft", _acc(), 44)
 			sb.pressed.connect(func() -> void: _start("script"))
 			acts.add_child(sb)
 		v.add_child(acts)
@@ -999,7 +1039,16 @@ func _ai_row(m: Dictionary, i: int, max_w: float) -> Control:
 	var col := UI.vbox(4)
 	col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	col.add_child(UI.label(_who(), "Small", false))
-	col.add_child(_bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, Ds.R_BTN))
+	var bub := _bubble(str(m["reply"]), Pal.SURFACE, Pal.LINE, Pal.INK, max_w, 4, Ds.R_BTN)
+	var rd: Control = ReadingLine.make(str(m.get("reading", "")), lang, Store.pref_bool("show_reading"), max_w, str(m.get("pron", "")))
+	if rd != null:  # 읽기 줄은 말풍선 안, 일본어 글 바로 아래 (talk_view 와 같은 모양)
+		var inner := bub.get_child(0) as Label
+		bub.remove_child(inner)
+		var bv := UI.vbox(2)
+		bv.add_child(inner)
+		bv.add_child(rd)
+		bub.add_child(bv)
+	col.add_child(bub)
 	var ko: String = str(m.get("ko", ""))
 	var always_ko: bool = Store.pref_bool("show_ko")
 	var show_ko: bool = ko != "" and (always_ko or bool(ko_open.get(i, false)))
@@ -1046,7 +1095,7 @@ func _render_aux() -> void:
 	var acts := UI.flow(8, 8)
 	var stop := UI.button("그만두기", "soft", Pal.BAD, 44)
 	stop.pressed.connect(_abandon)
-	var keep := UI.button("계속하기", "soft", Pal.EN, 44)
+	var keep := UI.button("계속하기", "soft", _acc(), 44)
 	keep.pressed.connect(func() -> void:
 		leave_confirm = false
 		_render_aux())
@@ -1090,7 +1139,7 @@ func _fill_goals(box: VBoxContainer, compact: bool) -> void:
 		box.add_child(UI.label("목표  %d / %d" % [n, total], "Strong", false))
 	for g in _goals():
 		box.add_child(_goal_row(g))
-	var hb := UI.button("힌트 숨기기" if hints_open else "힌트 보기", "soft", Pal.EN, 44)
+	var hb := UI.button("힌트 숨기기" if hints_open else "힌트 보기", "soft", _acc(), 44)
 	hb.pressed.connect(func() -> void:
 		hints_open = not hints_open
 		_render_goals())
@@ -1100,6 +1149,7 @@ func _fill_goals(box: VBoxContainer, compact: bool) -> void:
 			var gd: Dictionary = g
 			if str(gd["hint_en"]) != "":
 				box.add_child(UI.label("%s: %s" % [gd["label_ko"], gd["hint_en"]], "Small"))
+				_add_reading(box, str(gd.get("hint_rd", "")))
 	if not compact:
 		box.add_child(UI.label("자동으로 체크되지 않으면 목표를 눌러 직접 체크할 수 있어요.", "Small"))
 
@@ -1115,7 +1165,7 @@ func _goal_row(g: Dictionary) -> Button:
 		tag = {"rule": "  (자동)", "manual": "  (직접)", "ai": "  (AI 판정)"}.get(by, "")
 	var b := UI.option_row("%s  %s%s" % [mark, g["label_ko"], tag])
 	b.custom_minimum_size.y = _tap_h()
-	UI.paint_option(b, "right" if by != "" else "idle", Pal.EN)
+	UI.paint_option(b, "right" if by != "" else "idle", _acc())
 	b.pressed.connect(func() -> void: _toggle_goal(id))
 	return b
 
@@ -1304,7 +1354,7 @@ func _judge() -> void:
 	elif (data as Dictionary).get("ai", true) == false:
 		judge_note = "AI가 판정하지 못했어요. 규칙 결과를 그대로 뒀어요."
 	else:
-		var fresh: Array = MissionLogic.apply_judge(done, pending, data, _me_texts())
+		var fresh: Array = MissionLogic.apply_judge(done, pending, data, _me_texts(), lang)
 		judge_note = "AI가 목표 %d개를 더 인정했어요." % fresh.size() if not fresh.is_empty() else "AI도 더 달성한 목표를 찾지 못했어요."
 		_recompute_award()
 	if status == "result":
@@ -1476,6 +1526,7 @@ func _add_feedback(c: VBoxContainer, acc: Color) -> void:
 				# struck through (shape) and in the error colour; the corrected sentence below starts with a check mark
 				iv.add_child(UI.rich("[s][color=#%s]%s[/color][/s]" % [Pal.BAD_ON.to_html(false), UI.bb_escape(str(d["you"]))], 16))
 			iv.add_child(UI.colored("✓ " + str(d["better"]), Pal.OK_ON, "Strong"))
+			_add_reading(iv, str(d.get("reading", "")), str(d.get("pron", "")))
 			if str(d.get("ko", "")) != "":
 				iv.add_child(UI.label(str(d["ko"]), "Muted"))
 			if str(d.get("why", "")) != "":
@@ -1501,6 +1552,7 @@ func _add_feedback(c: VBoxContainer, acc: Color) -> void:
 			var item2 := UI.tinted_panel(Pal.SURFACE, Pal.LINE, 1, Ds.R_S, 12, 10)
 			var iv2 := UI.vbox(3)
 			iv2.add_child(UI.label(str(d2["phrase"]), "Strong"))
+			_add_reading(iv2, str(d2.get("reading", "")), str(d2.get("pron", "")))
 			if str(d2.get("ko", "")) != "":
 				iv2.add_child(UI.label(str(d2["ko"]), "Muted"))
 			item2.add_child(iv2)
