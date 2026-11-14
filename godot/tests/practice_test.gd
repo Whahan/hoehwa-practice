@@ -343,7 +343,7 @@ func _test_hub() -> void:
 	Store.prefs["lang"] = "ja"
 	v2.refresh()
 	await frames(3)
-	ok((v2._cards["dictation"] as Button).disabled == (not PracticeView.DICTATION_JA) and not (v2._cards["phoneme"] as Button).disabled and not (v2._cards["shadow"] as Button).disabled, "ja: weak sounds and shadowing are enabled, dictation follows DICTATION_JA (%s)" % str(PracticeView.DICTATION_JA))
+	ok(not (v2._cards["dictation"] as Button).disabled and not (v2._cards["phoneme"] as Button).disabled and not (v2._cards["shadow"] as Button).disabled, "ja: dictation, weak sounds and shadowing are all enabled")
 	Store.prefs["lang"] = "en"
 	PhonemeScreen.weak_provider = func(_l: String, _n: int) -> Array: return [{"p": "θ", "n": 10, "bad": 6, "rate": 0.6, "heard": {"s": 5}}, {"p": "ɹ", "n": 8, "bad": 3, "rate": 0.375, "heard": {}}]
 	v2.refresh()
@@ -687,7 +687,8 @@ func _test_dictation() -> void:
 	requests.clear()
 	dj.open("ja", {})
 	await frames(2)
-	ok(dj.stage == "unsupported" and reqs("/practice/sentences").is_empty(), "ja -> English-only notice, no request")
+	var jreq: Array = reqs("/practice/sentences")
+	ok(dj.stage == "run" and jreq.size() == 1 and "lang=ja" in str(jreq[0]["path"]) and "mode=dictation" in str(jreq[0]["path"]), "ja -> sentences requested with lang=ja&mode=dictation (stage %s, %d request)" % [dj.stage, jreq.size()])
 	await free_host(hj)
 
 

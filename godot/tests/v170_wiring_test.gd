@@ -6,7 +6,7 @@ extends Node
 ## 하는 일: 허브 카드 7개와 순서·KINDS, 일본어 허브(약한 소리 켜짐), 홈 [일기] 버튼, 약한 소리 칩, pending 소비, 잘못된 입력, 일기 저장·고침 직후 배지 평가
 ##   (diary_first 토스트 1회), 구서버에서 일기 요청 0건([말해서 쓰기]도 꺼짐), 읽기 줄 중복(ReadingLine).
 ## 흐름은 실제 버튼의 pressed 신호만 누른다. 누를 때마다 `press: <버튼>` 줄을 찍고, 누르기 전에 보이고 켜져 있는지 단언한다.
-## 일본어 받아쓰기 카드는 PracticeView.DICTATION_JA 가 true 가 된 뒤에만 켜져 있어야 한다(A4 가 합쳐지기 전에는 꺼짐).
+## 일본어 받아쓰기 카드는 켜져 있고 누르면 DictationScreen 이 ja 로 열린다(A4 합침 뒤).
 ## 마지막 줄: "== v170_wiring: N passed, M failed ==" (실패가 있으면 종료 코드 1)
 
 const MARK := "ZZ_MARK_9731"
@@ -161,6 +161,7 @@ func _ready() -> void:
 	await _test_reading_line()
 	await _test_talk_reading()
 	await _test_numbers_visible()
+	_test_dictation_chips()
 	_selfchecks()
 	_finish()
 
@@ -335,10 +336,9 @@ func _test_hub_cards() -> void:
 	var ja_text: String = _labels_text(pv)
 	ok(not (pv._cards["phoneme"] as Button).disabled, "W-4: japanese: weak sounds are on")
 	ok(not (pv._cards["kana"] as Button).disabled and not (pv._cards["mission"] as Button).disabled and not (pv._cards["shadow"] as Button).disabled and not (pv._cards["diary"] as Button).disabled, "W-4: japanese: kana, mission, shadow, diary are on")
-	ok((pv._cards["dictation"] as Button).disabled == (not PracticeView.DICTATION_JA), "W-4: japanese: dictation is %s (PracticeView.DICTATION_JA = %s)" % ["on" if PracticeView.DICTATION_JA else "off until the Japanese dictation screen is merged", str(PracticeView.DICTATION_JA)])
+	ok(not (pv._cards["dictation"] as Button).disabled, "W-4: japanese: dictation is on")
 	ok(not ja_text.contains("약한 소리 연습은 영어만"), "W-4: japanese: weak sounds have no 'english only' text")
-	if PracticeView.DICTATION_JA:
-		ok(not ja_text.contains("영어만 지원해요"), "W-4: japanese: no 'english only' text anywhere on the hub")
+	ok(not ja_text.contains("영어만 지원해요"), "W-4: japanese: no 'english only' text anywhere on the hub")
 	ok(ja_text.contains("길게 끄는 소리") and not ja_text.contains("자주 틀리는 소리만"), "W-4: japanese: the weak sounds card has the Japanese description")
 
 
@@ -416,16 +416,19 @@ func _test_hub_flow() -> void:
 		ok(all_ja, "W-2: the mission list of the japanese tab holds only japanese missions")
 	await _back_to_hub("mission ja")
 	ok(pv.current_screen() == null, "W-2: ← returns to the hub (mission ja)")
-	# 일본어: [받아쓰기] (일본어 받아쓰기 화면이 합쳐진 뒤에만 켜져 있다)
+	# 일본어: [받아쓰기] -> DictationScreen 이 ja 로 열린다 (일본어 소리가 있어야 하므로 Tts.fetch_hook 을 켠다)
 	var db: Button = pv._cards["dictation"] as Button
-	if PracticeView.DICTATION_JA:
-		_press(db, "hub ja: [받아쓰기 시작]")
-		await _frames(6)
-		var ds: Control = pv.current_screen()
-		ok(ds != null and str(ds.get_script().get_global_name()) == "DictationScreen", "W-2: japanese [받아쓰기] opens the dictation screen")
-		await _back_to_hub("dictation ja")
-	else:
-		ok(db.disabled, "W-2: japanese [받아쓰기] stays off until the Japanese dictation screen is merged (DICTATION_JA false)")
+	Tts.fetch_hook = func(_t: String, _l: String, _sp: float, _v: String) -> Variant: return null
+	var dreq0: int = _reqs_for("/practice/sentences")
+	_press(db, "hub ja: [받아쓰기 시작]")
+	await _frames(6)
+	var ds: Control = pv.current_screen()
+	ok(ds is DictationScreen and (ds as DictationScreen).lang == "ja", "W-2: japanese [받아쓰기] opens DictationScreen in ja (%s)" % [str((ds as DictationScreen).lang) if ds is DictationScreen else "-"])
+	var dreqs: Array = _reqs.filter(func(r: Dictionary) -> bool: return str(r["path"]).begins_with("/practice/sentences"))
+	ok(dreqs.size() == dreq0 + 1 and "lang=ja" in str(dreqs[dreqs.size() - 1]["path"]) and "mode=dictation" in str(dreqs[dreqs.size() - 1]["path"]), "W-2: ...and asks for lang=ja&mode=dictation sentences")
+	await _back_to_hub("dictation ja")
+	ok(pv.current_screen() == null, "W-2: ← returns to the hub (dictation ja)")
+	Tts.fetch_hook = Callable()
 	# 일기 카드 (일본어·영어 둘 다)
 	_press(pv._cards["diary"] as Button, "hub ja: [일기 쓰기]")
 	await _frames(4)
@@ -814,6 +817,34 @@ func _test_numbers_visible() -> void:
 	selfcheck(not _digits_in(_labels_text(fake)), "a fake screen with a unix time (1731571200) is caught by the digit scan")
 	fake.queue_free()
 	_set_lang("en")
+
+
+# ---------------------------------------------------------------- 일본어 받아쓰기 칩: 쓴 글자가 비면 "철자 틀림 ()" 이 나오지 않는다
+
+func _empty_paren(text: String) -> bool:
+	return text.contains("()")
+
+
+func _test_dictation_chips() -> void:
+	print("[dictation ja chips: empty written text]")
+	var d := {"units": [
+		{"w": "学校", "k": true, "rd": "がっこう", "kind": "typo", "ok": false, "said": ""},
+		{"w": "へ", "k": false, "kind": "ok", "ok": true, "said": "へ"},
+		{"w": "い", "k": false, "kind": "typo", "ok": false, "said": ""},
+		{"w": "く", "k": false, "kind": "typo", "ok": false, "said": ""},
+		{"w": "が", "k": true, "rd": "が", "kind": "typo", "ok": false, "said": "gaku"},
+	]}
+	var chips: Array = DictationScreen.ja_chips(d)
+	var texts: Array = chips.map(func(c: Variant) -> String: return str((c as Dictionary)["text"]))
+	ok(texts.size() == 4, "the chips are drawn (%d)" % texts.size())
+	var any_empty := false
+	for t in texts:
+		any_empty = any_empty or _empty_paren(str(t))
+	ok(not any_empty, "no chip reads '철자 틀림 ()' (%s)" % str(texts))
+	ok(str(texts[0]).contains("学校") and str(texts[0]).ends_with("철자 틀림"), "kanji chunk with nothing written: the reason stays, the parentheses go (%s)" % str(texts[0]))
+	ok(str(texts[2]).contains("いく") and str(texts[2]).ends_with("철자 틀림"), "kana run with nothing written: the reason stays, the parentheses go")
+	ok(str(texts[3]).contains("철자 틀림 (gaku)"), "something written is still shown in parentheses (%s)" % str(texts[3]))
+	selfcheck(not _empty_paren("✕ 学校(がっこう)  · 철자 틀림 ()"), "the empty-parentheses scan catches the old chip text")
 
 
 # ---------------------------------------------------------------- 검사기도 틀린 입력을 거절한다 (C-12)
