@@ -308,18 +308,26 @@ DROP_RULES = {"WHITESPACE_RULE", "COMMA_PARENTHESIS_WHITESPACE", "UPPERCASE_SENT
               "EN_SPECIFIC_CASE", "EN_UPPER_CASE_NGRAM", "PROFANITY", "CONSECUTIVE_SPACES", "ZERO_WIDTH_SPACE"}
 
 
-def check(lang, text, timeout=8.0):
-    """Raw LanguageTool matches, or None if the server is not available."""
+def check(lang, text, timeout=8.0, quiet=False):
+    """Raw LanguageTool matches, or None if the server is not available.
+    quiet: private text (the diary): the log lines name the failure only, never the exception text or the answer body
+    (an HTTP error body may repeat the checked text)."""
     base = start()
     if not base:
         return None
     try:
         r = requests.post(base + "/v2/check", data={"text": text, "language": LANG_CODE[lang]}, timeout=timeout)
     except Exception as e:
-        _warn("languagetool check failed: %s", e)
+        if quiet:
+            _warn("languagetool check failed (%s)", type(e).__name__)
+        else:
+            _warn("languagetool check failed: %s", e)
         return None
     if r.status_code != 200:
-        _warn("languagetool HTTP %s: %s", r.status_code, r.text[:200])
+        if quiet:
+            _warn("languagetool HTTP %s", r.status_code)
+        else:
+            _warn("languagetool HTTP %s: %s", r.status_code, r.text[:200])
         return None
     return r.json().get("matches", [])
 
@@ -514,15 +522,16 @@ def explain(lang, m):
 MAX_ROUNDS = 2   # a second pass may fix what the first fix uncovered ("He go" -> "He goes" ... ); never more
 
 
-def correct(lang, text):
+def correct(lang, text, quiet=False):
     """LanguageTool correction of one learner sentence.
+    quiet=True (private text): nothing of the sentence reaches the log (rule ids, counts and times only).
     Returns {"fix", "fix_ko", "changes": [{"from", "to", "rule", "category", "ko"}]} or None.
     None also when the corrected sentence would still be flagged by LanguageTool itself after MAX_ROUNDS passes: a
     dubious fix is worse than none (the AI, when available, then checks the original sentence)."""
     if lang not in LANG_CODE or not text.strip():
         return None
     t0 = time.time()
-    matches = check(lang, text)
+    matches = check(lang, text, quiet=quiet)
     if matches is None:
         return None
     cur, changes, raw_n = text, [], len(matches)
@@ -531,7 +540,10 @@ def correct(lang, text):
         if not kept:
             break
         if rnd == MAX_ROUNDS:   # still flagged after the fixes: do not offer a half-fixed sentence
-            _info("languagetool %s: fixed sentence %r is still flagged -> no fix %.2fs", lang, cur, time.time() - t0)
+            if quiet:
+                _info("languagetool %s: fixed sentence is still flagged -> no fix %.2fs", lang, time.time() - t0)
+            else:
+                _info("languagetool %s: fixed sentence %r is still flagged -> no fix %.2fs", lang, cur, time.time() - t0)
             return None
         fixed, chosen = apply(cur, kept)
         if fixed.strip() == cur.strip():
@@ -541,7 +553,7 @@ def correct(lang, text):
             changes.append({"from": cur[m["offset"]:m["offset"] + m["length"]], "to": m["_rep"], "rule": rule.get("id", ""),
                             "category": (rule.get("category") or {}).get("id", ""), "ko": explain(lang, m)})
         cur = fixed
-        matches = check(lang, cur)
+        matches = check(lang, cur, quiet=quiet)
         if matches is None:   # LanguageTool went away between the calls: keep what we have
             break
     if not changes or cur.strip() == text.strip():
