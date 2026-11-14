@@ -325,6 +325,19 @@ func _test_japanese_cards() -> void:
 	var v: StatsView = made[1]
 	ok(v.lang == "ja" and _any_text(v, "약한 소리 TOP 3") and _any_text(v, "표본이 더 쌓이면") and _any_text(v, "일본어 약한 소리"), "empty ja records: weak-sound card with its empty-state text (Japanese wording)")
 	ok(_any_text(v, "미션 별점") and _any_text(v, "아직 한 미션이 없어요") and _find_button(v, "집중 연습") == null, "empty ja records: mission card says no mission yet, no practice button")
+	ok(_any_text(v, "아직 기록이 없어요. 레슨"), "empty ja records: the page-level 'no record yet' line is shown")
+	holder.queue_free()
+	await _frames(2)
+	# --- 일본어 미션 기록만 있을 때는 "아직 기록이 없어요" 안내가 없다 (StudyLog.has_data('ja'))
+	_load_dataset("empty")
+	StudyLog.add_mission("ja", "ja_konbini", 2, 3)
+	StudyLog.flush()
+	Store.set_lang("ja")
+	made = await _make(SIZES[0])
+	holder = made[0]
+	v = made[1]
+	ok(StudyLog.has_data("ja") and not _any_text(v, "아직 기록이 없어요. 레슨"), "only a Japanese mission record: no page-level 'no record yet' line")
+	ok(_any_text(v, "편의점 ★★☆"), "...and the mission chip is shown")
 	holder.queue_free()
 	await _frames(2)
 	# --- 기록: 일본어 소리 칸 + 미션

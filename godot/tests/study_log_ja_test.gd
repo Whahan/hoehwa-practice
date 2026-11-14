@@ -29,6 +29,7 @@ func _ready() -> void:
 	StudyLog.today_override = Plan.days_from_civil(2026, 11, 14)
 	_cleanup()
 	_test_score_ja()
+	_test_has_data_missions()
 	_test_obs()
 	_test_bad_obs()
 	_test_persist()
@@ -95,6 +96,31 @@ func row_of(lang: String, p: String) -> Dictionary:
 		if r["p"] == p:
 			return r
 	return {}
+
+
+# ---------------------------------------------------------------- has_data: Japanese missions count (v1.7.0 S)
+
+func _test_has_data_missions() -> void:
+	print("[has_data with mission records only]")
+	_fresh()
+	ok(not StudyLog.has_data("ja") and not StudyLog.has_data("en"), "empty log: has_data false for both languages")
+	StudyLog.add_mission("ja", "ja_konbini", 2, 3)
+	ok(StudyLog.has_data("ja"), "only a Japanese mission record -> has_data('ja') is true")
+	ok(StudyLog.has_data("en"), "English behaviour is unchanged: any mission record keeps has_data('en') true")
+	_fresh()
+	StudyLog.add_mission("en", "cafe_order", 1, 1)
+	ok(StudyLog.has_data("en") and not StudyLog.has_data("ja"), "only an English mission record -> has_data('ja') stays false")
+	StudyLog.add_mission("en", "ja", 0, 0) # an id that merely equals the prefix word, not 'ja_...'
+	ok(not StudyLog.has_data("ja"), "an id without the 'ja_' prefix is not a Japanese mission")
+	_fresh()
+	StudyLog.add_mission("ja", "ja_unlisted_new_mission", 0, 0)
+	ok(StudyLog.has_data("ja"), "any ja_ id counts (even one this version has no name for, 0 stars)")
+	ok(not StudyLog.has_data("xx") and not StudyLog.has_data(""), "an unknown language is false")
+	# 저장하고 다시 읽어도 같다
+	StudyLog.flush()
+	StudyLog.load_from_disk()
+	ok(StudyLog.has_data("ja"), "after saving and reading the file again: still true")
+	_fresh()
 
 
 # ---------------------------------------------------------------- add_score_any (ja)

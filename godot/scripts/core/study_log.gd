@@ -31,6 +31,7 @@ const MAX_COUNT := 1000000
 const GOAL_MAX_MIN := 240
 const GOAL_DEFAULT_MIN := 10
 const LANGS := ["en", "ja"]
+const MISSION_JA_PREFIX := "ja_" ## Japanese mission ids (backend missions.json: ja_konbini ...); English ids have no prefix
 const KINDS := ["lessons", "talks", "missions", "reviews", "shadow", "dictation", "drill", "newcards"]
 const VIEWS := ["today", "lesson", "talk", "reading", "review", "roadmap", "practice", "stats"]
 const KNOWN_KEYS := ["v", "saved", "days", "phon", "freeze", "missions", "kana", "path", "speed", "badges", "kana_course"]
@@ -1342,4 +1343,8 @@ static func has_data(lang: String) -> bool:
 				return true
 	if not ((_data["phon"] as Dictionary)[lang] as Dictionary).is_empty():
 		return true
-	return lang == "en" and not (_data["missions"] as Dictionary).is_empty()
+	# Missions are stored by id, not by language: Japanese mission ids start with "ja_". English keeps "any mission record".
+	for id in (_data["missions"] as Dictionary).keys():
+		if lang == "en" or str(id).begins_with(MISSION_JA_PREFIX):
+			return true
+	return false
