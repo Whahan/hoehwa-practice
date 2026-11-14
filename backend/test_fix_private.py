@@ -673,6 +673,22 @@ def test_files():
     check("nothing printed with the canary during the whole run", not found("\n".join(PRINTED)))
 
 
+# ------------------------------------------------------------------------------------------------ 7b. /health tells the diary app that this server knows "private"
+def test_health_flag():
+    print("== 6b. GET /health has fix_private: true (the diary app sends no sentence to a server without it)")
+    r = CLIENT.get("/health")
+    h = r.json() if r.status_code == 200 else {}
+    check("/health -> 200 and fix_private is the boolean true", r.status_code == 200 and h.get("fix_private") is True, h.get("fix_private"))
+    old_keys = ("ok", "stt", "tts", "tts_device", "llm", "llm_model", "llm_provider", "llm_state", "score", "phoneme", "tatoeba", "grammar",
+                "llm_fallback", "song", "song_v", "song_identify")
+    check("/health still has every key it had before", all(k in h for k in old_keys), [k for k in old_keys if k not in h])
+    check("/health has exactly one new key: fix_private", sorted(set(h) - set(old_keys)) == ["fix_private"], sorted(set(h) - set(old_keys)))
+    # the checker must fail on a 1.6.x-like answer (no such key / not a real true)
+    old_answer = {k: h.get(k) for k in old_keys}
+    selfcheck("a /health without fix_private is not accepted", old_answer.get("fix_private") is not True, old_answer.get("fix_private"))
+    selfcheck("a /health with fix_private 'true' (string) or 1 is not accepted", not any(v is True for v in ("true", 1)))
+
+
 # ------------------------------------------------------------------------------------------------ 8. real LanguageTool JVM
 def test_live_lt():
     print("== 7. real LanguageTool process: its own log (languagetool.log) after private calls")
@@ -741,6 +757,7 @@ if __name__ == "__main__":
     test_failures()
     test_grammar_quiet()
     test_odd_inputs()
+    test_health_flag()
     lt_ok = test_live_lt()
     test_files()
     bad = [n for n, ok in results if not ok]
