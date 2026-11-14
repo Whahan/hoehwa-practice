@@ -1,6 +1,6 @@
 class_name BadgeDefs
 extends RefCounted
-## 업적 배지 23개의 정의(docs/v160_fun_design.md §5.5). 이름·설명·조건·목표 숫자는 전부 이 파일 한 곳에 있다.
+## 업적 배지 25개의 정의(docs/v160_fun_design.md §5.5 의 23개 + v1.7.0 일기 배지 2개, docs/v170_design.md Q6). 이름·설명·조건·목표 숫자는 전부 이 파일 한 곳에 있다.
 ## 판정은 BadgeRules(스냅샷 사전 하나만 읽는 순수 계산), 저장은 StudyLog.badges(받으면 영구), 평가는 BadgeEngine.
 ## 항목: {id, name, desc, cat, measure, target, glyph}. measure = 스냅샷 키(BadgeRules.MEASURES), glyph = GlyphIcon 도형 이름.
 ## 목표 숫자는 출시 뒤 조정할 수 있는 상수다(speed_score_500 · streak_30 · time_10h 등).
@@ -16,7 +16,7 @@ static var _all: Array = []
 static var _pair_letters: Array = []
 
 
-## 23개, 표 순서. 복사본이라 고쳐도 원본은 그대로.
+## 25개, 표 순서. 복사본이라 고쳐도 원본은 그대로.
 static func all() -> Array:
 	_build()
 	return _all.duplicate(true)
@@ -86,7 +86,7 @@ static func _build() -> void:
 		_d("time_1h", "공부 1시간", "공부한 시간이 모두 합쳐 1시간이 되었어요.", "habit", "study_sec_total", 3600, "check"),
 		_d("time_10h", "공부 10시간", "공부한 시간이 모두 합쳐 10시간이 되었어요.", "habit", "study_sec_total", 36000, "check"),
 		_d("mission_star3", "미션 별 3개", "미션 하나에서 별 3개를 받았어요.", "speak", "mission_star3", 1, "star"),
-		_d("mission_all_star3", "미션 8개 모두 별 3개", "미션 8개 모두에서 별 3개를 받았어요.", "speak", "mission_all_star3", 8, "star"),
+		_d("mission_all_star3", "미션 8개 모두 별 3개", "한 언어의 미션 8개 모두에서 별 3개를 받았어요.", "speak", "mission_all_star3", 8, "star"),
 		_d("pron_80", "발음 80점", "하루 평균 발음 점수가 80점 이상이었어요. (그날 3번 이상 채점)", "speak", "pron_day_best", 80, "record"),
 		_d("song_first", "첫 가사 등록", "가사를 처음으로 등록했어요.", "song", "song_lyrics", 1, "play"),
 		_d("song_done", "가사 한 곡 다 외움", "가사 한 곡(4줄 이상)을 줄마다 다 외웠어요.", "song", "song_done", 1, "play"),
@@ -97,4 +97,6 @@ static func _build() -> void:
 		_d("speed_first", "첫 스피드 퀴즈", "60초 스피드 퀴즈를 처음으로 풀었어요.", "speed", "speed_plays", 1, "play"),
 		_d("speed_combo_10", "콤보 10", "스피드 퀴즈에서 10개를 연속으로 맞혔어요.", "speed", "speed_combo", 10, "sparkle"),
 		_d("speed_score_500", "스피드 500점", "스피드 퀴즈에서 500점을 넘겼어요.", "speed", "speed_score", 500, "star"),
+		_d("diary_first", "첫 일기 고침", "한 줄 일기를 처음으로 고쳐 봤어요.", "learn", "diary_fixed", 1, "check"),
+		_d("diary_7", "일기 7일", "서로 다른 7일에 일기를 썼어요.", "learn", "diary_days", 7, "sparkle"),
 	]

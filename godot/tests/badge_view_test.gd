@@ -20,7 +20,7 @@ var _saved_on_seen: Callable
 const HEX_COLOR := "Color(" + "\"" + "#"
 const NET_WORDS := ["HTTP" + "Request", "Ap" + "i.", "Rou" + "te.", "OS.shell" + "_open", "OS.request" + "_permission"]
 
-## §5.5 표 순서의 23개: [id, 이름, 분류, 목표]
+## 표 순서의 25개(§5.5 의 23개 + v1.7.0 일기 배지 2개): [id, 이름, 분류, 목표]. _test_fixture_matches_defs 가 BadgeDefs 와 id·이름·분류를 대조한다
 const DEFS := [
 	["first_lesson", "첫 레슨", "learn", 1], ["lessons_10", "레슨 10번", "learn", 10], ["lessons_50", "레슨 50번", "learn", 50],
 	["first_talk", "첫 원어민 대화", "speak", 1], ["cards_20", "복습 카드 20장", "learn", 20], ["reviews_100", "복습 100번", "learn", 100],
@@ -30,6 +30,7 @@ const DEFS := [
 	["song_first", "첫 가사 등록", "song", 1], ["song_done", "가사 한 곡 다 외움", "song", 1],
 	["kana_hira", "히라가나 청음 마스터", "kana", 46], ["kana_kata", "가타카나 청음 마스터", "kana", 46], ["kana_all", "가나 전부 숙련", "kana", 208], ["kana_pairs", "헷갈리는 글자 극복", "kana", 20],
 	["speed_first", "첫 스피드 퀴즈", "speed", 1], ["speed_combo_10", "콤보 10", "speed", 10], ["speed_score_500", "스피드 500점", "speed", 500],
+	["diary_first", "첫 일기 고침", "learn", 1], ["diary_7", "일기 7일", "learn", 7],
 ]
 
 
@@ -82,6 +83,7 @@ func _ready() -> void:
 	await _frames(2)
 
 	_selfchecks()
+	_test_fixture_matches_defs()
 	await _test_grid_and_filter()
 	await _test_sheet()
 	await _test_new_dots()
@@ -101,7 +103,7 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- fixtures / helpers
 
-## 23개 가짜 배지: 앞 9개를 받은 것으로(날짜 11-02 ...), 새 배지(is_new)는 new_ids 에 든 것.
+## 25개 가짜 배지: 앞 9개를 받은 것으로(날짜 11-02 ...), 새 배지(is_new)는 new_ids 에 든 것.
 func _make_list(got_n: int, new_ids: Array = []) -> Array:
 	var out: Array = []
 	var i := 0
@@ -209,12 +211,37 @@ func _selfchecks() -> void:
 	add_child(plain)
 	fails(not _has_dot(plain), "dot checker finds no dot on a tile that is not new")
 	plain.queue_free()
-	# 가짜 목록 자체 점검: 23개, 분류별 개수가 설계(§5.5)와 같다
+	# 가짜 목록 자체 점검: 25개, 분류별 개수가 표(§5.5 + 일기 2개)와 같다
 	var l: Array = _make_list(9)
 	var cnt := {}
 	for it in l:
 		cnt[it["cat"]] = int(cnt.get(it["cat"], 0)) + 1
-	ok(l.size() == 23 and cnt.get("speed", 0) == 3 and cnt.get("habit", 0) == 5 and cnt.get("learn", 0) == 5 and cnt.get("kana", 0) == 4 and cnt.get("song", 0) == 2 and cnt.get("speak", 0) == 4, "fixture: 23 badges, categories 5/5/4/2/4/3")
+	ok(l.size() == 25 and cnt.get("speed", 0) == 3 and cnt.get("habit", 0) == 5 and cnt.get("learn", 0) == 7 and cnt.get("kana", 0) == 4 and cnt.get("song", 0) == 2 and cnt.get("speak", 0) == 4, "fixture: 25 badges, categories habit 5 / learn 7 / speak 4 / kana 4 / song 2 / speed 3")
+
+
+## 가짜 목록(DEFS)이 실제 BadgeDefs 와 같은 id · 이름 · 분류 순서인가(이름 줄바꿈 시험이 진짜 이름을 보게). 틀린 항목을 넣으면 걸리는 selfcheck 포함.
+func _fixture_diff(defs: Array, fixture: Array) -> String:
+	if defs.size() != fixture.size():
+		return "size %d != %d" % [defs.size(), fixture.size()]
+	for i in fixture.size():
+		var d: Dictionary = defs[i]
+		var f: Array = fixture[i]
+		if d["id"] != f[0] or d["name"] != f[1] or d["cat"] != f[2]:
+			return "row %d (%s) differs" % [i, f[0]]
+	return ""
+
+
+func _test_fixture_matches_defs() -> void:
+	print("[fixture == BadgeDefs]")
+	var defs: Array = BadgeDefs.all()
+	var why: String = _fixture_diff(defs, DEFS)
+	ok(why == "", "the 25 fixture rows have the same id / name / category as BadgeDefs.all() %s" % why)
+	var wrong: Array = DEFS.duplicate(true)
+	(wrong[24] as Array)[1] = "일기 8일"
+	fails(_fixture_diff(defs, wrong) != "", "fixture check notices a renamed diary badge")
+	var short: Array = DEFS.duplicate(true)
+	short.pop_back()
+	fails(_fixture_diff(defs, short) != "", "fixture check notices a missing last row")
 
 
 # ---------------------------------------------------------------- B2-2 격자와 필터
@@ -227,10 +254,11 @@ func _test_grid_and_filter() -> void:
 	var holder: Control = made[0]
 	var v: BadgeView = made[1]
 	var tiles: Array = v.find_children("*", "Button", true, false).filter(func(b: Node) -> bool: return (b as Button).has_meta("id"))
-	ok(tiles.size() == 23, "23 tiles for 23 badges (got %d)" % tiles.size())
-	ok(v.visible_ids().size() == 23 and v.visible_ids()[0] == "first_lesson" and v.visible_ids()[22] == "speed_score_500", "visible_ids in table order")
-	ok(v.total_count() == 23 and v.got_count() == 9, "9 of 23 received")
-	ok(_any_text(v, "23개 중 9개 받았어요"), "summary line '23개 중 9개 받았어요'")
+	ok(tiles.size() == 25, "25 tiles for 25 badges (got %d)" % tiles.size())
+	ok(v.visible_ids().size() == 25 and v.visible_ids()[0] == "first_lesson" and v.visible_ids()[22] == "speed_score_500" and v.visible_ids()[23] == "diary_first" and v.visible_ids()[24] == "diary_7", "visible_ids in table order (the two diary badges last)")
+	ok(v.total_count() == 25 and v.got_count() == 9, "9 of 25 received")
+	ok(_any_text(v, "25개 중 9개 받았어요"), "summary line '25개 중 9개 받았어요'")
+	ok(v.tile("diary_first") != null and v.tile("diary_7") != null and _any_text(v.tile("diary_7"), "일기 7일") and _any_text(v.tile("diary_7"), "3/7") and _any_text(v.tile("diary_first"), "0/1"), "the two diary tiles show their name and progress (0/1, 3/7)")
 	ok(v.tile("first_lesson") != null and v.tile("nope") == null, "tile(id) finds a tile, an unknown id gives null")
 	var got_tile: Control = v.tile("first_lesson")
 	var open_tile: Control = v.tile("kana_hira")
@@ -254,10 +282,15 @@ func _test_grid_and_filter() -> void:
 	ok(v.visible_ids().size() == 4, "filter 'kana' shows 4")
 	v.set_filter("")
 	await _frames(3)
-	ok(v.visible_ids().size() == 23, "back to '전체' shows 23 again")
+	ok(v.visible_ids().size() == 25, "back to '전체' shows 25 again")
 	v.set_filter("zz")
 	await _frames(3)
-	ok(v.filter() == "" and v.visible_ids().size() == 23, "unknown filter counts as all")
+	ok(v.filter() == "" and v.visible_ids().size() == 25, "unknown filter counts as all")
+	v.set_filter("learn")
+	await _frames(3)
+	ok(v.visible_ids().size() == 7 and v.visible_ids().has("diary_first") and v.visible_ids().has("diary_7"), "filter 'learn' shows 7 (5 + the two diary badges)")
+	v.set_filter("")
+	await _frames(3)
 	# 칩을 눌러서도 된다
 	var speed_chip: Button = null
 	for b in v.chips():
@@ -375,7 +408,7 @@ func _test_new_dots() -> void:
 	_fake = _make_list(2, ["first_lesson"])
 	v.refresh()
 	await _frames(4)
-	ok(is_instance_valid(v) and v.visible_ids().size() == 5 or v.visible_ids().size() == 23, "refresh() with an empty on_seen callable is harmless")
+	ok(is_instance_valid(v) and v.visible_ids().size() == 5 or v.visible_ids().size() == 25, "refresh() with an empty on_seen callable is harmless")
 	holder.queue_free()
 	await _frames(2)
 
@@ -525,7 +558,7 @@ func _test_time_tile_wrap() -> void:
 		await _frames(2)
 
 
-## 1.6.1 U1: 배지 이름도 낱말(공백) 중간에서 끊기지 않는다 — 23개 전부, 폭 412·360, 현재 글꼴 배율. 타일 이름과 상세 시트 제목.
+## 1.6.1 U1: 배지 이름도 낱말(공백) 중간에서 끊기지 않는다 — 25개 전부(v1.7.0: 일기 배지 2개 포함), 폭 412·360, 현재 글꼴 배율. 타일 이름과 상세 시트 제목.
 func _test_name_wrap() -> void:
 	print("[badge names are cut at spaces only]")
 	var old_holder := Control.new()
@@ -572,7 +605,7 @@ func _test_name_wrap() -> void:
 				await _frames(2)
 		(made[0] as Control).queue_free()
 		await _frames(2)
-	ok(checked == 46 and title_checked == 46, "checked 23 tile names and 23 sheet titles at 412 and 360 px (scale %s): %d / %d" % [str(_scale), checked, title_checked])
+	ok(checked == 50 and title_checked == 50, "checked 25 tile names and 25 sheet titles at 412 and 360 px (scale %s): %d / %d" % [str(_scale), checked, title_checked])
 	ok(bad_all.is_empty(), "no badge name is cut inside a word, wider than its box, or smaller than 12 px %s" % str(bad_all.slice(0, 3)))
 
 
@@ -701,7 +734,7 @@ func _test_progress_text() -> void:
 	await _frames(1)
 
 
-## 실제 BadgeEngine.ui_list 를 provider 로 꽂는다(가짜 스냅샷: 공부 시간만 바꾼다). 23개 타일 어디에도 초 원본이 없어야 한다.
+## 실제 BadgeEngine.ui_list 를 provider 로 꽂는다(가짜 스냅샷: 공부 시간만 바꾼다). 25개 타일 어디에도 초 원본이 없어야 한다.
 func _test_real_engine() -> void:
 	print("[real BadgeEngine.ui_list]")
 	var old_path: String = StudyLog.path
@@ -725,7 +758,7 @@ func _test_real_engine() -> void:
 			for tx in _texts(t):
 				if rx.search(str(tx)) != null:
 					raw.append(str(tx))
-		ok(tiles.size() == 23, "real ui_list (study %d s): 23 tiles (%d)" % [secs, tiles.size()])
+		ok(tiles.size() == 25, "real ui_list (study %d s): 25 tiles (%d)" % [secs, tiles.size()])
 		ok(raw.is_empty(), "real ui_list (study %d s): no raw 4+ digit number on any tile %s" % [secs, str(raw.slice(0, 3))])
 		var want1: String = "%s / 1시간" % FunParts.duration_text(mini(secs, 3600))
 		var want10: String = "%s / 10시간" % FunParts.duration_text(secs)

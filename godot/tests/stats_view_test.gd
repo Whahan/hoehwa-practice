@@ -1,6 +1,7 @@
 extends Node
 ## "기록" 탭(StatsView), GoalCard, MiniChart 레이아웃·내용 테스트 (412x915 폰 / 1280x800 PC × 빈 기록 / 풍부한 기록).
 ##   godot --headless --path <project> res://tests/stats_view_test.tscn
+## v1.7.0: 일본어 탭에도 약한 소리 카드(일본어 소리 칸)와 미션 카드(일본어 미션 8개)가 있다(_test_japanese_cards).
 ## 종료 코드 0 = 전부 통과. 마지막 줄: "== stats_view result: N passed, 0 failed =="
 ## 실제 studylog.json / progress.json / prefs.json 은 읽지도 쓰지도 않는다:
 ## Store.prefs_path / Store.progress_path / StudyLog.path 를 user://t1_test_* 로 바꿨다가 끝나면 원래 값으로 되돌린다.
@@ -34,6 +35,8 @@ func _ready() -> void:
 		for sz in SIZES:
 			await _combo(dataset, sz)
 	await _test_switching()
+	await _test_japanese_cards()
+	_test_pure_helpers()
 	await _test_report_once()
 	await _test_goal_card()
 	await _test_chart_robustness()
@@ -245,7 +248,7 @@ func _test_switching() -> void:
 	v.set_lang("ja")
 	await _frames(2)
 	ok(v.lang == "ja" and Store.lang() == "ja", "set_lang('ja') switches the page and the app language")
-	ok(not _any_text(v, "약한 소리 TOP 3") and _any_text(v, "영어에서만"), "Japanese page: no weak-sound / mission cards, a note instead")
+	ok(_any_text(v, "약한 소리 TOP 3") and _any_text(v, "미션 별점") and not _any_text(v, "영어에서만"), "Japanese page: the weak-sound and mission cards are there (v1.7.0), no 'English only' note")
 	ok(_charts(v).size() == 3, "Japanese page: 3 charts from the ja records")
 	var rep_ja: Control = null
 	for ch in v._scroll.content.get_children():
@@ -272,6 +275,172 @@ func _test_switching() -> void:
 		ok(_nav.size() == 1 and _nav[0][0] == "practice" and _nav[0][1] == "en", "pressing it asks main to open the practice tab (%s)" % str(_nav))
 	holder.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- v1.7.0 S-5: Japanese weak sounds + Japanese mission chips
+
+func _chip_texts(node: Node) -> Array:
+	var out: Array = []
+	for n in _walk(node):
+		if n is PanelContainer and (n as PanelContainer).tooltip_text != "":
+			out.append([_first_label_text(n), (n as PanelContainer).tooltip_text])
+	return out
+
+
+func _first_label_text(node: Node) -> String:
+	for n in _walk(node):
+		if n is Label:
+			return (n as Label).text
+	return ""
+
+
+## 화면 전체 글(Label / Button / 툴팁)에서 연속 5자리 이상 숫자를 찾는다(C-15). 찾은 글 목록.
+func _raw_numbers(node: Node) -> Array:
+	var rx := RegEx.new()
+	rx.compile("[0-9]{5,}")
+	var out: Array = []
+	for t in _texts(node):
+		if rx.search(str(t)) != null:
+			out.append(str(t))
+	for n in _walk(node):
+		if n is Control and (n as Control).tooltip_text != "" and rx.search((n as Control).tooltip_text) != null:
+			out.append((n as Control).tooltip_text)
+	return out
+
+
+func _find_button(node: Node, text: String) -> Button:
+	for n in _walk(node):
+		if n is Button and (n as Button).text == text:
+			return n
+	return null
+
+
+func _test_japanese_cards() -> void:
+	print("[v1.7.0 Japanese weak sounds + mission chips]")
+	# --- 기록이 없을 때: 두 카드는 있고 빈 상태 글만
+	_load_dataset("empty")
+	Store.set_lang("ja")
+	var made: Array = await _make(SIZES[0])
+	var holder: Control = made[0]
+	var v: StatsView = made[1]
+	ok(v.lang == "ja" and _any_text(v, "약한 소리 TOP 3") and _any_text(v, "표본이 더 쌓이면") and _any_text(v, "일본어 약한 소리"), "empty ja records: weak-sound card with its empty-state text (Japanese wording)")
+	ok(_any_text(v, "미션 별점") and _any_text(v, "아직 한 미션이 없어요") and _find_button(v, "집중 연습") == null, "empty ja records: mission card says no mission yet, no practice button")
+	ok(_any_text(v, "아직 기록이 없어요. 레슨"), "empty ja records: the page-level 'no record yet' line is shown")
+	holder.queue_free()
+	await _frames(2)
+	# --- 일본어 미션 기록만 있을 때는 "아직 기록이 없어요" 안내가 없다 (StudyLog.has_data('ja'))
+	_load_dataset("empty")
+	StudyLog.add_mission("ja", "ja_konbini", 2, 3)
+	StudyLog.flush()
+	Store.set_lang("ja")
+	made = await _make(SIZES[0])
+	holder = made[0]
+	v = made[1]
+	ok(StudyLog.has_data("ja") and not _any_text(v, "아직 기록이 없어요. 레슨"), "only a Japanese mission record: no page-level 'no record yet' line")
+	ok(_any_text(v, "편의점 ★★☆"), "...and the mission chip is shown")
+	holder.queue_free()
+	await _frames(2)
+	# --- 기록: 일본어 소리 칸 + 미션
+	_load_dataset("empty")
+	for i in 10: # long vowel: 4 wrong of 10 (40%); heard "あ" most
+		StudyLog.add_phon_obs("ja", "j_long", i >= 4, "あ" if i < 4 else "")
+	for i in 6: # sokuon: 2 wrong of 6 (33%)
+		StudyLog.add_phon_obs("ja", "j_sokuon", i >= 2)
+	for i in 8: # voice: 1 wrong of 8 (13%)
+		StudyLog.add_phon_obs("ja", "j_voice", i != 0)
+	for i in 3: # too few samples (3 < 5): not listed
+		StudyLog.add_phon_obs("ja", "j_tsu", false)
+	StudyLog.add_mission("ja", "ja_konbini", 3, 5)
+	StudyLog.add_mission("ja", "ja_konbini", 3, 5)
+	StudyLog.add_mission("ja", "ja_ramen", 2, 3)
+	StudyLog.add_mission("ja", "ja_self_intro", 1, 1)
+	StudyLog.add_mission("ja", "ja_new_mission", 3, 1) # 목록에 없지만 일본어 접두어
+	StudyLog.add_mission("en", "cafe_order", 3, 4)
+	StudyLog.add_mission("en", "other_new_mission", 2, 1) # 목록에 없고 접두어 없음 = 영어 쪽
+	StudyLog.flush()
+	Store.set_lang("ja")
+	made = await _make(SIZES[0])
+	holder = made[0]
+	v = made[1]
+	var long_label: String = JaSounds.label_of("j_long")
+	ok(long_label.contains("장음"), "(precondition) JaSounds.label_of('j_long') = '%s'" % long_label)
+	ok(_any_text(v, long_label + " 틀림 40%") and _any_text(v, "로 들림"), "ja weak chip: '%s 틀림 40%%' with the heard hint" % long_label)
+	ok(_any_text(v, JaSounds.label_of("j_sokuon") + " 틀림 33%") and _any_text(v, JaSounds.label_of("j_voice") + " 틀림 13%"), "ja weak chips: 촉음 33%, 청탁 13% (top 3 by wrong rate)")
+	ok(not _any_text(v, JaSounds.label_of("j_tsu")), "a sound with fewer than 5 samples is not listed")
+	ok(not _any_text(v, "/j_long/") and not _any_text(v, "j_long"), "the Japanese chips use the label, never the raw id or the English /x/ form")
+	ok(_any_text(v, "편의점 ★★★") and _any_text(v, "라멘집 ★★☆") and _any_text(v, "자기소개 ★☆☆"), "ja mission chips: 편의점 ★★★, 라멘집 ★★☆, 자기소개 ★☆☆")
+	ok(_any_text(v, "ja_new_mission ★★★"), "an unlisted ja_ id is added after the 8 and shown by its id")
+	ok(not _any_text(v, "카페 주문") and not _any_text(v, "other_new_mission"), "ja page: no English mission chips (listed or unlisted)")
+	var tips: Array = _chip_texts(v)
+	var konbini_tip := false
+	for t in tips:
+		if str(t[0]).begins_with("편의점") and str(t[1]) == "2번 도전":
+			konbini_tip = true
+	ok(konbini_tip, "the konbini chip says '2번 도전' (tooltip)")
+	# 순서: 정해진 순서(편의점, 라멘집, ..., 자기소개) 다음에 이름 없는 id
+	var order: Array = []
+	for t in tips:
+		if str(t[1]).ends_with("도전"):
+			order.append(str(t[0]).get_slice(" ", 0))
+	ok(order == ["편의점", "라멘집", "자기소개", "ja_new_mission"], "ja chips follow MISSION_ORDER_JA, then the unlisted id: %s" % str(order))
+	ok(_raw_numbers(v).is_empty(), "no 5+ digit number anywhere on the Japanese page %s" % str(_raw_numbers(v).slice(0, 3)))
+	await _layout_checks(v, SIZES[0], "ja data 412")
+	# 집중 연습: 가장 틀린 비율이 높은 소리(j_long)로
+	_nav.clear()
+	PracticeView.pending = {}
+	var b: Button = _find_button(v, "집중 연습")
+	ok(b != null, "ja page: the practice button exists")
+	if b != null:
+		print("press: 집중 연습 (ja)")
+		b.pressed.emit()
+		ok(PracticeView.pending == {"kind": "phoneme", "p": "j_long"}, "pressing it sets PracticeView.pending = {kind phoneme, p j_long} (%s)" % str(PracticeView.pending))
+		ok(_nav.size() == 1 and _nav[0][0] == "practice" and _nav[0][1] == "ja", "...and asks main to open the practice tab for ja (%s)" % str(_nav))
+	PracticeView.pending = {}
+	# 영어 탭: 영어 미션만, 일본어 칩 없음. 영어 약한 소리는 영어 기록이 없으니 빈 상태
+	v.set_lang("en")
+	await _frames(3)
+	ok(_any_text(v, "카페 주문 ★★★") and _any_text(v, "other_new_mission ★★☆"), "en tab: English chips (and an unlisted plain id)")
+	ok(not _any_text(v, "편의점") and not _any_text(v, "라멘집") and not _any_text(v, "ja_new_mission") and not _any_text(v, "자기소개"), "en tab: no Japanese mission chips")
+	ok(_any_text(v, "표본이 더 쌓이면") and not _any_text(v, "틀림") and _find_button(v, "집중 연습") == null, "en tab with no English sound records: empty state, no Japanese chips, no practice button")
+	# 다시 일본어 -> 소리 카드가 되돌아온다
+	v.set_lang("ja")
+	await _frames(3)
+	ok(_any_text(v, long_label + " 틀림 40%") and _any_text(v, "편의점 ★★★"), "switching back to ja shows the Japanese cards again")
+	holder.queue_free()
+	await _frames(2)
+	Store.set_lang("en")
+
+
+func _test_pure_helpers() -> void:
+	print("[v1.7.0 stats helpers: chip text / ids / names]")
+	ok(StatsView.weak_chip_text("ja", "j_long", 0.4) == JaSounds.label_of("j_long") + " 틀림 40%", "weak_chip_text(ja) = label + ' 틀림 n%'")
+	ok(StatsView.weak_chip_text("en", "θ", 0.4, " · s로 들림") == "/θ/ 40% · s로 들림", "weak_chip_text(en) keeps the English '/θ/ 40%' form")
+	ok(StatsView.weak_chip_text("ja", "j_nope", 0.5) == "j_nope 틀림 50%", "an unknown sound id is shown as its id")
+	var wild: Array = [-1.0, 5.0, NAN, INF, 1.0e99]
+	var wild_ok := true
+	for r in wild:
+		var t: String = StatsView.weak_chip_text("ja", "j_long", r)
+		var m := RegEx.create_from_string("틀림 ([0-9]+)%").search(t)
+		wild_ok = wild_ok and m != null and int(m.get_string(1)) >= 0 and int(m.get_string(1)) <= 100
+	ok(wild_ok, "a rate outside 0..1 / NaN / INF still shows a percent between 0 and 100")
+	ok(StatsView.plays_text(2) == "2번 도전" and StatsView.plays_text(999) == "999번 도전" and StatsView.plays_text(1000) == "999번 넘게 도전" and StatsView.plays_text(1000000) == "999번 넘게 도전" and StatsView.plays_text(-5) == "0번 도전", "plays_text: 2 / 999 as they are, 1000+ -> '999번 넘게 도전' (never 5 digits), negative -> 0")
+	# 검사기: 5자리 숫자 검사가 실제로 걸린다
+	var rx := RegEx.new()
+	rx.compile("[0-9]{5,}")
+	var fake := Label.new()
+	fake.text = "미션 12345번 도전"
+	add_child(fake)
+	var found: bool = not _raw_numbers(fake).is_empty()
+	print("selfcheck %s the raw-number checker on a fake label with 12345" % ("FAIL-as-expected" if found else "UNEXPECTED-PASS"))
+	ok(found and rx.search("99999") != null and rx.search("9999") == null, "the 5+ digit checker flags 12345 / 99999 but not 9999")
+	fake.queue_free()
+	var en_ids: Array = StatsView.mission_ids_for("en", ["cafe_order", "ja_konbini", "ja_unlisted", "plain_unlisted"])
+	var ja_ids: Array = StatsView.mission_ids_for("ja", ["cafe_order", "ja_konbini", "ja_unlisted", "plain_unlisted"])
+	ok(en_ids == StatsView.MISSION_ORDER + ["plain_unlisted"], "mission_ids_for(en): the 8 English ids + an unlisted plain id; no ja_ ids %s" % str(en_ids))
+	ok(ja_ids == StatsView.MISSION_ORDER_JA + ["ja_unlisted"], "mission_ids_for(ja): the 8 Japanese ids + an unlisted ja_ id; no English ids %s" % str(ja_ids))
+	ok(StatsView.mission_ids_for("xx", []) == StatsView.MISSION_ORDER, "an unknown language falls back to the English list")
+	ok(StatsView.mission_name("ja", "ja_konbini") == "편의점" and StatsView.mission_name("en", "cafe_order") == "카페 주문" and StatsView.mission_name("ja", "ja_zzz") == "ja_zzz" and StatsView.mission_name("en", "zzz") == "zzz", "mission_name: Japanese / English names, an id without a name is shown as the id")
+	ok(StatsView.mission_name("en", "ja_konbini") == "ja_konbini", "an English tab does not translate a Japanese id")
 
 
 # ---------------------------------------------------------------- report card: the "no record yet" line appears once

@@ -179,7 +179,7 @@ func _test_startup_evaluation() -> void:
 	var btn_text := ""
 	if fun != null:
 		btn_text = ((fun.get_meta("buttons") as Dictionary)["badges"] as Button).text
-	ok(_main.current == "today" and btn_text == "배지 3/23", "start: the home card shows the badges just granted (배지 3/23) without leaving the home (%s)" % btn_text)
+	ok(_main.current == "today" and btn_text == "배지 3/25", "start: the home card shows the badges just granted (배지 3/25) without leaving the home (%s)" % btn_text)
 	var kinds_ok := true
 	for t in _toasts:
 		if str((t as Array)[0]) == "이미 달성한 배지 3개를 모았어요" and str((t as Array)[1]) != "info":
@@ -272,7 +272,7 @@ func _test_home_card() -> void:
 		ok(rc.get_global_rect().position.y < 859.0, "W-3: the resume card is still above y 859")
 	var be: Dictionary = fun.get_meta("buttons")
 	ok(be["speed"] != null and be["kana"] == null and be["badges"] != null, "W-3: english: speed and badges buttons, no 가나 코스")
-	ok((be["badges"] as Button).text == "배지 3/23", "W-3: the badge button shows the real count 배지 3/23 (%s)" % (be["badges"] as Button).text)
+	ok((be["badges"] as Button).text == "배지 3/25", "W-3: the badge button shows the real count 배지 3/25 (%s)" % (be["badges"] as Button).text)
 	Store.set_lang("ja")
 	tv.refresh()
 	await _frames(4)
@@ -335,7 +335,7 @@ func _test_jumps() -> void:
 	await _frames(4)
 	ok(_main.current == "badges", "W-4: [배지] opens the badges screen (%s)" % _main.current)
 	var bv: BadgeView = _main.views["badges"]
-	ok(bv.visible_ids().size() == 23, "W-4: the badges screen lists the 23 badges (%d)" % bv.visible_ids().size())
+	ok(bv.visible_ids().size() == 25, "W-4: the badges screen lists the 25 badges (%d)" % bv.visible_ids().size())
 	_main.handle_back()
 	await _frames(3)
 	ok(_main.current == ("today" if not _phone else "today"), "W-4: back from 배지 (opened from the home) goes home (%s)" % _main.current)
