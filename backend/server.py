@@ -14,6 +14,8 @@ import threading
 import re
 import unicodedata
 import functools
+import contextlib
+import contextvars
 import difflib
 import math
 import random
@@ -942,6 +944,30 @@ def is_chinese_only(c):
 JA_READING_CHARS = re.compile(r"[ぁ-ゖゝゞー、。，．・…！？!?.,:;~〜\-「」『』（）()\[\]\"'_＿\s]")
 
 
+# ---- private mode (POST /fix with "private": true: the diary) ----
+# True while one private request runs on this thread: every log line on the way (OpenJTalk, the AI call, LanguageTool) then
+# names the failure only, never the learner's text, an exception message or an engine's answer text (they can repeat it).
+_PRIVATE = contextvars.ContextVar("hoehwa_private_text", default=False)
+
+
+@contextlib.contextmanager
+def private_scope(on=True):
+    tok = _PRIVATE.set(bool(on))
+    try:
+        yield
+    finally:
+        _PRIVATE.reset(tok)
+
+
+def log_failure(msg):
+    """log.exception(msg), but in private mode only the exception TYPE (no traceback, no message text)."""
+    if _PRIVATE.get():
+        et = sys.exc_info()[0]
+        log.warning("%s (%s)", msg, et.__name__ if et else "error")
+    else:
+        log.exception(msg)
+
+
 def ja_text_foreign(text: str):
     """characters of a Japanese string that OpenJTalk cannot read although they are CJK ideographs, i.e. Chinese-only
     characters (买 吗 这 ...) that leaked into the model's Japanese. [] for clean Japanese."""
@@ -955,7 +981,7 @@ def ja_text_foreign(text: str):
             if HAN_ANY.search(st) and not re.fullmatch(r"[ァ-ヶー]+", r):
                 bad.extend(c for c in st if is_chinese_only(c))
     except Exception:
-        log.exception("ja_text_foreign failed")
+        log_failure("ja_text_foreign failed")
     return bad
 
 
@@ -1006,7 +1032,7 @@ def _ja_pair(text: str):
                     parts.append(s2)
                     prons.append(s2)
         except Exception:
-            log.exception("ja_reading failed")
+            log_failure("ja_reading failed")
     fix = lambda s: s.replace(",", "、").replace(".", "。").replace("!", "！").replace("?", "？")
     return fix("".join(parts)), fix("".join(prons))
 
@@ -1580,7 +1606,10 @@ def _opencode_json(messages, schema, temperature):
     try:
         data, dt, st = llm_opencode.call_json(CFG, messages, schema, temperature=temperature)
     except llm_common.LlmError as e:
-        log.warning("opencode call failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
+        if _PRIVATE.get():   # the raw text can be the model's answer, i.e. the learner's sentence corrected
+            log.warning("opencode call failed (%s)", e.kind)
+        else:
+            log.warning("opencode call failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
         raise
     log.info("opencode call %.1fs %s", dt, st)
     llm_fallback.clear()   # it answers again: the notice is over
@@ -1592,7 +1621,10 @@ def _api_json(messages, schema, temperature, num_predict):
     try:
         data, dt, model = llm_api.call_json(CFG, messages, schema, temperature=temperature, timeout=120)
     except llm_common.LlmError as e:
-        log.warning("openai_api call failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
+        if _PRIVATE.get():
+            log.warning("openai_api call failed (%s)", e.kind)
+        else:
+            log.warning("openai_api call failed (%s): %s | %s", e.kind, e.msg, (e.raw or "")[:200].replace("\n", " "))
         raise
     log.info("openai_api call %.1fs (%s)", dt, model)
     llm_fallback.clear()
@@ -1854,36 +1886,46 @@ def looks_like_question(text, lang):
     return bool((QUESTION_EN if lang == "en" else QUESTION_JA).search(text or ""))
 
 
-def correct_learner(lang, stage, text, prev_ai):
+def correct_learner(lang, stage, text, prev_ai, private=False):
     """Is the learner's last sentence wrong/unnatural? returns (fix, fix_ko) or ("", "").
+    private=True (the diary, POST /fix {"private": true}): the sentence is not stored in llm_cache.sqlite and not written to any
+    log (LanguageTool's and the AI's included); everything else is the same.
     1) LanguageTool (offline, grammar.py). If it fixes something, that alone is a valid answer; with an AI engine
        available, the AI may still polish the LanguageTool version for naturalness (config "grammar_llm_polish", default on).
     2) If LanguageTool finds nothing (or is not installed), the AI checks "grammatical but unnatural" as before."""
+    with private_scope(private):
+        return _correct_learner(lang, stage, text, prev_ai, private)
+
+
+def _correct_learner(lang, stage, text, prev_ai, private):
     lt = None
     try:
-        lt = grammar.correct(lang, text)
+        lt = grammar.correct(lang, text, quiet=True) if private else grammar.correct(lang, text)
     except Exception:
-        log.exception("languagetool correction failed")
+        log_failure("languagetool correction failed")
     if lt is None:
         try:
-            return _llm_correct(lang, stage, text, prev_ai)
+            return _llm_correct(lang, stage, text, prev_ai, private=private)
         except ApiError as e:   # no AI engine can answer (not connected / not installed / limit reached ...): no fix, not an error
             log.info("no AI available for the correction (%s): no fix", e.msg)
             return "", ""
     if not CFG.get("grammar_llm_polish", True):
         return lt["fix"], lt["fix_ko"]
     try:
-        f, fk = _llm_correct(lang, stage, text, prev_ai, lt_fix=lt["fix"])
+        f, fk = _llm_correct(lang, stage, text, prev_ai, lt_fix=lt["fix"], private=private)
     except ApiError as e:
         log.info("AI polish unavailable (%s): LanguageTool result only", e.msg)
         return lt["fix"], lt["fix_ko"]
     if not f or norm_text(f, lang) in (norm_text(lt["fix"], lang), norm_text(text, lang)):
         return lt["fix"], lt["fix_ko"]  # the AI agrees with LanguageTool: keep its rule-specific explanation
-    log.info("AI polished LanguageTool fix %r -> %r", lt["fix"], f)
+    if private:
+        log.info("AI polished the LanguageTool fix (%d -> %d chars)", len(lt["fix"]), len(f))
+    else:
+        log.info("AI polished LanguageTool fix %r -> %r", lt["fix"], f)
     return f, fk
 
 
-def _llm_correct(lang, stage, text, prev_ai, lt_fix=""):
+def _llm_correct(lang, stage, text, prev_ai, lt_fix="", private=False):
     ln = LNAME[lang]
     hint = ""
     if lt_fix:
@@ -1915,7 +1957,7 @@ def _llm_correct(lang, stage, text, prev_ai, lt_fix=""):
     fix = ""
     for attempt in range(2):
         d = llm_json([{"role": "user", "content": prompt}], FIX_SCHEMA, temperature=0.2 if attempt == 0 else 0.5, num_predict=2500, think=True,
-                        cache_key_kind="fix", validate=fix_valid)
+                        cache_key_kind=None if private else "fix", validate=fix_valid)
         fix = str(d.get("fix", "") or "").strip()
         fix_ko = str(d.get("fix_ko", "") or "").strip()
         if not fix or norm_text(fix, lang) == norm_text(text, lang):
@@ -2515,6 +2557,7 @@ class FixReq(BaseModel):
     stage: Optional[int] = 1
     text: str = ""
     prev_ai: Optional[str] = ""
+    private: Any = False   # only a real JSON true switches private mode on (anything else = false, never a 422)
 
 
 class FeedbackReq(BaseModel):
@@ -3019,8 +3062,37 @@ def fix(req: FixReq):
     text = (req.text or "").strip()
     if not text:
         raise ApiError("고칠 문장이 비어 있어요.", 400)
+    if req.private is True:
+        return fix_private(lang, clamp_int(req.stage, 1, 4, 1), req.text, req.prev_ai)
     f, fk = correct_learner(lang, clamp_int(req.stage, 1, 4, 1), text[:500], (req.prev_ai or "")[:300])
     return {"fix": f, "fix_ko": fk}
+
+
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u2028\u2029]")
+
+
+def fix_private(lang, stage, raw_text, prev_ai):
+    """POST /fix with "private": true (the diary): same correction, but the sentence is never cached (llm_cache.sqlite) and never
+    logged, and the answer also carries the reading (hiragana) and the pronunciation (katakana) of the fixed sentence
+    ("" for English and when there is nothing to fix). An unexpected error is logged by its type only."""
+    with private_scope(True):
+        try:
+            text = CONTROL_CHARS.sub(" ", raw_text or "").strip()
+            if not text:
+                raise ApiError("고칠 문장이 비어 있어요.", 400)
+            f, fk = correct_learner(lang, stage, text[:500], CONTROL_CHARS.sub(" ", prev_ai or "")[:300], private=True)
+            reading = pron = ""
+            if lang == "ja" and f:
+                reading, pron = _ja_pair.__wrapped__(f)    # not the lru_cache: the sentence must not stay in memory either
+                # the same "kana + punctuation only" cleaning as fix_ja_reading, done on this result (no second, cached pass)
+                reading = "".join(c for c in reading if JA_READING_CHARS.fullmatch(c))
+                pron = "".join(c for c in pron if KATA_PRON_RE.fullmatch(c) or JA_READING_CHARS.fullmatch(c))
+            return {"fix": f, "fix_ko": fk, "reading": reading, "pron": pron}
+        except ApiError:
+            raise
+        except Exception as e:
+            log.warning("private /fix failed (%s)", type(e).__name__)   # no traceback: it could repeat the sentence
+            raise ApiError("서버에서 예기치 않은 오류가 났어요. 잠시 뒤에 다시 시도해 주세요.", 500) from None
 
 
 @app.post("/feedback")
