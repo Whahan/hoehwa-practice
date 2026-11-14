@@ -17,6 +17,8 @@ const MAX_FIX_CHARS := 300
 const MAX_WHY_CHARS := 200
 const MAX_READING_CHARS := 300
 const DEFAULT_WHY := "더 자연스럽게 고쳤어요."
+## 일기에서 만든 복습 카드의 note. 항상 이 고정 문구다: AI 의 이유(why)는 원문을 인용할 수 있어서 카드에 넣지 않는다.
+const CARD_NOTE := "일기에서 고친 문장"
 const WEEKDAYS := ["일", "월", "화", "수", "목", "금", "토"]
 
 const _TERMS_JA := "。！？!?"
@@ -269,7 +271,7 @@ static func clean_fix(orig: String, resp: Variant, lang: String) -> Dictionary:
 		why = _trim(why.substr(0, MAX_WHY_CHARS))
 	res["why"] = why
 	if lang == "ja":
-		res["reading"] = _cap(_one_line(_str_or(d.get("reading", ""))), MAX_READING_CHARS)
+		res["reading"] = _clean_reading(_str_or(d.get("reading", "")))
 		res["pron"] = _cap(_one_line(_str_or(d.get("pron", ""))), MAX_READING_CHARS)
 	return res
 
@@ -281,7 +283,8 @@ static func _cap(s: String, n: int) -> String:
 # ---------------------------------------------------------------- cards
 
 ## 일기 한 개에서 복습 카드로 넣을 것: [{lang, target, reading, ko, note}].
-## 고친 문장만 (원문은 target·reading·ko·note 어디에도 넣지 않는다). same·bad·이미 카드가 된 것·빈 fix 는 뺀다.
+## 고친 문장만. 카드 필드는 lang(일기의 언어), target(고친 문장), reading(고친 문장의 읽기, 히라가나만), ko("" 고정), note(CARD_NOTE 고정 문구)뿐이라
+## 원문과 AI 의 이유(why)는 어디에도 들어가지 않는다. same·bad·이미 카드가 된 것·빈 fix 는 뺀다.
 ## 일기당 CARDS_PER_ENTRY 개, 하루 CARDS_PER_DAY 개(today_cards = 오늘 이미 넣은 수)까지. 순수 함수:
 ## 설정 auto_fix_cards 가 꺼졌는지는 부르는 쪽이 본다.
 static func cards_for(entry: Dictionary, today_cards: int) -> Array:
@@ -308,13 +311,31 @@ static func cards_for(entry: Dictionary, today_cards: int) -> Array:
 		var key: String = TextSim.norm_text(fix, lang)
 		if key == "" or seen.has(key):
 			continue
-		seen[key] = true
 		var orig: String = _str_or(d.get("orig", "")).strip_edges()
-		var why: String = _str_or(d.get("why", "")).strip_edges()
-		if why == "" or (orig != "" and why.contains(orig)):
-			why = DEFAULT_WHY ## 이유 글이 원문을 인용했으면 원문이 카드로 새지 않게 기본 문구로
-		out.append({"lang": lang, "target": fix, "reading": _str_or(d.get("reading", "")), "ko": "", "note": why})
+		if orig != "" and TextSim.norm_text(orig, lang) == key:
+			continue ## nothing was fixed (the stored `same` flag may be wrong in a hand-edited file)
+		seen[key] = true
+		# every field is either the fixed sentence, its reading (checked: kana only), or a constant: nothing from the original
+		var reading: String = ""
+		if lang == "ja":
+			reading = _clean_reading(_str_or(d.get("reading", "")))
+		out.append({"lang": lang, "target": fix, "reading": reading, "ko": "", "note": CARD_NOTE})
 	return out
+
+
+## A reading is hiragana (and ー, digits, spaces, marks) only. Anything else (kanji, Latin letters, Hangul...) is not a reading
+## and is dropped, so a reading field can not carry a piece of the original text.
+static func _clean_reading(s: String) -> String:
+	var t: String = _one_line(s)
+	if t.length() > MAX_READING_CHARS:
+		return ""
+	for i in t.length():
+		var cp: int = t.unicode_at(i)
+		var kana: bool = (cp >= 0x3041 and cp <= 0x3096) or cp == 0x309D or cp == 0x309E or cp == 0x30FC
+		var digit: bool = cp >= 0x30 and cp <= 0x39
+		if not (kana or digit or _is_space(t[i]) or _PUNCT.find(t[i]) != -1):
+			return ""
+	return t
 
 
 # ---------------------------------------------------------------- date

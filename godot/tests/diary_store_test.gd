@@ -46,6 +46,7 @@ func _ready() -> void:
 	_test_write_failure()
 	_test_guard()
 	_test_not_in_sync_or_logs()
+	_test_card_flow_quoting_why()
 	_test_source_never_logs()
 	_selfchecks()
 
@@ -566,6 +567,29 @@ func _test_not_in_sync_or_logs() -> void:
 	ok(_toasts.filter(func(t: Variant) -> bool: return str(t).contains(MARK)).is_empty(), "log: no toast carried diary text")
 	# the diary never added a review card by itself
 	ok((Store.progress["review"] as Array).size() == 1, "reset: DiaryStore never touches the review list")
+
+
+func _test_card_flow_quoting_why() -> void:
+	# the reviewer's scenario: the AI reason quotes part of the original; the card goes to the review list, saves and syncs
+	fresh()
+	Store.progress = Progress.blank()
+	var orig := "きのう " + MARK + " えいがをみた。"
+	var lk: Dictionary = DiaryStore.add("ja", orig)
+	var why := "「きのう " + MARK + "」を直しました。"
+	var cl: Dictionary = DiaryLogic.clean_fix(orig, {"fix": "昨日、映画を見ました。", "fix_ko": why, "reading": "きのう、えいがをみました。", "pron": "キノー"}, "ja")
+	ok(str(cl["why"]).contains(MARK), "card flow: the screen still has the AI reason (it is shown inside the diary screen)")
+	DiaryStore.set_fixed(str(lk["id"]), [{"orig": cl["orig"], "fix": cl["fix"], "why": cl["why"], "reading": cl["reading"], "pron": cl["pron"], "same": cl["same"], "card": false}])
+	var cards: Array = DiaryLogic.cards_for(DiaryStore.get_entry(str(lk["id"])), DiaryStore.cards_today())
+	ok(cards.size() == 1 and not JSON.stringify(cards).contains(MARK) and (cards[0] as Dictionary)["note"] == DiaryLogic.CARD_NOTE, "card flow: the card has no part of the original and a fixed note")
+	var added: int = Store.add_review(cards)
+	DiaryStore.note_cards(added)
+	Store.save_progress()
+	StudyLog.add_event("ja", "talks", 1)
+	StudyLog.flush()
+	var doc_text: String = JSON.stringify(SyncDoc.extract(Store.progress, StudyLog.snapshot(), Store.prefs, 0))
+	var blob: String = JSON.stringify(Store.progress) + JSON.stringify(StudyLog.snapshot()) + doc_text + read_text(PPROG) + read_text(PLOG)
+	ok(added == 1 and doc_text.contains("昨日、映画を見ました。") and not blob.contains(MARK), "card flow: the fixed sentence reaches the review list and the SyncDoc, the original does not")
+	ok(read_text(P1).contains(MARK), "card flow: the original is only in the diary file")
 
 
 func _test_source_never_logs() -> void:
