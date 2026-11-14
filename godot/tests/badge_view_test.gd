@@ -87,6 +87,7 @@ func _ready() -> void:
 	await _test_new_dots()
 	await _test_layout()
 	await _test_time_tile_wrap()
+	await _test_name_wrap()
 	await _test_garbage()
 	await _test_progress_text()
 	await _test_real_engine()
@@ -451,15 +452,19 @@ func _test_layout() -> void:
 ## 진행 글 라벨 sl 의 문제 목록(비면 합격). 규칙: (1) 자동 줄바꿈이 없다(보이는 줄 수 == 직접 넣은 줄바꿈 수 + 1),
 ## (2) 직접 넣은 줄바꿈은 "/" 바로 뒤뿐이다, (3) 줄을 합치면 plain 과 같다, (4) 가장 긴 줄이 라벨 폭 안이다,
 ## (5) 라벨이 타일 폭 밖으로 나가지 않는다, (6) 글자 크기 12 이상.
-func _sub_problems(sl: Label, plain: String, tile: Control) -> Array:
+## slash_only=false 는 이름 줄용: 직접 넣은 줄바꿈이 공백 자리(= 낱말 사이)이기만 하면 된다. 줄 수는 max_lines 이하.
+func _sub_problems(sl: Label, plain: String, tile: Control, slash_only: bool = true, max_lines: int = 2) -> Array:
 	var bad: Array = []
 	var t: String = sl.text
 	var lines: PackedStringArray = t.split("\n")
 	if sl.get_line_count() != lines.size():
 		bad.append("auto-wrapped: %d visual lines for %d explicit '%s'" % [sl.get_line_count(), lines.size(), t.replace("\n", "|")])
-	for i in range(lines.size() - 1):
-		if not lines[i].ends_with("/"):
-			bad.append("line break not after a slash: '%s'" % lines[i])
+	if lines.size() > max_lines:
+		bad.append("%d lines > %d" % [lines.size(), max_lines])
+	if slash_only:
+		for i in range(lines.size() - 1):
+			if not lines[i].ends_with("/"):
+				bad.append("line break not after a slash: '%s'" % lines[i])
 	if " ".join(lines) != plain:
 		bad.append("text changed: '%s' vs '%s'" % [" ".join(lines), plain])
 	var font: Font = sl.get_theme_font("font")
@@ -513,9 +518,62 @@ func _test_time_tile_wrap() -> void:
 			if sl == null:
 				continue
 			var bad: Array = _sub_problems(sl, plain, t)
+			if w >= 400.0 and sl.get_theme_font_size("font_size") != FunParts._base_fs(sl):
+				bad.append("shrunk to %d from the theme size %d although two lines fit" % [sl.get_theme_font_size("font_size"), FunParts._base_fs(sl)])
 			ok(bad.is_empty(), "%s at %d px wide (scale %s): '%s' is not cut inside a number or unit %s" % [id, w, str(_scale), sl.text.replace("\n", "|"), str(bad)])
 		(made[0] as Control).queue_free()
 		await _frames(2)
+
+
+## 1.6.1 U1: 배지 이름도 낱말(공백) 중간에서 끊기지 않는다 — 23개 전부, 폭 412·360, 현재 글꼴 배율. 타일 이름과 상세 시트 제목.
+func _test_name_wrap() -> void:
+	print("[badge names are cut at spaces only]")
+	var old_holder := Control.new()
+	old_holder.size = Vector2(70, 200)
+	add_child(old_holder)
+	var old_nl := UI.label("미션 8개 모두 별 3개", "Small")
+	old_nl.custom_minimum_size.x = 70.0
+	old_holder.add_child(old_nl)
+	old_nl.size = Vector2(70, 20)
+	await _frames(3)
+	fails(not _sub_problems(old_nl, "미션 8개 모두 별 3개", old_holder, false, 3).is_empty(), "name checker flags an auto-wrapping label that is too narrow for '미션 8개 모두 별 3개'")
+	old_holder.queue_free()
+	var bad_all: Array = []
+	var checked := 0
+	var title_checked := 0
+	for w in [412.0, 360.0]:
+		_install(_make_list(9))
+		var made: Array = await _make(Vector2(w, 915))
+		await _frames(4)
+		var v: BadgeView = made[1]
+		for d in DEFS:
+			var t: Control = v.tile(d[0])
+			var nl: Label = t.get_meta("name_label") as Label if t != null else null
+			if nl == null:
+				bad_all.append("%d px %s: no name label" % [w, d[0]])
+				continue
+			checked += 1
+			var bad: Array = _sub_problems(nl, d[1], t, false, 3)
+			if w >= 400.0 and nl.get_theme_font_size("font_size") != FunParts._base_fs(nl):
+				bad.append("shrunk to %d from the theme size %d although it fits in %.0f px" % [nl.get_theme_font_size("font_size"), FunParts._base_fs(nl), nl.size.x])
+			if not bad.is_empty():
+				bad_all.append("%d px %s '%s': %s" % [w, d[0], nl.text.replace("\n", "|"), str(bad)])
+			(t as Button).pressed.emit()
+			await _frames(3)
+			var sh: Sheet = _sheet_node()
+			if sh == null or sh.title_label == null:
+				bad_all.append("%d px %s: no sheet title" % [w, d[0]])
+			else:
+				title_checked += 1
+				var bt: Array = _sub_problems(sh.title_label, d[1], sh, false, 3)
+				if not bt.is_empty():
+					bad_all.append("%d px sheet title %s '%s': %s" % [w, d[0], sh.title_label.text.replace("\n", "|"), str(bt)])
+				sh.close("dismiss")
+				await _frames(2)
+		(made[0] as Control).queue_free()
+		await _frames(2)
+	ok(checked == 46 and title_checked == 46, "checked 23 tile names and 23 sheet titles at 412 and 360 px (scale %s): %d / %d" % [str(_scale), checked, title_checked])
+	ok(bad_all.is_empty(), "no badge name is cut inside a word, wider than its box, or smaller than 12 px %s" % str(bad_all.slice(0, 3)))
 
 
 # ---------------------------------------------------------------- B2-8 일부러 틀린 입력

@@ -324,11 +324,10 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 	vb.add_child(icon)
 	var nl := UI.label(nm, "Small")
 	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	nl.max_lines_visible = TILE_NAME_LINES
-	nl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	nl.add_theme_color_override("font_color", Pal.REWARD_ON if got else Pal.INK)
 	nl.add_theme_font_override("font", UI.bold_font())
 	nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fit_name(nl, nm, TILE_NAME_LINES)
 	vb.add_child(nl)
 	var sl := UI.label(sub, "Small")
 	# 진행 글은 자동 줄바꿈을 끈다. 한글은 음절 사이 어디서나 끊겨 "10시|간" 이 되기 때문이다.
@@ -339,6 +338,7 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 	sl.add_theme_color_override("font_color", Pal.MUTED)
 	sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sl.resized.connect(func() -> void: _fit_sub(sl, sub))
+	sl.tree_entered.connect(func() -> void: _fit_sub.call_deferred(sl, sub))
 	vb.add_child(sl)
 	b.add_child(vb)
 	b.set_meta("name_label", nl)
@@ -365,10 +365,10 @@ static func badge_tile(info: Variant, on_tap: Callable) -> Button:
 ## 타일 아래 글자 `plain` 을 라벨 폭 안에 넣는다. 한 줄 -> " / " 뒤에서만 두 줄 -> 글자 줄이기(최소 SUB_MIN_FONT) 순으로,
 ## 글자 크기를 먼저 지키는 쪽을 고른다. 숫자·단위 중간에서는 끊지 않는다. 폭이 아직 없으면(배치 전) 아무것도 안 한다.
 static func _fit_sub(sl: Label, plain: String) -> void:
-	if not is_instance_valid(sl) or sl.size.x < 1.0:
+	if not is_instance_valid(sl) or not sl.is_inside_tree() or sl.size.x < 1.0: # 트리 밖에서는 테마 글자 크기가 아직 정해지지 않았다
 		return
 	if not sl.has_meta("base_fs"):
-		sl.set_meta("base_fs", sl.get_theme_font_size("font_size"))
+		sl.set_meta("base_fs", _base_fs(sl))
 	var base: int = int(sl.get_meta("base_fs"))
 	var font: Font = sl.get_theme_font("font")
 	var cands: Array = [plain]
@@ -393,6 +393,60 @@ static func _fit_sub(sl: Label, plain: String) -> void:
 			sl.remove_theme_font_size_override("font_size")
 	elif sl.get_theme_font_size("font_size") != pick_fs:
 		sl.add_theme_font_size_override("font_size", pick_fs)
+
+
+## 배지 이름 라벨(타일, 상세 시트 제목)을 정한다. 한글은 음절 사이 어디서나 끊기므로 자동 줄바꿈을 끄고,
+## 공백에서만 줄을 바꾼다(최대 max_lines 줄). 낱말 하나가 폭보다 길거나 줄이 모자라면 글자를 줄인다(최소 SUB_MIN_FONT).
+## 라벨 폭이 정해지면(resized) 다시 맞춘다. 라벨 text 는 줄바꿈이 들어간 모양이 될 수 있다(공백 -> "\n").
+static func fit_name(l: Label, plain: String, max_lines: int = TILE_NAME_LINES) -> void:
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	l.clip_text = true
+	l.max_lines_visible = -1
+	l.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	l.text = plain
+	l.resized.connect(func() -> void: _fit_name_now(l, plain, max_lines))
+	l.tree_entered.connect(func() -> void: _fit_name_now.call_deferred(l, plain, max_lines))
+
+
+static func _fit_name_now(l: Label, plain: String, max_lines: int) -> void:
+	if not is_instance_valid(l) or not l.is_inside_tree() or l.size.x < 1.0:
+		return
+	if not l.has_meta("base_fs"):
+		l.set_meta("base_fs", _base_fs(l))
+	var base: int = int(l.get_meta("base_fs"))
+	var font: Font = l.get_theme_font("font")
+	var pick_text: String = _wrap_words(font, plain, SUB_MIN_FONT, l.size.x)
+	var pick_fs: int = mini(base, SUB_MIN_FONT)
+	var fs: int = base
+	while fs >= SUB_MIN_FONT:
+		var t: String = _wrap_words(font, plain, fs, l.size.x)
+		if t.count("\n") + 1 <= max_lines and _widest_line(font, t, fs) <= l.size.x:
+			pick_text = t
+			pick_fs = fs
+			break
+		fs -= 1
+	if l.text != pick_text:
+		l.text = pick_text
+	if pick_fs >= base:
+		if l.has_theme_font_size_override("font_size"):
+			l.remove_theme_font_size_override("font_size")
+	elif l.get_theme_font_size("font_size") != pick_fs:
+		l.add_theme_font_size_override("font_size", pick_fs)
+
+
+## 공백에서만 끊는 탐욕 줄바꿈. 줄 사이는 "\n".
+static func _wrap_words(font: Font, plain: String, fs: int, avail: float) -> String:
+	var lines: Array = []
+	var cur := ""
+	for w in plain.split(" ", false):
+		var trial: String = w if cur == "" else cur + " " + w
+		if cur == "" or font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= avail:
+			cur = trial
+		else:
+			lines.append(cur)
+			cur = w
+	lines.append(cur)
+	return "\n".join(lines)
 
 
 static func _widest_line(font: Font, text: String, fs: int) -> float:
@@ -429,3 +483,12 @@ static func _tile_a11y(nm: String, got: bool, sub: String, is_new: bool) -> Stri
 	if is_new:
 		s += ", " + NOTE_NEW_BADGE
 	return s
+
+
+## 라벨의 테마 글자 크기(우리가 건 크기 덮어쓰기는 빼고). 변형 이름(Small, H2 ...)으로 직접 찾는다.
+## 라벨이 막 트리에 들어온 때에는 get_theme_font_size("font_size") 가 변형을 아직 모르고 기본 크기를 돌려주기 때문이다.
+static func _base_fs(l: Label) -> int:
+	var tv: String = str(l.theme_type_variation)
+	if tv != "":
+		return l.get_theme_font_size("font_size", tv)
+	return l.get_theme_font_size("font_size")
