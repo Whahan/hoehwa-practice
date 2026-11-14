@@ -779,7 +779,29 @@ static func add_score_any(lang: String, res: Variant, _source: String = "") -> b
 	var pair: Array = r["score"]
 	pair[0] = int(pair[0]) + 1
 	pair[1] = int(pair[1]) + score
-	PhonemeStats.observe(((_data["phon"] as Dictionary)[lang]) as Dictionary, d)
+	var obs: Dictionary = d
+	if lang == "ja":
+		# Japanese: attach the sound-category results (long vowel, sokuon, ...) to a COPY, so the caller's response is not changed
+		obs = d.duplicate(true)
+		JaSounds.annotate(obs)
+	PhonemeStats.observe(((_data["phon"] as Dictionary)[lang]) as Dictionary, obs)
+	_dirty = true
+	return true
+
+
+## One "listen and choose" answer of the Japanese sounds practice: phon[lang][p] gets one result (same rules as
+## PhonemeStats.observe: p empty / longer than PhonemeStats.MAX_P_LEN / unknown language -> false and nothing changes).
+## `heard` is the other sound that was chosen instead (only noted when wrong).
+static func add_phon_obs(lang: String, p: String, ok: bool, heard: String = "") -> bool:
+	if not _valid_lang(lang):
+		return false
+	var pp: String = p.strip_edges()
+	if pp == "" or pp.length() > PhonemeStats.MAX_P_LEN:
+		return false
+	_ensure()
+	var res := {"units": [{"ph": [{"p": pp, "ok": ok, "heard": (heard if heard.strip_edges() != "" else null)}]}]}
+	if PhonemeStats.observe(((_data["phon"] as Dictionary)[lang]) as Dictionary, res) <= 0:
+		return false
 	_dirty = true
 	return true
 
