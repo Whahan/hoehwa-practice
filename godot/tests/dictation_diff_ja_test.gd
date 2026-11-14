@@ -163,12 +163,14 @@ func _run() -> void:
 	_t_mixed()
 	_t_mutations()
 	_t_pass_line()
+	_t_short()
+	_t_independent()
+	_t_kanji_mutations()
 	_t_not_lower_than_textsim()
 	_t_cases()
 	_t_kanji_diff()
 	_t_invalid()
 	_t_segments()
-	_t_align_consistency()
 	_t_hint()
 
 
@@ -389,6 +391,203 @@ func _t_pass_line() -> void:
 	ok(DictationDiffJa.PASS_SCORE == 85 and DictationDiffJa.HARD_ERRORS == 3 and DictationDiffJa.HARD_CAP == 84, "A1-5 constants PASS_SCORE 85, HARD_ERRORS 3, HARD_CAP 84")
 
 
+func _t_short() -> void:
+	print("[A1-5b short sentences (reading <= 8 chars): one deleted / inserted char is not a pass]")
+	var rows: Array = [
+		["きってをかう", "きてをかう", "deletion of っ"], ["きってをかう", "きってをかうう", "insertion"],
+		["ごめんなさい", "ごめんなさ", "deletion at end"], ["ごめんなさい", "ごめんんなさい", "insertion in the middle"],
+		["ありがとう", "ありがと", "deletion (5 chars)"], ["ありがとう", "あありがとう", "insertion at start"],
+		["おげんきですか", "おげんきでか", "deletion (7 chars)"], ["こんにちは", "こにちは", "deletion ん"],
+	]
+	for r in rows:
+		var d: Dictionary = DictationDiffJa.diff(r[1], r[0], r[0])
+		ok(DictationDiffJa.fold(r[0]).length() <= DictationDiffJa.SHORT_LEN and not bool(d["passed"]) and int(d["score"]) < 100, "A1-5b %s: %s -> %s not passed (%d)" % [r[2], r[0], r[1], d["score"]])
+		var d_ok: Dictionary = DictationDiffJa.diff(r[0], r[0], r[0])
+		ok(bool(d_ok["passed"]) and int(d_ok["score"]) == 100, "A1-5b the exact %s still passes" % r[0])
+	var long9: Dictionary = DictationDiffJa.diff("おはようございま", "おはようございます", "おはようございます")
+	ok(DictationDiffJa.fold("おはようございます").length() == 9 and bool(long9["passed"]), "A1-5b a 9 char sentence with one deleted char is still a pass (%d)" % long9["score"])
+	# 검사기가 실패를 잡는지: 정답을 넣으면 "불통과여야 한다" 검사가 거절해야 한다
+	var d_all: Dictionary = DictationDiffJa.diff("きってをかう", "きってをかう", "きってをかう")
+	selfcheck(bool(d_all["passed"]), "A1-5b the 'must not pass' check rejects the exact answer (it passes)")
+
+
+## 손으로 쓴 정답 읽기로 만든 독립 사례. segments() 의 출력을 쓰지 않는다. [said, text, reading, want, mode, missing 으로 표시돼야 하는 칸 w]
+## want: "100" = 100점·passed, "lt" = 100 미만. mode 가 "" 이면 확인 안 함.
+func _t_independent() -> void:
+	print("[independent hand-written cases (reading written by hand, not taken from segments)]")
+	var tr: Array = [
+		["母親は赤ん坊をひざの上であやしている。", "ははおやはあかんぼうをひざのうえであやしている。"],
+		["私も音楽が大好きです。", "わたしもおんがくがだいすきです。"],
+		["彼女の責任ではない。", "かのじょのせきにんではない。"],
+		["昨日、友達と映画を見ました。", "きのう、ともだちとえいがをみました。"],
+		["毎朝六時に起きます。", "まいあさろくじにおきます。"],
+		["私は肉を食べます。", "わたしはにくをたべます。"],
+		["彼は大きい犬を飼っています。", "かれはおおきいいぬをかっています。"],
+		["私は山にいました。", "わたしはやまにいました。"],
+		["時間があるか分かりません。", "じかんがあるかわかりません。"],
+		["美しい花です。", "うつくしいはなです。"],
+		["今日、学校に行きます。", "きょう、がっこうにいきます。"],
+		["切手を買いたいです。", "きってをかいたいです。"],
+		["私は日本語を勉強しています。", "わたしはにほんごをべんきょうしています。"],
+		["新しい本を買いました。", "あたらしいほんをかいました。"],
+		["彼女の目は涙でいっぱいだった。", "かのじょのめはなみだでいっぱいだった。"],
+		["日曜日以外は毎日働く。", "にちようびいがいはまいにちはたらく。"],
+	]
+	# [文 index, said, want, mode, missing w]
+	var rows: Array = [
+		[0, "母親は赤ん坊をひざの上であやしている", "100", "exact", ""],
+		[0, "母親はあかんぼうをひざの上であやしている", "100", "mixed", ""],
+		[0, "ははおやは赤ん坊をひざの上であやしている", "100", "mixed", ""],
+		[0, "ははおやはあかんぼうをひざのうえであやしている", "100", "reading", ""],
+		[1, "私も音楽が大好きです", "100", "exact", ""],
+		[1, "私もおんがくが大好きです", "100", "mixed", ""],
+		[1, "わたしも音楽がだいすきです", "100", "mixed", ""],
+		[2, "彼女のせきにんではない", "100", "mixed", ""],
+		[2, "かのじょの責任ではない", "100", "mixed", ""],
+		[3, "昨日、ともだちと映画を見ました", "100", "mixed", ""],
+		[3, "きのう、友達と映画を見ました", "100", "mixed", ""],
+		[3, "昨日友達と映画を見ました", "100", "exact", ""],
+		[3, "昨日、友達とえいがをみました", "100", "mixed", ""],
+		[4, "まいあさ六時におきます", "100", "mixed", ""],
+		[4, "毎朝ろくじに起きます", "100", "mixed", ""],
+		[4, "毎朝六時におきます", "100", "mixed", ""],
+		[5, "私は肉を食べます", "100", "exact", ""],
+		[5, "私は肉を食ます", "lt", "wrong", "べ"],
+		[5, "私は肉を食べす", "lt", "wrong", "ま"],
+		[5, "私は肉を食べま", "lt", "wrong", "す"],
+		[6, "彼は大きい犬を飼っています", "100", "exact", ""],
+		[6, "彼は大きい犬を飼ています", "lt", "wrong", "っ"],
+		[6, "彼は大きい犬を飼ッています", "100", "exact", ""],
+		[7, "私は山にいました", "100", "exact", ""],
+		[7, "私は山いました", "lt", "wrong", "に"],
+		[8, "時間があるか分かりません", "100", "exact", ""],
+		[8, "時間あるか分かりません", "lt", "wrong", "が"],
+		[9, "美しい花です", "100", "exact", ""],
+		[9, "美い花です", "lt", "wrong", "し"],
+		[9, "美花です", "lt", "wrong", "し"],
+		[10, "今日、学校に行きます", "100", "exact", ""],
+		[10, "今日、学校に行ます", "lt", "wrong", "き"],
+		[11, "切手を買いたいです", "100", "exact", ""],
+		[11, "切てを買いたいです", "100", "mixed", ""],
+		[11, "きてを買いたいです", "lt", "wrong", "切手"],
+		[11, "きってを買いたいです", "100", "mixed", ""],
+		[12, "私は日本語を勉強しています", "100", "exact", ""],
+		[12, "私は日本語を勉強しいます", "lt", "wrong", "て"],
+		[13, "新しい本を買いました", "100", "exact", ""],
+		[13, "新い本を買いました", "lt", "wrong", "し"],
+		[14, "彼女の目はなみだでいっぱいだった", "100", "mixed", ""],
+		[14, "彼女の目は涙でいっぱいだつた", "lt", "wrong", ""],
+		[14, "彼女の目は涙でいっぱいだた", "lt", "wrong", "っ"],
+		[15, "日曜日以外はまいにちはたらく", "100", "mixed", ""],
+		[15, "日曜日以外は毎日はたらく", "100", "mixed", ""],
+		[15, "日曜日以外は毎日働", "lt", "wrong", "く"],
+	]
+	var n := 0
+	for r in rows:
+		var pair: Array = tr[int(r[0])]
+		var d: Dictionary = DictationDiffJa.diff(r[1], pair[0], pair[1])
+		var good: bool = _valid(d)
+		if String(r[2]) == "100":
+			good = good and int(d["score"]) == 100 and bool(d["passed"])
+		else:
+			good = good and int(d["score"]) < 100
+		if String(r[3]) != "":
+			good = good and String(d["mode"]) == String(r[3])
+		var miss_w: String = r[4]
+		if miss_w != "":
+			var found := false
+			for u in d["units"]:
+				if String((u as Dictionary)["w"]).contains(miss_w) and not bool((u as Dictionary)["ok"]) and String((u as Dictionary)["kind"]) == "missing":
+					found = true
+			good = good and found
+		n += 1
+		ok(good, "indep [%s] -> %d %s%s" % [r[1], d["score"], d["mode"], (" (missing %s)" % miss_w) if miss_w != "" else ""])
+	ok(n >= 25, "independent table has %d rows (>= 25)" % n)
+	# 검사기가 실패를 잡는지: 빠진 답이 100점이어야 한다는 기대는 거절돼야 한다
+	var p5: Array = tr[5]
+	var d_bad: Dictionary = DictationDiffJa.diff("私は肉を食ます", p5[0], p5[1])
+	selfcheck(not (int(d_bad["score"]) == 100 and bool(d_bad["passed"])), "indep a missing-kana answer is NOT scored 100 (%d)" % d_bad["score"])
+	var d_good: Dictionary = DictationDiffJa.diff("私は肉を食べます", p5[0], p5[1])
+	selfcheck(String(d_good["mode"]) != "wrong", "indep the correct answer is NOT mode wrong (%s)" % d_good["mode"])
+
+
+func _is_hira_kata(c: int) -> bool:
+	return (c >= 0x3041 and c <= 0x3096) or (c >= 0x30A1 and c <= 0x30F6)
+
+
+## text[i] 가 한자 바로 뒤 가나 1~4글자 안에 있는가(한자, 가나 0~3글자, text[i])
+func _follows_kanji(text: String, i: int) -> bool:
+	var j: int = i - 1
+	var steps := 0
+	while j >= 0 and steps < 4:
+		var c: int = text.unicode_at(j)
+		if DictationDiffJa._is_ideo(c):
+			return true
+		if not (_is_hira_kata(c) or c == 0x30FC):
+			return false
+		j -= 1
+		steps += 1
+	return false
+
+
+func _to_hira_char(ch: String) -> String:
+	var c: int = ch.unicode_at(0)
+	if c >= 0x30A1 and c <= 0x30F6:
+		return char(c - 0x60)
+	return ch
+
+
+## 한자 섞인 표기(말뭉치 text 그대로)에서 가나 한 글자를 지우거나 탁점을 빼고 채점한다. 100점이 나오는 비율을 센다.
+func _t_kanji_mutations() -> void:
+	print("[A1-4b mutations of the kanji-mixed text: kana after kanji deleted, small tsu / chouon deleted, voicing dropped]")
+	var voiced := "がぎぐげござじずぜぞだぢづでどばびぶべぼ"
+	var plain := "かきくけこさしすせそたちつてとはひふへほ"
+	var cats := {"after_kanji": [0, 0], "sokuon": [0, 0], "chouon": [0, 0], "voicing": [0, 0], "any_kana": [0, 0]}
+	var hits: Array = []
+	for row in corpus:
+		var text: String = row["text"]
+		var rd: String = row["reading"]
+		var any_done := 0
+		for i in text.length():
+			var ch: String = text.substr(i, 1)
+			var c: int = ch.unicode_at(0)
+			if not (_is_hira_kata(c) or c == 0x30FC):
+				continue
+			var del_said: String = text.substr(0, i) + text.substr(i + 1)
+			var variants: Array = []   # [category, said]
+			if c != 0x30FC and _follows_kanji(text, i):
+				variants.append(["after_kanji", del_said])
+			if ch == "っ" or ch == "ッ":
+				variants.append(["sokuon", del_said])
+			if ch == "ー":
+				variants.append(["chouon", del_said])
+			if any_done % 7 == 0:
+				variants.append(["any_kana", del_said])
+			any_done += 1
+			var vi: int = voiced.find(_to_hira_char(ch))
+			if vi >= 0:
+				variants.append(["voicing", text.substr(0, i) + plain.substr(vi, 1) + text.substr(i + 1)])
+			for v in variants:
+				var d: Dictionary = DictationDiffJa.diff(v[1], text, rd)
+				cats[v[0]][1] += 1
+				if int(d["score"]) == 100:
+					cats[v[0]][0] += 1
+					if hits.size() < 12:
+						hits.append("%s id %d: %s" % [v[0], row["id"], v[1]])
+	for k in cats:
+		var hit: int = cats[k][0]
+		var tot: int = cats[k][1]
+		var pct: float = 100.0 * float(hit) / float(maxi(1, tot))
+		print("A1-4b %s: tested %d, scored 100: %d (%.3f%%)" % [k, tot, hit, pct])
+		ok(tot > 100 and pct <= 0.5, "A1-4b %s mutations of kanji-mixed text: 100 points in <= 0.5%% (%d / %d = %.3f%%)" % [k, hit, tot, pct])
+	if hits.size() > 0:
+		print("  examples scoring 100: ", hits)
+	# 검사기가 실패를 잡는지: 변이하지 않은 입력은 100점이다. 이것을 "변이 입력"으로 취급하면 비율 검사가 걸려야 한다
+	var row0: Dictionary = corpus[3]
+	var d0: Dictionary = DictationDiffJa.diff(row0["text"], row0["text"], row0["reading"])
+	selfcheck(int(d0["score"]) == 100, "A1-4b an unmutated sentence scores 100 (so counting it as a mutation would be flagged by the <= 0.5% check)")
+
+
 func _t_not_lower_than_textsim() -> void:
 	print("[A1-6 never lower than TextSim.similarity for text-only / reading-only input]")
 	var viol := 0
@@ -434,7 +633,7 @@ func _t_cases() -> void:
 		["行なう", "行う", "おこなう", 100, "okurigana: 行なう for target 行う"],
 		["行う", "行う", "おこなう", 100, "okurigana: 行う for target 行う"],
 		["おこなう", "行う", "おこなう", 100, "okurigana: kana for target 行う"],
-		["行う", "行なう", "おこなう", 100, "okurigana: 行う for target 行なう"],
+		["行う", "行なう", "おこなう", -1, "okurigana: 行う for target 行なう drops な (a missing kana is never forgiven)"],
 		["行なう", "行なう", "おこなう", 100, "okurigana: 行なう for target 行なう"],
 		["ラーメン", "ラーメン", "らーめん", 100, "chouon kept: ラーメン"],
 		["らーめん", "ラーメン", "らーめん", 100, "chouon kept: らーめん"],
@@ -633,31 +832,6 @@ func _t_segments() -> void:
 		joined += String((sg2 as Dictionary)["r"])
 	selfcheck(joined + "あ" != DictationDiffJa.fold("かれはがくせいです。"), "A1-10 invariant check rejects a segment list with an extra char")
 	ok(segs2.size() == 5 and String((segs2[0] as Dictionary)["r"]) == "かれ" and String((segs2[2] as Dictionary)["r"]) == "がくせい", "A1-10 segments of 彼は学生です: 彼=かれ, 学生=がくせい (5 segments, got %d)" % segs2.size())
-
-
-func _t_align_consistency() -> void:
-	print("[internal LCS aligner == TextSim.lcs_match]")
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 77
-	var pool := "あいうえおかきくけこ"
-	var mism := 0
-	for n in 400:
-		var a := PackedStringArray()
-		var b := PackedStringArray()
-		for i in rng.randi_range(0, 14):
-			a.append(pool.substr(rng.randi() % 10, 1))
-		for i in rng.randi_range(0, 14):
-			b.append(pool.substr(rng.randi() % 10, 1))
-		var m1: Dictionary = TextSim.lcs_match(a, b)
-		var m2: Dictionary = DictationDiffJa._align(a, b)
-		var t_of: PackedInt32Array = m2["t_of"]
-		var same: bool = int(m1["len"]) == int(m2["len"])
-		for j in b.size():
-			if bool((m1["hit"] as Array)[j]) != (t_of[j] >= 0):
-				same = false
-		if not same:
-			mism += 1
-	ok(mism == 0, "internal aligner has the same length and hits as TextSim.lcs_match on 400 random pairs (mismatch %d)" % mism)
 
 
 func _t_hint() -> void:
