@@ -2,7 +2,10 @@
 """A3b: write godot/tests/fixtures/mission_golden.json from the PC rule engine (missions.check_text).
 
 The phone's LocalMissions (godot/scripts/local/local_missions.gd) must give the same `reached` sets and the same
-normalised text for these fixed inputs (INPUTS, 30 entries) and the same normalised text for NORM_CASES.
+normalised text for these fixed inputs (INPUTS, 30 English entries; JA_INPUTS, 24 or more Japanese entries) and the same
+normalised text for NORM_CASES. Japanese (v1.7.0 B3): JA_NORM_CASES, JA_TABLE_SCOPE (one code point at a time),
+JA_KNOWN_GAPS (NFKC results the phone does NOT build; the test asserts they still differ) and JA_RANDOM_N seeded random strings
+are written under the "ja_*" keys, for MissionText.norm_ja (godot/scripts/core/mission_text.gd) = missions.normalize_ja.
 The inputs live in this file on purpose: change them here, then re-run this script.
 
 Run (Windows, path with the venv python):
@@ -13,6 +16,7 @@ This script only CALLS missions.normalize / missions.check_text. It does not cha
 import hashlib
 import json
 import os
+import random
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -124,6 +128,151 @@ TABLE_SCOPE = (
 )
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Japanese (v1.7.0 B3). The phone's MissionText.norm_ja = missions.normalize_ja.
+# ---------------------------------------------------------------------------------------------------------------------
+# half-width katakana U+FF66..FF9D written out, then the two voicing marks
+HW_KATA = "ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ"
+HW_DAKU = "ﾞ"
+HW_HANDAKU = "ﾟ"
+
+# (mission id, learner text); the done list is always empty here. 8 missions x 3 or more.
+JA_INPUTS = [
+    # ja_konbini
+    ("ja_konbini", "すみません、おにぎりはどこにありますか"),
+    ("ja_konbini", "コレヲクダサイ"),                                          # katakana only: folds to hiragana
+    ("ja_konbini", "ｶｰﾄﾞﾃﾞ ﾊﾗｲﾏｽ"),                                         # half-width katakana with voicing marks
+    ("ja_konbini", "あたためてください。ふくろもおねがいします！"),             # punctuation is deleted
+    ("ja_konbini", "ありがとうございました" + "　" * 3 + "ＯＫ"),                # ideographic spaces, full-width letters
+    # ja_ramen
+    ("ja_ramen", "ふたりです。カウンターでもいいですか"),
+    ("ja_ramen", "とんこつラーメンをひとつ、めんはかためでおねがいします"),
+    ("ja_ramen", "ﾗｰﾒﾝ ｵﾈｶﾞｲｼﾏｽ"),                                         # half-width katakana, ｶﾞ is a composed voiced kana
+    ("ja_ramen", "お会計お願いします。ごちそうさまでした"),
+    # ja_ask_way
+    ("ja_ask_way", "すみません、駅はどこですか"),
+    ("ja_ask_way", "ここからえきまでとおいですか"),
+    ("ja_ask_way", "まっすぐいって、ひだりですね？ありがとうございます"),
+    ("ja_ask_way", "エキハドコデスカ"),
+    # ja_hotel_checkin
+    ("ja_hotel_checkin", "予約しているキムです。チェックインお願いします"),
+    ("ja_hotel_checkin", "禁煙の部屋をお願いします"),
+    ("ja_hotel_checkin", "ちょうしょくはなんじからですか。ＷｉＦｉはありますか"),   # full-width Latin letters
+    ("ja_hotel_checkin", "チェックアウトは何時ですか。荷物を預かってもらえますか"),
+    # ja_station_ticket
+    ("ja_station_ticket", "きょうとまでおとなにまいください"),
+    ("ja_station_ticket", "京都までの切符をください"),
+    ("ja_station_ticket", "つぎの電車は何時ですか。何番線から出ますか"),
+    ("ja_station_ticket", "カードではらいます。ありがとう"),
+    # ja_clinic
+    ("ja_clinic", "はじめてきました。診察をお願いします"),
+    ("ja_clinic", "あたまがいたいです。ねつもあります"),
+    ("ja_clinic", "きのうのよるからです"),
+    ("ja_clinic", "アレルギーはありません。保険証はこれです"),
+    # ja_shopping
+    ("ja_shopping", "これはいくらですか"),
+    ("ja_shopping", "もうすこしおおきいのはありますか。ちがういろもみたいです"),
+    ("ja_shopping", "免税できますか"),
+    ("ja_shopping", "ふくろはいりません。現金でお願いします"),
+    # ja_self_intro
+    ("ja_self_intro", "はじめまして、キムです。よろしくおねがいします"),
+    ("ja_self_intro", "韓国から来ました。しゅみはさんぽです"),
+    ("ja_self_intro", "ｻｯｶｰｶﾞｽｷﾃﾞｽ。あなたはどうですか"),                       # half-width katakana, no spaces
+    # nothing matches / odd inputs (the norm must still be the same)
+    ("ja_konbini", "Hello, I would like some water please"),                  # English only
+    ("ja_konbini", "안녕하세요 물 주세요"),                                    # Korean only
+    ("ja_konbini", "😀😀 おにぎりはどこですか 👍"),                           # emoji around a match
+    ("ja_ramen", "ごちそうさま" * 80),                                          # 480 characters: only the first 300 count
+    ("ja_ramen", "あ" * 295 + "ごちそうさま"),                                   # the match straddles the 300th character
+    ("ja_ask_way", "、" * 299 + "すみません"),                                  # punctuation fills the cut, the match is after it
+]
+
+# MissionText.norm_ja cases (text -> normalize_ja); the half-width / composition / cut rules in one place
+JA_NORM_CASES = [
+    "ｶﾞｷﾞｸﾞｹﾞｺﾞ ﾊﾟﾋﾟﾌﾟﾍﾟﾎﾟ ｳﾞ ﾜﾞ ｦﾞ",           # half-width voiced and semi-voiced; ｳﾞ -> ヴ -> ゔ, ﾜﾞ -> ヷ and ｦﾞ -> ヺ are deleted
+    "がぎぱゔゞ",         # combining voicing marks after hiragana
+    "ガパヴヷヸヹヺヾ",   # ... after katakana (ワ゛ヰ゛ヱ゛ヲ゛ are deleted)
+    "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポヴ",
+    "ヷヸヹヺ ヷ ヺ",                                      # U+30F7..30FA are deleted (rule outside the docstring)
+    "ヽヾゝゞ々〇ー",                                      # repeat marks, 々, 〇, long vowel
+    "ｰｱｲｳｴｵ｡｢｣､･",                                       # half-width long vowel and punctuation
+    "ＡＢＣａｂｃ０１２３！？（）",                        # full-width Latin letters, digits, marks
+    "　 \t\n",                                            # ideographic space, space, tab, newline
+    "",
+    "   ",
+    "東京タワー、スカイツリー。",
+    "漢字ひらがなカタカナABCabc123",
+    "I'm Kim. こんにちは！",
+    "😀👍🏽🇯🇵",
+    "안녕하세요 한국어",
+    "ゟヿ",                                                # compat digraphs: より, コト
+    "KİKİ ¼ ½ ¾ ™ ª º ① ⑩ ⓐⒶ x² ﬁ ﬃ",                    # compat characters that end in kept letters / digits
+    "か゛き゜",                                           # spacing voicing marks (U+309B, 309C) are deleted, they do not compose
+    "か゛゙",                                         # spacing mark then a combining mark: no composition
+    "が゙",                                      # two combining marks: only the first composes
+    "あ" * 300,
+    "あ" * 301,
+    "あ" * 299 + "ヷ",
+    "あ" * 299 + "ヷ",                              # ワ + ゛ near the end: ヷ is deleted
+    "ｱ" * 299 + "ﾞ",                                      # ｱ + ﾞ does not compose (ｱ is not voiceable)
+    "ｶ" * 299 + "ﾞ",                                      # ｶ + ﾞ composes to ガ, kept
+    "ｶ" * 300 + "ﾞ",                                      # the mark is past the first cut (300 characters)
+    "①" * 300,                                           # 300 digits
+    "⑩" * 200,                                           # each ⑩ gives 2 digits: 400 digits, cut to 300 AT THE END
+    "ﬃ" * 150,                                           # each ﬃ gives 3 letters: 450 letters, cut to 300
+    "x" * 299 + "ﬃ",                                      # the end cut lands inside an expansion
+    "x" * 300 + "あ",                                     # the first cut (300 characters) comes before NFKC
+]
+
+# One code point at a time. The phone must give exactly the PC normalize_ja result for each of them.
+JA_TABLE_SCOPE = (
+    list(range(0x20, 0x7F))
+    + [0x3000, 0x00AA, 0x00BA, 0x00B9, 0x00B2, 0x00B3, 0x00BC, 0x00BD, 0x00BE, 0x0130, 0x2070, 0x2071, 0x207F, 0x212A, 0x2122]
+    + list(range(0x2074, 0x207A)) + list(range(0x2080, 0x208A)) + list(range(0x2460, 0x246A))
+    + list(range(0xFB00, 0xFB07)) + list(range(0x24B6, 0x24EA))
+    + list(range(0x3041, 0x3100))                       # hiragana, katakana, ゟ ヿ
+    + [0x3005, 0x3007, 0x3001, 0x3002, 0x300C, 0x300D, 0x3004, 0x3006]
+    + list(range(0x3099, 0x309D))                       # U+3099 .. 309C voicing marks
+    + list(range(0xFF01, 0xFF61))                       # full-width forms
+    + list(range(0xFF61, 0xFFA0))                       # half-width kana and the half-width punctuation
+    + [0x4E00, 0x4E8C, 0x9FFF, 0x3400, 0x4DBF, 0x4DC0, 0x4DFF, 0xA000]
+)
+
+# NFKC results that the phone does NOT build (known gaps): the PC result is written here, the test asserts that the phone
+# result is DIFFERENT (so the table cannot silently go stale) and prints them as the "known differences" table.
+# (\uf900 is a CJK compatibility ideograph, written as an escape because editors normalise the literal to U+8C48.)
+JA_KNOWN_GAPS = [
+    "㈱", "㌔", "㎏", "Ⅳ", "\uf900", "⼀", "𝐀", "㊤", "⑴", "⒈", "ℌ", "e\u0301", "ヲ\u302e\u3099", "㍿", "𝟏", "㌻",
+]
+
+JA_RANDOM_N = 400
+JA_RANDOM_SEED = 170
+
+# character pools of the seeded random strings (the scratch comparison uses the same categories with more strings)
+_RP_HIRA = [chr(c) for c in range(0x3041, 0x3097)] + ["ゝ", "ゞ"]
+_RP_KATA = [chr(c) for c in range(0x30A1, 0x30FB)] + ["ー", "ヽ", "ヾ"]
+_RP_HW = list(HW_KATA) + [HW_DAKU, HW_HANDAKU, "｡", "｢", "｣", "､", "･"]
+_RP_FW = [chr(c) for c in range(0xFF01, 0xFF5F)] + ["　"]
+_RP_ASCII = [chr(c) for c in range(0x20, 0x7F)]
+_RP_KANJI = [chr(c) for c in (0x4E00, 0x4E8C, 0x4E09, 0x65E5, 0x672C, 0x8A9E, 0x7121, 0x9FFF, 0x3400, 0x4DBF)] + ["々", "〇"]
+_RP_PUNCT = list("、。！？「」『』（）・〜…※→←￥￠￡") + ["゙", "゚", "゛", "゜"]
+_RP_EMOJI = ["😀", "👍", "🇯🇵", "❤", "️", "‍", "1️⃣", "🎌"]
+_RP_HANGUL = [chr(c) for c in (0xAC00, 0xD55C, 0xAD6D, 0xC5B4, 0x3131, 0x1100, 0x1161)]
+_RP_COMPAT = ["①", "⑩", "ⓐ", "Ⓩ", "½", "™", "ﬁ", "ﬃ", "ª", "º", "x²", "K", "İ", "ゟ", "ヿ"]
+_RP_POOLS = [_RP_HIRA, _RP_KATA, _RP_HW, _RP_FW, _RP_ASCII, _RP_KANJI, _RP_PUNCT, _RP_EMOJI, _RP_HANGUL, _RP_COMPAT]
+
+
+def ja_random_strings(n, seed):
+    """n seeded random strings from the pools above (lengths around the 300 character cut)"""
+    rnd = random.Random(seed)
+    out = []
+    for _ in range(n):
+        k = rnd.choice((1, 2, 3, 3, 6, 12, 40, 150, 290, 299, 300, 301, 330, 400))
+        pools = rnd.sample(_RP_POOLS, rnd.choice((1, 2, 3, 4)))
+        out.append("".join(rnd.choice(rnd.choice(pools)) for _ in range(k)))
+    return out
+
+
 def pc_ascii_producers():
     """PC normalize output for every single code point in the scanned blocks that gives ASCII (informational)"""
     found = []
@@ -162,6 +311,23 @@ def main():
         "norm_cases": [{"text": t, "norm": M.normalize(t)} for t in NORM_CASES],
         "table_cases": [[cp, M.normalize(chr(cp))] for cp in TABLE_SCOPE],
     }
+    # Japanese (v1.7.0 B3): added after the English keys, which stay as they were
+    assert len(JA_INPUTS) >= 24, len(JA_INPUTS)
+    ja_entries = []
+    for mission_id, text in JA_INPUTS:
+        res = M.check_text("ja", mission_id, text, [])
+        ja_entries.append({
+            "lang": "ja",
+            "mission_id": mission_id,
+            "text": text,
+            "norm": M.normalize(text, "ja"),
+            "reached": list(res["new"]),
+        })
+    golden["ja_entries"] = ja_entries
+    golden["ja_norm_cases"] = [{"text": t, "norm": M.normalize_ja(t)} for t in JA_NORM_CASES]
+    golden["ja_table_cases"] = [[cp, M.normalize_ja(chr(cp))] for cp in JA_TABLE_SCOPE]
+    golden["ja_known_gaps"] = [{"text": t, "norm": M.normalize_ja(t)} for t in JA_KNOWN_GAPS]
+    golden["ja_random"] = [{"text": t, "norm": M.normalize_ja(t)} for t in ja_random_strings(JA_RANDOM_N, JA_RANDOM_SEED)]
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         json.dump(golden, f, ensure_ascii=False, indent=1)
@@ -174,6 +340,14 @@ def main():
     print("wrote", OUT)
     print("entries", len(entries), "non-empty reached per mission", covered)
     print("norm_cases", len(NORM_CASES), "table_cases", len(TABLE_SCOPE))
+    ja_cov = {}
+    for e in ja_entries:
+        ja_cov.setdefault(e["mission_id"], 0)
+        if e["reached"]:
+            ja_cov[e["mission_id"]] += 1
+    print("ja_entries", len(ja_entries), "non-empty reached per mission", ja_cov)
+    print("ja_norm_cases", len(JA_NORM_CASES), "ja_table_cases", len(JA_TABLE_SCOPE), "ja_known_gaps", len(JA_KNOWN_GAPS),
+          "ja_random", JA_RANDOM_N)
     producers = pc_ascii_producers()
     outside = [cp for cp in producers if cp not in set(TABLE_SCOPE)]
     print("PC ASCII producers in scanned blocks: %d, in table scope: %d, outside (known gap): %d"

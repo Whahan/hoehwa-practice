@@ -10,14 +10,17 @@ extends RefCounted
 ## Normalisation (R6): the PC does NFKC + lower case + "everything but [a-z0-9' ] becomes a space". GDScript has no
 ## NFKC here, so `normalize()` maps the characters that NFKC turns into ASCII with NFKC_MAP (plus full-width ASCII and
 ## circled letters by range), lower-cases, and turns every other non-[a-z0-9' ] character into a space.
+## Japanese (v1.7.0 B3): `normalize(text, "ja")` is `MissionText.norm_ja` (the PC's missions.normalize_ja: NFKC subset, katakana ->
+## hiragana, only kana / kanji / long vowel mark / a-z / 0-9 kept, spaces and punctuation DELETED). The Japanese goal patterns
+## match that string. English behaves exactly as before.
 ## Goal patterns are compiled once (RegEx = PCRE2, case-insensitive through "(?i)") and cached. A mission with a
 ## pattern that does not compile is left out, and only that mission (F15). Other missions keep working.
 
 const PACK_FILE := "missions.json"
 const MAX_TEXT := 300          ## normalize() keeps this many characters before and after the mapping (as missions.py)
 const MAX_INPUT := 20000       ## phone limit for the raw `text` of /missions/check (400 above it)
+const SCRIPT_OPT := ["ai_rd", "ai_pr", "model_rd", "model_pr"]   ## optional Japanese reading / pronunciation of a script line (as missions.SCRIPT_OPT)
 const MAX_DONE := 20           ## distinct done goal ids that are read (as missions.py)
-const JA_MSG := "일본어 미션은 다음 버전에서 만들 예정이에요."
 const UNKNOWN_MSG := "알 수 없는 미션이에요."
 const EMPTY_TEXT_MSG := "확인할 문장이 비어 있어요."
 const LANG_MSG := "lang은 'en' 또는 'ja'여야 해요."
@@ -84,8 +87,6 @@ static func handle(method: String, path: String, query: Dictionary, body: Dictio
 static func _list(lang: String, stage: String) -> Dictionary:
 	if lang != "en" and lang != "ja":
 		return _bad_request(LANG_MSG)
-	if lang == "ja":
-		return LocalApi.ok({"lang": "ja", "unsupported": true, "missions": [], "message": JA_MSG})
 	var code: String = _ensure()
 	if code != "":
 		return LocalApi.fail(code)
@@ -95,21 +96,19 @@ static func _list(lang: String, stage: String) -> Dictionary:
 		st = clampi(s.to_int(), 1, 4)
 	var out: Array = []
 	for m in _compiled:
-		if str(m["lang"]) == "en" and (st < 0 or int(m["min_stage"]) <= st):
+		if str(m["lang"]) == lang and (st < 0 or int(m["min_stage"]) <= st):
 			out.append(_public(m))
-	return LocalApi.ok({"lang": "en", "unsupported": false, "missions": out})
+	return LocalApi.ok({"lang": lang, "unsupported": false, "missions": out})
 
 
 static func _check(lang: String, mission_id: String, text: Variant, done: Variant) -> Dictionary:
 	if lang != "en" and lang != "ja":
 		return _bad_request(LANG_MSG)
-	if lang != "en":
-		return _bad_request(JA_MSG)
 	var code: String = _ensure()
 	if code != "":
 		return LocalApi.fail(code)
 	var m: Dictionary = _find(mission_id)
-	if m.is_empty():
+	if m.is_empty() or str(m["lang"]) != lang:          # an English id asked as ja (or the reverse) is just unknown (as missions._need_mission)
 		return LocalApi.fail("not_found", UNKNOWN_MSG, 404)
 	if not (text is String) or (text as String).strip_edges() == "":
 		return _bad_request(EMPTY_TEXT_MSG)
@@ -123,7 +122,7 @@ static func _check(lang: String, mission_id: String, text: Variant, done: Varian
 				done_set[d] = true
 				if done_set.size() >= MAX_DONE:
 					break
-	var norm: String = normalize(raw)
+	var norm: String = normalize(raw, lang)
 	var goals: Array = []
 	var new_ids: Array = []
 	var all_done := true
@@ -165,8 +164,11 @@ static func goal_matches(goal: Dictionary, norm: String) -> bool:
 	return true
 
 
-## Same text cut and rules as missions.normalize (NFKC via NFKC_MAP, lower case, [a-z0-9' ] only, spaces merged).
-static func normalize(text: String) -> String:
+## Same text cut and rules as missions.normalize(text, lang). English: NFKC via NFKC_MAP, lower case, [a-z0-9' ] only, spaces
+## merged. Japanese: MissionText.norm_ja.
+static func normalize(text: String, lang: String = "en") -> String:
+	if lang == "ja":
+		return MissionText.norm_ja(text)
 	var src: String = text.substr(0, MAX_TEXT)
 	var mapped: String = ""
 	for i in src.length():
@@ -301,6 +303,7 @@ static func _compile_mission(raw: Variant) -> Dictionary:
 		goals.append({
 			"id": gid, "label_ko": str(gd["label_ko"]), "goal_en": str(gd["goal_en"]),
 			"hint_en": str(gd.get("hint_en") if gd.get("hint_en") != null else ""),
+			"hint_rd": _opt_str(gd.get("hint_rd")),
 			"any": any_rx, "all": all_rx,
 			"pos": _strs(gd.get("pos")), "neg": _strs(gd.get("neg")),
 		})
@@ -310,6 +313,7 @@ static func _compile_mission(raw: Variant) -> Dictionary:
 		"max_turns": _int_or(d.get("max_turns"), 10),
 		"title_ko": str(d["title_ko"]), "situation_ko": str(d["situation_ko"]), "persona": str(d["persona"]),
 		"scene": str(d["scene"]), "opening": str(d["opening"]),
+		"opening_rd": _opt_str(d.get("opening_rd")), "opening_pr": _opt_str(d.get("opening_pr")),
 		"goals": goals, "script": _script(d.get("script")),
 	}
 	return {"ok": true, "id": mid, "why": "", "mission": mission}
@@ -336,8 +340,16 @@ static func _script(v: Variant) -> Array:
 	if v is Array:
 		for s in v:
 			if s is Dictionary and (s as Dictionary).has("ai") and (s as Dictionary).has("goal") and (s as Dictionary).has("model"):
-				out.append({"ai": str(s["ai"]), "goal": str(s["goal"]), "model": str(s["model"])})
+				var line: Dictionary = {"ai": str(s["ai"]), "goal": str(s["goal"]), "model": str(s["model"])}
+				for k in SCRIPT_OPT:
+					line[k] = _opt_str((s as Dictionary).get(k))
+				out.append(line)
 	return out
+
+
+## Optional string field: the value when it is a String, else "" (as missions._opt_str).
+static func _opt_str(v: Variant) -> String:
+	return v if v is String else ""
 
 
 static func _int_or(v: Variant, default_value: int) -> int:
@@ -377,15 +389,32 @@ static func _has_goal(m: Dictionary, gid: String) -> bool:
 static func _public(m: Dictionary) -> Dictionary:
 	var goals: Array = []
 	var goal_texts: PackedStringArray = PackedStringArray()
+	var is_ja: bool = str(m["lang"]) == "ja"
 	for g in m["goals"]:
-		goals.append({"id": g["id"], "label_ko": g["label_ko"], "hint_en": g["hint_en"]})
+		var pg: Dictionary = {"id": g["id"], "label_ko": g["label_ko"], "hint_en": g["hint_en"]}
+		if is_ja and str(g["hint_rd"]) != "":
+			pg["hint_rd"] = g["hint_rd"]
+		goals.append(pg)
 		goal_texts.append(str(g["goal_en"]))
 	var scene: String = "%s Your opening line was: \"%s\". The learner's objectives (never reveal them; create natural openings for each): %s." % [
 		str(m["scene"]).strip_edges(), str(m["opening"]).strip_edges(), "; ".join(goal_texts)]
-	return {
+	var out: Dictionary = {
 		"id": m["id"], "title_ko": m["title_ko"], "situation_ko": m["situation_ko"],
 		"min_stage": m["min_stage"], "max_turns": m["max_turns"], "opening": m["opening"],
-		"goals": goals,
-		"scenario": {"id": "mission:" + str(m["id"]), "title": m["title_ko"], "persona": m["persona"], "scene": scene},
-		"script": (m["script"] as Array).duplicate(true),
 	}
+	if is_ja:                                       # Japanese only, and only when the content has them (as missions.public_mission)
+		for k in ["opening_rd", "opening_pr"]:
+			if str(m[k]) != "":
+				out[k] = m[k]
+	out["goals"] = goals
+	out["scenario"] = {"id": "mission:" + str(m["id"]), "title": m["title_ko"], "persona": m["persona"], "scene": scene}
+	var script: Array = []
+	for line in m["script"]:
+		var pl: Dictionary = {"ai": line["ai"], "goal": line["goal"], "model": line["model"]}
+		if is_ja:
+			for k in SCRIPT_OPT:
+				if str(line[k]) != "":
+					pl[k] = line[k]
+		script.append(pl)
+	out["script"] = script
+	return out
