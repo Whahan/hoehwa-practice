@@ -1,6 +1,6 @@
 {
  "v": 1,
- "built": "2026-11-14T23:09:51+09:00",
+ "built": "2026-11-14T23:11:56+09:00",
  "files": [
   {
    "path": "examples_en.json",
@@ -53,7 +53,7 @@
   {
    "path": "missions.json",
    "bytes": 174453,
-   "sha256": "afae253660181a6cb9ec8741e9686ba4b267ccfb50a2d551f6faaf8274b319d8",
+   "sha256": "3c89d619e110637021cfc863d13a8da1ac84565407fc3d3936c7f020b675ec1d",
    "records": 16
   },
   {
