@@ -110,7 +110,7 @@ func _bad(code: int, msg: String) -> Dictionary:
 
 func _fake(method: String, path: String, body: Variant, _timeout: float) -> Variant:
 	var p: String = path.split("?")[0]
-	calls.append({"method": method, "path": p, "body": body})
+	calls.append({"method": method, "path": p, "body": body, "full": path})
 	var fc := FakeCall.new()
 	if holds.get(p, false):
 		if not held.has(p):
@@ -625,8 +625,14 @@ func _test_failures() -> void:
 	ok(has_text(ms, "일본어 미션은 다음 버전에서 만들 예정이에요."), "unsupported:true -> 서버 메시지")
 	var n_missions_calls: int = count_calls("/missions")
 	ms.open("ja")
-	await settle(3)
-	ok(ms.status == "list" and has_text(ms, "일본어 미션은 다음 버전") and count_calls("/missions") == n_missions_calls, "lang=ja -> 안내, 요청 없음")
+	await settle(4)
+	ok(count_calls("/missions") == n_missions_calls + 1 and str(calls[calls.size() - 1]["full"]) == "/missions?lang=ja", "1.7.0: lang=ja -> GET /missions?lang=ja 를 요청함 (예전엔 요청 없이 안내만)")
+	ok(ms.status == "list" and has_text(ms, "일본어 미션은 다음 버전"), "옛 서버가 ja 에 unsupported:true 로 답하면 서버 메시지를 그대로 안내 (호환)")
+	routes["/missions"] = func(_b: Variant) -> Dictionary: return _res({"lang": "ja", "unsupported": true, "missions": []})
+	ms.open("ja")
+	await settle(4)
+	ok(ms.status == "list" and has_text(ms, MissionScreen.JA_NOTE), "unsupported:true 에 메시지가 없으면 기본 안내(JA_NOTE)")
+	routes["/missions"] = func(_b: Variant) -> Dictionary: return _res({"lang": "ja", "unsupported": true, "missions": [], "message": "일본어 미션은 다음 버전에서 만들 예정이에요."})
 	routes["/missions"] = func(_b: Variant) -> Dictionary: return _bad(404, "Not Found")
 	ms.open("en")
 	await settle(4)
@@ -950,7 +956,10 @@ func _test_lifecycle() -> void:
 	await settle(3)
 	release("/missions", _res(fx("list")))
 	await settle(3)
-	ok(ms.status == "list" and ms.missions.is_empty() and has_text(ms, "일본어 미션은 다음 버전"), "요청 중 언어를 바꾸면 늦게 온 영어 목록은 버려짐")
+	ok(ms.status == "loading" and ms.missions.is_empty(), "요청 중 언어를 바꾸면 늦게 온 영어 목록은 버려짐 (ja 요청이 아직 대기 중)")
+	release("/missions", _res({"lang": "ja", "unsupported": false, "missions": []}))
+	await settle(3)
+	ok(ms.status == "list" and ms.missions.is_empty() and has_text(ms, "연습할 수 있는 미션이 없어요"), "그 뒤 ja 응답이 오면 ja 결과만 반영됨")
 	holds = {}
 	ms.open("en")
 	await settle(4)

@@ -85,9 +85,12 @@ static func should_end(done: int, total: int, learner_turns: int, max_turns: int
 	return max_turns > 0 and learner_turns >= max_turns
 
 
-## 보낼 문장 정리: 앞뒤 공백 제거 + 300자까지
+## 보낼 문장 정리: 앞뒤 공백 제거 + 300자까지. 일본어 입력기가 넣는 전각 공백(U+3000)만 있는 입력도 빈 글로 본다.
 static func clean_text(s: String) -> String:
-	return s.strip_edges().left(MAX_TEXT)
+	var t: String = s.strip_edges()
+	while t.begins_with("\u3000") or t.ends_with("\u3000"):
+		t = (t.substr(1) if t.begins_with("\u3000") else t.left(t.length() - 1)).strip_edges()
+	return t.left(MAX_TEXT)
 
 
 # ---------------------------------------------------------------- 서버 응답 정리
@@ -124,6 +127,7 @@ static func normalize_mission(raw: Variant) -> Dictionary:
 				"id": gid,
 				"label_ko": str((g as Dictionary).get("label_ko", gid)),
 				"hint_en": str((g as Dictionary).get("hint_en", "")),
+				"hint_rd": str((g as Dictionary).get("hint_rd", "")).strip_edges(),
 			})
 	if goals.is_empty():
 		return {}
@@ -136,6 +140,10 @@ static func normalize_mission(raw: Variant) -> Dictionary:
 					"ai": str((ln as Dictionary)["ai"]).strip_edges(),
 					"goal": str((ln as Dictionary).get("goal", "")),
 					"model": str((ln as Dictionary).get("model", "")).strip_edges(),
+					"ai_rd": str((ln as Dictionary).get("ai_rd", "")).strip_edges(),
+					"ai_pr": str((ln as Dictionary).get("ai_pr", "")).strip_edges(),
+					"model_rd": str((ln as Dictionary).get("model_rd", "")).strip_edges(),
+					"model_pr": str((ln as Dictionary).get("model_pr", "")).strip_edges(),
 				})
 	var scenario: Dictionary = m["scenario"] if m.get("scenario", null) is Dictionary else {}
 	var max_turns: int = _int(m.get("max_turns", DEFAULT_MAX_TURNS), DEFAULT_MAX_TURNS)
@@ -148,6 +156,8 @@ static func normalize_mission(raw: Variant) -> Dictionary:
 		"min_stage": clampi(_int(m.get("min_stage", 1), 1), 1, 4),
 		"max_turns": max_turns,
 		"opening": str(m.get("opening", "")).strip_edges(),
+		"opening_rd": str(m.get("opening_rd", "")).strip_edges(),
+		"opening_pr": str(m.get("opening_pr", "")).strip_edges(),
 		"goals": goals,
 		"scenario": scenario,
 		"script": script,
@@ -218,22 +228,28 @@ static func reached_ids(goals: Array, resp: Variant) -> Array:
 
 ## /missions/judge 응답을 반영: pending 에 있던 id 중 done:true 이고 증거 문장이 내 발화에 들어 있는 것만 BY_AI.
 ## 서버도 같은 검사를 하지만 화면에서도 한 번 더 확인한다. 새로 달성된 id 를 돌려준다.
-static func apply_judge(done: Dictionary, pending: Array, resp: Variant, me_texts: Array) -> Array:
+## lang "ja": 증거와 내 발화를 norm_ja 로 맞춰 비교하고(가타카나·전각만 달라도 인정), 정규화 뒤 너무 짧은 증거는 인정하지 않는다
+## (서버 하한이 2글자라 "はい"·"ーー" 같은 인용도 서버는 통과시킨다). 영어(lang 생략)는 예전 그대로.
+static func apply_judge(done: Dictionary, pending: Array, resp: Variant, me_texts: Array, lang: String = "en") -> Array:
 	var fresh: Array = []
 	if not (resp is Dictionary):
 		return fresh
 	var arr: Variant = (resp as Dictionary).get("goals", [])
 	if not (arr is Array):
 		return fresh
+	var ja: bool = lang == "ja"
 	var mine: Array = []
 	for t in me_texts:
-		mine.append(TextSim.norm_text(str(t), "en"))
+		mine.append(norm_ja(str(t)) if ja else TextSim.norm_text(str(t), "en"))
 	for g in arr:
 		if not (g is Dictionary) or typeof((g as Dictionary).get("done", false)) != TYPE_BOOL or not (g as Dictionary)["done"]:
 			continue
 		var id: String = str((g as Dictionary).get("id", ""))
-		var ev: String = TextSim.norm_text(str((g as Dictionary).get("evidence", "")), "en")
+		var raw_ev: String = str((g as Dictionary).get("evidence", ""))
+		var ev: String = norm_ja(raw_ev) if ja else TextSim.norm_text(raw_ev, "en")
 		if id == "" or not pending.has(id) or done.has(id) or ev == "":
+			continue
+		if ja and not ja_evidence_ok(ev):
 			continue
 		var quoted := false
 		for t in mine:
@@ -244,6 +260,71 @@ static func apply_judge(done: Dictionary, pending: Array, resp: Variant, me_text
 			done[id] = BY_AI
 			fresh.append(id)
 	return fresh
+
+
+# ---------------------------------------------------------------- 일본어 정규화 (증거 비교용)
+
+const JA_EVIDENCE_MIN := 3        ## 정규화한 일본어 증거의 최소 길이(2글자 이하는 "はい" 같은 우연한 일치라 인정하지 않는다)
+const JA_EVIDENCE_MIN_CONTENT := 2 ## 장음(ー)을 뺀 글자 수의 최소값("ーーー" 처럼 장음만 있는 증거 거부)
+const _HW_KATA := "ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン"  ## U+FF66..FF9D 를 전각으로
+
+
+## 일본어 규칙 판정과 같은 규약의 정규화(설계 2.3.1 normalize_ja): 앞 300자, NFKC 부분집합(전각 ASCII, U+3000, 반각 가타카나와
+## 탁점·반탁점 결합), 영문 소문자, 가타카나 -> 히라가나, 남기는 글자(가나·ー·한자·々·〇·a-z·0-9) 외에는 지운다.
+## 이 화면 안에서 양쪽(증거·내 문장)에 같은 함수를 쓰므로 비교는 서로 일치한다. (B3 의 MissionText.norm_ja 와 같은 규약.)
+static func norm_ja(s: String) -> String:
+	var cps: Array = []
+	var src: String = s.left(300)
+	for i in src.length():
+		var c: int = src.unicode_at(i)
+		if c >= 0xFF01 and c <= 0xFF5E:
+			c -= 0xFEE0                     # 전각 ASCII -> ASCII
+		elif c == 0x3000:
+			c = 0x20
+		elif c >= 0xFF66 and c <= 0xFF9D:
+			c = _HW_KATA.unicode_at(c - 0xFF66)  # 반각 가타카나 -> 전각
+		elif (c == 0xFF9E or c == 0xFF9F) and not cps.is_empty():
+			var prev: int = int(cps[cps.size() - 1])  # 탁점·반탁점은 앞 글자와 결합
+			var comb: int = _voice(prev, c == 0xFF9F)
+			if comb != 0:
+				cps[cps.size() - 1] = comb
+			continue
+		cps.append(c)
+	var out := ""
+	for c2 in cps:
+		var c: int = int(c2)
+		if c >= 0x41 and c <= 0x5A:
+			c += 0x20
+		if c >= 0x30A1 and c <= 0x30F6:
+			c -= 0x60
+		elif c == 0x30FD:
+			c = 0x309D
+		elif c == 0x30FE:
+			c = 0x309E
+		var keep: bool = (c >= 0x3041 and c <= 0x3096) or c == 0x309D or c == 0x309E or c == 0x30FC 			or (c >= 0x4E00 and c <= 0x9FFF) or (c >= 0x3400 and c <= 0x4DBF) or c == 0x3005 or c == 0x3007 			or (c >= 0x61 and c <= 0x7A) or (c >= 0x30 and c <= 0x39)
+		if keep:
+			out += String.chr(c)
+	return out
+
+
+## 전각 가타카나 prev 에 탁점(semi=false)·반탁점(true)을 붙인 글자. 못 붙이면 0.
+static func _voice(prev: int, semi: bool) -> int:
+	if semi:
+		if prev >= 0x30CF and prev <= 0x30DB and (prev - 0x30CF) % 3 == 0:  # ハヒフヘホ -> パピプペポ
+			return prev + 2
+		return 0
+	if prev == 0x30A6:
+		return 0x30F4                                                        # ウ -> ヴ
+	if (prev >= 0x30AB and prev <= 0x30C1 and prev % 2 == 1) or (prev >= 0x30C4 and prev <= 0x30C6 and prev % 2 == 0) 			or (prev >= 0x30C8 and prev <= 0x30C8) or (prev >= 0x30CF and prev <= 0x30DB and (prev - 0x30CF) % 3 == 0):
+		return prev + 1
+	return 0
+
+
+## norm_ja 를 거친 증거가 인정할 만한지: 길이 JA_EVIDENCE_MIN 이상 + 장음 뺀 글자 JA_EVIDENCE_MIN_CONTENT 이상.
+static func ja_evidence_ok(ev_norm: String) -> bool:
+	if ev_norm.length() < JA_EVIDENCE_MIN:
+		return false
+	return ev_norm.replace("ー", "").length() >= JA_EVIDENCE_MIN_CONTENT
 
 
 # ---------------------------------------------------------------- 대본 모드 (AI 없음)
@@ -258,7 +339,8 @@ static func script_finished(state: Dictionary, size: int) -> bool:
 
 ## 내 답이 이 줄을 통과하는지: 규칙으로 줄의 목표에 닿았거나, 모범 답과 문장 유사도가 PASS_SIM 이상.
 ## `reached` = 이 문장이 규칙으로 닿은 목표 id 들 (서버가 안 되면 빈 배열).
-static func script_passes(said: String, line: Dictionary, reached: Array) -> bool:
+## lang "ja": 글자 단위 비교(TextSim "ja")이고, 모범 답의 읽기(model_rd)와도 비교해 높은 쪽을 쓴다(히라가나로만 써도 통과).
+static func script_passes(said: String, line: Dictionary, reached: Array, lang: String = "en") -> bool:
 	if said.strip_edges() == "":
 		return false
 	var goal: String = str(line.get("goal", ""))
@@ -267,6 +349,8 @@ static func script_passes(said: String, line: Dictionary, reached: Array) -> boo
 	var model: String = str(line.get("model", ""))
 	if model == "":
 		return false
+	if lang == "ja":
+		return int(TextSim.similarity(said, model, str(line.get("model_rd", "")), "ja")["score"]) >= PASS_SIM
 	return int(TextSim.similarity(said, model, "", "en")["score"]) >= PASS_SIM
 
 
