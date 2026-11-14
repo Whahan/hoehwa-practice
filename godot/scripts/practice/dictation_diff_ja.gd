@@ -53,6 +53,9 @@ const _OP_IN := 4
 const _OP_IN_MISS := 5
 const _OP_EXTRA := 6
 const _OP_EXIT := 7
+const _OP_EXIT_PEN2 := 8  # 한자 글자 항목을 통째로 빠뜨리고 읽기 1글자만 먹인 채 나감(오류 2 추가)
+const _OP_EXIT_PEN1 := 9  # 같은데 읽기 2글자를 먹인 채 나감(오류 1 추가)
+const _KINDS := 5
 
 
 ## 읽기 비교용 정규화: 앞 MAX_LEN 글자 -> 전각 영숫자 반각·소문자 -> 반각 가타카나 전각 -> 가타카나 -> 히라가나
@@ -138,6 +141,8 @@ static func diff(said: Variant, text: Variant, reading: Variant = "") -> Diction
 	var lcs := 0
 	var kanji_items := 0   # 한자를 써서 맞춘 글자 항목 수
 	var extras_n := 0
+	var extra_ideo := false   # 어디에도 맞지 않은 쓴 한자가 있는가
+	var pen_n := 0         # 통째로 빠뜨린 한자 글자 항목의 추가 오류
 	var extra: Array = []
 	var cur_miss: Array = []
 	var cur_txt := ""
@@ -171,12 +176,17 @@ static func diff(said: Variant, text: Variant, reading: Variant = "") -> Diction
 			r_match[op_q[k]] = 0
 			r_item[op_q[k]] = op_i[k]
 			cur_miss.append(op_q[k])
+		elif t == _OP_EXIT_PEN2:
+			pen_n += 2
+		elif t == _OP_EXIT_PEN1:
+			pen_n += 1
 		elif t == _OP_EXTRA:
 			extras_n += 1
 			cur_n += 1
 			cur_txt += so_all[op_p[k]]
 			if _is_ideo(sf_all[op_p[k]].unicode_at(0)):
 				cur_ideo = true
+				extra_ideo = true
 		if matched:
 			_flush_gap(cur_miss, cur_txt, cur_n, cur_ideo, r_gap_txt, r_gap_t, r_gap_ideo, extra)
 			cur_miss = []
@@ -192,11 +202,11 @@ static func diff(said: Variant, text: Variant, reading: Variant = "") -> Diction
 		extra.append(rest)
 
 	# ---- 점수
-	var tn: int = lcs + extras_n
+	var tn: int = lcs + extras_n + pen_n
 	var score := 0
 	if tn > 0:
 		score = roundi(200.0 * float(lcs) / float(rn + tn))
-		var errors: int = (rn - lcs) + extras_n
+		var errors: int = (rn - lcs) + extras_n + pen_n
 		if errors >= HARD_ERRORS or (rn <= SHORT_LEN and errors >= 1):
 			score = mini(score, HARD_CAP)
 	var out: Dictionary = {"score": score, "passed": score >= PASS_SCORE, "mode": "empty", "units": [], "extra": extra, "len": rn}
@@ -235,6 +245,7 @@ static func diff(said: Variant, text: Variant, reading: Variant = "") -> Diction
 			u_said[u] = String(u_said[u]) + r_orig[q]
 			if r_match[q] != 2:
 				u_all_kanji[u] = false
+	var has_kanji_diff := false
 	var chunk_items := 0
 	for kx in it_k:
 		chunk_items += int(kx)
@@ -248,12 +259,17 @@ static func diff(said: Variant, text: Variant, reading: Variant = "") -> Diction
 		else:
 			if is_chunk and bool(u_miss_ideo[u]):
 				kind = "kanji_diff"
+				has_kanji_diff = true
 			elif bool(u_miss_t[u]):
 				kind = "typo"
 			else:
 				kind = "missing"
 		units.append({"w": run["o"], "rd": u_rd[u], "ok": bool(u_ok[u]), "kind": kind, "said": u_said[u], "k": is_chunk})
 	out["units"] = units
+	# 한자 칸에 다른 한자를 썼거나 어디에도 맞지 않는 한자를 쓴 글은 통과하지 못한다(한자로 쓰기로 했다면 맞는 한자여야 한다)
+	if (has_kanji_diff or extra_ideo) and int(out["score"]) > HARD_CAP:
+		out["score"] = HARD_CAP
+		out["passed"] = HARD_CAP >= PASS_SCORE
 
 	if tn == 0:
 		out["mode"] = "empty"
@@ -556,7 +572,11 @@ static func _rx(cost: PackedInt32Array, back: PackedInt32Array, lo: PackedInt32A
 			hi[row] = tp
 
 
-## 정렬 탐색(최소 오류). 상태: B[i][q][p] = 항목 i 앞, 읽기 q 글자·쓴 글 p 글자 소비 / I[i][q][p] = 한자 글자 항목 i 의 읽기를 가나로 쓰는 중.
+## 정렬 탐색(최소 오류). 상태 종류(kind): 0 = B[i][q][p] 항목 i 앞(읽기 q 글자·쓴 글 p 글자 소비),
+## 1 = 한자 글자 항목 i 의 읽기를 가나로 쓰는 중이고 맞은 글자가 1개 이상,
+## 2 / 3 / 4 = 그런 중인데 지금까지 소비한 읽기 1글자 / 2글자 / 3글자 이상이 전부 빠짐.
+## 한자 글자 항목을 통째로 빠뜨리면(맞은 글자 0) 읽기가 몇 글자든 오류 HARD_ERRORS(3)개 이상으로 센다(나갈 때 모자란 만큼 추가):
+## 이웃한 한자가 그 읽기를 대신 먹어도 빠진 한자 하나는 항상 오류 3 이상이라 통과하지 못한다.
 ## {"ok": bool, "cost": int, "op","i","q","p","l": 연산 열(정답 순서)}
 static func _search(it_s: PackedStringArray, it_k: PackedByteArray, it_last: PackedByteArray, a_arr: PackedInt32Array, b_arr: PackedInt32Array, rch: PackedStringArray, pch: PackedStringArray, pstr: String, rstr: String, feas: Array, budget: int) -> Dictionary:
 	var n: int = it_s.size()
@@ -566,93 +586,97 @@ static func _search(it_s: PackedStringArray, it_k: PackedByteArray, it_last: Pac
 	var rw: int = (rn + 1) * w
 	var total: int = (n + 1) * rw
 	var rows: int = (n + 1) * (rn + 1)
-	var cb := PackedInt32Array()
-	cb.resize(total)
-	cb.fill(_INF)
-	var ci := PackedInt32Array()
-	ci.resize(total)
-	ci.fill(_INF)
-	var bb := PackedInt32Array()
-	bb.resize(total)
-	var bi := PackedInt32Array()
-	bi.resize(total)
-	var lob := PackedInt32Array()
-	lob.resize(rows)
-	lob.fill(w)
-	var hib := PackedInt32Array()
-	hib.resize(rows)
-	hib.fill(-1)
-	var loi := PackedInt32Array()
-	loi.resize(rows)
-	loi.fill(w)
-	var hii := PackedInt32Array()
-	hii.resize(rows)
-	hii.fill(-1)
+	# 종류별 비용·되돌림·범위 배열 (0 = B, 1..3 = I 계열)
+	var cost: Array = []
+	var back: Array = []
+	var lo: Array = []
+	var hi: Array = []
+	for kd in _KINDS:
+		var c0 := PackedInt32Array()
+		c0.resize(total)
+		c0.fill(_INF)
+		cost.append(c0)
+		var b0 := PackedInt32Array()
+		b0.resize(total)
+		back.append(b0)
+		var l0 := PackedInt32Array()
+		l0.resize(rows)
+		l0.fill(w)
+		lo.append(l0)
+		var h0 := PackedInt32Array()
+		h0.resize(rows)
+		h0.fill(-1)
+		hi.append(h0)
+	var cb: PackedInt32Array = cost[0]
+	var lo0: PackedInt32Array = lo[0]
+	var hi0: PackedInt32Array = hi[0]
+	lo0[0] = 0
+	hi0[0] = 0
 	cb[0] = 0
-	lob[0] = 0
-	hib[0] = 0
 	for i in range(n + 1):
 		var feas_next: PackedByteArray
 		if i < n:
 			feas_next = feas[i + 1]
 		for q in range(rn + 1):
 			var row: int = i * (rn + 1) + q
-			# ---- B 상태
-			var p: int = lob[row]
-			while p <= hib[row]:
-				var f: int = row * w + p
-				var c: int = cb[f]
-				if c < _INF:
-					var base: int = (f * 2) * 16
-					if p < pn:
-						_rx(cb, bb, lob, hib, rn, w, i, q, p + 1, c + _UNIT, base + _OP_EXTRA, budget)
-					if i < n:
-						if it_k[i] == 0:
-							if p < pn and pch[p] == it_s[i]:
-								_rx(cb, bb, lob, hib, rn, w, i + 1, q + 1, p + 1, c, base + _OP_KANA, budget)
-							_rx(cb, bb, lob, hib, rn, w, i + 1, q + 1, p, c + _UNIT, base + _OP_KANA_MISS, budget)
+			for kd in _KINDS:
+				if kd > 0 and i >= n:
+					break
+				var ck: PackedInt32Array = cost[kd]
+				var lok: PackedInt32Array = lo[kd]
+				var hik: PackedInt32Array = hi[kd]
+				var p: int = lok[row]
+				while p <= hik[row]:
+					var f: int = row * w + p
+					var c: int = ck[f]
+					if c < _INF:
+						var base: int = (f * _KINDS + kd) * 16
+						if p < pn:
+							_rx(ck, back[kd], lok, hik, rn, w, i, q, p + 1, c + _UNIT, base + _OP_EXTRA, budget)
+						if kd == 0:
+							if i < n:
+								if it_k[i] == 0:
+									if p < pn and pch[p] == it_s[i]:
+										_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q + 1, p + 1, c, base + _OP_KANA, budget)
+									_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q + 1, p, c + _UNIT, base + _OP_KANA_MISS, budget)
+								else:
+									if q < rn:
+										var out_of: int = 1 if (q < a_arr[i] or q >= b_arr[i]) else 0
+										if p < pn and pch[p] == rch[q]:
+											_rx(cost[1], back[1], lo[1], hi[1], rn, w, i, q + 1, p + 1, c + out_of, base + _OP_IN, budget)
+										_rx(cost[2], back[2], lo[2], hi[2], rn, w, i, q + 1, p, c + _UNIT + out_of, base + _OP_IN_MISS, budget)
+									var len_i: int = it_s[i].length()
+									if len_i > 0 and p + len_i <= pn:
+										var typed: bool
+										if len_i == 1:
+											typed = pch[p] == it_s[i]
+										else:
+											typed = pstr.substr(p, len_i) == it_s[i]
+										if typed:
+											for l in range(1, rn - q + 1):
+												if feas_next[q + l] != 1:
+													continue
+												var ov: int = mini(q + l, b_arr[i]) - maxi(q, a_arr[i])
+												var pc: int = l - maxi(0, ov)
+												_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q + l, p + len_i, c + pc, base + _OP_KANJI, budget)
+												if it_last[i] == 1 and l >= 2:
+													for k in range(1, mini(TAIL_MAX, l - 1) + 1):
+														if p + len_i + k <= pn and pstr.substr(p + len_i, k) == rstr.substr(q + l - k, k):
+															_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q + l, p + len_i + k, c + pc, base + _OP_KANJI, budget)
 						else:
 							if q < rn:
-								var out_of: int = 1 if (q < a_arr[i] or q >= b_arr[i]) else 0
+								var out2: int = 1 if (q < a_arr[i] or q >= b_arr[i]) else 0
 								if p < pn and pch[p] == rch[q]:
-									_rx(ci, bi, loi, hii, rn, w, i, q + 1, p + 1, c + out_of, base + _OP_IN, budget)
-								_rx(ci, bi, loi, hii, rn, w, i, q + 1, p, c + _UNIT + out_of, base + _OP_IN_MISS, budget)
-							var len_i: int = it_s[i].length()
-							if len_i > 0 and p + len_i <= pn:
-								var typed: bool
-								if len_i == 1:
-									typed = pch[p] == it_s[i]
+									_rx(cost[1], back[1], lo[1], hi[1], rn, w, i, q + 1, p + 1, c + out2, base + _OP_IN, budget)
+								var miss_to: int = 1 if kd == 1 else mini(kd + 1, 4)
+								_rx(cost[miss_to], back[miss_to], lo[miss_to], hi[miss_to], rn, w, i, q + 1, p, c + _UNIT + out2, base + _OP_IN_MISS, budget)
+							if feas_next[q] == 1:
+								if kd == 2:
+									_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q, p, c + 2 * _UNIT, base + _OP_EXIT_PEN2, budget)
+								elif kd == 3:
+									_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q, p, c + _UNIT, base + _OP_EXIT_PEN1, budget)
 								else:
-									typed = pstr.substr(p, len_i) == it_s[i]
-								if typed:
-									for l in range(1, rn - q + 1):
-										if feas_next[q + l] != 1:
-											continue
-										var ov: int = mini(q + l, b_arr[i]) - maxi(q, a_arr[i])
-										var pc: int = l - maxi(0, ov)
-										_rx(cb, bb, lob, hib, rn, w, i + 1, q + l, p + len_i, c + pc, base + _OP_KANJI, budget)
-										if it_last[i] == 1 and l >= 2:
-											for k in range(1, mini(TAIL_MAX, l - 1) + 1):
-												if p + len_i + k <= pn and pstr.substr(p + len_i, k) == rstr.substr(q + l - k, k):
-													_rx(cb, bb, lob, hib, rn, w, i + 1, q + l, p + len_i + k, c + pc, base + _OP_KANJI, budget)
-				p += 1
-			# ---- I 상태
-			if i < n:
-				p = loi[row]
-				while p <= hii[row]:
-					var f2: int = row * w + p
-					var c2: int = ci[f2]
-					if c2 < _INF:
-						var base2: int = (f2 * 2 + 1) * 16
-						if p < pn:
-							_rx(ci, bi, loi, hii, rn, w, i, q, p + 1, c2 + _UNIT, base2 + _OP_EXTRA, budget)
-						if q < rn:
-							var out2: int = 1 if (q < a_arr[i] or q >= b_arr[i]) else 0
-							if p < pn and pch[p] == rch[q]:
-								_rx(ci, bi, loi, hii, rn, w, i, q + 1, p + 1, c2 + out2, base2 + _OP_IN, budget)
-							_rx(ci, bi, loi, hii, rn, w, i, q + 1, p, c2 + _UNIT + out2, base2 + _OP_IN_MISS, budget)
-						if feas_next[q] == 1:
-							_rx(cb, bb, lob, hib, rn, w, i + 1, q, p, c2, base2 + _OP_EXIT, budget)
+									_rx(cb, back[0], lo[0], hi[0], rn, w, i + 1, q, p, c, base + _OP_EXIT, budget)
 					p += 1
 	var f_end: int = (n * (rn + 1) + rn) * w + pn
 	var res: Dictionary = {"ok": false, "cost": _INF, "op": PackedInt32Array(), "i": PackedInt32Array(), "q": PackedInt32Array(), "p": PackedInt32Array(), "l": PackedInt32Array()}
@@ -667,13 +691,14 @@ static func _search(it_s: PackedStringArray, it_k: PackedByteArray, it_last: Pac
 	var f_cur: int = f_end
 	var kind: int = 0
 	var guard := 0
-	while not (f_cur == 0 and kind == 0) and guard < total * 2 + 10:
+	while not (f_cur == 0 and kind == 0) and guard < total * _KINDS + 10:
 		guard += 1
-		var code: int = bb[f_cur] if kind == 0 else bi[f_cur]
+		var bk: PackedInt32Array = back[kind]
+		var code: int = bk[f_cur]
 		var op: int = code % 16
 		var pk: int = code / 16
-		var prev_kind: int = pk % 2
-		var prev_f: int = pk / 2
+		var prev_kind: int = pk % _KINDS
+		var prev_f: int = pk / _KINDS
 		var pi: int = prev_f / rw
 		var prem: int = prev_f % rw
 		var pq: int = prem / w
