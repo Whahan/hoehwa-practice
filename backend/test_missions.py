@@ -44,6 +44,7 @@ KANJI = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\u3005\u3007]")
 FULL_SET = {"cafe_order": 1, "self_intro": 1, "hotel_checkin": 2, "ask_directions": 2, "restaurant": 2,
             "pharmacy_doctor": 3, "return_item": 3, "job_interview": 4}
 SECRET_KEYS = {"match", "pos", "neg", "goal_en"}
+MEDICAL_IDS = {"ja_clinic", "pharmacy_doctor"}   # their scene must forbid a diagnosis / a dose (safety rule)
 JA_BOMBS = ["あ" * 300, "ください" * 60, "お願いします" * 50, "これをください。" * 40, "いくらですか" * 50, "ア" * 400 + "。", "日本語" * 100 + "を", "かーど" * 100]
 BOMBS = ["a" * 300 + "!", "I'd like " * 40, "a " * 150, "i" * 300, "can i have " * 30, ("hello " * 60) + "x" + (" thank you" * 20)]
 
@@ -257,6 +258,12 @@ def mission_errors(data, full=False, full_ja=False):
         for key in ("persona", "scene"):
             if not _ne(m.get(key)):
                 errs.append("%s: %s가 비어 있어요" % (tag, key))
+        if _ne(m.get("scene")):
+            sc = m["scene"].lower()
+            if "never tell the learner what to say" not in sc:
+                errs.append("%s: scene에 안전 규칙 'Never tell the learner what to say' (학습자가 할 말을 알려 주지 않는다)가 없어요" % tag)
+            if mid in MEDICAL_IDS and ("dose" not in sc or "never" not in sc or (mid == "ja_clinic" and "diagnos" not in sc)):
+                errs.append("%s: 병원·약국 scene에 진단·약 용량을 말하지 않는다는 규칙(Never diagnose … never state a dose)이 없어요" % tag)
         if not _ne(m.get("opening")):
             errs.append("%s: opening이 비어 있어요" % tag)
         elif HANGUL.search(m["opening"]):
@@ -495,12 +502,19 @@ def meta_lint_ja():
         ("목표 2개", lambda m: m.__setitem__("goals", m["goals"][:2]), "목표가 3~5개"),
         ("max_turns 가 작음", lambda m: m.__setitem__("max_turns", 5), "max_turns"),
         ("title_ko 에 한글 없음", lambda m: m.__setitem__("title_ko", "ショップ"), "title_ko"),
+        ("scene 에서 '학습자가 할 말을 알려 주지 않는다' 삭제", lambda m: m.__setitem__("scene", "You work at a small clothing shop. Speak short, polite Japanese."), "Never tell the learner"),
+        ("병원 scene 에서 진단·용량 금지 삭제", lambda m: (m.__setitem__("id", "ja_clinic"), m.__setitem__("scene", "You are a receptionist. Never tell the learner what to say.")), "진단·약 용량"),
+        ("병원 scene 에서 진단 금지만 삭제", lambda m: (m.__setitem__("id", "ja_clinic"), m.__setitem__("scene", "Never state a dose. Never tell the learner what to say.")), "진단·약 용량"),
     ]
     for name, fn, word in cases:
         d = json.loads(json.dumps(good))
         fn(d["missions"][0])
         errs = mission_errors(d)
         check("selfcheck FAIL-as-expected: 틀린 일본어 내용 -- %s" % name, any(word in e for e in errs), "찾는 글 %r / 첫 오류 %s" % (word, errs[:1]))
+    d = ja_sample()
+    d["missions"][0]["id"] = "ja_clinic"
+    d["missions"][0]["scene"] = "You are a receptionist. Never diagnose, never name a medicine, never state a dose. Never tell the learner what to say."
+    check("병원 scene 에 안전 문구가 다 있으면 통과", mission_errors(d) == [], mission_errors(d)[:2])
     d = ja_sample()
     d["missions"].append(json.loads(json.dumps(d["missions"][0])))
     check("selfcheck FAIL-as-expected: 틀린 일본어 내용 -- 미션 id 중복", any("중복" in e for e in mission_errors(d)))
