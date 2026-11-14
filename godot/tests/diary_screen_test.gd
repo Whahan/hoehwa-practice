@@ -71,6 +71,7 @@ func _ready() -> void:
 	await _test_consent()
 	await _test_private_requests()
 	await _test_old_server()
+	await _test_health_gate()
 	await _test_ai_defense()
 	await _test_errors()
 	await _test_cards()
@@ -90,7 +91,7 @@ func _ready() -> void:
 func _setup() -> void:
 	_saved = {
 		"diary_path": DiaryStore.path, "prefs_path": Store.prefs_path, "progress_path": Store.progress_path, "log_path": StudyLog.path,
-		"progress": Store.progress.duplicate(true), "prefs": Store.prefs.duplicate(true), "animate": Sheet.animate,
+		"progress": Store.progress.duplicate(true), "prefs": Store.prefs.duplicate(true), "animate": Sheet.animate, "health": Backend.health.duplicate(true),
 	}
 	Store.prefs_path = P_PREFS
 	Store.progress_path = P_PROG
@@ -135,6 +136,7 @@ func _teardown() -> void:
 	Store.progress = _saved["progress"]
 	Store.prefs = _saved["prefs"]
 	Sheet.animate = _saved["animate"]
+	Backend.health = _saved["health"]
 
 
 func _rm(path: String) -> void:
@@ -167,6 +169,7 @@ func _fresh() -> void:
 	DiaryScreen.ai_hook = func() -> String: return "ready"
 	DiaryScreen.stt_hook = func() -> bool: return false
 	DiaryScreen.old_server_seen = false
+	Backend.health = {"llm": true, "fix_private": true} ## a PC program that knows "private"
 	_reqs = []
 	_queue = []
 	_hold = false
@@ -670,6 +673,86 @@ func _test_old_server() -> void:
 	await _frames(4)
 	ok(s3.stage == "result" and _find(s3, "NoChange") != null and (_find(s3, "NoChange") as Label).text == DiaryScreen.MSG_NO_CHANGE, "nothing to fix: one line, no card")
 	ok(_find(s3, "ResultCard") == null and Store.progress["review"].is_empty(), "...no result card and no review card")
+
+
+# ---------------------------------------------------------------- the PC program must say it knows "private"
+
+func _test_health_gate() -> void:
+	print("[health gate: no sentence goes to a PC program whose /health has no fix_private: true]")
+	var old_healths := [
+		["no fix_private key (1.6.x)", {"llm": true}],
+		["empty health", {}],
+		["fix_private false", {"llm": true, "fix_private": false}],
+		["fix_private as a string", {"llm": true, "fix_private": "true"}],
+		["fix_private as 1", {"llm": true, "fix_private": 1}],
+	]
+	for oh in old_healths:
+		_fresh()
+		Store.prefs["diary_consent"] = true
+		Backend.health = (oh[1] as Dictionary).duplicate(true)
+		var s := _make("ja")
+		await _frames(3)
+		var text := "きのう ともだちと えいがをみた。きょうは あめだった。"
+		_type(s, text)
+		await _frames(1)
+		ok(not DiaryScreen.fix_private_ok(), "%s: fix_private_ok() is false" % oh[0])
+		ok(_btn(s, "FixBtn").disabled, "%s: [고쳐 보기] is off" % oh[0])
+		var note: Label = _find(s, "OldPcNote") as Label
+		ok(note != null and note.text == DiaryScreen.NOTE_OLD_PC and note.text.contains(DiaryScreen.OLD_SERVER_PRIVACY), "%s: the old PC program notice is shown" % oh[0])
+		_reqs.clear()
+		s.fix_text()
+		await _frames(3)
+		ok(_fix_reqs().is_empty() and _reqs.is_empty(), "%s: [고쳐 보기] sends 0 requests" % oh[0])
+		ok(s.consent_asks == 0 and not Sheet.is_open(), "%s: no consent sheet either (nothing would be sent)" % oh[0])
+		ok(_find(s, "Message") != null and _joined(_find(s, "Message")).contains(DiaryScreen.OLD_SERVER_PRIVACY), "%s: the message says it" % oh[0])
+		ok(s._edit.text == text and DiaryStore.entries("ja").is_empty(), "%s: the text is kept in the box, nothing was saved by the press" % oh[0])
+		_press(_btn(s, "SaveBtn"), "저장만 하기 (%s)" % oh[0])
+		await _frames(3)
+		ok(DiaryStore.pending("ja").size() == 1 and _reqs.is_empty(), "%s: saving only works and sends nothing" % oh[0])
+		var fe: Button = _btn(s, "FixEntryBtn")
+		ok(fe != null and fe.disabled, "%s: the list [고치기] is off" % oh[0])
+		s.fix_entry(str(DiaryStore.pending("ja")[0]["id"]))
+		await _frames(3)
+		ok(_reqs.is_empty() and _joined(s).contains(DiaryScreen.OLD_SERVER_PRIVACY), "%s: fix_entry sends 0 requests and shows the notice" % oh[0])
+	# the PC program is updated: the same screen works again
+	_fresh()
+	Store.prefs["diary_consent"] = true
+	Backend.health = {"llm": true}
+	var s2 := _make("ja")
+	await _frames(3)
+	_type(s2, "きのう ともだちと えいがをみた。")
+	await _frames(1)
+	ok(_btn(s2, "FixBtn").disabled, "before the update: [고쳐 보기] is off")
+	Backend.health = {"llm": true, "fix_private": true}
+	s2.refresh()
+	await _frames(2)
+	_type(s2, "きのう ともだちと えいがをみた。")
+	await _frames(1)
+	ok(not _btn(s2, "FixBtn").disabled and _find(s2, "OldPcNote") == null, "after the update: [고쳐 보기] is on and the notice is gone")
+	_press(_btn(s2, "FixBtn"), "고쳐 보기 (updated PC)")
+	await _frames(4)
+	ok(s2.stage == "result" and _fix_reqs().size() == 1 and _body_problem(_fix_reqs()[0]["body"], "ja") == "", "with fix_private true it works as before (1 request, private:true)")
+	# the health changes while the consent sheet is open: nothing is sent
+	_fresh()
+	var s3 := _make("ja")
+	await _frames(3)
+	_type(s3, "きのう ともだちと えいがをみた。")
+	await _frames(1)
+	_press(_btn(s3, "FixBtn"), "고쳐 보기 (health changes under the sheet)")
+	await _frames(2)
+	ok(Sheet.is_open(), "the consent sheet is open")
+	Backend.health = {"llm": true}
+	if s3.last_sheet != null and is_instance_valid(s3.last_sheet) and s3.last_sheet.buttons.has("agree"):
+		_press(s3.last_sheet.buttons["agree"], "동의하고 고치기 (health changed)")
+	await _frames(3)
+	ok(_fix_reqs().is_empty() and s3.stage == "home" and DiaryStore.pending("ja").size() == 1, "last check: 0 requests, the entry stays saved")
+	# without a PC / AI the older notices keep their place (the update note is for 'ready' only)
+	_fresh()
+	Backend.health = {"llm": true}
+	DiaryScreen.ai_hook = func() -> String: return "no_pc"
+	var s4 := _make("ja")
+	await _frames(3)
+	ok(_find(s4, "OldPcNote") == null and _find(s4, "AiNote") != null, "no PC: the usual 'connect the PC' note, not the update note")
 
 
 # ---------------------------------------------------------------- AI output defence

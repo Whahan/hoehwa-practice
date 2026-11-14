@@ -9,7 +9,9 @@ extends Control
 ##   - /fix 는 언제나 "private": true 로 보낸다 (문장당 1번, 최대 3번, 한 번에 문장 하나, prev_ai "").
 ##   - 일기 글은 소리로 읽지 않는다: 이 화면은 Tts 를 부르지 않고 /tts 도 요청하지 않는다 (서버가 /tts 문장 앞 30자를 로그에 남기기 때문).
 ##   - 일기 글은 print / push_warning / Toast 로 내보내지 않는다. 저장은 DiaryStore(user://diary.json) 한 곳뿐이다.
-##   - 응답에 reading 키가 없으면 옛 PC 프로그램(private 를 모르고 문장을 로그·캐시에 남김)이다: OLD_SERVER_PRIVACY 를 보이고
+##   - 보내기 전에 PC 의 /health(Backend.health)에 "fix_private": true 가 있는지 본다. 없으면(1.6.x PC 프로그램) 한 문장도 보내지 않고
+##     NOTE_OLD_PC 안내를 보이며 글은 저장만 한다. 이 판정은 새 요청 없이 이미 받아 둔 Backend.health 를 읽는다.
+##   - (두 번째 방어선) 응답에 reading 키가 없으면 옛 PC 프로그램(private 를 모르고 문장을 로그·캐시에 남김)이다: OLD_SERVER_PRIVACY 를 보이고
 ##     그 일기는 저장만 해 두며, 앱을 다시 열 때까지(또는 PC 연결이 끊겼다 다시 이어질 때까지) 더는 보내지 않는다.
 ## 연습 허브 하위 화면 계약: `signal closed`, `open(lang, args)`, `go_back() -> bool`, `on_hide()`.
 
@@ -27,6 +29,7 @@ const OLD_SERVER_PRIVACY := "PC 프로그램을 최신 버전으로 업데이트
 const OLD_SERVER_EXTRA := "이 PC 프로그램은 옛 버전이라 방금 보낸 문장이 PC의 기록에 남았을 수 있어요. 업데이트하기 전에는 더 보내지 않아요."
 const NOTE_NO_PC := "AI로 고치려면 PC에 연결해야 해요. 지금은 [저장만 하기]로 저장해 두고, 나중에 목록의 [고치기]로 고칠 수 있어요."
 const NOTE_AI_OFF := "PC의 AI가 아직 연결되지 않았어요. 연결하기 전에는 [저장만 하기]로 저장해 두고, 나중에 목록의 [고치기]로 고칠 수 있어요."
+const NOTE_OLD_PC := OLD_SERVER_PRIVACY + ". 그때까지는 [저장만 하기]로 저장해 두고, 나중에 목록의 [고치기]로 고칠 수 있어요."
 const NOTE_NO_MIC := "음성 입력은 PC에 연결했을 때만 돼요."
 const MSG_SAVED_LATER := "일기는 저장돼 있어요. 아래 목록의 [고치기]로 다시 고칠 수 있어요."
 const MSG_NO_CHANGE := "잘 썼어요. 고칠 곳이 없어요."
@@ -159,6 +162,12 @@ static func ai_state() -> String:
 	return "ready"
 
 
+## PC 프로그램이 "private" 를 아는가: /health 에 fix_private 가 불리언 true 로 있을 때만. (Backend.health 는 이미 앱이 받아 둔 값이다.)
+## 1.6.x PC 프로그램은 이 키가 없고 private 를 무시해서 일기 문장을 로그·캐시에 남기므로, 그때는 한 문장도 보내지 않는다.
+static func fix_private_ok() -> bool:
+	return Backend.health.get("fix_private", false) is bool and bool(Backend.health.get("fix_private", false))
+
+
 static func stt_ok() -> bool:
 	if stt_hook.is_valid():
 		return bool(stt_hook.call())
@@ -201,7 +210,12 @@ static func ai_note(state: String) -> String:
 
 ## AI 로 고칠 수 있나: PC 와 AI 가 준비됐고, 옛 PC 프로그램을 본 적이 없다.
 func can_fix() -> bool:
-	return _ai == "ready" and not old_server_seen
+	return _ai == "ready" and not old_server_seen and fix_private_ok()
+
+
+## PC 와 AI 는 준비됐는데 PC 프로그램이 옛 버전이라(fix_private 없음) 고칠 수 없는 상태.
+func needs_pc_update() -> bool:
+	return _ai == "ready" and not fix_private_ok()
 
 
 func consented() -> bool:
@@ -312,6 +326,8 @@ func fix_text() -> void:
 		return
 	_ai = ai_state()
 	if not can_fix():
+		if needs_pc_update():
+			_say(NOTE_OLD_PC, true)
 		return
 	if not consented():
 		_ask_consent(_fix_text_after_consent)
@@ -349,7 +365,9 @@ func fix_entry(id: String) -> void:
 	_ai = ai_state()
 	if not can_fix():
 		stage = "home"
-		if old_server_seen:
+		if needs_pc_update():
+			_say(NOTE_OLD_PC, true)
+		elif old_server_seen:
 			_say(OLD_SERVER_PRIVACY + ". " + OLD_SERVER_EXTRA, true)
 		else:
 			_say(ai_note(_ai), true)
@@ -401,6 +419,11 @@ func cancel_fix() -> void:
 func _run_fix(id: String) -> void:
 	var entry: Dictionary = DiaryStore.get_entry(id)
 	if entry.is_empty():
+		return
+	_ai = ai_state()
+	if not fix_private_ok(): ## 마지막 확인: 동의 시트를 보는 사이에 상황이 바뀌어도 옛 PC 프로그램에는 보내지 않는다
+		stage = "home"
+		_fail(NOTE_OLD_PC)
 		return
 	var chk: Dictionary = DiaryLogic.check_input(str(entry["text"]), lang)
 	if not bool(chk["ok"]):
@@ -664,9 +687,11 @@ func _render_home(c: VBoxContainer) -> void:
 	btns.add_child(_save_btn)
 	card.body.add_child(btns)
 	var note: String = ai_note(_ai)
+	if needs_pc_update():
+		note = NOTE_OLD_PC
 	if note != "":
 		var nl := UI.label(note, "Muted")
-		nl.name = "AiNote"
+		nl.name = "OldPcNote" if needs_pc_update() else "AiNote"
 		card.body.add_child(nl)
 	if DiaryStore.is_read_only():
 		var ro := UI.label("일기 파일을 읽지 못해서 이번에는 저장할 수 없어요.", "Muted")

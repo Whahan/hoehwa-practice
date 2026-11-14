@@ -2784,6 +2784,7 @@ def health():
     return {"ok": True, "stt": _stt_model is not None, "tts": {"en": _tts_ready["en"], "ja": _tts_ready["ja"]}, "tts_device": _tts_device,
             "llm": state in ("ready", "blocked"), "llm_model": _remote_model(), "llm_provider": llm_provider(), "llm_state": state,
             "score": _stt_model is not None and _ojt is not None,
+            "fix_private": True,   # POST /fix understands "private": true (the diary app sends nothing to a server without this)
             "phoneme": features.phoneme_ready(), "tatoeba": readmode.tatoeba_ready(),
             "grammar": grammar.installed(), "llm_fallback": _fallback_status(),
             "song": song.available(), "song_v": song.SONG_V, "song_identify": True}
