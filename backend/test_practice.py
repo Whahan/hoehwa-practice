@@ -88,6 +88,19 @@ def skip(name, why):
     print("  [SKIP] %s -- %s" % (name, why))
 
 
+_JA_DICT_PUNCT = re.compile(r"[ \t\r\n\u3000。、！？!?,.，．…・「」『』（）()\"'“”‘’〜~―\-：:；;]")  # NOT ー: a long vowel mark is a letter
+_JA_DICT_BAD = re.compile(r"[0-9\uff10-\uff19A-Za-z\uff21-\uff3a\uff41-\uff5a]")
+
+
+def ja_dict_ok(text, reading):
+    """the Japanese dictation rule written out again, independently of practice.py (a second opinion for the live checks)"""
+    if not isinstance(text, str) or not isinstance(reading, str) or _JA_DICT_BAD.search(text):
+        return False
+    n = len(_JA_DICT_PUNCT.sub("", text))
+    core = re.sub(r"[\s。、！？!?,.，．…・「」『』（）()\"'“”‘’〜~ー―-]", "", reading)
+    return 6 <= n <= 24 and bool(core) and re.fullmatch(r"[ぁ-ゖゝゞ]+", core) is not None
+
+
 # ----------------------------------------------------------------------------------------------
 # content lint (pure: data in, list of problems out)
 # ----------------------------------------------------------------------------------------------
@@ -364,8 +377,18 @@ def live_tests(full):
             return all(not (w.strip(".,!?;:\"")[:1].isupper() and w.strip(".,!?;:\"").replace("’", "'").split("'")[0] != "I") for w in ws[1:])
         check("dictation n=20 -> 200, 숫자 없음·3~10단어·이름 대문자 없음", r.status_code == 200 and len(ss) >= 10 and all(dict_ok(s["text"]) for s in ss),
               "%s %d개 %s" % (r.status_code, len(ss), [s["text"] for s in ss if not dict_ok(s["text"])][:3]))
-        r = call("/practice/sentences", lang="ja", mode="dictation")
-        check("ja dictation -> 400 + 한글 error", r.status_code == 400 and is_korean_error(r), r.text[:120])
+        r = call("/practice/sentences", lang="ja", mode="dictation", stage=3, n=20, seed=3)
+        d = r.json() if r.status_code == 200 else {}
+        ss = d.get("sentences", [])
+        check("ja dictation n=20 -> 200, 문장이 받아쓰기 규칙(부호 뺀 6~24자·숫자/영문 없음·읽기 히라가나만)을 통과",
+              r.status_code == 200 and len(ss) >= 10 and all(ja_dict_ok(x["text"], x["reading"]) for x in ss),
+              "%s %d개 %s" % (r.status_code, len(ss), [x["text"] for x in ss if not ja_dict_ok(x["text"], x["reading"])][:3]))
+        check("ja dictation: 필드 모양·한글 ko·pron 가타카나", all(set(x) == {"id", "text", "ko", "reading", "pron", "words", "url"} and HANGUL.search(x["ko"]) for x in ss)
+              and (d.get("lang"), d.get("mode")) == ("ja", "dictation"), (d.get("lang"), d.get("mode")))
+        r = call("/practice/sentences", lang="ja", mode="dictation", stage=1, n=6, seed=11)
+        check("ja dictation stage1 n=6 -> 200, 6개", r.status_code == 200 and len(r.json().get("sentences", [])) == 6, "%s" % r.status_code)
+        r = call("/practice/sentences", lang="en", mode="dictation", stage=1, n=8, seed=11)
+        check("영어 dictation 은 그대로(8개, 영어 규칙)", r.status_code == 200 and len(r.json().get("sentences", [])) == 8 and all(dict_ok(x["text"]) for x in r.json()["sentences"]))
 
         print("\n== exclude / seed / 일본어 reading")
         a = call("/practice/sentences", lang="en", mode="shadow", stage=2, n=8, seed=7).json()["sentences"]
@@ -402,7 +425,8 @@ def live_tests(full):
         ("exclude=a,,1,%00", "/practice/sentences?lang=en&mode=shadow&exclude=a,,1,%00", (200, 503)),
         ("exclude 5000자", "/practice/sentences?lang=en&mode=shadow&exclude=" + ",".join(["12345"] * 800)[:5000], (200, 503)),
         ("exclude 한글·이모지", "/practice/sentences?lang=en&mode=shadow&exclude=%EA%B0%80,%F0%9F%98%80,-5,1e3", (200, 503)),
-        ("ja dictation", "/practice/sentences?lang=ja&mode=dictation", (400,)),
+        ("ja dictation", "/practice/sentences?lang=ja&mode=dictation", (200, 503)),
+        ("ja mode=Dictation(대문자)", "/practice/sentences?lang=ja&mode=Dictation", (400,)),
         ("없는 하위 경로", "/practice/nothing", (404,)),
     ]
     for name, path, expect in bad:
@@ -542,12 +566,104 @@ def extra_tests():
           and not practice.dictation_ok("Go now.") and not practice.dictation_ok("one two three four five six seven eight nine ten eleven")
           and practice.dictation_ok("Then I'm going home."))
 
+    ja_dictation_checks(practice, reading, lesson_rules)
+
     # importing the modules must be cheap and must not touch models or the network
     t0 = time.time()
     r = subprocess.run([sys.executable, "-X", "utf8", "-c", "import sys; sys.path.insert(0, %r); import practice, missions" % HERE],
                        capture_output=True, timeout=30)
     dt = time.time() - t0
     check("python -c 'import practice, missions' 3초 안에 끝남, 종료 코드 0", r.returncode == 0 and dt < 3.0, "exit %s, %.2fs %s" % (r.returncode, dt, r.stderr.decode("utf-8", "replace")[-100:]))
+
+
+# the phone pack's candidates: LocalPractice.ja_dictation_ok must find exactly these ids (local_lessons_test asserts the same numbers)
+JA_DICT_PACK_COUNT = 1670
+JA_DICT_PACK_ID_SUM = 7983997825  # local_lessons_test.gd carries the same two constants (the phone rule over the same pack)
+
+
+
+def ja_dictation_checks(practice, reading, lesson_rules):
+    print("\n== 일본어 받아쓰기 후보 규칙 (practice.ja_dictation_ok)")
+    f = practice.ja_dictation_ok
+    table = [
+        ("きみにちょっとしたものをもってきたよ。", "きみにちょっとしたものをもってきたよ。", True, "보통 문장"),
+        ("彼は学校にバスで行きます。", "かれはがっこうにばすでいきます。", True, "한자+가타카나 문장"),
+        ("あいうえお。", "あいうえお。", False, "부호를 빼면 5자 -> 거부"),
+        ("あいうえおか。", "あいうえおか。", True, "부호를 빼면 6자 -> 허용(경계)"),
+        ("あ" * 24, "あ" * 24, True, "24자 -> 허용(경계)"),
+        ("あ" * 25, "あ" * 25, False, "25자 -> 거부"),
+        ("あ、い。う？え！おか", "あ、い。う？え！おか", True, "부호 5개를 빼고 6자 -> 허용"),
+        ("コーヒーをのみます", "こーひーをのみます", True, "ー 는 글자로 센다"),
+        ("ーーーーーー", "ーーーーーー", False, "읽기가 ー 뿐이면 거부"),
+        ("あいうえおか。", "", False, "읽기 없음 -> 거부"),
+        ("あいうえおか。", "abc", False, "읽기가 히라가나가 아님 -> 거부"),
+        ("あいうえおか。", "アイウエオカ", False, "읽기가 가타카나 -> 거부"),
+        ("今日は3月です。", "きょうはさんがつです。", False, "아라비아 숫자 -> 거부"),
+        ("今日は３月です。", "きょうはさんがつです。", False, "전각 숫자 -> 거부"),
+        ("今日はMarchです", "きょうはまーちです", False, "알파벳 -> 거부"),
+        ("今日はＭａｒｃｈです", "きょうはまーちです", False, "전각 알파벳 -> 거부"),
+        ("三月は寒いです。", "さんがつはさむいです。", True, "한자 숫자는 허용"),
+        (None, "あいうえおか", False, "text 가 문자열이 아님 -> 거부(에러 없음)"),
+        ("あいうえおか", None, False, "reading 이 문자열이 아님 -> 거부(에러 없음)"),
+        ("", "", False, "빈 문장 -> 거부"),
+    ]
+    for t, rd, want, why in table:
+        try:
+            got = f(t, rd)
+        except Exception as e:
+            got = "예외 %s" % type(e).__name__
+        check("ja_dictation_ok: %s" % why, got is want, "%r -> %r" % (t, got))
+        if isinstance(t, str) and isinstance(rd, str):
+            check("ja_dictation_ok == 독립 구현(test 의 ja_dict_ok): %s" % why, ja_dict_ok(t, rd) is want)
+    pack_path = os.path.join(os.path.dirname(HERE), "godot", "data", "pack", "practice_ja.json")
+    if not os.path.exists(pack_path):
+        unverified("폰 팩 후보 개수", "godot/data/pack/practice_ja.json 이 없어요")
+    else:
+        pack = json.load(open(pack_path, encoding="utf-8"))
+        ids = sorted(it["id"] for it in pack["sentences"] if f(it["text"], it["reading"]))
+        check("폰 팩 practice_ja.json 의 받아쓰기 후보 = %d개 (설계 결정: 부호를 뺀 6~24자)" % JA_DICT_PACK_COUNT, len(ids) == JA_DICT_PACK_COUNT, "%d개" % len(ids))
+        check("폰 팩 후보 id 합계 = %d (local_lessons_test.gd 와 같은 값)" % JA_DICT_PACK_ID_SUM, sum(ids) == JA_DICT_PACK_ID_SUM, "%d" % sum(ids))
+        print("  (후보 id 합계 %d, 처음 %s, 끝 %s)" % (sum(ids), ids[:3], ids[-3:]))
+        # a deliberately broken rule must change the count (the check can fail)
+        saved_max = practice.JA_DICT_MAX_CHARS
+        practice.JA_DICT_MAX_CHARS = 20
+        try:
+            fewer = sum(1 for it in pack["sentences"] if f(it["text"], it["reading"]))
+        finally:
+            practice.JA_DICT_MAX_CHARS = saved_max
+        check("selfcheck FAIL-as-expected: 상한을 24 -> 20 으로 틀리게 하면 후보 개수가 달라진다", fewer != JA_DICT_PACK_COUNT, "%d개" % fewer)
+
+    # _pick with a fake pool: only candidates that pass the rule come out, English dictation is untouched
+    print("\n== 일본어 받아쓰기 _pick (가짜 풀)")
+    saved = (reading.tatoeba_ready, lesson_rules.pool, getattr(lesson_rules, "_eligible", None), getattr(lesson_rules, "target_vocab", None), dict(practice.H))
+    texts = {1: "あいうえおか。", 2: "短い。", 3: "今日は3月です。", 4: "あ" * 30, 5: "これはペンです。", 6: "ＡＢＣですよ。", 7: "ここにきてください。", 8: "水をください。"}
+
+    class FakePool:
+        items = [{"id": i, "text": t, "ko": "한글", "n": len(t), "lemmas": [], "dmin": 5.0} for i, t in texts.items()]
+    try:
+        reading.tatoeba_ready = lambda: True
+        lesson_rules.pool = lambda lang: FakePool
+        lesson_rules._eligible = lambda P, stage: P.items
+        lesson_rules.target_vocab = lambda lang, m, w: {}
+        practice.H["ja_reading"] = lambda t: "".join(c if ("ぁ" <= c <= "ゖ" or c in "。、") else "あ" for c in t)
+        practice.H["ja_pron"] = lambda t: "ア"
+        res = practice.get_sentences("ja", "dictation", n="20", seed="1")
+        got = sorted(x["id"] for x in res["sentences"])
+        check("가짜 풀: 규칙을 통과하는 문장(1, 5, 7, 8)만 나온다", got == [1, 5, 7, 8], got)
+        res = practice.get_sentences("ja", "shadow", n="20", seed="1")
+        check("가짜 풀: shadow 는 받아쓰기 규칙을 쓰지 않는다(길이·숫자 문장도 후보, 읽기가 히라가나만인 것)", 2 in {x["id"] for x in res["sentences"]} and 4 in {x["id"] for x in res["sentences"]},
+              sorted(x["id"] for x in res["sentences"]))
+        practice.H["ja_reading"] = lambda t: "abc"
+        res = practice.get_sentences("ja", "dictation", n="20", seed="1")
+        check("읽기가 히라가나가 아니면(일부러 틀린 읽기) 받아쓰기 후보가 0개", res["sentences"] == [], res["sentences"])
+    finally:
+        reading.tatoeba_ready, lesson_rules.pool = saved[0], saved[1]
+        if saved[2] is not None:
+            lesson_rules._eligible = saved[2]
+        if saved[3] is not None:
+            lesson_rules.target_vocab = saved[3]
+        practice.H.clear()
+        practice.H.update(saved[4])
 
 
 def summary():
