@@ -1343,8 +1343,8 @@ static func has_data(lang: String) -> bool:
 				return true
 	if not ((_data["phon"] as Dictionary)[lang] as Dictionary).is_empty():
 		return true
-	# Missions are stored by id, not by language: Japanese mission ids start with "ja_". English keeps "any mission record".
+	# Missions are stored by id, not by language: Japanese mission ids start with "ja_", English ids have no prefix.
 	for id in (_data["missions"] as Dictionary).keys():
-		if lang == "en" or str(id).begins_with(MISSION_JA_PREFIX):
+		if str(id).begins_with(MISSION_JA_PREFIX) == (lang == "ja"):
 			return true
 	return false
