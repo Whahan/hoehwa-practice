@@ -1,0 +1,62 @@
+{
+ "lang": "ja",
+ "mode": "dictation",
+ "stage": 3,
+ "sentences": [
+  {
+   "id": 78724,
+   "text": "来てくださってありがとうございます。",
+   "ko": "와주셔서 감사드립니다.",
+   "reading": "きてくださってありがとうございます。",
+   "pron": "キテクダサッテアリガトーゴザイマス。",
+   "words": 18,
+   "url": "https://tatoeba.org/sentences/show/78724"
+  },
+  {
+   "id": 80013,
+   "text": "目が覚めたら雪が降っていた。",
+   "ko": "눈을 뜨니 눈이 내리고 있었다.",
+   "reading": "めがさめたらゆきがふっていた。",
+   "pron": "メガサメタラユキガフッテイタ。",
+   "words": 14,
+   "url": "https://tatoeba.org/sentences/show/80013"
+  },
+  {
+   "id": 84997,
+   "text": "夫はまもなく帰ってきます。",
+   "ko": "남편은 곧 돌아옵니다.",
+   "reading": "おっとはまもなくかえってきます。",
+   "pron": "オットワマモナクカエッテキマス。",
+   "words": 13,
+   "url": "https://tatoeba.org/sentences/show/84997"
+  },
+  {
+   "id": 98900,
+   "text": "彼は列車に間に合うでしょうか。",
+   "ko": "그는 열차에 제때 탈 수 있을까요?",
+   "reading": "かれはれっしゃにまにあうでしょうか。",
+   "pron": "カレワレッシャニマニアウデショーカ。",
+   "words": 15,
+   "url": "https://tatoeba.org/sentences/show/98900"
+  },
+  {
+   "id": 107874,
+   "text": "彼は決して幸福ではなかった。",
+   "ko": "그는 결코 행복하지 않았다.",
+   "reading": "かれはけっしてこうふくではなかった。",
+   "pron": "カレワケッシテコーフクデワナカッタ。",
+   "words": 14,
+   "url": "https://tatoeba.org/sentences/show/107874"
+  },
+  {
+   "id": 108887,
+   "text": "彼は学校にバスで行きます。",
+   "ko": "그는 버스를 타고 학교에 가요.",
+   "reading": "かれはがっこうにばすでいきます。",
+   "pron": "カレワガッコーニバスデイキマス。",
+   "words": 13,
+   "url": "https://tatoeba.org/sentences/show/108887"
+  }
+ ],
+ "attribution": "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
+}
