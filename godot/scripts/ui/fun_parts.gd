@@ -182,8 +182,8 @@ static func _score_text(r: Dictionary) -> String:
 
 # ---------------------------------------------------------------- 홈 "이번 주" 카드 (§4.6)
 
-## on_open(kind: String): "report" | "speed" | "kana" | "badges".
-## meta "buttons" = {"speed": Button, "kana": Button | null (일본어가 아니면), "badges": Button}, "tap_area" = 본문(눌러서 "report"),
+## on_open(kind: String): "report" | "speed" | "kana" | "diary" | "badges".
+## meta "buttons" = {"speed": Button, "kana": Button | null (일본어가 아니면), "diary": Button, "badges": Button}, "tap_area" = 본문(눌러서 "report"),
 ## "numbers" = 숫자 줄 Label, "badge_dot" = 새 배지 점(새 배지가 없으면 이 meta 가 없다).
 static func home_card(lang: String, report: Variant, badge_counts: Variant, on_open: Callable) -> CardBox:
 	var card := UI.card("Card", Ds.S3)
@@ -227,6 +227,9 @@ static func home_card(lang: String, report: Variant, badge_counts: Variant, on_o
 		kana = UI.button("가나 코스", "soft", Pal.PRIMARY, 48.0)
 		kana.pressed.connect(func() -> void: _open(on_open, "kana"))
 		btns.add_child(kana)
+	var diary := UI.button("일기", "soft", Pal.PRIMARY, 48.0)
+	diary.pressed.connect(func() -> void: _open(on_open, "diary"))
+	btns.add_child(diary)
 	var btext: String = "배지 %d/%d" % [got, total] if total > 0 else "배지"
 	var badges := UI.button(btext, "soft", Pal.REWARD, 48.0)
 	badges.pressed.connect(func() -> void: _open(on_open, "badges"))
@@ -236,7 +239,7 @@ static func home_card(lang: String, report: Variant, badge_counts: Variant, on_o
 		dot = _pin_dot(badges)
 	btns.add_child(badges)
 	card.body.add_child(btns)
-	card.set_meta("buttons", {"speed": speed, "kana": kana, "badges": badges})
+	card.set_meta("buttons", {"speed": speed, "kana": kana, "diary": diary, "badges": badges})
 	if dot != null:
 		card.set_meta("badge_dot", dot)
 	return card

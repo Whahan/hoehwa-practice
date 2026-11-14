@@ -327,17 +327,17 @@ func _test_home_card() -> void:
 	print("[home card]")
 	var w: float = 392.0 if _phone else 340.0
 	_opened.clear()
-	var counts := {"got": 9, "total": 23, "unseen": 2}
+	var counts := {"got": 9, "total": 25, "unseen": 2}
 	var cja: CardBox = FunParts.home_card("ja", _rich(), counts, _on_open)
 	var pja: Array = await _place(cja, w)
 	var bj: Dictionary = cja.get_meta("buttons")
-	ok(_buttons(cja).size() == 3, "ja: 3 buttons (%d)" % _buttons(cja).size())
-	ok(bj["speed"] != null and bj["kana"] != null and bj["badges"] != null, "ja: meta buttons speed / kana / badges")
-	ok((bj["speed"] as Button).text == "60초 퀴즈" and (bj["kana"] as Button).text == "가나 코스" and (bj["badges"] as Button).text == "배지 9/23", "ja: button texts 60초 퀴즈 / 가나 코스 / 배지 9/23")
+	ok(_buttons(cja).size() == 4, "ja: 4 buttons (%d)" % _buttons(cja).size())
+	ok(bj["speed"] != null and bj["kana"] != null and bj["diary"] != null and bj["badges"] != null, "ja: meta buttons speed / kana / diary / badges")
+	ok((bj["speed"] as Button).text == "60초 퀴즈" and (bj["kana"] as Button).text == "가나 코스" and (bj["diary"] as Button).text == "일기" and (bj["badges"] as Button).text == "배지 9/25", "ja: button texts 60초 퀴즈 / 가나 코스 / 일기 / 배지 9/25")
 	ok(_any_text(cja, "이번 주") and _any_text(cja, "공부 126분 · 레슨 6개 · 새 카드 18"), "ja: title and the 3 numbers")
-	for k in ["speed", "kana", "badges"]:
+	for k in ["speed", "kana", "diary", "badges"]:
 		(bj[k] as Button).pressed.emit()
-	ok(_opened == ["speed", "kana", "badges"], "ja: the buttons call on_open with speed / kana / badges: %s" % str(_opened))
+	ok(_opened == ["speed", "kana", "diary", "badges"], "ja: the buttons call on_open with speed / kana / diary / badges: %s" % str(_opened))
 	_opened.clear()
 	var area: Control = cja.get_meta("tap_area")
 	_tap(area)
@@ -351,21 +351,22 @@ func _test_home_card() -> void:
 	ok(not (bj["speed"] as Button).accessibility_name.contains("새 배지") and (bj["badges"] as Button).accessibility_name.contains("새 배지 2개"), "ja: the badge button's accessible name tells there are 2 new badges")
 	pja[0].queue_free()
 	# 영어: 가나 코스 없음
-	var cen: CardBox = FunParts.home_card("en", _rich(), {"got": 0, "total": 23, "unseen": 0}, _on_open)
+	var cen: CardBox = FunParts.home_card("en", _rich(), {"got": 0, "total": 25, "unseen": 0}, _on_open)
 	var pen: Array = await _place(cen, w)
 	var be: Dictionary = cen.get_meta("buttons")
-	ok(_buttons(cen).size() == 2 and be["kana"] == null and not _any_text(cen, "가나 코스"), "en: 2 buttons, no 가나 코스")
-	ok((be["badges"] as Button).text == "배지 0/23" and not cen.has_meta("badge_dot"), "en: 배지 0/23 and no dot when nothing is unseen")
+	ok(_buttons(cen).size() == 3 and be["kana"] == null and not _any_text(cen, "가나 코스"), "en: 3 buttons (60초 퀴즈, 일기, 배지), no 가나 코스")
+	ok((be["badges"] as Button).text == "배지 0/25" and not cen.has_meta("badge_dot"), "en: 배지 0/25 and no dot when nothing is unseen")
 	(be["badges"] as Button).pressed.emit()
 	(be["speed"] as Button).pressed.emit()
-	ok(_opened == ["badges", "speed"], "en: speed and badges buttons work")
+	(be["diary"] as Button).pressed.emit()
+	ok(_opened == ["badges", "speed", "diary"], "en: badges, speed and diary buttons work")
 	_opened.clear()
 	pen[0].queue_free()
 	# 기록 없음
 	var cz: CardBox = FunParts.home_card("ja", _all_zero(), counts, _on_open)
 	var pz: Array = await _place(cz, w)
 	ok(_any_text(cz, "공부를 시작하면 이번 주 기록이 여기에 쌓여요") and not _any_text(cz, "공부 0분"), "empty report: one hint line instead of numbers")
-	ok(_buttons(cz).size() == 3, "empty report: the buttons are still there")
+	ok(_buttons(cz).size() == 4, "empty report: the buttons are still there")
 	pz[0].queue_free()
 	await _frames(2)
 
@@ -379,7 +380,7 @@ func _test_home_garbage() -> void:
 	for bc in bad_counts:
 		var c: CardBox = FunParts.home_card("en", null, bc, Callable())
 		var p: Array = await _place(c, w)
-		ok(is_instance_valid(c) and _buttons(c).size() == 2, "home_card(bad counts #%d, no report, empty callback) is drawn with 2 buttons" % i)
+		ok(is_instance_valid(c) and _buttons(c).size() == 3, "home_card(bad counts #%d, no report, empty callback) is drawn with 3 buttons" % i)
 		var txt: String = _all_text(c).to_lower()
 		ok(not ("nan" in txt) and not ("inf" in txt) and not ("-3" in txt), "bad counts #%d: no nan / inf / negative text" % i)
 		for b in _buttons(c):
@@ -388,7 +389,7 @@ func _test_home_garbage() -> void:
 		p[0].queue_free()
 		i += 1
 	var cb: CardBox = FunParts.home_card("zz", {}, {}, _on_open)
-	ok(_buttons(cb).size() == 2, "unknown language counts as not-ja (no kana button)")
+	ok(_buttons(cb).size() == 3, "unknown language counts as not-ja (no kana button)")
 	cb.queue_free()
 	ok(_opened.is_empty(), "nothing was reported to the real callback in the garbage runs")
 	await _frames(2)
@@ -403,8 +404,8 @@ func _test_layout() -> void:
 		["report rich", FunParts.report_card(_rich())],
 		["report empty", FunParts.report_card(_all_zero())],
 		["report few scores", FunParts.report_card(_few_scores())],
-		["home ja", FunParts.home_card("ja", _rich(), {"got": 9, "total": 23, "unseen": 3}, _on_open)],
-		["home en empty", FunParts.home_card("en", _all_zero(), {"got": 0, "total": 23, "unseen": 0}, _on_open)],
+		["home ja", FunParts.home_card("ja", _rich(), {"got": 9, "total": 25, "unseen": 3}, _on_open)],
+		["home en empty", FunParts.home_card("en", _all_zero(), {"got": 0, "total": 25, "unseen": 0}, _on_open)],
 	]
 	for pair in cards:
 		var nm: String = pair[0]
@@ -433,7 +434,7 @@ func _test_layout() -> void:
 		ok(clipped.is_empty(), "%s: no label is wider than its box %s" % [nm, str(clipped.slice(0, 2))])
 		p[0].queue_free()
 	# 홈 카드 버튼 높이를 명시한다(설계: 홈 카드 버튼 >= 48)
-	var hc: CardBox = FunParts.home_card("ja", _rich(), {"got": 1, "total": 23, "unseen": 0}, _on_open)
+	var hc: CardBox = FunParts.home_card("ja", _rich(), {"got": 1, "total": 25, "unseen": 0}, _on_open)
 	var ph: Array = await _place(hc, w)
 	var bh := 9999.0
 	for b in _buttons(hc):
