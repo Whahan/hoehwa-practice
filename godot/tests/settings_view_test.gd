@@ -18,6 +18,11 @@ var _old_progress: String
 var _old_log: String
 
 
+## "모든 기록 지우기" 확인 문구가 지워지는 범위를 글자 그대로 말하는가.
+func _says_scope(text: String) -> bool:
+	return text.contains("배지·스피드 퀴즈 기록·가나 코스 진행도 함께 지워져요")
+
+
 func ok(cond: bool, name: String) -> void:
 	if cond:
 		passed += 1
@@ -387,6 +392,14 @@ func _test_reset_sheet() -> void:
 		if (l as Label).is_visible_in_tree():
 			texts.append((l as Label).text)
 	ok(texts.has(SyncPanel.reset_confirm_text()), "the sheet shows SyncPanel.reset_confirm_text()")
+	# 1.6.1 U1: 지워지는 범위를 문구로 알린다 (함수 값이 아니라 글자 그대로 단언한다)
+	var shown := ""
+	for tx in texts:
+		if str(tx).contains("정말 지울까요?"):
+			shown = str(tx)
+	ok(_says_scope(shown), "the confirm text says badges, speed quiz record and kana course progress are wiped too")
+	ok(shown.contains("정말 지울까요? 되돌릴 수 없어요."), "and the old question stays")
+	ok(not _says_scope("정말 지울까요? 되돌릴 수 없어요.") and not _says_scope(""), "scope checker rejects the old one-sentence text and an empty one")
 	Sheet.close_top()
 	await _frames(2)
 	# source: the order is "before_reset" first (awaited), the wipe after it

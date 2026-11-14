@@ -237,4 +237,6 @@ func _open_sheet(id: String) -> void:
 		body.add_child(UI.progress_bar(float(info["value"]) / float(info["target"]), Pal.REWARD, 10.0))
 	UI.fix_cjk(body)
 	_sheet = Sheet.open(self, str(info["name"]), body, [{"id": "close", "text": "닫기", "kind": "soft"}])
+	if _sheet.title_label != null:
+		FunParts.fit_name(_sheet.title_label, str(info["name"]), 3) # 제목도 공백에서만 줄을 바꾼다
 	_sheet.closed.connect(func(_r: Variant) -> void: _sheet = null)
