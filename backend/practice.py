@@ -2,7 +2,7 @@
 """Practice API (v1.1): shadowing / dictation sentences and the weak-sound drills. Contract: docs/english_v11_design.md (F2, F3, F4).
 
   GET /practice/ping        -> {"ok": true, "practice": 1, "missions": 1, "tatoeba": bool}
-  GET /practice/sentences   -> Tatoeba sentences for shadowing (en, ja) and dictation (en only)
+  GET /practice/sentences   -> Tatoeba sentences for shadowing (en, ja) and dictation (en, ja)
   GET /practice/phonemes    -> the sounds that have a drill (content/phoneme_drills.json)
   GET /practice/phoneme     -> one sound: hint, minimal pairs, phrases, a few Tatoeba example sentences
 
@@ -126,6 +126,24 @@ def dictation_ok(text):
     return True
 
 
+# Japanese dictation candidates (v1.7.0). The phone (LocalPractice.ja_dictation_ok) applies the very same rule to the same data.
+JA_DICT_MIN_CHARS, JA_DICT_MAX_CHARS = 6, 24
+_JA_DICT_PUNCT = re.compile(r"[ \t\r\n　。、！？!?,.，．…・「」『』（）()\"'“”‘’〜~―\-：:；;]")  # NOT ー (a long vowel mark is a letter)
+_JA_DICT_FORBIDDEN = re.compile(r"[0-9０-９A-Za-zＡ-Ｚａ-ｚ]")
+
+
+def ja_dictation_text_ok(text):
+    """6..24 characters once punctuation and spaces are dropped (ー counts), no Arabic digit (full width too), no Latin letter"""
+    if not isinstance(text, str) or _JA_DICT_FORBIDDEN.search(text):
+        return False
+    return JA_DICT_MIN_CHARS <= len(_JA_DICT_PUNCT.sub("", text)) <= JA_DICT_MAX_CHARS
+
+
+def ja_dictation_ok(text, reading):
+    """the Japanese dictation candidate rule: ja_dictation_text_ok(text) and a non-empty hiragana-only reading"""
+    return ja_dictation_text_ok(text) and _ja_reading_ok(reading)
+
+
 def _ja_reading_ok(rd):
     """non-empty and hiragana only once punctuation is dropped"""
     core = _JA_PUNCT.sub("", rd or "")
@@ -151,7 +169,7 @@ def _pick(lang, mode, stage, month, week, n, seed, exclude):
     for it in cands:
         if it["id"] in exclude:
             continue
-        if mode == "dictation" and not dictation_ok(it["text"]):
+        if mode == "dictation" and not (dictation_ok(it["text"]) if lang == "en" else ja_dictation_text_ok(it["text"])):
             continue
         s = sum(target.get(l, 0) for l in it.get("lemmas", ()))
         scored.append((min(s, 8.0) * rng.uniform(0.5, 1.5) + rng.random() * 2.5, it["id"], it))
@@ -194,8 +212,6 @@ def get_sentences(lang, mode, stage=None, month=None, week=None, n=None, seed=No
     _need_lang(lang)
     if mode not in ("shadow", "dictation"):
         raise _err("mode는 'shadow' 또는 'dictation'이어야 해요.", 400)
-    if lang == "ja" and mode == "dictation":
-        raise _err("받아쓰기는 영어만 지원해요.", 400)
     month_i = _int(month, 1, 12, 1)
     stage_i = _int(stage, 1, 4, int(math.ceil(month_i / 3.0)))
     week_i = _int(week, 1, 4, 1)

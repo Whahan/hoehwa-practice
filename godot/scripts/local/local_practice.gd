@@ -27,9 +27,12 @@ const EXAMPLES_FILE := "examples_en.json"
 const CURRICULUM_PATH := "res://data/curriculum.json"
 const LANG_MSG := "lang은 'en' 또는 'ja'여야 해요."
 const MODE_MSG := "mode는 'shadow' 또는 'dictation'이어야 해요."
-const DICT_JA_MSG := "받아쓰기는 영어만 지원해요."
 const P_MSG := "소리(p)를 보내 주세요."
 const NO_DRILL_MSG := "아직 연습 자료가 없는 소리예요."
+const JA_DICT_MIN_CHARS := 6 ## Japanese dictation: letters once punctuation and spaces are dropped (practice.ja_dictation_ok)
+const JA_DICT_MAX_CHARS := 24
+## punctuation and spaces dropped before counting (practice._JA_DICT_PUNCT). NOT ー: a long vowel mark is a letter.
+const JA_DICT_PUNCT := " \t\r\n\u3000。、！？!?,.，．…・「」『』（）()\"'“”‘’〜~―-：:；;"
 const PUNCT_EDGE := ".,!?;:\"“”()"
 const JA_PUNCT := "。、！？!?,.，．…・「」『』（）()\"'“”‘’〜~ー―-   \t\r\n"
 const STOP_WORDS := ["a", "an", "the", "to", "of", "in", "on", "at", "is", "are", "am", "be", "it", "i", "you", "we",
@@ -101,8 +104,6 @@ static func _sentences(q: Dictionary) -> Dictionary:
 		return _bad(LANG_MSG)
 	if mode != "shadow" and mode != "dictation":
 		return _bad(MODE_MSG)
-	if lang == "ja" and mode == "dictation":
-		return _bad(DICT_JA_MSG)
 	var month: int = _int_q(q.get("month", ""), 1, 12, 1)
 	var stage: int = _int_q(q.get("stage", ""), 1, 4, int(ceil(float(month) / 3.0)))
 	var week: int = _int_q(q.get("week", ""), 1, 4, 1)
@@ -177,6 +178,26 @@ static func dictation_ok(text: String) -> bool:
 	return true
 
 
+## Same rule as practice.ja_dictation_text_ok: 6..24 characters once punctuation and spaces are dropped (ー counts),
+## no Arabic digit (full width too) and no Latin letter.
+static func ja_dictation_text_ok(text: String) -> bool:
+	var n: int = 0
+	for k in range(text.length()):
+		var code: int = text.unicode_at(k)
+		if (code >= 0x30 and code <= 0x39) or (code >= 0xFF10 and code <= 0xFF19):
+			return false
+		if (code >= 0x41 and code <= 0x5A) or (code >= 0x61 and code <= 0x7A) or (code >= 0xFF21 and code <= 0xFF3A) or (code >= 0xFF41 and code <= 0xFF5A):
+			return false
+		if not JA_DICT_PUNCT.contains(text.substr(k, 1)):
+			n += 1
+	return n >= JA_DICT_MIN_CHARS and n <= JA_DICT_MAX_CHARS
+
+
+## Same rule as practice.ja_dictation_ok: ja_dictation_text_ok(text) and a non-empty hiragana-only reading.
+static func ja_dictation_ok(text: String, reading: String) -> bool:
+	return ja_dictation_text_ok(text) and ja_reading_ok(reading)
+
+
 ## Same rule as practice._ja_reading_ok: non-empty and hiragana only once punctuation is dropped.
 static func ja_reading_ok(rd: String) -> bool:
 	var core: String = ""
@@ -220,7 +241,7 @@ static func _pick(data: Dictionary, lang: String, mode: String, stage: int, mont
 		var id: int = int(it["id"])
 		if exclude.has(id):
 			continue
-		if mode == "dictation" and not dictation_ok(str(it["text"])):
+		if mode == "dictation" and not (dictation_ok(str(it["text"])) if lang == "en" else ja_dictation_text_ok(str(it["text"]))):
 			continue
 		var s: float = 0.0
 		var lemmas: Variant = it.get("lemmas", [])

@@ -10,6 +10,10 @@ const TMP_PACK := "user://test_a3a_pack"
 const TMP_PACK2 := "user://test_r1fix_pack"
 const LESSON_CELL := "3-2"
 const TATOEBA_URL := "https://tatoeba.org/sentences/show/"
+## The PC rule (backend/practice.py ja_dictation_ok) over the same pack: backend/test_practice.py prints and checks the same numbers.
+## A rebuilt practice_ja.json changes them: update both tests together (they are meant to move in step).
+const JA_DICT_PACK_COUNT := 1670
+const JA_DICT_PACK_ID_SUM := 7983997825
 
 var passed: int = 0
 var failed: int = 0
@@ -320,8 +324,26 @@ func _test_practice_ping_and_sentences() -> void:
 		if not LocalPractice.ja_reading_ok(str(s["reading"])):
 			ja_ok = false
 	ok(ja_ok, "practice: ja readings are hiragana only")
-	var jd: Dictionary = await _http_get("/practice/sentences?lang=ja&mode=dictation&n=3")
-	ok(not bool(jd["ok"]) and int(jd["code"]) == 400, "practice: ja dictation -> 400")
+	# v1.7.0 (A4): Japanese dictation works on the phone, with the same candidate rule as the PC (practice.ja_dictation_ok)
+	var jd: Dictionary = await _http_get("/practice/sentences?lang=ja&mode=dictation&n=6&seed=3")
+	var jdl: Array = jd["data"]["sentences"] if bool(jd["ok"]) else []
+	ok(bool(jd["ok"]) and jdl.size() == 6, "practice: ja dictation n=6 -> 200 and 6 sentences")
+	var jd_rule: bool = true
+	for s in jdl:
+		if not LocalPractice.ja_dictation_ok(str(s["text"]), str(s["reading"])):
+			jd_rule = false
+	ok(jd_rule, "practice: every ja dictation sentence passes ja_dictation_ok (6..24 letters, no digits/Latin, hiragana reading)")
+	ok(bool(jd["ok"]) and str(jd["data"]["mode"]) == "dictation" and str(jd["data"]["lang"]) == "ja" and str((jdl[0] as Dictionary).get("pron", "")) != "", "practice: ja dictation answer shape (mode, lang, pron)")
+	var jd_stage_ok: bool = true
+	for stg in [1, 2, 3, 4]:
+		var jr: Dictionary = await _http_get("/practice/sentences?lang=ja&mode=dictation&n=6&seed=4&stage=%d" % stg)
+		if not bool(jr["ok"]) or (jr["data"]["sentences"] as Array).size() != 6:
+			jd_stage_ok = false
+	ok(jd_stage_ok, "practice: ja dictation gives 6 sentences in every stage")
+	var en_dict: Dictionary = await _http_get("/practice/sentences?lang=en&mode=dictation&n=8&seed=4")
+	ok(bool(en_dict["ok"]) and (en_dict["data"]["sentences"] as Array).size() == 8, "practice: English dictation is unchanged (8 sentences)")
+	var jd_bad: Dictionary = await _http_get("/practice/sentences?lang=ja&mode=Dictation&n=3")
+	ok(not bool(jd_bad["ok"]) and int(jd_bad["code"]) == 400, "practice: wrong-case mode for ja -> 400")
 	var bm: Dictionary = await _http_get("/practice/sentences?lang=en&mode=zzz&n=3")
 	ok(not bool(bm["ok"]) and int(bm["code"]) == 400, "practice: bad mode -> 400")
 	var bl: Dictionary = await _http_get("/practice/sentences?lang=fr&mode=shadow&n=3")
@@ -356,6 +378,40 @@ func _test_helpers() -> void:
 	ok(not LocalPractice.ja_reading_ok("漢字"), "ja reading: kanji rejected")
 	ok(LocalPractice.ja_reading_ok("わたしは、がくせいです。"), "ja reading: hiragana with punctuation ok")
 	ok(not LocalPractice.ja_reading_ok("。。"), "ja reading: punctuation only rejected")
+	# ja_dictation_ok: the same table as backend/test_practice.py (ja_dictation_checks)
+	var table: Array = [
+		["きみにちょっとしたものをもってきたよ。", "きみにちょっとしたものをもってきたよ。", true, "ordinary sentence"],
+		["彼は学校にバスで行きます。", "かれはがっこうにばすでいきます。", true, "kanji + katakana"],
+		["あいうえお。", "あいうえお。", false, "5 letters without the mark"],
+		["あいうえおか。", "あいうえおか。", true, "6 letters (edge)"],
+		["あ".repeat(24), "あ".repeat(24), true, "24 letters (edge)"],
+		["あ".repeat(25), "あ".repeat(25), false, "25 letters"],
+		["あ、い。う？え！おか", "あ、い。う？え！おか", true, "5 marks dropped, 6 letters"],
+		["コーヒーをのみます", "こーひーをのみます", true, "ー counts as a letter"],
+		["ーーーーーー", "ーーーーーー", false, "reading of ー only"],
+		["あいうえおか。", "", false, "no reading"],
+		["あいうえおか。", "abc", false, "reading not hiragana"],
+		["あいうえおか。", "アイウエオカ", false, "reading in katakana"],
+		["今日は3月です。", "きょうはさんがつです。", false, "Arabic digit"],
+		["今日は３月です。", "きょうはさんがつです。", false, "full-width digit"],
+		["今日はMarchです", "きょうはまーちです", false, "Latin letters"],
+		["今日はＭａｒｃｈです", "きょうはまーちです", false, "full-width Latin letters"],
+		["三月は寒いです。", "さんがつはさむいです。", true, "kanji numeral is fine"],
+		["", "", false, "empty"],
+	]
+	for row in table:
+		ok(LocalPractice.ja_dictation_ok(str(row[0]), str(row[1])) == bool(row[2]), "ja_dictation_ok: " + str(row[3]))
+	# the pack's candidates: the same count and id sum that backend/test_practice.py prints for practice.ja_dictation_ok (the PC rule)
+	var pk: Dictionary = PackLoader.load_json("practice_ja.json")
+	var cand_n: int = 0
+	var cand_sum: int = 0
+	if bool(pk["ok"]):
+		for it in (pk["data"] as Dictionary)["sentences"]:
+			if LocalPractice.ja_dictation_ok(str(it["text"]), str(it["reading"])):
+				cand_n += 1
+				cand_sum += int(it["id"])
+	ok(cand_n == JA_DICT_PACK_COUNT and cand_sum == JA_DICT_PACK_ID_SUM, "ja dictation candidates in the pack: %d ids, id sum %d (PC rule: %d, %d)" % [cand_n, cand_sum, JA_DICT_PACK_COUNT, JA_DICT_PACK_ID_SUM])
+	ok(cand_n >= 1000, "ja dictation: at least 1000 candidates (A4-7)")
 	ok(LocalLessons._next_cursor(2, 20) == 3, "cursor math: +1 in the first round")
 	ok(LocalLessons._next_cursor(19, 20) == 20, "cursor math: last of the first round -> 20")
 	ok(LocalLessons._next_cursor(39, 20) == 20, "cursor math: wraps back to N inside the repeat round")
