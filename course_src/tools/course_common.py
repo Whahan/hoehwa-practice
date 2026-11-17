@@ -221,6 +221,8 @@ class Course:
         sk = self.skeleton or {}
         out = []
         a = sk.get("assign")
+        if not isinstance(a, list) and isinstance(sk.get("words"), list):
+            a = sk["words"]            # K0 layout: the assignment table is the top-level `words` list
         if isinstance(a, list):
             out += [x for x in a if isinstance(x, dict)]
         for wk in sk.get("weeks", []) if isinstance(sk.get("weeks"), list) else []:
@@ -230,6 +232,22 @@ class Course:
                         x = dict(x)
                         x.setdefault("w", wk.get("w"))
                         out.append(x)
+        return out
+
+    def skeleton_patterns(self):
+        """pattern id -> dict. Design 10.2 / K0 layout: weeks[].patterns are ids and the bodies are in the top-level
+        `patterns` list; a pattern object inside a week is accepted as well. Each dict gets `_w` (week that lists it)."""
+        sk = self.skeleton or {}
+        out = {}
+        top = sk.get("patterns")
+        if isinstance(top, list):
+            for p in top:
+                if isinstance(p, dict) and is_str(p.get("id")):
+                    out[p["id"]] = dict(p)
+        for wk in self.skeleton_weeks():
+            for p in wk.get("patterns", []) if isinstance(wk.get("patterns"), list) else []:
+                if isinstance(p, dict) and is_str(p.get("id")):
+                    out.setdefault(p["id"], dict(p))
         return out
 
     def skeleton_weeks(self):
@@ -320,7 +338,7 @@ def build_lexicon(course, mode="files", weeks=None):
         for w in use:
             for x in course.weeks[w].get("words", []) if isinstance(course.weeks[w].get("words"), list) else []:
                 if isinstance(x, dict) and is_str(x.get("id")):
-                    file_words[x["id"]] = x
+                    file_words[x["id"]] = dict(x, _w=w)
         for a in course.skeleton_assign():
             wid, w, d = a.get("id"), a.get("w"), a.get("d")
             if not (is_str(wid) and is_int(w) and is_int(d) and is_str(a.get("lemma"))):
@@ -328,6 +346,11 @@ def build_lexicon(course, mode="files", weeks=None):
             fw = file_words.get(wid, {})
             lex.add(wid, a["lemma"], a.get("pos"), a.get("role", "active"), w * 10 + d, say=fw.get("say", "") or "",
                     forms=fw.get("forms") or (), alt=fw.get("alt") or (), pat_o=pat_o, week=w)
+        assigned = {a.get("id") for a in course.skeleton_assign()}
+        for wid, x in file_words.items():      # words the authors add on top of the table (proper nouns): taken from the files
+            if wid not in assigned and is_str(x.get("en")) and is_int(x.get("d")) and is_int(x.get("_w")):
+                lex.add(wid, x["en"], x.get("pos"), x.get("role", "active"), x["_w"] * 10 + x["d"], say=x.get("say", "") or "",
+                        forms=x.get("forms") or (), alt=x.get("alt") or (), pat_o=pat_o, week=x["_w"])
     else:
         for w in sorted(use):
             for x in course.weeks[w].get("words", []) if isinstance(course.weeks[w].get("words"), list) else []:
@@ -382,3 +405,34 @@ def select_weeks(course, weeks_arg):
         return sorted(course.weeks)
     a, b = weeks_arg
     return list(range(a, b + 1))
+
+
+def policy_names(policy):
+    """Allowed proper nouns of policy.json -> {lower-case name: first week it may be used}. Understands a plain list of
+    names, lists of {name, from_w}, and the K0 layout {"given":[..], "surnames":{"from_w":4,"names":[..]}, "streets":{..}, ...}."""
+    out = {}
+
+    def add(name, w):
+        if is_str(name) and name.strip():
+            k = nfkc(name).lower().strip()
+            out[k] = min(out.get(k, 99), w if is_int(w) else 1)
+
+    def walk(v, w=1):
+        if isinstance(v, str):
+            add(v, w)
+        elif isinstance(v, list):
+            for x in v:
+                walk(x, w)
+        elif isinstance(v, dict):
+            fw = v.get("from_w") if is_int(v.get("from_w")) else w
+            if is_str(v.get("name")):
+                add(v["name"], fw)
+            for k, x in v.items():
+                if k in ("from_w", "name", "kind", "why_ko", "rule_ko"):
+                    continue
+                walk(x, fw)
+
+    for key in ("names", "places", "allowed_propn", "allowed_names", "fake_names", "fake_streets"):
+        if key in (policy or {}):
+            walk(policy[key])
+    return out

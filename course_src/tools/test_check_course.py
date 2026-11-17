@@ -668,7 +668,7 @@ class Skeleton(unittest.TestCase):
             del sk["weeks"][3]["patterns"][0]["grammar_ko"]
         r = self.sk(mut)
         self.assertIn("can_do_needs_2_korean_lines", self.details(r, "SCHEMA"))
-        self.assertIn("grammar_ko_must_be_2_to_4_lines", self.details(r, "SCHEMA"))
+        self.assertIn("grammar_ko_must_be_2_to_4_short_lines", self.details(r, "SCHEMA"))
 
     def test_id_ranges_overlap_and_limits(self):
         def overlap(sk):

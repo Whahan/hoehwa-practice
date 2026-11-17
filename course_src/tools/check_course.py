@@ -15,6 +15,8 @@ Codes: SCHEMA ORDER UNKNOWN_TOKEN NUM_SAY KO_HANGUL KO_HANJA DUP_EN DUP_KO SAME_
 import argparse
 import csv
 import importlib.util
+import os
+import tempfile
 import re
 import sqlite3
 import sys
@@ -30,7 +32,7 @@ from course_common import Problem, is_int, is_str  # noqa: E402
 CODES = ["SCHEMA", "ORDER", "UNKNOWN_TOKEN", "NUM_SAY", "KO_HANGUL", "KO_HANJA", "DUP_EN", "DUP_KO", "SAME_KO_OPTIONS",
          "BLOCKED", "PERSONAL", "COUNT", "CANON", "TATOEBA", "GRAMMAR"]
 POS = {"n", "v", "adj", "adv", "prep", "pron", "det", "art", "conj", "interj", "intj", "num", "aux", "modal", "propn",
-       "chunk", "phr", "part", "exclam"}
+       "chunk", "phr", "part", "exclam", "contr"}
 NOTE_KINDS = {"spelling", "vocab", "culture", "fact", "sound"}
 PROMPT_KINDS = {"read", "answer", "intro", "question"}
 SECRET_FREE_DEFAULT_PAIRS = [("colour", "color"), ("favourite", "favorite"), ("centre", "center"), ("neighbour", "neighbor"),
@@ -168,8 +170,7 @@ def validate_week(w, wk, fname, lim, out):
             continue
         wh, i = ident(x, ID_PAT, "pattern")
         _keys_unknown(x, PAT_KEYS, wh, out)
-        if need_str(x, "tpl", wh) and "___" not in x["tpl"]:
-            out.append(Problem("SCHEMA", wh, "tpl_has_no_blank"))
+        need_str(x, "tpl", wh)
         en_ok(x, "tpl", wh)
         need_str(x, "title_ko", wh)
         g = x.get("grammar_ko")
@@ -502,52 +503,71 @@ def check_same_ko(ctx):
                     ctx.add("SAME_KO_OPTIONS", _where(w, pair[0]), "overlaps_with=" + pair[1])
 
 
-def _blocked_matcher(ctx):
-    items = []
+def _blocked_rules(ctx):
+    """-> list of (word, is_prefix, allow_weeks:set, from_w|None). A rule blocks a token in week w unless w is in
+    allow_weeks or (from_w is set and w >= from_w).  policy.json layouts: `blocked` = list of words / {word, weeks}
+    or {category: [words]}, `blocked_prefix` = [prefixes], `context_allowed` = [{word, from_w}], `allow` = {word: [weeks]}."""
+    rules = []
+    pol = ctx.pol
+
+    def add(word, prefix, weeks=(), from_w=None):
+        if is_str(word) and word.strip():
+            rules.append((word.lower().rstrip("*"), prefix or word.endswith("*"), set(weeks), from_w))
+
     for n in ("blocked", "blocked_words", "blocklist"):
-        v = ctx.pol.get(n)
+        v = pol.get(n)
+        if isinstance(v, dict):
+            v = [x for lst in v.values() if isinstance(lst, list) for x in lst]
         if isinstance(v, list):
             for e in v:
                 if is_str(e):
-                    items.append((e.lower(), None))
+                    add(e, False)
                 elif isinstance(e, dict) and is_str(e.get("word")):
-                    items.append((e["word"].lower(), set(x for x in e.get("weeks", []) if is_int(x))))
+                    add(e["word"], False, [x for x in e.get("weeks", []) if is_int(x)])
+    for e in pol.get("blocked_prefix", []) if isinstance(pol.get("blocked_prefix"), list) else []:
+        add(e, True)
+    for e in pol.get("context_allowed", []) if isinstance(pol.get("context_allowed"), list) else []:
+        if isinstance(e, dict) and is_str(e.get("word")):
+            add(e["word"], False, (), e.get("from_w") if is_int(e.get("from_w")) else None)
     allow = {}
     for n in ("allow", "exceptions", "allow_in_weeks"):
-        v = ctx.pol.get(n)
+        v = pol.get(n)
         if isinstance(v, dict):
             for k, ws in v.items():
                 if isinstance(ws, list):
-                    allow.setdefault(k.lower(), set()).update(x for x in ws if is_int(x))
-    return items, allow
+                    allow.setdefault(k.lower().rstrip("*"), set()).update(x for x in ws if is_int(x))
+    return [(w, pre, ws | allow.get(w, set()), f) for w, pre, ws, f in rules], allow
+
+
+def _is_blocked(rules_allow, tok, week):
+    rules, allow = rules_allow
+    if week in allow.get(tok, ()):
+        return False
+    for word, prefix, weeks, from_w in rules:
+        if (tok.startswith(word) if prefix else tok == word):
+            if week in weeks or (from_w is not None and week >= from_w):
+                continue
+            return True
+    return False
 
 
 def check_blocked(ctx):
-    items, allow = _blocked_matcher(ctx)
-    if not items:
+    rules = _blocked_rules(ctx)
+    if not rules[0]:
         return
-    exact = {w: ws for w, ws in items if not w.endswith("*")}
-    prefix = [(w[:-1], ws) for w, ws in items if w.endswith("*")]
     for it in cc.iter_items(ctx.course, ctx.weeks):
         texts = [it["en"], it["say"]] + [a for a in (it["raw"].get("accept") or []) if is_str(a)]
         hit = set()
         for t in texts:
             for tok in cc.tokenize(t if is_str(t) else ""):
-                if tok in exact:
-                    ws = allow.get(tok, set()) | (exact[tok] or set())
-                    if it["w"] not in ws:
-                        hit.add(tok)
-                for pre, ws in prefix:
-                    if tok.startswith(pre):
-                        if it["w"] not in (allow.get(tok, set()) | allow.get(pre + "*", set()) | (ws or set())):
-                            hit.add(tok)
+                if _is_blocked(rules, tok, it["w"]):
+                    hit.add(tok)
         for tok in sorted(hit):
             ctx.add("BLOCKED", _where(it["w"], it["id"]), "token=" + tok)
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
-            toks = cc.tokenize(x.get("en", ""))
-            for tok in toks:
-                if tok in exact and w not in (allow.get(tok, set()) | (exact[tok] or set())):
+            for tok in cc.tokenize(x.get("en", "")):
+                if _is_blocked(rules, tok, w):
                     ctx.add("BLOCKED", _where(w, x.get("id")), "token=" + tok)
 
 
@@ -560,9 +580,10 @@ LONGDIGITS_RX = re.compile(r"(?<![\d,.])\d{7,}(?![\d])")
 
 
 def check_personal(ctx):
-    streets = {s.lower() for s in ctx.pol_list("fake_streets", "places")}
+    names = cc.policy_names(ctx.pol)          # lower-case name -> first week it may be used
     postal_ok = {re.sub(r"[ -]", "", s).upper() for s in ctx.pol_list("allowed_postal_codes", "fake_postal_codes")}
-    names_ok = {s.lower() for s in ctx.pol_list("names", "allowed_names", "fake_names", "places", "allowed_propn")}
+    pers = ctx.pol.get("personal") if isinstance(ctx.pol.get("personal"), dict) else {}
+    mail_ok = [d.lower() for d in pers.get("email_domains", []) if is_str(d)] if isinstance(pers.get("email_domains"), list) else []
     kinds_ok = {"place", "calendar", "country", "language", "org", "brand", "holiday"}
 
     def scan(w, ident, text):
@@ -576,14 +597,16 @@ def check_personal(ctx):
         if LONGDIGITS_RX.search(text):
             ctx.add("PERSONAL", _where(w, ident), "long_digit_run")
         for m in EMAIL_RX.finditer(text):
-            if not re.search(r"@(?:[\w-]+\.)*example\.(?:com|org|net)$", m.group(0), re.I):
+            dom = m.group(0).split("@", 1)[1].lower()
+            if not (re.search(r"(?:^|\.)example\.(?:com|org|net|ca)$", dom) or any(dom == d or dom.endswith("." + d) for d in mail_ok)):
                 ctx.add("PERSONAL", _where(w, ident), "email")
         for m in URL_RX.finditer(text):
             if "example." not in m.group(0).lower():
                 ctx.add("PERSONAL", _where(w, ident), "url")
         for m in ADDR_RX.finditer(text):
+            full = re.sub(r"^\d+\s+", "", m.group(0)).lower()
             name = m.group(1).strip().lower()
-            if name not in streets and not any(name.endswith(s) for s in streets):
+            if full not in names and name not in names:
                 ctx.add("PERSONAL", _where(w, ident), "street_address")
         for m in POSTAL_RX.finditer(text):
             if re.sub(r"[ -]", "", m.group(0)).upper() not in postal_ok:
@@ -600,7 +623,11 @@ def check_personal(ctx):
             scan(w, x.get("id"), x.get("en"))
             if x.get("pos") == "propn":
                 tags = set(x.get("tags") or [])
-                if x.get("en", "").lower() not in names_ok and not (tags & kinds_ok):
+                key = cc.nfkc(x.get("en", "")).lower().strip()
+                if key in names:
+                    if names[key] > w:
+                        ctx.add("PERSONAL", _where(w, x.get("id")), "name_before_allowed_week=%d" % names[key])
+                elif not (tags & kinds_ok):
                     ctx.add("PERSONAL", _where(w, x.get("id")), "name_not_in_policy")
 
 
@@ -766,6 +793,12 @@ def check_counts(ctx):
             n = use.get(x.get("id"), 0)
             if n < lim["word_min_sentences"]:
                 ctx.add("COUNT", _where(w, x.get("id")), "word_sentences=%d want>=%d" % (n, lim["word_min_sentences"]))
+        mw = (ctx.pol.get("stage0") or {}).get("max_words_per_sentence") if isinstance(ctx.pol.get("stage0"), dict) else None
+        if isinstance(mw, dict) and is_int(mw.get(str(w))):
+            for s in sents:
+                n = len(cc.tokenize(s.get("en", ""))) if is_str(s.get("en")) else 0
+                if n > mw[str(w)]:
+                    ctx.add("COUNT", _where(w, s.get("id")), "sentence_words=%d want<=%d" % (n, mw[str(w)]))
         # dialogue
         dl = [x for x in wk.get("dialogues", []) or [] if isinstance(x, dict)]
         if len(dl) != 1:
@@ -781,7 +814,20 @@ def check_counts(ctx):
             ctx.add("COUNT", _where(w), "speak_prompts=%d want=%d" % (sp, want))
 
 
-def check_grammar(ctx, grammar_module, grammar_path=None):
+def _lt_dir_candidates(lt_dir):
+    out = []
+    if lt_dir:
+        out.append(Path(lt_dir))
+    if os.environ.get("COURSE_LT_DIR"):
+        out.append(Path(os.environ["COURSE_LT_DIR"]))
+    for base in (cc.REPO_ROOT, cc.REPO_ROOT.parent / "app", cc.REPO_ROOT.parent.parent / "app"):
+        out.append(base / "backend" / "tools" / "languagetool")
+    return out
+
+
+def check_grammar(ctx, grammar_module, grammar_path=None, lt_dir=None):
+    """LanguageTool through backend\grammar.py. The module starts the Java server on a free port of its own and is
+    stopped here by PID (grammar.stop). Any problem (no module, no jar, no Java, server does not start) = GRAMMAR_SKIPPED."""
     mod = grammar_module
     if mod is None:
         p = Path(grammar_path) if grammar_path else cc.REPO_ROOT / "backend" / "grammar.py"
@@ -795,6 +841,16 @@ def check_grammar(ctx, grammar_module, grammar_path=None):
         except Exception as e:  # noqa: BLE001 - any import problem means "cannot check"
             ctx.notes.append("GRAMMAR_SKIPPED reason=import_failed_%s (not verified)" % e.__class__.__name__)
             return
+        # the worktree has no backend\tools: look for LanguageTool in --lt-dir, COURSE_LT_DIR, this repo, the main checkout
+        for d in _lt_dir_candidates(lt_dir):
+            if not d.is_dir():
+                continue
+            mod.LT_DIR, mod.TOOLS = str(d), str(d.parent)
+            mod.LOG_DIR = os.path.join(tempfile.gettempdir(), "course_lt_logs")
+            if mod.find_jar():
+                break
+    if isinstance(getattr(mod, "LANG_CODE", None), dict):
+        mod.LANG_CODE = dict(mod.LANG_CODE, en="en-CA")      # the course spells the Canadian way (colour, centre ...)
     try:
         ok = bool(mod.installed()) and bool(mod.find_java())
     except Exception:  # noqa: BLE001
@@ -802,8 +858,14 @@ def check_grammar(ctx, grammar_module, grammar_path=None):
     if not ok:
         ctx.notes.append("GRAMMAR_SKIPPED reason=LanguageTool_or_Java_not_found (not verified)")
         return
-    n = 0
+    n, info = 0, ""
     try:
+        if hasattr(mod, "start") and not mod.start():
+            ctx.notes.append("GRAMMAR_SKIPPED reason=server_did_not_start (not verified)")
+            return
+        st = getattr(mod, "_state", None)
+        if isinstance(st, dict) and st.get("proc") is not None:
+            info = " pid=%s port=%s" % (st["proc"].pid, st.get("port"))
         for it in cc.iter_items(ctx.course, ctx.weeks):
             if it["kind"] != "sentence" or not is_str(it["en"]) or it["raw"].get("src") == "tatoeba":
                 continue
@@ -816,53 +878,83 @@ def check_grammar(ctx, grammar_module, grammar_path=None):
             mod.stop()
         except Exception:  # noqa: BLE001
             pass
-    ctx.notes.append("GRAMMAR_CHECKED sentences=%d" % n)
+    ctx.notes.append("GRAMMAR_CHECKED sentences=%d%s (server stopped)" % (n, info))
 
 
 # ================================================================================================ skeleton
-def _rng(x):
-    return x if isinstance(x, list) and len(x) == 2 and all(is_int(i) for i in x) else None
-
-
 def _id_num(s):
     m = re.fullmatch(r"[a-z]+(\d+)", s) if is_str(s) else None
     return int(m.group(1)) if m else None
 
 
+def _range_of(v):
+    """["w0001","w0500"] / [1, 500] / "w0001-w0500" -> (lo, hi) or None."""
+    lo = hi = None
+    if isinstance(v, list) and len(v) == 2:
+        lo, hi = (_id_num(v[0]) if is_str(v[0]) else v[0]), (_id_num(v[1]) if is_str(v[1]) else v[1])
+    elif is_str(v) and "-" in v:
+        a, b = v.split("-", 1)
+        lo, hi = _id_num(a.strip()), _id_num(b.strip())
+    return (lo, hi) if is_int(lo) and is_int(hi) and lo <= hi else None
+
+
+def _weeks_of(w):
+    if isinstance(w, list) and len(w) == 2 and all(is_int(i) for i in w):
+        return (w[0], w[1])
+    if is_str(w):
+        try:
+            return cc.parse_weeks_arg(w)
+        except ValueError:
+            return None
+    return None
+
+
 def parse_id_ranges(sk, out):
-    """-> list of (author, weeks (a,b)|None, {kind: (lo, hi)}). Problems go to out."""
+    """-> list of (author, weeks (a,b)|None, {kind: (lo, hi)}). Problems go to out.
+    Layouts: (a) K0: {"words": {"assigned": [lo,hi], "A1": [lo,hi], ..}, "sentences": {"A1": [..]}, "dialogues": {..},
+    "authors": {"A1": [1,4], ..}};  (b) {"A1": {"weeks": [1,4], "words": [lo,hi], "sentences": [..], "dialogues": [..]}}."""
     res = []
     ir = sk.get("id_ranges")
-    if ir is None:
+    if not isinstance(ir, dict):
         out.append(Problem("SCHEMA", "skeleton", "id_ranges_missing"))
         return res
-    entries = ir.items() if isinstance(ir, dict) else enumerate(ir) if isinstance(ir, list) else []
-    for name, e in entries:
+    if isinstance(ir.get("authors"), dict):
+        for name, w in ir["authors"].items():
+            weeks = _weeks_of(w)
+            if weeks is None:
+                out.append(Problem("SCHEMA", "skeleton.id_ranges", "bad_weeks=" + str(name)))
+            kinds = {}
+            for kind in ("words", "sentences", "dialogues"):
+                src = ir.get(kind)
+                if isinstance(src, dict) and name in src:
+                    r = _range_of(src[name])
+                    if r is None:
+                        out.append(Problem("SCHEMA", "skeleton.id_ranges", "bad_%s_range=%s" % (kind, name)))
+                    else:
+                        kinds[kind] = r
+            res.append((str(name), weeks, kinds))
+        asg = ir.get("words", {}).get("assigned") if isinstance(ir.get("words"), dict) else None
+        if asg is not None:
+            r = _range_of(asg)
+            if r is None:
+                out.append(Problem("SCHEMA", "skeleton.id_ranges", "bad_words_range=assigned"))
+            else:
+                res.append(("assigned", None, {"words": r}))
+        return res
+    for name, e in ir.items():
         if not isinstance(e, dict):
             out.append(Problem("SCHEMA", "skeleton.id_ranges", "entry_not_an_object=" + str(name)))
             continue
-        weeks = None
-        w = e.get("weeks")
-        if isinstance(w, list) and len(w) == 2 and all(is_int(i) for i in w):
-            weeks = (w[0], w[1])
-        elif is_str(w):
-            try:
-                weeks = cc.parse_weeks_arg(w)
-            except ValueError:
-                out.append(Problem("SCHEMA", "skeleton.id_ranges", "bad_weeks=" + str(name)))
+        weeks = _weeks_of(e.get("weeks"))
+        if e.get("weeks") is not None and weeks is None:
+            out.append(Problem("SCHEMA", "skeleton.id_ranges", "bad_weeks=" + str(name)))
         kinds = {}
         for kind in ("words", "sentences", "dialogues"):
-            v = e.get(kind)
-            lo = hi = None
-            if isinstance(v, list) and len(v) == 2:
-                lo, hi = (_id_num(v[0]) if is_str(v[0]) else v[0]), (_id_num(v[1]) if is_str(v[1]) else v[1])
-            elif is_str(v) and "-" in v:
-                a, b = v.split("-", 1)
-                lo, hi = _id_num(a.strip()), _id_num(b.strip())
-            if not (is_int(lo) and is_int(hi) and lo <= hi):
+            r = _range_of(e.get(kind))
+            if r is None:
                 out.append(Problem("SCHEMA", "skeleton.id_ranges", "bad_%s_range=%s" % (kind, name)))
             else:
-                kinds[kind] = (lo, hi)
+                kinds[kind] = r
         res.append((str(name), weeks, kinds))
     return res
 
@@ -888,6 +980,7 @@ def check_skeleton(course, lim):
     for w in range(1, cc.WEEKS + 1):
         if w not in seen:
             out.append(Problem("SCHEMA", _where(w), "week_missing"))
+    # ---- assignment table (top-level `words`, or `assign`)
     assign = course.skeleton_assign()
     by_week = {}
     ids, lemmas = set(), {}
@@ -903,7 +996,6 @@ def check_skeleton(course, lim):
         if not (is_str(lem) and lem.strip()):
             out.append(Problem("SCHEMA", wh, "lemma_missing"))
             continue
-        key = (cc.norm_en(lem), a.get("pos"))
         key1 = cc.norm_en(lem)
         if key1 in lemmas:
             out.append(Problem("SCHEMA", wh, "duplicate_lemma_with=" + lemmas[key1]))
@@ -920,8 +1012,12 @@ def check_skeleton(course, lim):
             out.append(Problem("SCHEMA", wh, "bad_d"))
             continue
         by_week.setdefault(a["w"], []).append(a)
+    # ---- patterns: weeks list ids, bodies in the top-level `patterns`
+    pats = course.skeleton_patterns()
+    listed_in = {}
     totals = {"active": 0, "passive": 0}
     assigned_active = assigned_passive = 0
+    canada_ids = {n.get("id") for n in sk.get("canada_notes", []) if isinstance(n, dict)} if isinstance(sk.get("canada_notes"), list) else None
     for w in range(1, cc.WEEKS + 1):
         x = seen.get(w)
         if x is None:
@@ -941,55 +1037,99 @@ def check_skeleton(course, lim):
         for key in ("scene", "ladder", "check", "minutes"):
             if not isinstance(x.get(key), dict):
                 out.append(Problem("SCHEMA", wh, key + "_missing", warn=True))
-        pats = x.get("patterns")
-        if not isinstance(pats, list):
+        if isinstance(x.get("check"), dict) and x["check"] and not (is_int(x["check"].get("pass")) and 0 <= x["check"]["pass"] <= 100):
+            out.append(Problem("SCHEMA", wh, "check_pass_must_be_0_to_100"))
+        sc = x.get("scene") if isinstance(x.get("scene"), dict) else {}
+        if canada_ids is not None and isinstance(sc.get("canada"), list):
+            for cid in sc["canada"]:
+                if is_str(cid) and cid not in canada_ids:
+                    out.append(Problem("SCHEMA", wh, "scene_canada_unknown_id=" + cid))
+        wp = x.get("patterns")
+        if not isinstance(wp, list):
             out.append(Problem("SCHEMA", wh, "patterns_missing"))
-            pats = []
-        for pi, p in enumerate(pats):
-            ph = "%s:%s" % (wh, p.get("id") if isinstance(p, dict) else "?")
-            if not (isinstance(p, dict) and is_str(p.get("id")) and ID_PAT.match(p["id"]) and is_str(p.get("tpl")) and "___" in p["tpl"]):
-                out.append(Problem("SCHEMA", ph, "pattern_needs_id_and_tpl"))
+            wp = []
+        week_pats = []
+        for pi, p in enumerate(wp):
+            if is_str(p):                       # design 10.2: an id; the body is in the top-level list
+                pid, body = p, pats.get(p)
+                if body is None:
+                    out.append(Problem("SCHEMA", "%s:%s" % (wh, pid), "pattern_id_not_defined"))
+                    continue
+            elif isinstance(p, dict) and is_str(p.get("id")):
+                pid, body = p["id"], pats.get(p["id"], p)
+            else:
+                out.append(Problem("SCHEMA", "%s:#%d" % (wh, pi + 1), "pattern_must_be_an_id_or_an_object"))
                 continue
+            ph = "%s:%s" % (wh, pid)
+            if not ID_PAT.match(pid):
+                out.append(Problem("SCHEMA", ph, "bad_pattern_id"))
+            if pid in listed_in and listed_in[pid] != w:
+                out.append(Problem("SCHEMA", ph, "pattern_listed_in_w%03d_too" % listed_in[pid]))
+            listed_in[pid] = w
+            if not (is_str(body.get("tpl")) and body["tpl"].strip()):
+                out.append(Problem("SCHEMA", ph, "tpl_missing"))
+            if is_int(body.get("w")) and body["w"] != w:
+                out.append(Problem("SCHEMA", ph, "pattern_w_differs_from_week"))
+            if "d" in body and not (is_int(body["d"]) and 1 <= body["d"] <= cc.WORD_DAY_MAX):
+                out.append(Problem("SCHEMA", ph, "pattern_d_out_of_range"))
             if w <= 16:
-                g = p.get("grammar_ko")
-                if not is_str(p.get("title_ko")):
+                g = body.get("grammar_ko")
+                if not is_str(body.get("title_ko")):
                     out.append(Problem("SCHEMA", ph, "title_ko_missing"))
-                if not (_list_of_str(g) and 2 <= len(g) <= 4):
-                    out.append(Problem("SCHEMA", ph, "grammar_ko_must_be_2_to_4_lines"))
-        # counts
+                if not (_list_of_str(g) and 2 <= len(g) <= 4 and all(len(t) <= 90 for t in g)):
+                    out.append(Problem("SCHEMA", ph, "grammar_ko_must_be_2_to_4_short_lines"))
+            week_pats.append((pid, body))
+        # ---- counts
         w_assign = by_week.get(w, [])
+        declared = _skel_counts(x)
         if w_assign:
             act = sum(1 for a in w_assign if a.get("role") == "active")
             pas = sum(1 for a in w_assign if a.get("role") == "passive")
             assigned_active += act
             assigned_passive += pas
+            if declared[0] is not None and declared != (act, pas):
+                out.append(Problem("COUNT", wh, "counts_%s_differ_from_assignment_%d_%d" % ("%d_%d" % declared, act, pas)))
+            wd = x.get("words")
+            if isinstance(wd, dict):
+                for role, key in (("active", "new"), ("passive", "passive")):
+                    want = sorted(a["id"] for a in w_assign if a.get("role") == role)
+                    if isinstance(wd.get(key), list) and sorted(wd[key]) != want:
+                        out.append(Problem("SCHEMA", wh, "words_%s_differ_from_assignment" % key))
+            for dd in x.get("days", []) if isinstance(x.get("days"), list) else []:
+                if isinstance(dd, dict) and isinstance(dd.get("words"), list) and is_int(dd.get("d")):
+                    want = sorted(a["id"] for a in w_assign if a.get("role") == "active" and a.get("d") == dd["d"])
+                    if sorted(dd["words"]) != want:
+                        out.append(Problem("SCHEMA", wh, "day%d_words_differ_from_assignment" % dd["d"]))
         else:
-            act, pas = _skel_counts(x)
+            act, pas = declared
             if act is None:
                 out.append(Problem("SCHEMA", wh, "word_counts_missing"))
                 act = pas = 0
         totals["active"] += act
         totals["passive"] += pas
-        cls = cc.week_class(w)
         arange, prange, patrange = ranges_for(w, lim)
         if not arange[0] <= act <= arange[1]:
             out.append(Problem("COUNT", wh, "active_words=%d want=%d-%d" % (act, arange[0], arange[1])))
         if not prange[0] <= pas <= prange[1]:
             out.append(Problem("COUNT", wh, "passive_words=%d want=%d-%d" % (pas, prange[0], prange[1])))
-        if not patrange[0] <= len(pats) <= patrange[1]:
-            out.append(Problem("COUNT", wh, "patterns=%d want=%d-%d" % (len(pats), patrange[0], patrange[1])))
-        if w_assign:
+        if not patrange[0] <= len(wp) <= patrange[1]:
+            out.append(Problem("COUNT", wh, "patterns=%d want=%d-%d" % (len(wp), patrange[0], patrange[1])))
+        if isinstance(x.get("counts"), dict) and is_int(x["counts"].get("patterns")) and x["counts"]["patterns"] != len(wp):
+            out.append(Problem("COUNT", wh, "counts_patterns_differ_from_list"))
+        if w_assign and x.get("review") is not True:
             days = {1: 0, 2: 0, 3: 0, 4: 0}
             for a in w_assign:
                 if a.get("role") == "active" and a.get("d") in days:
                     days[a["d"]] += 1
             tol = lim["word_day_split_tol"]
-            if 20 <= act <= 30 and cls in ("normal", "intro"):
+            if 20 <= act <= 30 and cc.week_class(w) in ("normal", "intro"):
                 for dd, want in ((1, 7), (2, 6), (3, 6)):
                     if abs(days[dd] - want) > tol:
                         out.append(Problem("COUNT", wh, "day%d_active=%d want=%d+-%d" % (dd, days[dd], want, tol)))
                 if not 4 <= days[4] <= 7:
                     out.append(Problem("COUNT", wh, "day4_active=%d want=4-7" % days[4]))
+    for pid in sorted(set(pats) - set(listed_in)):
+        out.append(Problem("SCHEMA", "patterns:" + pid, "pattern_not_listed_in_any_week"))
     if totals["active"] and len(seen) == cc.WEEKS:
         lo, hi = lim["total_active"]
         if not lo <= totals["active"] <= hi:
@@ -1006,35 +1146,40 @@ def check_skeleton(course, lim):
             out.append(Problem("COUNT", "assign_1_16", "passive_words=%d want=%d-%d" % (assigned_passive, lo, hi)))
     elif assign:
         out.append(Problem("SCHEMA", "assign", "weeks_1_to_16_not_all_assigned"))
-    # pattern needs (K0-5)
+    # ---- pattern needs (K0-5): every needed lemma is taught on or before the pattern's day
     lem_o = {}
     for a in assign:
         if is_str(a.get("lemma")) and is_int(a.get("w")) and is_int(a.get("d")):
+            o = a["w"] * 10 + a["d"]
+            lem_o["lemma:" + cc.norm_en(a["lemma"])] = min(lem_o.get("lemma:" + cc.norm_en(a["lemma"]), 10 ** 9), o)
             for t in cc.tokenize(a["lemma"]):
-                lem_o[t] = min(lem_o.get(t, 10 ** 9), a["w"] * 10 + a["d"])
-            lem_o["id:" + str(a.get("id"))] = a["w"] * 10 + a["d"]
-    for w, x in sorted(seen.items()):
-        for pi, p in enumerate(x.get("patterns") or []):
-            if not isinstance(p, dict) or "needs" not in p:
-                continue
-            po = w * 10 + cc.week_pattern_day(pi, p)
-            ph = "%s:%s" % (_where(w), p.get("id"))
-            needs = p.get("needs")
-            if not _list_of_str(needs):
-                out.append(Problem("SCHEMA", ph, "needs_must_be_a_list_of_text"))
-                continue
-            for n in needs:
-                key = "id:" + n if ID_WORD.match(n) else None
-                o = lem_o.get(key) if key else None
-                if o is None and not key:
+                lem_o[t] = min(lem_o.get(t, 10 ** 9), o)
+            lem_o["id:" + str(a.get("id"))] = o
+    for pid, body in sorted(pats.items()):
+        if "needs" not in body:
+            continue
+        w = listed_in.get(pid, body.get("w") if is_int(body.get("w")) else 1)
+        idx = next((i for i, p in enumerate(seen.get(w, {}).get("patterns") or []) if (p if is_str(p) else p.get("id")) == pid), 0)
+        po = w * 10 + cc.week_pattern_day(idx, body)
+        ph = "%s:%s" % (_where(w), pid)
+        needs = body.get("needs")
+        if not _list_of_str(needs):
+            out.append(Problem("SCHEMA", ph, "needs_must_be_a_list_of_text"))
+            continue
+        for n in needs:
+            if ID_WORD.match(n):
+                o = lem_o.get("id:" + n)
+            else:
+                o = lem_o.get("lemma:" + cc.norm_en(n))
+                if o is None:
                     toks = cc.tokenize(n)
                     os_ = [lem_o.get(t) for t in toks]
                     o = None if (not toks or any(v is None for v in os_)) else max(os_)
-                if o is None:
-                    out.append(Problem("UNKNOWN_TOKEN", ph, "needs=" + n))
-                elif o > po:
-                    out.append(Problem("ORDER", ph, "needs=%s need_o=%d pattern_o=%d" % (n, o, po)))
-    # canada notes: every 2 weeks from week 8 (within the written/assigned weeks 8..16)
+            if o is None:
+                out.append(Problem("UNKNOWN_TOKEN", ph, "needs=" + n))
+            elif o > po:
+                out.append(Problem("ORDER", ph, "needs=%s need_o=%d pattern_o=%d" % (n, o, po)))
+    # ---- canada notes: some note in every two consecutive weeks from week 8 (weeks 8..16)
     def has_note(w):
         x = seen.get(w, {})
         sc = x.get("scene") if isinstance(x.get("scene"), dict) else {}
@@ -1048,7 +1193,7 @@ def check_skeleton(course, lim):
     for w in range(8, 16):
         if w in seen and (w + 1) in seen and not (has_note(w) or has_note(w + 1)):
             out.append(Problem("SCHEMA", _where(w), "no_canada_note_in_weeks_%d_%d" % (w, w + 1)))
-    # id ranges (K0-6)
+    # ---- id ranges (K0-6)
     ranges = parse_id_ranges(sk, out)
     for kind, (lo_lim, hi_lim) in R1_ID_LIMITS.items():
         mine = [(n, k[kind]) for n, _w, k in ranges if kind in k]
@@ -1085,35 +1230,48 @@ def _skel_counts(x):
 
 
 def check_assignment(course, weeks, out):
-    """A-2: the week files carry exactly the words assigned in skeleton.json (ids, lemma, pos, role, d); new ids are
-    inside the author's id range."""
+    """A-2: the week files carry exactly the words assigned in skeleton.json (ids, lemma, pos, role, d). Words on top
+    of the table are allowed only for proper nouns (pos propn, listed in policy.json) with an id inside the author's
+    word range and not before the week the policy allows the name."""
     by_week = {}
     for a in course.skeleton_assign():
         if is_int(a.get("w")):
             by_week.setdefault(a["w"], {})[a.get("id")] = a
     ranges = parse_id_ranges(course.skeleton or {}, []) if course.skeleton else []
+    names = cc.policy_names(course.policy)
     for w in weeks:
         wk = course.weeks.get(w)
         if wk is None:
             continue
         want = by_week.get(w, {})
         got = {x.get("id"): x for x in wk.get("words", []) or [] if isinstance(x, dict)}
+        mine = [(n, k) for n, wr, k in ranges if wr and wr[0] <= w <= wr[1]]
         for i in sorted(set(want) - set(got)):
             out.append(Problem("SCHEMA", _where(w, i), "assigned_word_missing"))
         for i in sorted(set(got) - set(want)):
-            out.append(Problem("SCHEMA", _where(w, i), "word_not_in_assignment"))
+            x = got[i]
+            if x.get("pos") != "propn":
+                out.append(Problem("SCHEMA", _where(w, i), "word_not_in_assignment"))
+                continue
+            n = _id_num(i)
+            if mine and not any("words" in k and k["words"][0] <= n <= k["words"][1] for _a, k in mine):
+                out.append(Problem("SCHEMA", _where(w, i), "id_outside_author_range"))
+            key = cc.nfkc(x.get("en", "")).lower().strip()
+            if key not in names:
+                out.append(Problem("PERSONAL", _where(w, i), "name_not_in_policy"))
+            elif names[key] > w:
+                out.append(Problem("PERSONAL", _where(w, i), "name_before_allowed_week=%d" % names[key]))
         for i in sorted(set(want) & set(got)):
             a, x = want[i], got[i]
             if cc.norm_en(a.get("lemma", "")) != cc.norm_en(x.get("en", "")):
                 out.append(Problem("SCHEMA", _where(w, i), "lemma_differs_from_assignment"))
             if a.get("pos") != x.get("pos") or a.get("role") != x.get("role") or a.get("d") != x.get("d"):
                 out.append(Problem("SCHEMA", _where(w, i), "pos_role_or_day_differs_from_assignment"))
-        mine = [(n, k) for n, wr, k in ranges if wr and wr[0] <= w <= wr[1]]
         if mine:
-            for kind, key in (("words", "words"), ("sentences", "sentences"), ("dialogues", "dialogues")):
-                for x in wk.get(key, []) or []:
+            for kind in ("sentences", "dialogues"):
+                for x in wk.get(kind, []) or []:
                     n = _id_num(x.get("id")) if isinstance(x, dict) else None
-                    if n is None or key == "words" and x.get("id") in want:
+                    if n is None:
                         continue
                     if not any(kind in k and k[kind][0] <= n <= k[kind][1] for _a, k in mine):
                         out.append(Problem("SCHEMA", _where(w, x.get("id")), "id_outside_author_range"))
@@ -1178,7 +1336,7 @@ class Result:
 
 
 def run_check(in_dir, weeks_arg=None, strict=False, skeleton=False, lexicon_from="files", grammar=False,
-              tatoeba_db=None, grammar_module=None, grammar_path=None):
+              tatoeba_db=None, grammar_module=None, grammar_path=None, lt_dir=None):
     res = Result()
     course = cc.Course(in_dir).load()
     lim = course.limits()
@@ -1242,7 +1400,7 @@ def run_check(in_dir, weeks_arg=None, strict=False, skeleton=False, lexicon_from
         fn(ctx)
     check_tatoeba(ctx, tatoeba_db)
     if grammar:
-        check_grammar(ctx, grammar_module, grammar_path)
+        check_grammar(ctx, grammar_module, grammar_path, lt_dir)
     probs += ctx.out
     stats = {"words": sum(len(course.weeks[w].get("words", [])) for w in ctx.weeks),
              "sentences": sum(len(course.weeks[w].get("sentences", [])) for w in ctx.weeks),
@@ -1297,6 +1455,7 @@ def main(argv=None):
     ap.add_argument("--skeleton", action="store_true")
     ap.add_argument("--grammar", action="store_true")
     ap.add_argument("--grammar-backend", dest="grammar_path", default=None, help="path of backend\grammar.py (default: this repo's)")
+    ap.add_argument("--lt-dir", dest="lt_dir", default=None, help="LanguageTool folder (default: backend\tools\languagetool of this repo or of the main checkout)")
     ap.add_argument("--lexicon-from", dest="lexicon_from", choices=["files", "skeleton"], default="files")
     ap.add_argument("--tatoeba-db", dest="tatoeba_db", default=None)
     ap.add_argument("--count-items", dest="count_items", action="store_true")
@@ -1330,7 +1489,7 @@ def main(argv=None):
         for ln in lines:
             print(ln)
         return 0 if ok else 1
-    res = run_check(a.in_dir, weeks_arg, a.strict, a.skeleton, a.lexicon_from, a.grammar, a.tatoeba_db, None, a.grammar_path)
+    res = run_check(a.in_dir, weeks_arg, a.strict, a.skeleton, a.lexicon_from, a.grammar, a.tatoeba_db, None, a.grammar_path, a.lt_dir)
     for ln in format_result(res):
         print(ln)
     return 1 if res.violations else 0

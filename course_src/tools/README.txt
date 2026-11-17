@@ -59,15 +59,31 @@ weeks\w0NN.json   {"v":1,"w":N,"title_ko":..,"can_do":[..],"scene":{..},
    "speak_prompts":[{id sp0401, kind read|answer|intro|question, en, ko, say?, expect_any[]}],
    "notes":[{id n0001, kind spelling|vocab|culture|fact|sound, text_ko, ca+us (spelling), fact_date (fact)}]}
   Keys starting with "_" are free notes. `o` may be given but must equal w*10+d.
-skeleton.json     {"v":1,"id_ranges":{"A1":{"weeks":[1,4],"words":["w0001","w0100"],"sentences":[..],"dialogues":[..]}},
-   "weeks":[{w,n,k,stage,legacy_stage,title_ko,can_do[],scene{id,title_ko,canada[]},ladder{},check{},minutes{},
-             patterns[{id,tpl,title_ko,grammar_ko[],d?,needs[lemmas or ids]}],
-             counts{active,passive} (weeks without assignment rows)}],
-   "assign":[{id,lemma,pos,role,w,d}]}      (weeks 1-16; assign may also sit inside weeks[].assign)
-policy.json       {"v":1,"blocked":["fuck*","knife"],"allow":{"knife":[3]},"names":[..],"places":[..],"allowed_propn":[..],
-   "canon_pairs":[{"ca":"colour","us":"color"}],"acronym_ok":[..],"fake_streets":[..],"allowed_postal_codes":[..],
-   "tatoeba_db":"relative path (fixtures only)","limits":{..}}
-  Proper nouns (pos propn) must be listed in names/places/allowed_propn unless tagged place/calendar/country/language/org/brand/holiday.
-  Phone numbers must be 555-01xx, e-mails @example.com; URLs, street addresses and postal codes are flagged.
-  Built-in Canadian spelling pairs: colour/color favourite/favorite centre/center neighbour flavour honour labour behaviour
-  theatre metre grey/gray (US form in text or as headword -> CANON; a Canadian headword needs the US form in `alt`).
+skeleton.json     the layout of design 10.2 as K0 wrote it (older object layout is still accepted):
+   top level: v, lang, meta, id_ranges, stages, situations, canada_notes[{id,w,..}], sound_items, patterns, words, weeks
+   words      = the assignment table [{id, lemma, pos, role, w, d}] (weeks 1-16; also accepted under the name `assign`)
+   patterns   = [{id p_xxx, w, d 1..4, tpl, title_ko, grammar_ko[2..4 lines], needs[lemmas]}]  (bodies of the week lists)
+   weeks[]    = {w,n,k,stage,legacy_stage,release,title_ko,can_do[],scene{id,title_ko,canada[ids of canada_notes]},situations,
+                 themes,review,counts{active,passive,patterns},patterns[ids],days[{d,kind,active,words[],patterns[]}],
+                 ladder{},check{items,pass,month},minutes{},words{new[],passive[]},dialogue}
+   id_ranges  = {"words":{"assigned":[lo,hi],"A1":[lo,hi]..},"sentences":{"A1":[..]},"dialogues":{..},"authors":{"A1":[1,4]..}}
+   Checked: 72 weeks, n/k/stage/legacy_stage, counts against the table and against words.new/passive and days[].words,
+   unknown or unlisted pattern ids, duplicate lemma/id, needs <= pattern day, canada note ids, id ranges (no overlap,
+   inside w0001-w0699 / s0001-s0999 / d0001-d0999), totals (active 1714-1894, passive 892-1012; weeks 1-16 370-410 / 110-130).
+   Weeks with review:true skip the per-day word split.
+policy.json       K0 layout: blocked {category:[words]} (or a list), blocked_prefix [..], context_allowed [{word, from_w}]
+   (blocked before that week), allow {word:[weeks]}, allowed_names {given:[{name,from_w}], surnames:{from_w,names[]},
+   places/streets/orgs/..}, personal.email_domains, stage0.max_words_per_sentence {"1":4,..}, limits {..} (overrides counts),
+   canon_pairs [{ca,us}], acronym_ok [..], allowed_postal_codes [..], tatoeba_db (fixtures only).
+   A proper noun (pos propn) in a week file must be listed in allowed_names (or names/places/allowed_propn) and not be used
+   before its from_w, unless it is tagged place/calendar/country/language/org/brand/holiday.  With --lexicon-from skeleton
+   the table has no proper nouns: week files may add them (pos propn, id inside the author's word range).
+   Phone numbers 555-01xx, e-mail @example.com/.ca (or personal.email_domains); URLs, street addresses (not listed in
+   allowed_names), postal codes are flagged.  Built-in Canadian spelling pairs: colour/color favourite/favorite
+   centre/center neighbour flavour honour labour behaviour theatre metre grey/gray (US form in text or as headword ->
+   CANON; a Canadian headword needs the US form in `alt`).
+
+LanguageTool (--grammar): backend\grammar.py is loaded from the file (default <repo>ackend\grammar.py) and pointed at
+   --lt-dir, else COURSE_LT_DIR, else <repo>ackend	ools\languagetool, else the main checkout's copy next to the worktree
+   (..ppackend	ools\languagetool). Language en-CA (so colour is not flagged). The Java server is started by that
+   module on a free port of its own and stopped by PID (grammar.stop); the note line shows pid and port.
