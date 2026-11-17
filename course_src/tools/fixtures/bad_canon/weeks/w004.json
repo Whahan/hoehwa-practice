@@ -1,0 +1,298 @@
+{
+ "v": 1,
+ "w": 4,
+ "title_ko": "친구에게 인사",
+ "can_do": [
+  "친구에게 인사할 수 있다",
+  "작별 인사를 할 수 있다"
+ ],
+ "words": [
+  {
+   "id": "w0301",
+   "en": "friend",
+   "pos": "n",
+   "ko": "친구",
+   "ipa": "frɛnd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0302",
+   "en": "welcome",
+   "pos": "interj",
+   "ko": "환영해요",
+   "ipa": "ˈwɛlkəm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0303",
+   "en": "bye",
+   "pos": "interj",
+   "ko": "안녕히 가세요",
+   "ipa": "baɪ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0304",
+   "en": "colour",
+   "pos": "n",
+   "ko": "색깔",
+   "ipa": "ˈkʌlər",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_greet_name",
+   "tpl": "Hello, ___.",
+   "slots": [
+    {
+     "name": "x",
+     "pos": [
+      "n",
+      "propn"
+     ]
+    }
+   ],
+   "title_ko": "Hello, ~ (안녕하세요, ~)",
+   "grammar_ko": [
+    "이름이나 호칭을 부를 때는 쉼표 뒤에 붙여요.",
+    "한국어의 '~야', '~씨' 같은 호칭 대신 이름만 써요."
+   ],
+   "d": 2
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0401",
+   "en": "Hello, friend.",
+   "ko": "안녕하세요, 친구.",
+   "say": "",
+   "pat": "p_greet_name",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0402",
+   "en": "Hi, friend.",
+   "ko": "안녕, 친구.",
+   "say": "",
+   "pat": "p_greet_name",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0403",
+   "en": "Good morning, friend.",
+   "ko": "좋은 아침이에요, 친구.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0404",
+   "en": "Thanks, friend.",
+   "ko": "고마워요, 친구.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0405",
+   "en": "Welcome, friend.",
+   "ko": "환영해요, 친구.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0406",
+   "en": "Welcome, Min.",
+   "ko": "환영해요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0407",
+   "en": "Bye, friend.",
+   "ko": "안녕히 가세요, 친구.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0408",
+   "en": "Bye, Min.",
+   "ko": "안녕히 가세요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0409",
+   "en": "Good colour.",
+   "ko": "좋은 색깔이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0410",
+   "en": "Good colour, Min.",
+   "ko": "좋은 색깔이에요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0411",
+   "en": "Yes, thanks, Min.",
+   "ko": "네, 고마워요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "tatoeba",
+   "tid": 90001
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0004",
+   "title_ko": "작별 인사",
+   "scene": "bye",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Good morning, friend.",
+     "ko": "좋은 아침이에요, 친구.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Good morning, Min.",
+     "ko": "좋은 아침이에요, 민.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Bye, friend.",
+     "ko": "안녕히 가세요, 친구.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [
+  {
+   "id": "sp0401",
+   "kind": "read",
+   "en": "Hello, my name is Min.",
+   "ko": "안녕하세요, 제 이름은 민이에요.",
+   "expect_any": [
+    "name"
+   ]
+  },
+  {
+   "id": "sp0402",
+   "kind": "answer",
+   "en": "Is your name Min?",
+   "ko": "당신의 이름이 민인가요?",
+   "expect_any": [
+    "yes",
+    "no"
+   ]
+  },
+  {
+   "id": "sp0403",
+   "kind": "intro",
+   "en": "My name is Min.",
+   "ko": "제 이름은 민이에요.",
+   "expect_any": [
+    "name",
+    "min"
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n0001",
+   "kind": "spelling",
+   "ca": "colour",
+   "us": "color",
+   "text_ko": "캐나다에서는 colour 라고 써요."
+  }
+ ]
+}

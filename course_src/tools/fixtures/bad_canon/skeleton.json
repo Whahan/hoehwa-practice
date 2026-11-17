@@ -1,0 +1,272 @@
+{
+ "v": 1,
+ "lang": "en",
+ "id_ranges": {
+  "A1": {
+   "weeks": [
+    1,
+    4
+   ],
+   "words": [
+    "w0001",
+    "w0399"
+   ],
+   "sentences": [
+    "s0001",
+    "s0499"
+   ],
+   "dialogues": [
+    "d0001",
+    "d0099"
+   ]
+  }
+ },
+ "weeks": [
+  {
+   "w": 1,
+   "n": 1,
+   "k": 1,
+   "stage": 0,
+   "legacy_stage": 1,
+   "title_ko": "인사하기",
+   "can_do": [
+    "인사를 할 수 있다",
+    "이름을 말할 수 있다"
+   ],
+   "scene": {
+    "id": "mini",
+    "title_ko": "시험용",
+    "canada": []
+   },
+   "ladder": {},
+   "check": {},
+   "minutes": {}
+  },
+  {
+   "w": 2,
+   "n": 1,
+   "k": 2,
+   "stage": 0,
+   "legacy_stage": 1,
+   "title_ko": "숫자 1~3",
+   "can_do": [
+    "1부터 3까지 셀 수 있다",
+    "번호를 말할 수 있다"
+   ],
+   "scene": {
+    "id": "mini",
+    "title_ko": "시험용",
+    "canada": []
+   },
+   "ladder": {},
+   "check": {},
+   "minutes": {}
+  },
+  {
+   "w": 4,
+   "n": 1,
+   "k": 4,
+   "stage": 0,
+   "legacy_stage": 1,
+   "title_ko": "친구에게 인사",
+   "can_do": [
+    "친구에게 인사할 수 있다",
+    "작별 인사를 할 수 있다"
+   ],
+   "scene": {
+    "id": "mini",
+    "title_ko": "시험용",
+    "canada": []
+   },
+   "ladder": {},
+   "check": {},
+   "minutes": {}
+  }
+ ],
+ "assign": [
+  {
+   "id": "w0001",
+   "lemma": "hello",
+   "pos": "interj",
+   "role": "active",
+   "w": 1,
+   "d": 1
+  },
+  {
+   "id": "w0002",
+   "lemma": "hi",
+   "pos": "interj",
+   "role": "active",
+   "w": 1,
+   "d": 1
+  },
+  {
+   "id": "w0003",
+   "lemma": "thanks",
+   "pos": "interj",
+   "role": "active",
+   "w": 1,
+   "d": 1
+  },
+  {
+   "id": "w0004",
+   "lemma": "sorry",
+   "pos": "interj",
+   "role": "active",
+   "w": 1,
+   "d": 2
+  },
+  {
+   "id": "w0005",
+   "lemma": "yes",
+   "pos": "interj",
+   "role": "active",
+   "w": 1,
+   "d": 2
+  },
+  {
+   "id": "w0006",
+   "lemma": "no",
+   "pos": "interj",
+   "role": "active",
+   "w": 1,
+   "d": 2
+  },
+  {
+   "id": "w0007",
+   "lemma": "my",
+   "pos": "det",
+   "role": "active",
+   "w": 1,
+   "d": 3
+  },
+  {
+   "id": "w0008",
+   "lemma": "name",
+   "pos": "n",
+   "role": "active",
+   "w": 1,
+   "d": 3
+  },
+  {
+   "id": "w0009",
+   "lemma": "is",
+   "pos": "v",
+   "role": "active",
+   "w": 1,
+   "d": 3
+  },
+  {
+   "id": "w0010",
+   "lemma": "Min",
+   "pos": "propn",
+   "role": "active",
+   "w": 1,
+   "d": 3
+  },
+  {
+   "id": "w0011",
+   "lemma": "your",
+   "pos": "det",
+   "role": "active",
+   "w": 1,
+   "d": 4
+  },
+  {
+   "id": "w0012",
+   "lemma": "good",
+   "pos": "adj",
+   "role": "active",
+   "w": 1,
+   "d": 4
+  },
+  {
+   "id": "w0013",
+   "lemma": "morning",
+   "pos": "n",
+   "role": "active",
+   "w": 1,
+   "d": 4
+  },
+  {
+   "id": "w0101",
+   "lemma": "one",
+   "pos": "num",
+   "role": "active",
+   "w": 2,
+   "d": 1
+  },
+  {
+   "id": "w0102",
+   "lemma": "two",
+   "pos": "num",
+   "role": "active",
+   "w": 2,
+   "d": 1
+  },
+  {
+   "id": "w0103",
+   "lemma": "three",
+   "pos": "num",
+   "role": "active",
+   "w": 2,
+   "d": 1
+  },
+  {
+   "id": "w0104",
+   "lemma": "it",
+   "pos": "pron",
+   "role": "active",
+   "w": 2,
+   "d": 2
+  },
+  {
+   "id": "w0105",
+   "lemma": "number",
+   "pos": "n",
+   "role": "active",
+   "w": 2,
+   "d": 3
+  },
+  {
+   "id": "w0106",
+   "lemma": "room",
+   "pos": "n",
+   "role": "active",
+   "w": 2,
+   "d": 3
+  },
+  {
+   "id": "w0301",
+   "lemma": "friend",
+   "pos": "n",
+   "role": "active",
+   "w": 4,
+   "d": 1
+  },
+  {
+   "id": "w0302",
+   "lemma": "welcome",
+   "pos": "interj",
+   "role": "active",
+   "w": 4,
+   "d": 2
+  },
+  {
+   "id": "w0303",
+   "lemma": "bye",
+   "pos": "interj",
+   "role": "active",
+   "w": 4,
+   "d": 2
+  },
+  {
+   "id": "w0304",
+   "lemma": "colour",
+   "pos": "n",
+   "role": "active",
+   "w": 4,
+   "d": 4
+  }
+ ]
+}

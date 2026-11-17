@@ -1,0 +1,297 @@
+{
+ "v": 1,
+ "w": 2,
+ "title_ko": "숫자 1~3",
+ "can_do": [
+  "1부터 3까지 셀 수 있다",
+  "번호를 말할 수 있다"
+ ],
+ "words": [
+  {
+   "id": "w0101",
+   "en": "one",
+   "pos": "num",
+   "ko": "하나",
+   "ipa": "wʌn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0102",
+   "en": "two",
+   "pos": "num",
+   "ko": "둘",
+   "ipa": "tuː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0103",
+   "en": "three",
+   "pos": "num",
+   "ko": "셋",
+   "ipa": "θriː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0104",
+   "en": "it",
+   "pos": "pron",
+   "ko": "그것",
+   "ipa": "ɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0105",
+   "en": "number",
+   "pos": "n",
+   "ko": "번호",
+   "ipa": "ˈnʌmbər",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0106",
+   "en": "room",
+   "pos": "n",
+   "ko": "방",
+   "ipa": "ruːm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_it_is",
+   "tpl": "It is ___.",
+   "slots": [
+    {
+     "name": "x",
+     "pos": [
+      "num"
+     ]
+    }
+   ],
+   "title_ko": "It is ~ (그것은 ~예요)",
+   "grammar_ko": [
+    "영어는 'It is' 뒤에 말하려는 것이 와요.",
+    "한국어처럼 주어를 빼지 않고 'It' 을 꼭 써요."
+   ],
+   "d": 2
+  },
+  {
+   "id": "p_my_x_is",
+   "tpl": "My ___ is ___.",
+   "slots": [
+    {
+     "name": "x",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "My ~ is ~ (제 ~은 ~예요)",
+   "grammar_ko": [
+    "'My' 와 'is' 사이에 말하려는 대상을 넣어요.",
+    "번호는 숫자로 써도 소리 내어 읽을 때는 단어로 읽어요."
+   ],
+   "d": 3
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0101",
+   "en": "One, two, three.",
+   "ko": "하나, 둘, 셋.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0102",
+   "en": "It is one.",
+   "ko": "그것은 하나예요.",
+   "say": "",
+   "pat": "p_it_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0103",
+   "en": "It is two.",
+   "ko": "그것은 둘이에요.",
+   "say": "",
+   "pat": "p_it_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0104",
+   "en": "It is three.",
+   "ko": "그것은 셋이에요.",
+   "say": "",
+   "pat": "p_it_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0105",
+   "en": "My number is three.",
+   "ko": "제 번호는 604-555-1234예요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0106",
+   "en": "My room is two.",
+   "ko": "제 방은 둘이에요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0107",
+   "en": "My number is 3.",
+   "ko": "제 번호는 3번이에요.",
+   "say": "My number is three.",
+   "pat": "p_my_x_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0108",
+   "en": "My room is 2.",
+   "ko": "제 방은 2호예요.",
+   "say": "My room is two.",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0109",
+   "en": "Is it one?",
+   "ko": "그것은 하나인가요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0110",
+   "en": "Is your room two?",
+   "ko": "당신의 방은 둘인가요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0002",
+   "title_ko": "번호 묻기",
+   "scene": "number",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "My number is three.",
+     "ko": "제 번호는 셋이에요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Is it three?",
+     "ko": "셋인가요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Yes.",
+     "ko": "네.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": []
+}

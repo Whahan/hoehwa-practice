@@ -1,0 +1,495 @@
+{
+ "v": 1,
+ "w": 1,
+ "title_ko": "인사하기",
+ "can_do": [
+  "인사를 할 수 있다",
+  "이름을 말할 수 있다"
+ ],
+ "words": [
+  {
+   "id": "w0001",
+   "en": "hello",
+   "pos": "interj",
+   "ko": "안녕하세요",
+   "ipa": "həˈloʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0002",
+   "en": "hi",
+   "pos": "interj",
+   "ko": "안녕",
+   "ipa": "haɪ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0003",
+   "en": "thanks",
+   "pos": "interj",
+   "ko": "고마워요",
+   "ipa": "θæŋks",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0004",
+   "en": "sorry",
+   "pos": "interj",
+   "ko": "미안해요",
+   "ipa": "ˈsɑːri",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0005",
+   "en": "yes",
+   "pos": "interj",
+   "ko": "네",
+   "ipa": "jɛs",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0006",
+   "en": "no",
+   "pos": "interj",
+   "ko": "아니요",
+   "ipa": "noʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0007",
+   "en": "my",
+   "pos": "det",
+   "ko": "나의",
+   "ipa": "maɪ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0008",
+   "en": "name",
+   "pos": "n",
+   "ko": "이름",
+   "ipa": "neɪm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0009",
+   "en": "is",
+   "pos": "v",
+   "ko": "이다",
+   "ipa": "ɪz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0010",
+   "en": "Min",
+   "pos": "propn",
+   "ko": "민",
+   "ipa": "mɪn",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0011",
+   "en": "your",
+   "pos": "det",
+   "ko": "당신의",
+   "ipa": "jɔːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0012",
+   "en": "good",
+   "pos": "adj",
+   "ko": "좋은",
+   "ipa": "ɡʊd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0013",
+   "en": "morning",
+   "pos": "n",
+   "ko": "아침",
+   "ipa": "ˈmɔːrnɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_my_name",
+   "tpl": "My name is ___.",
+   "slots": [
+    {
+     "name": "x",
+     "pos": [
+      "propn"
+     ]
+    }
+   ],
+   "title_ko": "My name is ~ (제 이름은 ~예요)",
+   "grammar_ko": [
+    "영어는 'My name is' 바로 뒤에 이름이 와요.",
+    "한국어의 '은/는' 같은 조사는 필요 없어요."
+   ],
+   "d": 3
+  },
+  {
+   "id": "p_good_x",
+   "tpl": "Good ___.",
+   "slots": [
+    {
+     "name": "x",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "Good ~ (좋은 ~이에요)",
+   "grammar_ko": [
+    "'Good' 뒤에 때를 나타내는 말을 붙여 인사해요.",
+    "Good morning 은 아침에 하는 인사예요."
+   ],
+   "d": 4
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0001",
+   "en": "Hello.",
+   "ko": "안녕하세요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0002",
+   "en": "Hi.",
+   "ko": "안녕.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0003",
+   "en": "Thanks.",
+   "ko": "고마워요 謝.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0004",
+   "en": "Sorry.",
+   "ko": "미안해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0005",
+   "en": "Yes.",
+   "ko": "네.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0006",
+   "en": "No.",
+   "ko": "아니요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0007",
+   "en": "Yes, thanks.",
+   "ko": "네, 고마워요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0008",
+   "en": "No, thanks.",
+   "ko": "아니요, 괜찮아요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0009",
+   "en": "My name is Min.",
+   "ko": "제 이름은 민이에요.",
+   "say": "",
+   "pat": "p_my_name",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0010",
+   "en": "Hello, my name is Min.",
+   "ko": "안녕하세요, 제 이름은 민이에요.",
+   "say": "",
+   "pat": "p_my_name",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0011",
+   "en": "Hello, Min.",
+   "ko": "안녕하세요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0012",
+   "en": "Hi, Min.",
+   "ko": "안녕, 민.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0013",
+   "en": "Sorry, Min.",
+   "ko": "미안해요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0014",
+   "en": "Your name is Min.",
+   "ko": "당신의 이름은 민이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0015",
+   "en": "Is your name Min?",
+   "ko": "당신의 이름이 민인가요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0016",
+   "en": "Good morning.",
+   "ko": "좋은 아침이에요.",
+   "say": "",
+   "pat": "p_good_x",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0017",
+   "en": "Good morning, Min.",
+   "ko": "좋은 아침이에요, 민.",
+   "say": "",
+   "pat": "p_good_x",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0001",
+   "title_ko": "첫 인사",
+   "scene": "intro",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hello, my name is Min.",
+     "ko": "안녕하세요, 제 이름은 민이에요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Hello, Min.",
+     "ko": "안녕하세요, 민.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Thanks.",
+     "ko": "고마워요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": []
+}

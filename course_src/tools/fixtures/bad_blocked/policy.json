@@ -1,0 +1,42 @@
+{
+ "v": 1,
+ "blocked": [
+  "kill*",
+  "sex*",
+  "fuck*",
+  "shit*",
+  "knife",
+  "bye"
+ ],
+ "allow": {
+  "knife": [
+   3
+  ]
+ },
+ "names": [
+  "Min",
+  "Anna"
+ ],
+ "places": [],
+ "allowed_propn": [],
+ "canon_pairs": [],
+ "acronym_ok": [],
+ "tatoeba_db": "tatoeba_mini.json",
+ "limits": {
+  "min_sentences": 8,
+  "pattern_min_sentences": 2,
+  "word_min_sentences": 2,
+  "intro_active_range": [
+   3,
+   28
+  ],
+  "intro_pattern_range": [
+   1,
+   2
+  ],
+  "intro_passive_range": [
+   0,
+   16
+  ]
+ }
+}
