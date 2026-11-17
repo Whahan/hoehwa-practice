@@ -155,6 +155,12 @@ class SentenceTest(unittest.TestCase):
             with self.subTest(text=text, say=say):
                 self.assertFalse(ne.say_matches(text, say))
 
+    def test_four_digit_numbers_also_read_like_years(self):
+        self.assertTrue(ne.say_matches("In 1999", "in nineteen ninety-nine"))
+        self.assertTrue(ne.say_matches("In 2024", "in twenty twenty-four"))
+        self.assertTrue(ne.say_matches("In 1999", "in one thousand nine hundred ninety-nine"))
+        self.assertFalse(ne.say_matches("In 1999", "in nineteen ninety"))
+
     def test_readings_of_one_token(self):
         self.assertEqual(ne.readings("$5.99")[0], "five ninety-nine")
         self.assertEqual(ne.readings("21st"), ["twenty-first"])
