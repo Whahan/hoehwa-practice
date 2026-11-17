@@ -65,6 +65,7 @@ func _ready() -> void:
 	_test_options_small_weeks()
 	_test_input_defense()
 	_test_judge()
+	_test_judge_signs()
 	_test_poison_drop()
 	_test_sources_pure()
 	_test_oracle_selfcheck()
@@ -672,7 +673,9 @@ func _test_judge() -> void:
 			print("    judge row mismatch: ", r[4], " got ", res)
 	ok(rows.size() >= 25, "E2-9 judge table has >= 25 rows (%d)" % rows.size())
 	ok(bad == 0, "E2-9 all judge rows match (%d bad)" % bad)
-	ok(LessonBuilder.norm_answer("  Hello,  WORLD!! ") == "hello world", "norm_answer: same token rule as the guard (case, spaces, punctuation)")
+	# 이전 단언은 "hello, world"(1라운드 전)에서 "hello world"(토큰 규칙)로 바뀌었고, 3라운드 규칙에서도 "hello world" 이다:
+	# 글자 뒤 공백이 따르는 쉼표는 지우고, 끝의 !! 도 지운다. 숫자·부호는 그대로(아래 _test_judge_signs).
+	ok(LessonBuilder.norm_answer("  Hello,  WORLD!! ") == "hello world", "norm_answer: case, spaces, end !, comma after a word (was 'hello, world' before round 1)")
 	ok(LessonBuilder.norm_answer("It’s") == "it's" and LessonBuilder.norm_answer(null) == "", "norm_answer: curly apostrophe, null")
 	# 만든 문제는 자기 정답을 맞다고 판정한다(만든 쪽과 채점이 어긋나지 않는다)
 	var data: Dictionary = _idx(mini_raw)
@@ -719,6 +722,80 @@ func _self_judges(e: Dictionary) -> bool:
 			var wrong: int = (int(e["answer"]) + 1) % e["options"].size()
 			return not LessonBuilder.judge(e, wrong)["ok"]
 	return true
+
+
+# ------------------------------------------------------------------ 3라운드: 값을 바꾸는 부호는 판정에서 지키고, 말하기는 전사 규칙
+
+func _modes_for(gold: String) -> Array:
+	var tiles: Array = gold.split(" ")
+	return [
+		["recall type", {"type": "recall", "mode": "ko_en_type", "accept": [gold]}],
+		["listen type", {"type": "listen", "mode": "type", "accept": [gold]}],
+		["build string", {"type": "build", "answer": tiles, "accept": []}],
+		["speak repeat", {"type": "speak", "mode": "repeat", "target": gold, "accept": []}],
+		["speak answer", {"type": "speak", "mode": "answer", "expect_any": [gold]}],
+		["speak intro", {"type": "speak", "mode": "intro", "expect_any": [gold]}],
+	]
+
+
+func _test_judge_signs() -> void:
+	# [정답, 값이 다른 답]: 모든 모드에서 ok:false (타이핑에서는 near 일 수 있다)
+	var rejects: Array = [["It is -5 degrees", "It is 5 degrees"], ["1,000", "1.000"], ["It costs $5", "It costs 5"], ["5%", "5"], ["+1 604", "1 604"], ["C++", "C"]]
+	for r in rejects:
+		var bad_modes: Array = []
+		for m in _modes_for(r[0]):
+			if LessonBuilder.judge(m[1], r[1])["ok"]:
+				bad_modes.append(m[0])
+		ok(bad_modes.is_empty(), "sign kept: '" + str(r[0]) + "' answered as '" + str(r[1]) + "' is wrong in every mode (accepted in " + str(bad_modes) + ")")
+	# 조립 타일: -5 와 5 는 다른 타일
+	var tile_ex: Dictionary = {"type": "build", "answer": ["It", "is", "-5"], "accept": [["It", "is", "-5"]]}
+	print("selfcheck FAIL-as-expected tile -5 vs 5: ok=", LessonBuilder.judge(tile_ex, ["It", "is", "5"])["ok"])
+	ok(not LessonBuilder.judge(tile_ex, ["It", "is", "5"])["ok"] and LessonBuilder.judge(tile_ex, ["it", "IS", "-5"])["ok"], "tiles: -5 is not 5; the same tiles in another case are right")
+	ok(not LessonBuilder.judge({"type": "build", "answer": ["It", "costs", "$5"], "accept": []}, ["It", "costs", "5"])["ok"], "tiles: $5 is not 5")
+	# 정답으로 판정
+	var yes: Array = [
+		[{"type": "speak", "mode": "answer", "expect_any": ["yes", "no"]}, "Yes, I do", "answer: Yes, I do"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["yes", "no"]}, "No, thanks", "answer: No, thanks"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["Hello world"]}, "hello world!", "typed: end ! ignored, case ignored"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["hello world!"]}, "Hello world", "typed: the accept side may have the !"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["I'm"]}, "I\u2019m", "typed: curly apostrophe"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["don't"]}, "\uff44\uff4f\uff4e't", "typed: fullwidth letters"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["1,000"]}, "1000", "typed: 1,000 equals 1000"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["1000"]}, "1,000", "typed: 1000 equals 1,000"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["Yes, I do"]}, "yes I do", "typed: comma after a word is ignored"],
+		[{"type": "listen", "mode": "type", "accept": ["It costs $5.99."]}, "it costs $5.99", "typed: $5.99 kept, end period ignored"],
+		[{"type": "build", "answer": ["It", "is", "-5"], "accept": []}, "It is -5.", "build string: sign kept, end period ignored"],
+		[{"type": "speak", "mode": "repeat", "target": "It is 1,000", "accept": []}, "it is 1000", "speak: 1,000 equals 1000"],
+		[{"type": "speak", "mode": "repeat", "target": "It is -5", "say": "It is minus five", "accept": []}, "It is minus five", "speak: the spoken form (say) is right"],
+		[{"type": "speak", "mode": "repeat", "target": "It is -5", "say": "It is minus five", "accept": []}, "it is -5", "speak: the written form is right too"],
+		[{"type": "speak", "mode": "repeat", "target": "Well-known price", "accept": []}, "well known, price.", "speak: hyphen and comma between words are folded"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["-5"]}, "it is -5 today", "speak answer: -5 inside a transcript"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["5%"]}, "about 5% more", "speak answer: 5% inside a transcript"],
+	]
+	for y in yes:
+		ok(LessonBuilder.judge(y[0], y[1])["ok"], "judged right: " + y[2])
+	# 타이핑에서 부호·하이픈·공백만 다르면 ok:false, near:true
+	var nears: Array = [["hello-world", "hello world"], ["Mr. Smith", "Mr Smith"], ["5,99", "5.99"], ["It is -5 degrees", "It is 5 degrees"], ["1,000", "1.000"]]
+	for n in nears:
+		var jr: Dictionary = LessonBuilder.judge({"type": "recall", "mode": "ko_en_type", "accept": [n[0]]}, n[1])
+		ok(not jr["ok"] and jr["near"], "typed near: '" + str(n[0]) + "' vs '" + str(n[1]) + "' -> ok:false, near:true")
+	# 말하기에서 값이 다른 숫자는 near 도 아니고 오답
+	ok(not LessonBuilder.judge({"type": "speak", "mode": "repeat", "target": "It is -5", "accept": []}, "It is 5")["ok"], "speak: -5 and 5 differ")
+	# norm_answer / speech_tokens 직접 표
+	var norms: Array = [["  Hello,  WORLD!! ", "hello world"], ["1,000", "1000"], ["1,000,000", "1000000"], ["It is -5", "it is -5"], ["5%", "5%"], ["$5.99", "$5.99"], ["C++", "c++"], ["+1 604", "+1 604"], ["It\u2019s", "it's"], ["Mr. Smith", "mr. smith"], ["5,99", "5,99"], ["hello-world", "hello-world"], ["Hi???", "hi"], [" yes, ", "yes"], [null, ""], [5, ""]]
+	var norm_bad: int = 0
+	for nr in norms:
+		if LessonBuilder.norm_answer(nr[0]) != nr[1]:
+			norm_bad += 1
+			print("    norm row mismatch: ", var_to_str(nr[0]), " -> '", LessonBuilder.norm_answer(nr[0]), "' want '", nr[1], "'")
+	ok(norm_bad == 0, "norm_answer table (%d rows): number chunks, signs, dollar, percent and plus kept; only thousand commas and word commas removed" % norms.size())
+	var toks: Array = [["It costs $5.", ["it", "costs", "$5"]], ["-5", ["-5"]], ["1,000", ["1000"]], ["5%", ["5%"]], ["c++", ["c++"]], ["well-known", ["well", "known"]], ["5-3", ["5", "3"]], ["10:30", ["10:30"]], ["+1 604", ["+1", "604"]], ["Yes, I do!", ["yes", "i", "do"]], ["I\u2019m here", ["i'm", "here"]]]
+	var tok_bad: int = 0
+	for tr in toks:
+		if LessonBuilder.speech_tokens(tr[0]) != tr[1]:
+			tok_bad += 1
+			print("    speech_tokens mismatch: ", tr[0], " -> ", LessonBuilder.speech_tokens(tr[0]), " want ", tr[1])
+	ok(tok_bad == 0, "speech_tokens table (%d rows): numbers keep their sign, percent and dollar, words follow the K1 rule" % toks.size())
 
 
 # ------------------------------------------------------------------ E2-4 (a) 독이 든 데이터

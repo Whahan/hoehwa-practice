@@ -1163,12 +1163,77 @@ static func _unit_month(ctx: Ctx, out: Array) -> void:
 
 ## ------------------------------------------------------------------ 채점 (E2-9)
 
-## 비교용 정규화: 가드(LexiconGuard.tokens, K1 규칙)와 같은 토큰 열을 공백 한 칸으로 이은 글.
-## 대소문자·앞뒤 공백·부호·전각·굽은 따옴표·하이픈 차이는 무시한다. 글이 아니면 "".
+## 판정용 정규식(가드의 낱말 검사용 토큰화와는 다른 함수다: 검사는 K1 규칙, 판정은 값을 바꾸는 부호를 지키는 규칙).
+static var _rx_cache: Dictionary = {}
+
+
+static func _rx(pattern: String) -> RegEx:
+	if not _rx_cache.has(pattern):
+		var r: RegEx = RegEx.new()
+		r.compile(pattern)
+		_rx_cache[pattern] = r
+	return _rx_cache[pattern]
+
+
+## 전각 -> 반각, 굽은 따옴표 -> 곧은 따옴표, 이상한 공백 -> 공백, 여러 가지 줄표·마이너스 -> 하이픈.
+static func _fold(s: String) -> String:
+	var out: String = ""
+	for i in s.length():
+		var u: int = s.unicode_at(i)
+		if u >= 0xFF01 and u <= 0xFF5E:
+			u -= 0xFEE0
+		elif u == 0x2019 or u == 0x2018 or u == 0x2032 or u == 0x2BC or u == 0x60 or u == 0xB4:
+			u = 39
+		elif u == 0x201C or u == 0x201D or u == 0x201E:
+			u = 34
+		elif u == 0x3000 or u == 0xA0 or (u >= 0x2000 and u <= 0x200F) or u == 0x2028 or u == 0x2029 or u == 0x202F or u == 0x205F or u == 0xFEFF:
+			u = 32
+		elif (u >= 0x2010 and u <= 0x2015) or u == 0x2212:
+			u = 45
+		out += char(u)
+	return out
+
+
+## 공통 정규화(모든 판정 모드): 소문자, 전각·따옴표·공백 정리, 앞뒤 공백 제거, 끝의 . ! ? 제거,
+## 글자 뒤 공백(또는 끝)이 따르는 쉼표 제거, 천 단위 쉼표(1,000 -> 1000)만 제거.
+## 숫자 덩어리의 부호·소수점·%·$ 와 그 밖의 부호(- + . ' & 등)는 남긴다. 글이 아니면 "".
 static func norm_answer(s: Variant) -> String:
 	if not (s is String):
 		return ""
-	return " ".join(PackedStringArray(LexiconGuard.tokens(s)))
+	var t: String = _fold(s).to_lower()
+	t = _rx("\\s+").sub(t, " ", true).strip_edges()
+	t = _rx("[\\s.!?]+$").sub(t, "")
+	t = _rx("(?<=[^\\W\\d_]),(?=\\s|$)").sub(t, "", true)
+	t = _rx("(?<=\\d),(?=\\d{3}(?!\\d))").sub(t, "", true)
+	return _rx("\\s+").sub(t, " ", true).strip_edges()
+
+
+## 부호·공백만 다른 답을 "거의 맞음" 으로 알아보는 뼈대: 글자와 숫자만 남긴다.
+static func _skeleton(canon: String) -> String:
+	return _rx("[^\\p{L}\\p{N}]+").sub(canon, "", true)
+
+
+## 말하기(전사)용 토큰: 낱말은 K1 규칙, 숫자 덩어리는 부호·소수점·%·$ 를 붙인 채 한 토큰(1,000 은 1000 으로),
+## 낱말 뒤 + 와 # 는 낱말에 붙인다(c++ 와 c 는 다르다). 낱말 사이의 하이픈·쉼표 같은 부호는 접는다.
+static func speech_tokens(s: Variant) -> Array:
+	var out: Array = []
+	if not (s is String):
+		return out
+	var t: String = _fold(s).to_lower()
+	var rx: RegEx = _rx("(?:(?<![^\\W_])[-+$])?\\d[\\d,.:]*%?|[^\\W_]+(?:'[^\\W_]+)*[+#]*")
+	for m in rx.search_all(t):
+		var tok: String = m.get_string()
+		var first: String = tok.substr(0, 1)
+		if first == "-" or first == "+" or first == "$" or (first >= "0" and first <= "9"):
+			var pct: bool = tok.ends_with("%")
+			if pct:
+				tok = tok.substr(0, tok.length() - 1)
+			tok = _rx("[,.:]+$").sub(tok, "")
+			tok = _rx("(?<=\\d),(?=\\d{3}(?!\\d))").sub(tok, "", true)
+			if pct:
+				tok += "%"
+		out.append(tok)
+	return out
 
 
 ## 고르기 답으로 쓸 수 있는 값(int, 또는 소수 부분이 없는 float). bool·문자열·1.5 는 아니다.
@@ -1233,7 +1298,11 @@ static func _edit1(a: String, b: String) -> bool:
 
 
 ## 답 판정 -> {ok, near}. 고르기(int)·조립(Array/String)·쓰기·말하기(String). 이상한 입력은 {ok:false, near:false}.
-## 글 비교는 모두 norm_answer(가드와 같은 토큰 규칙)로 한다. 월말 answer/intro 는 전사에 expect_any 항목의 토큰 열이 연속으로 들어 있으면 맞다.
+## 모드별 규칙:
+##  - 타이핑(조립 문자열, recall type, listen type): norm_answer 가 정확히 같아야 ok. 부호·하이픈·공백만 다르면 ok:false, near:true.
+##  - 조립 타일 배열: 타일마다 norm_answer 한 뒤 순서와 내용이 모두 같아야 ok(-5 와 5 는 다른 타일).
+##  - 말하기(repeat, substitute, answer, intro): 전사는 부호가 들쭉날쭉하므로 speech_tokens 로 비교한다(숫자의 부호·%·$ 는 지킨다).
+##    repeat 는 target 과 say(읽는 글, 예: minus five)를 둘 다 정답으로 본다. answer/intro 는 expect_any 항목이 전사 안에 연속으로 들어 있으면 맞다.
 static func judge(ex: Variant, answer: Variant) -> Dictionary:
 	var res: Dictionary = {"ok": false, "near": false}
 	if not (ex is Dictionary):
@@ -1246,63 +1315,105 @@ static func judge(ex: Variant, answer: Variant) -> Dictionary:
 			res["ok"] = int(answer) == int(ex["answer"])
 		return res
 	if typ == "build":
-		var got: String = ""
-		if answer is Array:
-			var joined: Variant = _tiles_text(answer)
-			if joined == null:
-				return res
-			got = norm_answer(joined)
-		elif answer is String:
-			got = norm_answer(answer)
-		else:
-			return res
 		var lists: Array = []
 		if ex.get("answer") is Array:
 			lists.append(ex["answer"])
 		if ex.get("accept") is Array:
 			for a in ex["accept"]:
 				lists.append(a)
-		for l in lists:
-			var txt: String = ""
-			if l is Array:
-				var jl: Variant = _tiles_text(l)
-				if jl == null:
-					continue
-				txt = jl
-			elif l is String:
-				txt = l
-			if got != "" and norm_answer(txt) == got:
-				res["ok"] = true
+		if answer is Array:
+			var tiles: Array = []
+			for x in answer:
+				if not (x is String):
+					return res
+				tiles.append(norm_answer(x))
+			if tiles.is_empty():
 				return res
+			for l in lists:
+				if l is Array and l.size() == tiles.size():
+					var same: bool = true
+					for i in tiles.size():
+						if not (l[i] is String) or norm_answer(l[i]) != tiles[i]:
+							same = false
+							break
+					if same:
+						res["ok"] = true
+						return res
+				elif l is String and norm_answer(l) == norm_answer(" ".join(PackedStringArray(tiles))):
+					res["ok"] = true
+					return res
+			return res
+		if answer is String:
+			var accepts_b: Array = []
+			for l in lists:
+				if l is Array:
+					var jl: Variant = _tiles_text(l)
+					if jl != null:
+						accepts_b.append(jl)
+				elif l is String:
+					accepts_b.append(l)
+			return _typed(answer, accepts_b, res)
 		return res
 	if typ == "speak" and (mode == "answer" or mode == "intro"):
 		if not (answer is String) or not (ex.get("expect_any") is Array):
 			return res
-		var ga: Array = LexiconGuard.tokens(answer)
+		var ga: Array = speech_tokens(answer)
 		for e in ex["expect_any"]:
-			if e is String and _contains_seq(ga, LexiconGuard.tokens(e)):
+			if e is String and _contains_seq(ga, speech_tokens(e)):
 				res["ok"] = true
 				return res
 		return res
-	if (typ == "recall" and mode == "ko_en_type") or (typ == "listen" and mode == "type") or typ == "speak":
+	if typ == "speak":
 		if not (answer is String):
 			return res
-		var g: String = norm_answer(answer)
-		if g == "":
+		var accepts_s: Array = []
+		if ex.get("accept") is Array:
+			accepts_s = ex["accept"].duplicate()
+		if mode == "repeat":
+			if ex.get("target") is String and LexiconGuard.str_of(ex["target"]) != "":
+				accepts_s.append(ex["target"])
+			if ex.get("say") is String and LexiconGuard.str_of(ex["say"]).strip_edges() != "":
+				accepts_s.append(ex["say"])
+		var gs: Array = speech_tokens(answer)
+		if gs.is_empty():
+			return res
+		for a in accepts_s:
+			if a is String and speech_tokens(a) == gs:
+				res["ok"] = true
+				return res
+		var gj: String = " ".join(PackedStringArray(gs))
+		for a in accepts_s:
+			if a is String:
+				var nj: String = " ".join(PackedStringArray(speech_tokens(a)))
+				if nj.length() >= NEAR_MIN_LEN and _edit1(nj, gj):
+					res["near"] = true
+					return res
+		return res
+	if (typ == "recall" and mode == "ko_en_type") or (typ == "listen" and mode == "type"):
+		if not (answer is String):
 			return res
 		var accepts: Array = []
 		if ex.get("accept") is Array:
-			accepts = ex["accept"].duplicate()
-		if typ == "speak" and ex.get("target") is String and LexiconGuard.str_of(ex["target"]) != "" and mode == "repeat":
-			accepts.append(ex["target"])
-		for a in accepts:
-			if a is String and norm_answer(a) == g:
-				res["ok"] = true
+			accepts = ex["accept"]
+		return _typed(answer, accepts, res)
+	return res
+
+
+## 타이핑 판정: norm_answer 가 같으면 ok, 부호·공백만 다르거나 한 글자 차이(4글자 이상)면 near.
+static func _typed(answer: String, accepts: Array, res: Dictionary) -> Dictionary:
+	var g: String = norm_answer(answer)
+	if g == "":
+		return res
+	for a in accepts:
+		if a is String and norm_answer(a) == g:
+			res["ok"] = true
+			return res
+	for a in accepts:
+		if a is String:
+			var na: String = norm_answer(a)
+			if na == "":
+				continue
+			if _skeleton(na) == _skeleton(g) or (na.length() >= NEAR_MIN_LEN and _edit1(na, g)):
+				res["near"] = true
 				return res
-		for a in accepts:
-			if a is String:
-				var na: String = norm_answer(a)
-				if na.length() >= NEAR_MIN_LEN and _edit1(na, g):
-					res["near"] = true
-					return res
 	return res
