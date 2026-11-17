@@ -55,10 +55,11 @@ SYNTH_WEEKS = {16, 32, 48, 60, 68}
 
 
 class Problem:
-    __slots__ = ("code", "where", "detail", "warn")
+    __slots__ = ("code", "where", "detail", "warn", "soft")
 
-    def __init__(self, code, where, detail="", warn=False):
-        self.code, self.where, self.detail, self.warn = code, where, detail, warn
+    def __init__(self, code, where, detail="", warn=False, soft=False):
+        # soft = a warning that --strict leaves a warning (e.g. a spelling both Canada and the US use)
+        self.code, self.where, self.detail, self.warn, self.soft = code, where, detail, warn, soft
 
     def line(self):
         return ("WARN " if self.warn else "  ") + self.code + " " + self.where + (" " + self.detail if self.detail else "")
@@ -78,16 +79,21 @@ NUMBER_GLUE = {"oh", "point", "percent", "and", "a", "m", "p", "am", "pm", "o'cl
                "fahrenheit", "degrees", "dollars", "dollar", "cents", "cent", "plus", "at", "equals", "equal", "number", "hash", "pound"}
 
 
-def item_tokens(en, say=""):
-    """Tokens that must be lexicon words for an item: the ordinary words of `en` (numbers, symbols, abbreviations and acronyms
-    are read through `say`, not looked up) plus every word of `say` (glue words of a number reading excepted)."""
+def item_tokens(en, say="", acronyms=None, is_word=None):
+    """Tokens that must be lexicon words for an item: the words of `en` (numbers, symbols and abbreviations are read through
+    `say`; capital words are looked up in lower case like any other word) plus every word of `say`, except the glue words of
+    an actual number reading ("minus", "oh", "percent" ...) and the letters of a letter-by-letter acronym reading.
+    `acronyms` / `is_word` come from the lexicon (Lexicon.acronym_map(), Lexicon.is_word)."""
     en = en if isinstance(en, str) else ""
     say = say if isinstance(say, str) else ""
     toks = tokenize(_ne.plain_text(en))
     if say.strip():
-        glue = _ne.has_numeric(en)
-        for t in tokenize(say):
-            if glue and t in NUMBER_GLUE:
+        say_t = tokenize(say)
+        labels = _ne.align(en, say, acronyms, is_word)
+        if labels is None or len(labels) != len(say_t):
+            labels = [None] * len(say_t)
+        for t, lab in zip(say_t, labels):
+            if lab == "letters" or (lab in ("number", "symbol", "abbrev") and t in NUMBER_GLUE):
                 continue
             if t not in toks:
                 toks.append(t)
@@ -297,9 +303,10 @@ class Lexicon:
         self.tok.setdefault(token, []).append((o, wid, kind))
 
     def add(self, wid, en, pos, role, o, say="", forms=(), alt=(), pat_o=None, week=None):
-        src_text = say if (say and re.search(r"[0-9$%&@#+=/]", en or "")) else en
-        toks = tokenize(src_text)
-        self.words[wid] = {"id": wid, "en": en, "pos": pos, "role": role, "o": o, "tokens": toks, "w": week}
+        toks = tokenize(_ne.plain_text(en))       # a `say` never registers words (3D / say "friend")
+        acronym = bool(is_str(en) and re.fullmatch(r"[A-Z]{2,6}", en.strip()) and en.strip() not in _ne.ACRONYM_EXEMPT)
+        self.words[wid] = {"id": wid, "en": en, "pos": pos, "role": role, "o": o, "tokens": toks, "w": week, "say": say or "",
+                           "acronym": acronym}
         kind = "word" if len(toks) <= 1 else "chunk"
         for t in toks:
             self._reg(t, o, wid, kind)
@@ -315,6 +322,18 @@ class Lexicon:
             if is_str(a):
                 for t in tokenize(a):
                     self._reg(t, o, wid, "alt")
+
+    def acronym_map(self):
+        """{"SIN": [["sin"]]}: registered acronyms (en in capitals) and how their `say` reads them."""
+        out = {}
+        for info in self.words.values():
+            if info["acronym"] and info["say"].strip():
+                out.setdefault(info["en"].strip(), []).append(_ne.norm_say(info["say"]))
+        return out
+
+    def is_word(self, token):
+        """True when the lower-case token is an ordinary (non-acronym) lexicon word."""
+        return any(not self.words.get(wid, {}).get("acronym") for _o, wid, _k in self.tok.get(token, []))
 
     def min_o(self, token):
         c = self.tok.get(token)
@@ -459,3 +478,18 @@ def policy_names(policy):
         if key in (policy or {}):
             walk(policy[key])
     return out
+
+
+def week_strings(obj, ident=None):
+    """(item id, text) of every string in a week file (the `id` keys themselves are skipped). Used by the checks that must not
+    miss a field: PERSONAL, BLOCKED."""
+    if isinstance(obj, str):
+        yield ident, obj
+    elif isinstance(obj, list):
+        for x in obj:
+            yield from week_strings(x, ident)
+    elif isinstance(obj, dict):
+        i = obj.get("id") if is_str(obj.get("id")) else ident
+        for k, v in obj.items():
+            if k != "id":
+                yield from week_strings(v, i)

@@ -265,7 +265,7 @@ def main(argv):
             if not p.is_file() or p.read_bytes().decode("utf-8").replace("\r\n", "\n") != text:
                 bad.append(rel)
         for p in FIX.rglob("*.json"):
-            if p.relative_to(FIX).as_posix() not in files:
+            if p.relative_to(FIX).as_posix() not in files and p.name != "forms_corpus.json":     # forms_corpus.json is hand-made
                 bad.append(p.relative_to(FIX).as_posix() + " (unexpected)")
         print("FIXTURES_OUT_OF_DATE " + ",".join(bad) if bad else "FIXTURES_OK files=%d" % len(files))
         return 1 if bad else 0

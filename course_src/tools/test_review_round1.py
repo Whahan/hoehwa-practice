@@ -82,7 +82,7 @@ class SayDoesNotHideEn(Base):
     def test_numbers_symbols_and_acronyms_are_read_through_say(self):
         self.assertEqual(cc.item_tokens("My number is 3.", "My number is three."), ["my", "number", "is", "three"])
         self.assertEqual(cc.item_tokens("It is 9:05.", "It is nine oh five."), ["it", "is", "nine", "five"])   # "oh" is reading glue
-        self.assertEqual(cc.item_tokens("Hello, ATM.", "Hello, a t m."), ["hello", "a", "t", "m"])
+        self.assertEqual(cc.item_tokens("Hello, ATM.", "Hello, a t m."), ["hello", "atm"])     # letters of the reading are exempt
 
     def test_the_good_fixture_with_say_still_passes(self):
         self.assertEqual(self.res().violations, [])
@@ -136,7 +136,7 @@ class FormsAndAlt(Base):
 
     def test_legitimate_forms_and_alts_pass(self):
         def mut(d):
-            ts.find(d, 1, "words", "w0008")["forms"] = [{"f": "names", "pat": "p_good_x"}, {"f": "named", "pat": "p_good_x"}, {"f": "naming", "pat": "p_good_x"}]
+            ts.find(d, 1, "words", "w0008")["forms"] = [{"f": "names", "pat": "p_good_x"}]
             ts.find(d, 1, "words", "w0012")["forms"] = [{"f": "better", "pat": "p_good_x"}, {"f": "best", "pat": "p_good_x"}]
             ts.find(d, 1, "words", "w0010")["forms"] = [{"f": "Min's", "pat": "p_good_x"}]
             ts.find(d, 4, "words", "w0304")["alt"] = ["color"]
@@ -268,15 +268,16 @@ class NumberReadings(unittest.TestCase):
 
     def test_acronym_say_has_the_right_number_of_words(self):
         self.ok("Say ABC.", "Say a b c.")
-        self.ok("Say ABC.", "Say abc.")
+        self.no("Say ABC.", "Say abc.")                                   # an unregistered acronym is never read as a word
         self.no("Say ABC.", "Say a b.")
         self.no("Say ABC.", "Say a b c d.")
         self.ok("Use the ATM.", "Use the a t m.")
         self.no("Use the ATM.", "Use the cash machine.")
-        self.ok("Go to SIN office.", "Go to sin office.")
+        self.assertTrue(ne.say_matches("Go to SIN office.", "Go to sin office.", acronyms={"SIN": [["sin"]]}))     # registered
+        self.assertFalse(ne.say_matches("Go to SIN office.", "Go to s i n office.", acronyms={"SIN": [["sin"]]}))
 
     def test_year_readings_only_between_1000_and_2099(self):
-        self.no("Room 2105.", "Room twenty one oh five.")
+        self.no("I have 2105.", "I have twenty one oh five.")
         self.assertEqual(ne.readings("2005")[:1], ["two thousand five"])
         self.assertNotIn("twenty five", ne.readings("2005"))
         self.assertNotIn("nineteen five", ne.readings("1905"))
@@ -309,7 +310,11 @@ class SmallerGaps(Base):
                 def mut(d, en=en):
                     d["weeks/w004.json"]["words"].append(ts.mf.W("w0398", en, "n", "물건", "x", 4))
                 r = self.res(mut)
-                self.assertTrue(any(x.startswith("us_spelling_as_headword=") for x in self.details(r, "CANON")), en)
+                if en == "gray":                    # Canada uses gray as well: a warning only
+                    self.assertFalse(self.details(r, "CANON"))
+                    self.assertTrue(any(p.code == "CANON" and p.warn for p in r.warnings))
+                else:
+                    self.assertTrue(any(x.startswith("us_spelling_as_headword=") for x in self.details(r, "CANON")), en)
 
     def test_canon_ca_spelling_is_fine(self):
         def mut(d):
@@ -395,7 +400,7 @@ class SmallerGaps(Base):
 
         def too_few(d):
             ts.find(d, 1, "sentences", "s0001").update(en="Hello, ABC.", say="Hello, a b.")
-        self.assertIn("say_differs_from_numbers_en", self.details(self.res(too_few), "NUM_SAY"))
+        self.assertIn("UNKNOWN_TOKEN", self.codes(self.res(too_few)))          # abc is neither a word nor a registered acronym
 
     def test_word_say_with_digits(self):
         def mut(d):

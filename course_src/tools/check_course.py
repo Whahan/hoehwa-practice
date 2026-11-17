@@ -293,9 +293,13 @@ class Ctx:
         self.pol = course.policy
         self.out = []
         self.inrange = set(weeks)
+        self._seen = set()
 
-    def add(self, code, where, detail="", warn=False):
-        self.out.append(Problem(code, where, detail, warn))
+    def add(self, code, where, detail="", warn=False, soft=False):
+        key = (code, where, detail, warn)
+        if key not in self._seen:
+            self._seen.add(key)
+            self.out.append(Problem(code, where, detail, warn, soft))
 
     def pol_list(self, *names):
         res = []
@@ -313,7 +317,7 @@ def check_order(ctx):
         d = it["d"] if is_int(it["d"]) else None
         w = it["w"]
         base = w * 10 + (d if d else 1)
-        toks = cc.item_tokens(it["en"], it["say"])      # ordinary words of `en` + every word of `say`
+        toks = cc.item_tokens(it["en"], it["say"], ctx.acr, ctx.is_word)      # words of `en` + every word of `say`
         extra_texts = []
         if it["kind"] == "sentence" or it["kind"] == "line":
             extra_texts = [a for a in (raw.get("accept") or []) if is_str(a)]
@@ -387,37 +391,54 @@ def check_order(ctx):
                     ctx.add("SCHEMA", _where(w, x.get("id")), "form_pattern_unknown=" + str(f.get("pat")))
 
 
+SAY_BAD_CHARS = re.compile(r"[0-9$%&@#+=/*<>~^|\\_]")
+
+
 def check_num_say(ctx):
     extra_ok = set(ctx.pol_list("acronym_ok"))
     for it in cc.iter_items(ctx.course, ctx.weeks):
         texts = [("en", it["en"])]
         say = it["say"] if is_str(it["say"]) else ""
         for a in (it["raw"].get("accept") or []) if it["kind"] in ("sentence", "line") else []:
-            if is_str(a) and ne.needs_say(a) and not it["raw"].get("say"):
+            if is_str(a) and ne.needs_say(a, ctx.acr, ctx.is_word) and not it["raw"].get("say"):
                 ctx.add("NUM_SAY", _where(it["w"], it["id"]), "accept_needs_say")
         en = it["en"] if is_str(it["en"]) else ""
         probe = en
         for a in extra_ok:
             probe = re.sub(r"\b%s\b" % re.escape(a), "x", probe)
-        if ne.needs_say(probe):
+        if ne.needs_say(probe, ctx.acr, ctx.is_word):
             if not say.strip():
                 ctx.add("NUM_SAY", _where(it["w"], it["id"]), "say_missing")
             elif re.search(r"[0-9$%&@#+=/*<>~^|\\_]", say):
                 ctx.add("NUM_SAY", _where(it["w"], it["id"]), "say_has_digits_or_symbols")
-            elif not ne.say_matches(probe, say):
+            elif not ne.say_matches(probe, say, ctx.acr, ctx.is_word):
                 ctx.add("NUM_SAY", _where(it["w"], it["id"]), "say_differs_from_numbers_en")
         elif say.strip() and re.search(r"[0-9$%&@#+=/*<>~^|\\_]", say):
             ctx.add("NUM_SAY", _where(it["w"], it["id"]), "say_has_digits_or_symbols")
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
             en, say = x.get("en", ""), x.get("say", "") or ""
-            if re.search(r"[0-9$%&@#+=/*<>~^|\\_]", say):
-                ctx.add("NUM_SAY", _where(w, x.get("id")), "say_has_digits_or_symbols")
-            if ne.needs_say(en):
+            where = _where(w, x.get("id"))
+            if SAY_BAD_CHARS.search(say):
+                ctx.add("NUM_SAY", where, "say_has_digits_or_symbols")
+                continue
+            sw = ne.norm_say(say)
+            if is_str(en) and re.fullmatch(r"[A-Z]{2,6}", en.strip()) and en.strip() not in ne.ACRONYM_EXEMPT:
+                # a registered acronym: its say is the letters, or ONE word that starts with the same letter (SIN -> sin)
+                if not sw:
+                    ctx.add("NUM_SAY", where, "acronym_needs_say")
+                elif not (ne.say_matches(en, say) or (len(sw) == 1 and sw[0][:1] == en.strip()[:1].lower())):
+                    ctx.add("NUM_SAY", where, "acronym_say_differs")
+            elif ne.needs_say(en):
                 if not say.strip():
-                    ctx.add("NUM_SAY", _where(w, x.get("id")), "say_missing")
+                    ctx.add("NUM_SAY", where, "say_missing")
                 elif not ne.say_matches(en, say):
-                    ctx.add("NUM_SAY", _where(w, x.get("id")), "say_differs_from_numbers_en")
+                    ctx.add("NUM_SAY", where, "say_differs_from_numbers_en")
+            elif sw:
+                # a plain word may carry a say only to spell a letter ("A" -> ay) or to repeat itself; no other word can ride along
+                letter = len(en.strip()) == 1 and en.strip().isalpha() and sw in ne.LETTER_NAMES[en.strip().lower()]
+                if not letter and sw != cc.tokenize(en):
+                    ctx.add("NUM_SAY", where, "say_differs_from_en")
 
 
 def check_ko(ctx):
@@ -582,12 +603,11 @@ def check_blocked(ctx):
     rules = _blocked_rules(ctx)
     if not rules[0]:
         return
-    seen = set()
-    for w, ident, kind, text in english_texts(ctx):
-        for tok in cc.tokenize(text if is_str(text) else ""):
-            if _is_blocked(rules, tok, w) and (w, ident, tok) not in seen:
-                seen.add((w, ident, tok))
-                ctx.add("BLOCKED", _where(w, ident), "token=" + tok)
+    for w in ctx.weeks:
+        for ident, text in cc.week_strings(ctx.course.weeks.get(w, {})):
+            for tok in cc.tokenize(text):
+                if _is_blocked(rules, tok, w):
+                    ctx.add("BLOCKED", _where(w, ident), "token=" + tok)
 
 
 PHONE_RX = re.compile(r"(?<!\d)(?:\+?1[-. ]?)?(?:\(?(\d{3})\)?[-. ])?(\d{3})[-. ](\d{4})(?!\d)")
@@ -641,18 +661,11 @@ def check_personal(ctx):
             if re.sub(r"[ -]", "", m.group(0)).upper() not in postal_ok:
                 ctx.add("PERSONAL", _where(w, ident), "postal_code")
 
-    for w, ident, kind, text in english_texts(ctx):
-        scan(w, ident, text)
-    for it in cc.iter_items(ctx.course, ctx.weeks):
-        scan(it["w"], it["id"], it["ko"])
-        scan(it["w"], it["id"], it["raw"].get("hint_ko"))
-    for w in ctx.weeks:
+    for w in ctx.weeks:                                   # every string of the week file: notes, titles, grammar lines ...
         wk = ctx.course.weeks.get(w, {})
-        for x in wk.get("notes", []) or []:
-            scan(w, x.get("id"), x.get("text_ko"))
+        for ident, text in cc.week_strings(wk):
+            scan(w, ident, text)
         for x in wk.get("words", []) or []:
-            scan(w, x.get("id"), x.get("ko"))
-            scan(w, x.get("id"), x.get("ko2"))
             if x.get("pos") == "propn":
                 tags = set(x.get("tags") or [])
                 key = cc.nfkc(x.get("en", "")).lower().strip()
@@ -675,6 +688,7 @@ def _canon_pairs(ctx):
     return pairs
 
 
+SOFT_PAIRS = {("metre", "meter"), ("grey", "gray")}      # Canada uses both spellings: a warning, never a violation
 US_SUFFIXES = ("", "s", "es", "ed", "d", "ing", "er", "ers", "est", "ly", "ful", "less", "hood", "'s", "s'")
 
 
@@ -686,7 +700,7 @@ def check_canon(ctx):
         """US spelling (or an inflection of it: colors, favorites, centered) -> the Canadian stem, else None."""
         for ca, us in pairs:
             if tok.startswith(us) and tok[len(us):] in US_SUFFIXES:
-                return ca
+                return ca, us
         return None
 
     seen = set()
@@ -694,19 +708,20 @@ def check_canon(ctx):
         if kind == "alt":           # `alt` is where the US spelling belongs
             continue
         for t in cc.tokenize(text if is_str(text) else ""):
-            ca = us_hit(t)
-            if ca and (w, ident, t) not in seen:
+            hit = us_hit(t)
+            if hit and (w, ident, t) not in seen:
                 seen.add((w, ident, t))
-                if kind == "word":
-                    ctx.add("CANON", _where(w, ident), "us_spelling_as_headword=%s want=%s" % (t, ca))
-                else:
-                    ctx.add("CANON", _where(w, ident), "us_spelling=%s want=%s" % (t, ca))
+                ca, us = hit
+                soft = (ca, us) in SOFT_PAIRS
+                what = "us_spelling_as_headword" if kind == "word" else "us_spelling"
+                ctx.add("CANON", _where(w, ident), "%s=%s want=%s" % (what, t, ca), warn=soft, soft=soft)
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
             alts = {a.lower() for a in x.get("alt") or [] if is_str(a)}
             for t in cc.tokenize(x.get("en", "")):
                 if t in ca_to_us and ca_to_us[t] not in alts:
-                    ctx.add("CANON", _where(w, x.get("id")), "alt_missing_us_spelling=" + ca_to_us[t])
+                    soft = (t, ca_to_us[t]) in SOFT_PAIRS
+                    ctx.add("CANON", _where(w, x.get("id")), "alt_missing_us_spelling=" + ca_to_us[t], warn=soft, soft=soft)
 
 
 def check_forms(ctx):
@@ -741,7 +756,7 @@ def check_forms(ctx):
             for f in x.get("forms", []) or []:
                 ft = f.get("f", "")
                 where = _where(w, wid)
-                if not forms_en.is_derived(lemma, ft):
+                if not forms_en.is_derived(lemma, ft, x.get("pos")):
                     ctx.add("FORM_SUSPECT", where, "form_not_derived_from_headword=" + "_".join(cc.tokenize(ft)))
                 for t in cc.tokenize(ft):
                     if heads.get(t, set()) - {wid}:
@@ -881,7 +896,7 @@ def check_counts(ctx):
         use = {}
         for s in sents:
             if is_str(s.get("en")):
-                toks = cc.item_tokens(s["en"], s.get("say", ""))
+                toks = cc.item_tokens(s["en"], s.get("say", ""), ctx.acr, ctx.is_word)
                 for wid in ctx.lex.used_words(toks, 10 ** 6):
                     use[wid] = use.get(wid, 0) + 1
         for x in act:
@@ -1490,6 +1505,7 @@ def run_check(in_dir, weeks_arg=None, strict=False, skeleton=False, lexicon_from
     ctx = Ctx(course, [w for w in weeks if w in course.weeks], lex, strict)
     ctx.notes = res.notes
     ctx.usable = sorted(usable)
+    ctx.acr, ctx.is_word = lex.acronym_map(), lex.is_word
     ctx.pat_o = cc.pattern_o_map(course)
     for fn in (check_order, check_num_say, check_ko, check_dups, check_same_ko, check_blocked, check_personal, check_counts, check_canon,
                check_forms):
@@ -1507,8 +1523,9 @@ def run_check(in_dir, weeks_arg=None, strict=False, skeleton=False, lexicon_from
 def _finish(res, probs, strict, label, stats):
     probs = sorted(probs, key=lambda p: (CODES.index(p.code) if p.code in CODES else 99))
     if strict:      # --strict: every warning is a violation (unknown keys, Korean style, missing policy, unverified Tatoeba ...)
-        for p in probs:
-            p.warn = False
+        for p in probs:                       # ... except the soft ones (a spelling that Canada uses as well)
+            if not p.soft:
+                p.warn = False
     res.violations = [p for p in probs if not p.warn]
     res.warnings = [p for p in probs if p.warn]
     res.stats, res.label = stats, label

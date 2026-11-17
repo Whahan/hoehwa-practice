@@ -235,17 +235,22 @@ def time_say(text):
 
 
 # ------------------------------------------------------------------------------------------------ sentences
-# What a reading may look like (review round 1):
+# What a reading may look like:
 #  * a plain integer is read as a number (25 = "twenty-five"); never digit by digit ("two five" is rejected), 911 = "nine one one" only
-#  * digit by digit ("two oh five", "two zero five") only for codes: numbers with a leading zero, 4+ digits that are no year
-#    (1000-2099), or 3+ digit numbers right after an identifier word (room, apartment, flight, code, pin, number ...)
+#  * digit by digit ("three oh five"), two digits at a time ("twelve oh five", "nineteen twenty") and the plain number are all
+#    accepted for codes: a number with 3+ digits when an identifier word (room, apartment, apt, unit, suite, flight, gate, bus,
+#    route, platform, code, pin, number, no ...) is among the 4 words before it in the same sentence; 4+ digit numbers that are
+#    no year (1000-2099); a leading zero is always read digit by digit
 #  * years 1000-2099 also read as "nineteen ninety-nine", "twenty twenty-four", "twenty oh five", "two thousand and five";
 #    "twenty five" for 2005 and "nineteen five" for 1905 are wrong
 #  * -5 = "minus five" / "negative five", 5 deg C = "five degrees Celsius" or "five degrees", 5-10 = "five to ten" / "five through ten"
-#  * acronyms (ABC) are spelled letter by letter (3 words) or said as one word; anything else is rejected
+#  * 5 pm = "five p m" / "five pm"
+#  * an all-capital word is an ordinary word first (STOP = stop); an acronym registered in the lexicon (en in capitals) is read
+#    as that entry's `say`; an unregistered one only letter by letter (A B C, or ay bee see)
 _TOKEN_RE = re.compile(
     r"""(?P<price>\$\s?\d[\d,]*(?:\.\d{2})?)
       | (?P<time>\b\d{1,2}:\d{2}(?:\s?[AaPp]\.?[Mm]\.?)?)
+      | (?P<hourap>\b\d{1,2}\s?[AaPp]\.?[Mm]\.?(?![A-Za-z]))
       | (?P<phone>(?<![\d])(?:\+?1[-. ])?(?:\(?\d{3}\)?[-. ])?\d{3}[-. ]\d{4}(?!\d))
       | (?P<date>\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b)
       | (?P<temp>(?<![\w.])-?\d+(?:\.\d+)?\s?°\s?[CcFf]?(?![A-Za-z]))
@@ -259,11 +264,20 @@ _TOKEN_RE = re.compile(
       | (?P<acronym>\b[A-Z]{2,6}\b)
       | (?P<symbol>[&+@=#/*<>~^|\\_])
     """, re.X)
+_NUMERIC_KINDS = ("price", "time", "hourap", "phone", "percent", "ordinal", "decimal", "int", "temp", "range")
 
 SYMBOL_READ = {"&": ["and"], "+": ["plus"], "@": ["at"], "=": ["equals", "equal"], "#": ["number", "hash", "pound"]}
 ID_WORDS = {"room", "rm", "apartment", "apt", "unit", "suite", "flight", "gate", "bus", "route", "code", "pin", "extension", "ext",
-            "number", "id", "zip", "postal", "line", "platform", "locker", "seat", "table", "bay", "box", "channel", "highway", "hwy"}
+            "number", "no", "id", "zip", "postal", "line", "platform", "locker", "seat", "table", "bay", "box", "channel", "highway", "hwy"}
 NEG = ("minus ", "negative ")
+LETTER_NAMES = {
+    "a": [["a"], ["ay"]], "b": [["b"], ["bee"]], "c": [["c"], ["see"], ["cee"]], "d": [["d"], ["dee"]], "e": [["e"], ["ee"]],
+    "f": [["f"], ["eff"]], "g": [["g"], ["gee"]], "h": [["h"], ["aitch"], ["haitch"]], "i": [["i"], ["eye"]], "j": [["j"], ["jay"]],
+    "k": [["k"], ["kay"]], "l": [["l"], ["el"], ["ell"]], "m": [["m"], ["em"]], "n": [["n"], ["en"]], "o": [["o"], ["oh"]],
+    "p": [["p"], ["pee"]], "q": [["q"], ["cue"], ["queue"]], "r": [["r"], ["ar"], ["are"]], "s": [["s"], ["ess"]], "t": [["t"], ["tee"]],
+    "u": [["u"], ["you"], ["yoo"]], "v": [["v"], ["vee"]], "w": [["w"], ["double", "you"], ["double", "u"]], "x": [["x"], ["ex"]],
+    "y": [["y"], ["why"], ["wye"]], "z": [["z"], ["zed"], ["zee"]],
+}
 
 
 def norm_say(s):
@@ -290,15 +304,27 @@ def _year_readings(n):
     return out
 
 
+def _pair_readings(core):
+    """4 digits two at a time: 1205 = "twelve oh five", 1920 = "nineteen twenty", 2100 = "twenty-one hundred"."""
+    if len(core) != 4 or core[0] == "0":
+        return []
+    a, b = int(core[:2]), core[2:]
+    if b == "00":
+        return [words(a) + " hundred"]
+    if b[0] == "0":
+        return [words(a) + " oh " + ONES[int(b[1])]]
+    return [words(a) + " " + words(int(b))]
+
+
 def _int_readings(s, prev=""):
-    """all accepted readings of an integer token ("25", "-5", "1,234", "2005", "007", "911") in the context of the word before it."""
+    """all accepted readings of an integer token ("25", "-5", "1,234", "2005", "007", "911") in its context; `prev` is
+    an identifier word when one stands in the 4 words before the number (room 305, code 4821)."""
     s = str(s).strip()
     neg = s.startswith("-")
     core = s.lstrip("-").replace(",", "")
     if not core.isdigit():
         return None
     n = int(core)
-    base = []
     if core == "911":
         base = ["nine one one"]
     elif len(core) > 1 and core[0] == "0":
@@ -310,10 +336,14 @@ def _int_readings(s, prev=""):
         base = [w]
         if not neg and "," not in s:
             is_year = 1000 <= n <= 2099
+            idctx = prev in ID_WORDS
+            digits = [digits_say(core, zero="oh"), digits_say(core)]
             if is_year:
                 base += _year_readings(n)
-            if (len(core) >= 4 and not is_year) or (len(core) >= 3 and prev in ID_WORDS):
-                base += [digits_say(core, zero="oh"), digits_say(core)]
+            if idctx and len(core) >= 3:
+                base = digits + _pair_readings(core) + base            # canonical: digit by digit / two at a time
+            elif len(core) >= 4 and not is_year:
+                base += digits
     base = [b for b in base if b]
     return [p + b for p in NEG for b in base] if neg else base
 
@@ -346,18 +376,30 @@ def _range_readings(tok):
     ra, rb = _int_readings(m.group(1)), _int_readings(m.group(2))
     if not ra or not rb:
         return None
-    ra = [x for x in ra if not re.fullmatch(r"(?:(?:zero|oh|one|two|three|four|five|six|seven|eight|nine) ?)+", x) or len(ra) == 1]
-    rb = [x for x in rb if not re.fullmatch(r"(?:(?:zero|oh|one|two|three|four|five|six|seven|eight|nine) ?)+", x) or len(rb) == 1]
+    digits_only = r"(?:(?:zero|oh|one|two|three|four|five|six|seven|eight|nine) ?)+"
+    ra = [x for x in ra if not re.fullmatch(digits_only, x) or len(ra) == 1]
+    rb = [x for x in rb if not re.fullmatch(digits_only, x) or len(rb) == 1]
     return [a + sep + b for a in ra for b in rb for sep in (" to ", " through ")]
 
 
+def _hour_ampm_readings(tok):
+    m = re.fullmatch(r"\s*(\d{1,2})\s?([AaPp])\.?[Mm]\.?\s*", tok)
+    if not m or not 1 <= int(m.group(1)) <= 12:
+        return None
+    hw, ap = ONES[int(m.group(1))] if int(m.group(1)) < 20 else words(int(m.group(1))), m.group(2).lower()
+    return [hw + " " + ap + " m", hw + " " + ap + "m"]
+
+
 def readings(token, prev=""):
-    """All accepted readings of one numeric token ("$5.99", "12:30", "21st", "20%", "555-0123", "205", "-5", "5-10" ...),
-    canonical first. `prev` = the lower-case word before it (room 205 may be read digit by digit)."""
+    """All accepted readings of one numeric token ("$5.99", "12:30", "5 pm", "21st", "20%", "555-0123", "205", "-5", "5-10" ...),
+    canonical first. `prev` = an identifier word when one precedes the number (room 205 may be read digit by digit)."""
     if not isinstance(token, str):
         return None
     t = unicodedata.normalize("NFKC", token).strip().replace("−", "-")
     r = price_readings(t) if t.startswith("$") else time_readings(t)
+    if r:
+        return r
+    r = _hour_ampm_readings(t)
     if r:
         return r
     ph = phone_say(t)
@@ -381,45 +423,75 @@ def readings(token, prev=""):
     return _int_readings(t, prev)
 
 
-def _prev_word(text, pos):
-    head = text[:pos].rstrip()
-    if head.endswith("#"):
-        return "number"
-    m = re.search(r"([A-Za-z]+)[^A-Za-z]*$", head)
-    return m.group(1).lower() if m and len(head) - m.end(1) <= 3 else ""
+def _id_context(text, pos):
+    """The identifier word standing in the 4 words before `pos` in the same sentence ("" when there is none)."""
+    head = re.split(r"[.?!]\s", text[:pos])[-1]
+    toks = re.findall(r"[A-Za-z]+|#", head)[-4:]
+    for t in reversed(toks):
+        if t == "#":
+            return "number"
+        if t.lower() in ID_WORDS:
+            return t.lower()
+    return ""
 
 
-def _segments(text):
-    """text -> [("lit", [words]) | ("alt", [[words], ...]) | ("any",) | ("acr", n_letters)] for the matcher."""
+def _norm_text(text):
+    return unicodedata.normalize("NFKC", text or "").replace("’", "'").replace("‘", "'").replace("−", "-")
+
+
+def _segments(text, acronyms=None, is_word=None):
+    """text -> [(kind, data, label)]: kind lit (words) | alt (list of word lists) | any | letters (an acronym token).
+    label = where the say words come from: lit, number, abbrev, symbol, acr, any, letters."""
     segs, pos = [], 0
-    text = unicodedata.normalize("NFKC", text or "").replace("’", "'").replace("‘", "'").replace("−", "-")
+    text = _norm_text(text)
     for m in _TOKEN_RE.finditer(text):
         if m.start() > pos:
-            segs.append(("lit", norm_say(text[pos:m.start()])))
+            segs.append(("lit", norm_say(text[pos:m.start()]), "lit"))
         kind, tok = m.lastgroup, m.group(0)
-        if kind in ("price", "time", "phone", "percent", "ordinal", "decimal", "int", "temp", "range"):
-            rd = readings(tok, _prev_word(text, m.start()))
-            segs.append(("alt", [norm_say(r) for r in rd]) if rd else ("any",))
+        if kind in _NUMERIC_KINDS:
+            rd = readings(tok, _id_context(text, m.start()))
+            segs.append(("alt", [norm_say(r) for r in rd], "number") if rd else ("any", None, "any"))
         elif kind == "abbrev":
             key = tok.lower().rstrip(".")
-            segs.append(("alt", [norm_say(r) for r in ABBREV[key]]) if key in ABBREV else ("any",))
+            segs.append(("alt", [norm_say(r) for r in ABBREV[key]], "abbrev") if key in ABBREV else ("any", None, "any"))
         elif kind == "acronym":
-            segs.append(("acr", len(tok)) if tok not in ACRONYM_EXEMPT else ("lit", norm_say(tok)))
-        elif kind in ("alnum", "date"):
-            segs.append(("any",))
+            if tok in ACRONYM_EXEMPT:
+                segs.append(("lit", norm_say(tok), "lit"))
+            elif acronyms and tok in acronyms:
+                segs.append(("alt", acronyms[tok], "acr"))
+            elif is_word is not None and is_word(tok.lower()):
+                segs.append(("lit", norm_say(tok), "lit"))              # STOP is the word stop
+            else:
+                segs.append(("letters", tok, "letters"))
+        elif kind == "alnum":                       # 3D = three + d, 2x = two + x: digits as numbers, letters letter by letter
+            parts = re.findall(r"\d+|[A-Za-z]+", tok)
+            ok = True
+            sub = []
+            for part in parts:
+                if part.isdigit():
+                    rd = readings(part, "")
+                    if not rd:
+                        ok = False
+                        break
+                    sub.append(("alt", [norm_say(r) for r in rd], "number"))
+                else:
+                    sub.append(("letters", part, "letters"))
+            segs.extend(sub if ok else [("any", None, "any")])
+        elif kind == "date":
+            segs.append(("any", None, "any"))
         else:
             rd = SYMBOL_READ.get(tok)
-            segs.append(("alt", [norm_say(r) for r in rd]) if rd else ("any",))
+            segs.append(("alt", [norm_say(r) for r in rd], "symbol") if rd else ("any", None, "any"))
         pos = m.end()
     if pos < len(text):
-        segs.append(("lit", norm_say(text[pos:])))
+        segs.append(("lit", norm_say(text[pos:]), "lit"))
     return [s for s in segs if s[0] != "lit" or s[1]]
 
 
-def say_matches(text, say):
-    """True when `say` is an accepted reading of `text` (numbers must be spelled out, other words must be equal,
-    an acronym is spelled letter by letter or said as one word)."""
-    segs = _segments(text)
+def align(text, say, acronyms=None, is_word=None):
+    """Match `say` against the readings of `text`. -> None when it does not match, else one label per say word
+    (lit, number, abbrev, symbol, acr, any, letters): where that word of the reading comes from."""
+    segs = _segments(text, acronyms, is_word)
     target = norm_say(say)
     memo = {}
 
@@ -427,46 +499,66 @@ def say_matches(text, say):
         key = (i, j)
         if key in memo:
             return memo[key]
+        res = None
         if i == len(segs):
-            res = j == len(target)
+            res = [] if j == len(target) else None
         else:
-            s = segs[i]
-            res = False
-            if s[0] == "lit":
-                n = len(s[1])
-                res = target[j:j + n] == s[1] and go(i + 1, j + n)
-            elif s[0] == "alt":
-                for alt in s[1]:
+            kind, data, label = segs[i]
+            if kind == "lit":
+                n = len(data)
+                if target[j:j + n] == data:
+                    t = go(i + 1, j + n)
+                    res = None if t is None else [label] * n + t
+            elif kind == "alt":
+                for alt in data:
                     n = len(alt)
-                    if target[j:j + n] == alt and go(i + 1, j + n):
-                        res = True
-                        break
-            elif s[0] == "acr":
-                for n in sorted({s[1], 1}):
-                    if j + n <= len(target) and go(i + 1, j + n):
-                        res = True
-                        break
+                    if target[j:j + n] == alt:
+                        t = go(i + 1, j + n)
+                        if t is not None:
+                            res = [label] * n + t
+                            break
+            elif kind == "letters":
+                def spell(k, p):
+                    if k == len(data):
+                        return go(i + 1, p)
+                    for opt in LETTER_NAMES[data[k].lower()]:
+                        n = len(opt)
+                        if target[p:p + n] == opt:
+                            t = spell(k + 1, p + n)
+                            if t is not None:
+                                return [label] * n + t
+                    return None
+                res = spell(0, j)
             else:  # any: 1..6 words
                 for n in range(1, 7):
-                    if j + n <= len(target) and go(i + 1, j + n):
-                        res = True
-                        break
+                    if j + n <= len(target):
+                        t = go(i + 1, j + n)
+                        if t is not None:
+                            res = ["any"] * n + t
+                            break
         memo[key] = res
         return res
 
     return go(0, 0)
 
 
-def spans(text):
-    """[(start, end)] of every number / symbol / abbreviation / acronym match in NFKC-normalised text (those parts are
-    read through `say`, not through the lexicon)."""
-    text = unicodedata.normalize("NFKC", text or "").replace("’", "'").replace("‘", "'").replace("−", "-")
-    return [(m.start(), m.end()) for m in _TOKEN_RE.finditer(text) if not (m.lastgroup == "acronym" and m.group(0) in ACRONYM_EXEMPT)]
+def say_matches(text, say, acronyms=None, is_word=None):
+    """True when `say` is an accepted reading of `text` (numbers must be spelled out, other words must be equal,
+    an unregistered acronym is spelled letter by letter)."""
+    return align(text, say, acronyms, is_word) is not None
+
+
+def spans(text, acronyms=False):
+    """[(start, end)] of every number / symbol / abbreviation match in NFKC-normalised text (those parts are read through
+    `say`, not looked up in the lexicon); acronym matches only with acronyms=True."""
+    text = _norm_text(text)
+    return [(m.start(), m.end()) for m in _TOKEN_RE.finditer(text)
+            if m.lastgroup != "acronym" or (acronyms and m.group(0) not in ACRONYM_EXEMPT)]
 
 
 def plain_text(text):
-    """text without its number / symbol / abbreviation / acronym parts (what is left must be ordinary words)."""
-    text = unicodedata.normalize("NFKC", text or "").replace("’", "'").replace("‘", "'").replace("−", "-")
+    """text without its number / symbol / abbreviation parts. Capital words stay: they are looked up like any word."""
+    text = _norm_text(text)
     out, pos = [], 0
     for a, b in spans(text):
         out.append(text[pos:a] + " ")
@@ -475,16 +567,20 @@ def plain_text(text):
     return "".join(out)
 
 
+def acronym_tokens(text):
+    return [m.group(0) for m in _TOKEN_RE.finditer(_norm_text(text)) if m.lastgroup == "acronym" and m.group(0) not in ACRONYM_EXEMPT]
+
+
 def say_sentence(text):
     """Canonical reading: numbers spelled out, known abbreviations expanded; acronyms and unknown symbols stay as they are."""
     out, pos = [], 0
-    text = unicodedata.normalize("NFKC", text or "").replace("’", "'").replace("‘", "'").replace("−", "-")
+    text = _norm_text(text)
     for m in _TOKEN_RE.finditer(text):
         out.append(text[pos:m.start()])
         kind, tok = m.lastgroup, m.group(0)
         rd = None
-        if kind in ("price", "time", "phone", "percent", "ordinal", "decimal", "int", "temp", "range"):
-            rd = readings(tok, _prev_word(text, m.start()))
+        if kind in _NUMERIC_KINDS:
+            rd = readings(tok, _id_context(text, m.start()))
         elif kind == "abbrev":
             rd = ABBREV.get(tok.lower().rstrip("."))
         elif kind == "symbol":
@@ -496,19 +592,25 @@ def say_sentence(text):
 
 
 def has_numeric(text):
-    """True when the text has a number token (price, time, phone, date, temperature, percent, ordinal, range, decimal, integer, 3D / 2x)."""
+    """True when the text has a number token (price, time, phone, temperature, percent, ordinal, range, decimal, integer)."""
     if not isinstance(text, str):
         return False
-    t = unicodedata.normalize("NFKC", text).replace("−", "-")
-    return any(m.lastgroup in ("price", "time", "phone", "date", "temp", "percent", "ordinal", "range", "decimal", "alnum", "int")
-               for m in _TOKEN_RE.finditer(t))
+    return any(m.lastgroup in _NUMERIC_KINDS for m in _TOKEN_RE.finditer(_norm_text(text)))
 
 
-def needs_say(text):
-    """True when a TTS would have to guess: digits, symbols, abbreviations, acronyms, tokens like 3D or 2x."""
+def needs_say(text, acronyms=None, is_word=None):
+    """True when a TTS would have to guess: digits, symbols, abbreviations, tokens like 3D or 2x, and acronyms. A capital word
+    that is an ordinary word (is_word) needs no say; without `is_word` every acronym needs one."""
     if not isinstance(text, str):
         return False
-    return bool(spans(text))
+    if spans(text):
+        return True
+    for tok in acronym_tokens(text):
+        if acronyms and tok in acronyms:
+            return True
+        if is_word is None or not is_word(tok.lower()):
+            return True
+    return False
 
 
 if __name__ == "__main__":

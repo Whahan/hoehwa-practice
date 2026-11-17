@@ -278,13 +278,13 @@ class Basics(unittest.TestCase):
 
     def test_acronym_and_abbreviation_need_say(self):
         def mut(d):
-            ts.find(d, 1, "sentences", "s0001")["en"] = "Hello, MIN."
+            ts.find(d, 1, "sentences", "s0001")["en"] = "Hello, XYZ."          # an unregistered acronym needs a letter-by-letter say
         self.assertIn("say_missing", self.details(self.res(mut), "NUM_SAY"))
 
     def test_acronym_ok_list_in_policy(self):
         def mut(d):
-            ts.find(d, 1, "sentences", "s0001")["en"] = "Hello, MIN."
-            d["policy.json"]["acronym_ok"] = ["MIN"]
+            ts.find(d, 1, "sentences", "s0001")["en"] = "Hello, XYZ."
+            d["policy.json"]["acronym_ok"] = ["XYZ"]
         self.assertNotIn("NUM_SAY", self.codes(self.res(mut)))
 
     def test_say_text_is_the_token_source(self):

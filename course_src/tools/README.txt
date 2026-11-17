@@ -43,20 +43,32 @@ ORDER: a token of an item has min(o of its lexicon entries) > item o; passive wo
   declared `words` that are later than the item.  UNKNOWN_TOKEN: token not in the lexicon at all.
 NUM_SAY: digits, symbols ($ % & @ # + =), abbreviations (Mr. Dr. a.m. ...), acronyms (ABC, except policy acronym_ok / OK)
   need a `say` without digits/symbols that matches numbers_en readings ("$5.99" -> "five ninety-nine").
-Say and en: the ordinary words of `en` (numbers, symbols, abbreviations and acronyms are cut out first) AND every word of `say`
-  are looked up; glue words that only come from reading a number aloud (oh, point, percent, and, minus, to, degrees, dollars,
-  cents, a m ...) are exempt, number words (five, twenty) are not: they must have been taught.
-Forms and alt (FORM_SUSPECT): `forms[].f` needs a non-empty `pat` and must be a regular derivation of the headword (-s/-es/-ies,
-  -ed/-d/-ied, -ing, -er/-est, -ly, 's, doubled consonant) or a listed irregular form (forms_en.py: went/gone/ate/children/better ...);
-  a headword that has an irregular form does not get the regular one (goed, childs). A form may not be another word's
-  headword or alt (two words may share a form: leaves, saw). `alt` is a spelling variant only: case, hyphen, space,
-  Canadian/US pair; never another word's headword, form or alt. alt tokens are known from the headword's day, not earlier.
-Number readings (numbers_en.py), judgement rule: a plain integer is a number (25 = twenty-five, never "two five"; 30 never
-  "three oh"). Digit by digit is accepted only for codes: a leading zero, 4+ digits that are no year (1000-2099), or 3+ digits right
-  after an identifier word (room, apartment, flight, gate, bus, route, code, pin, number, id, extension ...), and for phone
-  numbers. 911 = "nine one one" only. Years 1000-2099: nineteen ninety-nine, twenty twenty-four, twenty oh five, two thousand
-  (and) five; "twenty five" for 2005 is wrong. -5 = minus/negative five; 5 deg C = five degrees (Celsius); 5-10 = five to/through ten;
-  3D / 2x / B2 / COVID-19 need a `say`; ABC = three words (a b c) or one word (abc).
+Say and en: the words of `en` (numbers, symbols and abbreviations are cut out first; capital words stay and are looked up in lower
+  case: STOP = stop) AND every word of `say` are looked up. Exempt are only the glue words of a real number reading (oh, point,
+  percent, and, minus, to, degrees, dollars, cents, a m ...) and the letters of a letter-by-letter acronym reading; number words
+  (five, twenty) are not exempt: they must have been taught. The "any" parts of a say (3D, dates, unknown symbols) are looked up
+  too. An acronym (SIN, ATM) is a word when the lexicon has an entry whose `en` is in capitals (with a `say`: the letters, or one
+  word starting with the same letter); a sentence must then read it as that entry's say. An unregistered acronym (ABC) only
+  letter by letter (a b c / ay bee see) and is an unknown word anyway. A word's own `say` never registers words: it must be a number
+  reading, a letter reading, the word itself, or the registered acronym reading (3D with say "friend" is NUM_SAY).
+Forms and alt (FORM_SUSPECT): `forms[].f` needs a non-empty `pat` and must be a form of the headword by part of speech and spelling
+  (forms_en.py): n -s/-es/-ies, 's s'; v -s, -ing, -ed, agent -er; adj/adv -er/-est (e: -r, y: -ier, one-syllable CVC: doubled
+  consonant), adj -ly; propn 's only; interj/pron/det/prep/conj/num/aux get no regular form, only the listed irregular forms and
+  contractions (went, children, better, don't, I'm ...). -ing: make-making, see-seeing, die-dying, run-running; -ed: like-liked,
+  study-studied, stop-stopped, picnic-picnicked, learn-learnt/learned. Wrong spellings (runing, stoped, biger) and compounds
+  (mine, myself, something) are rejected. A form may not be another word's headword or alt (two words may share a form: leaves,
+  saw). `alt` is a spelling variant only: case, hyphen, space, Canadian/US pair; never another word's headword, form or alt.
+  fixturesorms_corpus.json = 200+ beginner sentences with their forms (all must pass) and 46 wrong forms (all must fail).
+Number readings (numbers_en.py), judgement rule: a plain integer is a number (25 = twenty-five, never "two five"; 30 never "three oh").
+  Identifier context: a number with 3+ digits that has an identifier word (room, apartment, apt, unit, suite, flight, gate, bus,
+  route, platform, code, pin, number, no, id ...) among the 4 words before it in the same sentence is read digit by digit,
+  two digits at a time, or as a plain number (room 305: three oh five / three zero five / three hundred five; apartment 1205:
+  twelve oh five); 4+ digit numbers that are no year, and phone numbers, likewise; a leading zero is always digit by digit. 911 =
+  "nine one one" only. Years 1000-2099: nineteen ninety-nine, twenty twenty-four, twenty oh five, two thousand (and) five; "twenty
+  five" for 2005 is wrong. -5 = minus/negative five; 5 deg C = five degrees (Celsius); 5-10 = five to/through ten; 5 pm = five p m /
+  five pm; 3D = three d, 2x = two x (letters spelled).
+PERSONAL and BLOCKED look at every string of a week file (notes, titles, can_do, grammar lines ...); ORDER does not (design).
+CANON: meter/metre and gray/grey are used in Canada too: only a WARN line (exit code and --strict unaffected).
 Day rule: new words and patterns are taught on D1..D4 (`d` 1..4); sentences/lines may use D1..D7.
 Counts per week (policy.json "limits" overrides any key; defaults = design): sentences >= 36, per pattern >= 6, per active
   word >= 2, active 10-30 (weeks 1-4: 20-28, weeks 16/32/48/60/68: 10-16), passive 8-16 (weeks 1-4: 0-16), patterns 3-5

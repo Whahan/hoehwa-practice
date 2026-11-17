@@ -131,7 +131,7 @@ class OrdinalPhoneTest(unittest.TestCase):
 class SentenceTest(unittest.TestCase):
     def test_say_sentence(self):
         self.assertEqual(ne.say_sentence("It is 2:30 p.m. on May 1st, $5.99."), "It is two thirty p m on May first, five ninety-nine.")
-        self.assertEqual(ne.say_sentence("Room 205"), "Room two hundred five")
+        self.assertEqual(ne.say_sentence("Room 205"), "Room two oh five")
         self.assertEqual(ne.say_sentence("Call 555-0123."), "Call five five five, oh one two three.")
 
     def test_needs_say(self):
