@@ -49,12 +49,20 @@ def load_sentences(path):
     return out
 
 
+def passive_only(lex, token):
+    """True when every lexicon entry of the token is a passive word: such a sentence would be scope "listen" only (R5)."""
+    c = lex.candidates(token)
+    return bool(c) and all(lex.words.get(wid, {}).get("role") == "passive" for _o, wid, _k in c)
+
+
 def fit(sents, lex, weeks):
-    """-> {w: {"cum": n, "new": n, "ids": [ids that are new this week]}}"""
+    """-> {w: {"cum": n, "new": n, "ids": [ids that are new this week]}}. Sentences with a passive-only word are left out
+    (an own sentence with scope "all" may not contain one: ORDER), so every candidate could be used as it is."""
     need = []
     for sid, en, ko, toks in sents:
         os_ = [lex.min_o(t) for t in toks]
-        need.append(None if any(o is None for o in os_) else max(os_))
+        bad = any(o is None for o in os_) or any(passive_only(lex, t) for t in toks)
+        need.append(None if bad else max(os_))
     res, prev = {}, set()
     for w in weeks:
         lim = w * 10 + cc.DAY_MAX
@@ -107,6 +115,9 @@ def main(argv=None):
         print("FIT_FAIL tatoeba_database_unreadable")
         return 1
     res = fit(sents, lex, weeks)
+    if a.lexicon_from == "skeleton":
+        print("FIT_NOTE lexicon from the skeleton has no inflected forms (works, apples ...) and no alt spellings: "
+              "candidates with such words are missing, the counts are a lower bound")
     by_id = {s[0]: s for s in sents}
     for w in weeks:
         print("FIT week=%d cum=%d new=%d" % (w, res[w]["cum"], res[w]["new"]))

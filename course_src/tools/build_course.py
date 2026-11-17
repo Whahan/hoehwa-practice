@@ -93,8 +93,7 @@ def build_data(course, weeks, lex):
                              "grammar_ko": p["grammar_ko"], "o": w * 10 + cc.week_pattern_day(i, p),
                              "examples": p.get("examples") if isinstance(p.get("examples"), list) else sorted(sent_by_pat.get(p["id"], []))})
         for s in wk.get("sentences", []):
-            text = s["say"] if s.get("say") else s["en"]
-            toks = cc.tokenize(text)
+            toks = cc.item_tokens(s["en"], s.get("say", ""))
             decl = w * 10 + s["d"] if cc.is_int(s.get("d")) else None
             o = decl if decl is not None else max([w * 10 + 1] + [lex.min_o(t) or 0 for t in toks])
             sent_out.append({"id": s["id"], "en": s["en"], "ko": s["ko"], "say": s.get("say", ""),
@@ -106,7 +105,7 @@ def build_data(course, weeks, lex):
             lines = []
             for ln in dlg["lines"]:
                 o = w * 10 + (ln["d"] if cc.is_int(ln.get("d")) else ddef)
-                toks = cc.tokenize(ln["say"] if ln.get("say") else ln["en"])
+                toks = cc.item_tokens(ln["en"], ln.get("say", ""))
                 rec = {"s": ln["s"], "en": ln["en"], "ko": ln["ko"], "say": ln.get("say", ""),
                        "words": sorted(lex.used_words(toks, o)), "o": o}
                 for k in ("hint_ko", "accept"):

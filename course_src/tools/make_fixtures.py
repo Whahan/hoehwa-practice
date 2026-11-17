@@ -30,6 +30,7 @@ BAD = {
     "bad_count": "COUNT",
     "bad_schema": "SCHEMA",
     "bad_canon": "CANON",
+    "bad_form_suspect": "FORM_SUSPECT",
     "bad_tatoeba": "TATOEBA",
 }
 
@@ -229,6 +230,8 @@ def mutate(name, d):
         del _word(d, 1, "w0001")["ko"]
     elif name == "bad_canon":
         _word(d, 4, "w0304")["alt"] = []
+    elif name == "bad_form_suspect":
+        _word(d, 1, "w0001")["forms"] = [{"f": "went", "pat": "p_my_name"}]
     elif name == "bad_tatoeba":
         _sent(d, 4, "s0411")["tid"] = 0
     else:

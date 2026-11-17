@@ -19,7 +19,7 @@ check_course.py   linter (design docs\v200_design.md 9.2). Exit 0 = pass, 1 = fa
     --review <tsv>        checks R1_X*.tsv (columns id type verdict issue fix): every item once, verdict OK/M/C
                           -> `REVIEW_OK rows=N C=.. M=..` (with --strict C must be 0)
   Codes: SCHEMA ORDER UNKNOWN_TOKEN NUM_SAY KO_HANGUL KO_HANJA DUP_EN DUP_KO SAME_KO_OPTIONS BLOCKED PERSONAL COUNT CANON
-         TATOEBA GRAMMAR.
+         FORM_SUSPECT TATOEBA GRAMMAR.
 
 build_course.py   lint (strict) then write godot\data\course\ files: --in <dir> --out <dir> [--weeks a-b] [--check]
                   Nothing is written when the lint fails. Manifest = {"v":1,"lang":"en","weeks":[a,b],"count":N,
@@ -27,8 +27,9 @@ build_course.py   lint (strict) then write godot\data\course\ files: --in <dir> 
                   en_speak_prompts.json is grouped by month: {"month":n,"w":w,"prompts":[{id,kind,en,ko,say,expect_any,o}]}.
 numbers_en.py     words(n) price_say time_say ordinal_say phone_say percent_say decimal_say say_sentence needs_say say_matches
 sample_sheet.py   --in <dir> --n 300 --seed S --out sheet.csv [--weeks a-b]   stratified sample for the human review
-tatoeba_fit.py    --in <dir> [--weeks a-b] [--db <sqlite>] [--show N] [--json out]   candidates per week (cum / new)
-make_fixtures.py  rewrites fixtures\ (good_mini and 14 bad_<name> folders); `--check` compares (test_check_course runs it)
+tatoeba_fit.py    --in <dir> [--weeks a-b] [--db <sqlite>] [--show N] [--json out]   candidates per week (cum / new); sentences with a
+                  passive-only word are left out; with --lexicon-from skeleton inflected forms are missing (FIT_NOTE: lower bound)
+make_fixtures.py  rewrites fixtures\ (good_mini and 15 bad_<name> folders); `--check` compares (test_check_course runs it)
 Tests: python -X utf8 -m unittest discover -s course_src\tools -p "test_*.py" -v
 
 Rules the linter applies (token rules are the ones the app's LexiconGuard must use too)
@@ -42,6 +43,20 @@ ORDER: a token of an item has min(o of its lexicon entries) > item o; passive wo
   declared `words` that are later than the item.  UNKNOWN_TOKEN: token not in the lexicon at all.
 NUM_SAY: digits, symbols ($ % & @ # + =), abbreviations (Mr. Dr. a.m. ...), acronyms (ABC, except policy acronym_ok / OK)
   need a `say` without digits/symbols that matches numbers_en readings ("$5.99" -> "five ninety-nine").
+Say and en: the ordinary words of `en` (numbers, symbols, abbreviations and acronyms are cut out first) AND every word of `say`
+  are looked up; glue words that only come from reading a number aloud (oh, point, percent, and, minus, to, degrees, dollars,
+  cents, a m ...) are exempt, number words (five, twenty) are not: they must have been taught.
+Forms and alt (FORM_SUSPECT): `forms[].f` needs a non-empty `pat` and must be a regular derivation of the headword (-s/-es/-ies,
+  -ed/-d/-ied, -ing, -er/-est, -ly, 's, doubled consonant) or a listed irregular form (forms_en.py: went/gone/ate/children/better ...);
+  a headword that has an irregular form does not get the regular one (goed, childs). A form may not be another word's
+  headword or alt (two words may share a form: leaves, saw). `alt` is a spelling variant only: case, hyphen, space,
+  Canadian/US pair; never another word's headword, form or alt. alt tokens are known from the headword's day, not earlier.
+Number readings (numbers_en.py), judgement rule: a plain integer is a number (25 = twenty-five, never "two five"; 30 never
+  "three oh"). Digit by digit is accepted only for codes: a leading zero, 4+ digits that are no year (1000-2099), or 3+ digits right
+  after an identifier word (room, apartment, flight, gate, bus, route, code, pin, number, id, extension ...), and for phone
+  numbers. 911 = "nine one one" only. Years 1000-2099: nineteen ninety-nine, twenty twenty-four, twenty oh five, two thousand
+  (and) five; "twenty five" for 2005 is wrong. -5 = minus/negative five; 5 deg C = five degrees (Celsius); 5-10 = five to/through ten;
+  3D / 2x / B2 / COVID-19 need a `say`; ABC = three words (a b c) or one word (abc).
 Day rule: new words and patterns are taught on D1..D4 (`d` 1..4); sentences/lines may use D1..D7.
 Counts per week (policy.json "limits" overrides any key; defaults = design): sentences >= 36, per pattern >= 6, per active
   word >= 2, active 10-30 (weeks 1-4: 20-28, weeks 16/32/48/60/68: 10-16), passive 8-16 (weeks 1-4: 0-16), patterns 3-5

@@ -26,11 +26,12 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 import course_common as cc  # noqa: E402
+import forms_en  # noqa: E402
 import numbers_en as ne  # noqa: E402
 from course_common import Problem, is_int, is_str  # noqa: E402
 
 CODES = ["SCHEMA", "ORDER", "UNKNOWN_TOKEN", "NUM_SAY", "KO_HANGUL", "KO_HANJA", "DUP_EN", "DUP_KO", "SAME_KO_OPTIONS",
-         "BLOCKED", "PERSONAL", "COUNT", "CANON", "TATOEBA", "GRAMMAR"]
+         "BLOCKED", "PERSONAL", "COUNT", "CANON", "FORM_SUSPECT", "TATOEBA", "GRAMMAR"]
 POS = {"n", "v", "adj", "adv", "prep", "pron", "det", "art", "conj", "interj", "intj", "num", "aux", "modal", "propn",
        "chunk", "phr", "part", "exclam", "contr"}
 NOTE_KINDS = {"spelling", "vocab", "culture", "fact", "sound"}
@@ -57,7 +58,7 @@ ID_DLG = re.compile(r"^d\d{4}$")
 ID_PAT = re.compile(r"^p_[a-z0-9_]+$")
 ID_PROMPT = re.compile(r"^sp\d{4}$")
 ID_NOTE = re.compile(r"^n\d{4}$")
-KO_BANMAL = re.compile(r"(?<!니)(다|야|어|아|해|지|자|래|냐|니)[.?!~…\s]*$")  # plain-style endings (not -니다)
+KO_BANMAL = re.compile(r"(?<!니)(다|야|어|아|해|지|자|래|냐)[.?!~…\s]*$")  # plain-style endings (not -니다)
 
 
 def _where(w, ident=None):
@@ -159,6 +160,8 @@ def validate_week(w, wk, fname, lim, out):
             if not isinstance(x["forms"], list) or not all(isinstance(f, dict) and is_str(f.get("f")) and f.get("f").strip()
                                                            and is_str(f.get("pat")) for f in x["forms"]):
                 out.append(Problem("SCHEMA", wh, "forms_must_be_list_of_f_pat"))
+            elif any(not f["pat"].strip() for f in x["forms"]):
+                out.append(Problem("SCHEMA", wh, "form_pat_empty"))
         if "ca" in x and not isinstance(x["ca"], bool):
             out.append(Problem("SCHEMA", wh, "ca_must_be_bool"))
         if x.get("src", "own") != "own":
@@ -310,16 +313,12 @@ def check_order(ctx):
         d = it["d"] if is_int(it["d"]) else None
         w = it["w"]
         base = w * 10 + (d if d else 1)
-        has_say = is_str(it["say"]) and it["say"].strip() != ""
-        text = it["say"] if has_say else it["en"]
-        toks = cc.tokenize(text)
+        toks = cc.item_tokens(it["en"], it["say"])      # ordinary words of `en` + every word of `say`
         extra_texts = []
         if it["kind"] == "sentence" or it["kind"] == "line":
             extra_texts = [a for a in (raw.get("accept") or []) if is_str(a)]
         worst, unknown = 0, set()
         for t in toks:
-            if t.isdigit() and not has_say:
-                continue          # NUM_SAY reports this
             mo = lex.min_o(t)
             if mo is None:
                 unknown.add(t)
@@ -334,7 +333,7 @@ def check_order(ctx):
         for t in sorted(unknown):
             ctx.add("UNKNOWN_TOKEN", _where(w, it["id"]), "token=" + t)
         for a in extra_texts:
-            for t in cc.tokenize(a):
+            for t in cc.tokenize(ne.plain_text(a)):
                 mo = lex.min_o(t)
                 if mo is None:
                     ctx.add("UNKNOWN_TOKEN", _where(w, it["id"]), "accept_token=" + t)
@@ -350,7 +349,7 @@ def check_order(ctx):
         declared = raw.get("words") if isinstance(raw.get("words"), list) else []
         if declared:
             item_o = w * 10 + (d if d else cc.DAY_MAX)
-            used = lex.used_words(cc.tokenize(text), 10 ** 6)
+            used = lex.used_words(toks, 10 ** 6)
             for wid in declared:
                 info = lex.words.get(wid)
                 if info is None:
@@ -374,7 +373,7 @@ def check_order(ctx):
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("speak_prompts", []) or []:
             for e in x.get("expect_any", []) or []:
-                for t in cc.tokenize(e):
+                for t in cc.tokenize(ne.plain_text(e)):
                     mo = ctx.lex.min_o(t)
                     if mo is None:
                         ctx.add("UNKNOWN_TOKEN", _where(w, x.get("id")), "expect_token=" + t)
@@ -384,7 +383,7 @@ def check_order(ctx):
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
             for f in x.get("forms", []) or []:
-                if f.get("pat") not in ctx.pat_o and f.get("pat") != "":
+                if f.get("pat") not in ctx.pat_o:
                     ctx.add("SCHEMA", _where(w, x.get("id")), "form_pattern_unknown=" + str(f.get("pat")))
 
 
@@ -412,6 +411,8 @@ def check_num_say(ctx):
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
             en, say = x.get("en", ""), x.get("say", "") or ""
+            if re.search(r"[0-9$%&@#+=/*<>~^|\\_]", say):
+                ctx.add("NUM_SAY", _where(w, x.get("id")), "say_has_digits_or_symbols")
             if ne.needs_say(en):
                 if not say.strip():
                     ctx.add("NUM_SAY", _where(w, x.get("id")), "say_missing")
@@ -431,6 +432,8 @@ def check_ko(ctx):
     for w in ctx.weeks:
         wk = ctx.course.weeks.get(w, {})
         one(w, None, wk.get("title_ko", "x가"), "title_ko", need_hangul=False)
+        if isinstance(wk.get("scene"), dict):
+            one(w, None, wk["scene"].get("title_ko", "x가"), "scene_title_ko", need_hangul=False)
         for x in wk.get("words", []) or []:
             one(w, x.get("id"), x.get("ko"), "ko")
             if "ko2" in x:
@@ -457,7 +460,8 @@ def check_ko(ctx):
     # Korean style of sentences and lines (warning only; --strict makes it a violation)
     for it in cc.iter_items(ctx.course, ctx.weeks):
         if it["kind"] in ("sentence", "line") and is_str(it["ko"]) and cc.HANGUL.search(it["ko"]):
-            if KO_BANMAL.search(it["ko"].strip()):
+            plain = re.sub(r"[.?!~\u2026\s]+$", "", it["ko"].strip())
+            if " " in plain and KO_BANMAL.search(it["ko"].strip()):       # a single word (a noun like 의자) is never "plain style"
                 ctx.add("SCHEMA", _where(it["w"], it["id"]), "ko_style_not_haeyo", warn=True)
 
 
@@ -551,30 +555,49 @@ def _is_blocked(rules_allow, tok, week):
     return False
 
 
+def english_texts(ctx):
+    """(week, id, kind, text) of every English text a manuscript carries: sentence / line / prompt en, say, accept,
+    expect_any, pattern templates, word headwords, say, forms and alt spellings."""
+    for it in cc.iter_items(ctx.course, ctx.weeks):
+        yield it["w"], it["id"], it["kind"], it["en"]
+        yield it["w"], it["id"], "say", it["say"]
+        for a in (it["raw"].get("accept") or []) if isinstance(it["raw"].get("accept"), list) else []:
+            yield it["w"], it["id"], "accept", a
+        for a in (it["raw"].get("expect_any") or []) if isinstance(it["raw"].get("expect_any"), list) else []:
+            yield it["w"], it["id"], "expect", a
+    for w in ctx.weeks:
+        wk = ctx.course.weeks.get(w, {})
+        for p in wk.get("patterns", []) or []:
+            yield w, p.get("id"), "tpl", str(p.get("tpl", "")).replace("___", " ")
+        for x in wk.get("words", []) or []:
+            yield w, x.get("id"), "word", x.get("en")
+            yield w, x.get("id"), "say", x.get("say")
+            for f in x.get("forms", []) or []:
+                yield w, x.get("id"), "form", f.get("f")
+            for a in x.get("alt", []) or []:
+                yield w, x.get("id"), "alt", a
+
+
 def check_blocked(ctx):
     rules = _blocked_rules(ctx)
     if not rules[0]:
         return
-    for it in cc.iter_items(ctx.course, ctx.weeks):
-        texts = [it["en"], it["say"]] + [a for a in (it["raw"].get("accept") or []) if is_str(a)]
-        hit = set()
-        for t in texts:
-            for tok in cc.tokenize(t if is_str(t) else ""):
-                if _is_blocked(rules, tok, it["w"]):
-                    hit.add(tok)
-        for tok in sorted(hit):
-            ctx.add("BLOCKED", _where(it["w"], it["id"]), "token=" + tok)
-    for w in ctx.weeks:
-        for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
-            for tok in cc.tokenize(x.get("en", "")):
-                if _is_blocked(rules, tok, w):
-                    ctx.add("BLOCKED", _where(w, x.get("id")), "token=" + tok)
+    seen = set()
+    for w, ident, kind, text in english_texts(ctx):
+        for tok in cc.tokenize(text if is_str(text) else ""):
+            if _is_blocked(rules, tok, w) and (w, ident, tok) not in seen:
+                seen.add((w, ident, tok))
+                ctx.add("BLOCKED", _where(w, ident), "token=" + tok)
 
 
 PHONE_RX = re.compile(r"(?<!\d)(?:\+?1[-. ]?)?(?:\(?(\d{3})\)?[-. ])?(\d{3})[-. ](\d{4})(?!\d)")
 EMAIL_RX = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 URL_RX = re.compile(r"(?:https?://|www\.)[^\s]+", re.I)
 ADDR_RX = re.compile(r"\b\d{1,5}\s+((?:[A-Z][\w']*\s+){1,3})(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Lane|Ln|Way|Court|Ct|Crescent|Cres)\b")
+# lower case spelling ("1234 granville street"): only the long, unambiguous street words (not "5 minute drive")
+ADDR_LOWER_RX = re.compile(r"\b\d{1,5}\s+((?:[A-Za-z][\w']*\s+){1,3})(?:street|avenue|road|boulevard|crescent)\b", re.I)
+DOMAIN_RX = re.compile(r"(?<![\w@.-])(?:[a-z\d][a-z\d-]*\.)+(?:com|ca|net|org)\b(?:/\S*)?", re.I)
+DASHES = re.compile("[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]")
 POSTAL_RX = re.compile(r"\b[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d\b")
 LONGDIGITS_RX = re.compile(r"(?<![\d,.])\d{7,}(?![\d])")
 
@@ -589,6 +612,7 @@ def check_personal(ctx):
     def scan(w, ident, text):
         if not is_str(text):
             return
+        text = DASHES.sub("-", cc.nfkc(text))          # NFKC, then every dash looks like a hyphen
         for m in PHONE_RX.finditer(text):
             digits = [g for g in m.groups() if g]
             exch, last = digits[-2], digits[-1]
@@ -603,24 +627,32 @@ def check_personal(ctx):
         for m in URL_RX.finditer(text):
             if "example." not in m.group(0).lower():
                 ctx.add("PERSONAL", _where(w, ident), "url")
-        for m in ADDR_RX.finditer(text):
-            full = re.sub(r"^\d+\s+", "", m.group(0)).lower()
-            name = m.group(1).strip().lower()
-            if full not in names and name not in names:
-                ctx.add("PERSONAL", _where(w, ident), "street_address")
+        for rx in (ADDR_RX, ADDR_LOWER_RX):
+            for m in rx.finditer(text):
+                full = re.sub(r"^\d+\s+", "", m.group(0)).lower()
+                name = m.group(1).strip().lower()
+                if full not in names and name not in names:
+                    ctx.add("PERSONAL", _where(w, ident), "street_address")
+        for m in DOMAIN_RX.finditer(text):
+            dom = m.group(0).split("/", 1)[0].lower()
+            if not (re.search(r"(?:^|\.)example\.(?:com|org|net|ca)$", dom) or any(dom == d or dom.endswith("." + d) for d in mail_ok)):
+                ctx.add("PERSONAL", _where(w, ident), "web_address")
         for m in POSTAL_RX.finditer(text):
             if re.sub(r"[ -]", "", m.group(0)).upper() not in postal_ok:
                 ctx.add("PERSONAL", _where(w, ident), "postal_code")
 
+    for w, ident, kind, text in english_texts(ctx):
+        scan(w, ident, text)
     for it in cc.iter_items(ctx.course, ctx.weeks):
-        for f in ("en", "say", "ko"):
-            scan(it["w"], it["id"], it[f])
+        scan(it["w"], it["id"], it["ko"])
+        scan(it["w"], it["id"], it["raw"].get("hint_ko"))
     for w in ctx.weeks:
         wk = ctx.course.weeks.get(w, {})
         for x in wk.get("notes", []) or []:
             scan(w, x.get("id"), x.get("text_ko"))
         for x in wk.get("words", []) or []:
-            scan(w, x.get("id"), x.get("en"))
+            scan(w, x.get("id"), x.get("ko"))
+            scan(w, x.get("id"), x.get("ko2"))
             if x.get("pos") == "propn":
                 tags = set(x.get("tags") or [])
                 key = cc.nfkc(x.get("en", "")).lower().strip()
@@ -643,23 +675,86 @@ def _canon_pairs(ctx):
     return pairs
 
 
+US_SUFFIXES = ("", "s", "es", "ed", "d", "ing", "er", "ers", "est", "ly", "ful", "less", "hood", "'s", "s'")
+
+
 def check_canon(ctx):
     pairs = _canon_pairs(ctx)
-    us_to_ca = {us: ca for ca, us in pairs}
     ca_to_us = {ca: us for ca, us in pairs}
-    for it in cc.iter_items(ctx.course, ctx.weeks):
-        for t in set(cc.tokenize(it["en"] if is_str(it["en"]) else "")):
-            if t in us_to_ca:
-                ctx.add("CANON", _where(it["w"], it["id"]), "us_spelling=%s want=%s" % (t, us_to_ca[t]))
+
+    def us_hit(tok):
+        """US spelling (or an inflection of it: colors, favorites, centered) -> the Canadian stem, else None."""
+        for ca, us in pairs:
+            if tok.startswith(us) and tok[len(us):] in US_SUFFIXES:
+                return ca
+        return None
+
+    seen = set()
+    for w, ident, kind, text in english_texts(ctx):
+        if kind == "alt":           # `alt` is where the US spelling belongs
+            continue
+        for t in cc.tokenize(text if is_str(text) else ""):
+            ca = us_hit(t)
+            if ca and (w, ident, t) not in seen:
+                seen.add((w, ident, t))
+                if kind == "word":
+                    ctx.add("CANON", _where(w, ident), "us_spelling_as_headword=%s want=%s" % (t, ca))
+                else:
+                    ctx.add("CANON", _where(w, ident), "us_spelling=%s want=%s" % (t, ca))
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
-            toks = cc.tokenize(x.get("en", ""))
             alts = {a.lower() for a in x.get("alt") or [] if is_str(a)}
-            for t in toks:
-                if t in us_to_ca:
-                    ctx.add("CANON", _where(w, x.get("id")), "us_spelling_as_headword=%s want=%s" % (t, us_to_ca[t]))
-                elif t in ca_to_us and ca_to_us[t] not in alts:
+            for t in cc.tokenize(x.get("en", "")):
+                if t in ca_to_us and ca_to_us[t] not in alts:
                     ctx.add("CANON", _where(w, x.get("id")), "alt_missing_us_spelling=" + ca_to_us[t])
+
+
+def check_forms(ctx):
+    """FORM_SUSPECT: `forms` / `alt` may not smuggle other words into the lexicon. A form must be a regular derivation of
+    its headword or a listed irregular form (forms_en.py), and it may not be the headword / alt of another word; an alt
+    must be a spelling variant (case, hyphen, space, Canadian/US pair) of its headword and not the headword, form or alt
+    of another word."""
+    pairs = _canon_pairs(ctx)
+    heads, forms_of, alts_of = {}, {}, {}
+    for wid, info in ctx.lex.words.items():
+        if len(info["tokens"]) == 1:
+            heads.setdefault(info["tokens"][0], set()).add(wid)
+    for w in ctx.usable:
+        for x in ctx.course.weeks[w].get("words", []) or []:
+            wid = x.get("id")
+            for f in x.get("forms", []) or []:
+                for t in cc.tokenize(f.get("f", "")):
+                    forms_of.setdefault(t, set()).add(wid)
+            for a in x.get("alt", []) or []:
+                for t in cc.tokenize(a if is_str(a) else ""):
+                    alts_of.setdefault(t, set()).add(wid)
+
+    def alt_ok(lemma, alt):
+        jl, ja = "".join(cc.tokenize(lemma)), "".join(cc.tokenize(alt))
+        if jl == ja:
+            return True
+        return any(jl.replace(ca, us) == ja or jl.replace(us, ca) == ja for ca, us in pairs)
+
+    for w in ctx.weeks:
+        for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
+            wid, lemma = x.get("id"), x.get("en", "")
+            for f in x.get("forms", []) or []:
+                ft = f.get("f", "")
+                where = _where(w, wid)
+                if not forms_en.is_derived(lemma, ft):
+                    ctx.add("FORM_SUSPECT", where, "form_not_derived_from_headword=" + "_".join(cc.tokenize(ft)))
+                for t in cc.tokenize(ft):
+                    if heads.get(t, set()) - {wid}:
+                        ctx.add("FORM_SUSPECT", where, "form_is_another_headword=" + t)
+                    elif alts_of.get(t, set()) - {wid}:
+                        ctx.add("FORM_SUSPECT", where, "form_is_another_words_alt=" + t)
+            for a in x.get("alt", []) or []:
+                where = _where(w, wid)
+                if not alt_ok(lemma, a):
+                    ctx.add("FORM_SUSPECT", where, "alt_not_a_spelling_variant=" + "_".join(cc.tokenize(a)))
+                for t in cc.tokenize(a):
+                    if (heads.get(t, set()) | forms_of.get(t, set()) | alts_of.get(t, set())) - {wid}:
+                        ctx.add("FORM_SUSPECT", where, "alt_is_another_word=" + t)
 
 
 def _open_tatoeba(ctx, path_arg):
@@ -786,7 +881,7 @@ def check_counts(ctx):
         use = {}
         for s in sents:
             if is_str(s.get("en")):
-                toks = cc.tokenize(s["say"] if is_str(s.get("say")) and s.get("say").strip() else s["en"])
+                toks = cc.item_tokens(s["en"], s.get("say", ""))
                 for wid in ctx.lex.used_words(toks, 10 ** 6):
                     use[wid] = use.get(wid, 0) + 1
         for x in act:
@@ -1396,7 +1491,8 @@ def run_check(in_dir, weeks_arg=None, strict=False, skeleton=False, lexicon_from
     ctx.notes = res.notes
     ctx.usable = sorted(usable)
     ctx.pat_o = cc.pattern_o_map(course)
-    for fn in (check_order, check_num_say, check_ko, check_dups, check_same_ko, check_blocked, check_personal, check_counts, check_canon):
+    for fn in (check_order, check_num_say, check_ko, check_dups, check_same_ko, check_blocked, check_personal, check_counts, check_canon,
+               check_forms):
         fn(ctx)
     check_tatoeba(ctx, tatoeba_db)
     if grammar:

@@ -23,7 +23,7 @@ class Fixtures(unittest.TestCase):
         self.assertRegex(lines[-1], r"^CHECK_OK weeks=1-4 .*violations=0$")
 
     def test_each_bad_fixture_fails_with_its_own_code(self):
-        self.assertEqual(len(ts.mf.BAD), 14)
+        self.assertEqual(len(ts.mf.BAD), 15)
         for name, code in ts.mf.BAD.items():
             with self.subTest(name=name):
                 rc, lines = ts.check("--in", ts.FIX / name, "--strict")

@@ -144,10 +144,10 @@ class SentenceTest(unittest.TestCase):
         yes = [("My number is 3.", "My number is three."), ("My number is 3.", "my number is THREE"), ("Room 205", "Room two oh five"),
                ("Room 205", "room two zero five"), ("$5.99", "Five ninety-nine"), ("$5.99", "five dollars and ninety-nine cents"),
                ("9:30 a.m.", "nine thirty a m"), ("Mr. Lee", "mister Lee"), ("Meet at 12:30 on 1st", "meet at twelve thirty on first"),
-               ("ATM", "a t m"), ("Use the ATM, please", "use the cash machine please")]
+               ("ATM", "a t m"), ("Use the ATM, please", "use the a t m please")]
         no = [("My number is 3.", "My number is four."), ("My number is 3.", "My number is 3."), ("My number is 3.", "My number is."),
               ("$5.99", "five ninety"), ("$5.99", "five ninety-nine dollars"), ("12:30", "twelve oh thirty"), ("Room 205", "room two hundred"),
-              ("Hello.", "Hi.")]
+              ("Hello.", "Hi."), ("Use the ATM, please", "use the cash machine please")]
         for text, say in yes:
             with self.subTest(text=text, say=say):
                 self.assertTrue(ne.say_matches(text, say))

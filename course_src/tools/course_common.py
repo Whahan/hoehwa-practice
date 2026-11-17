@@ -14,12 +14,14 @@ import re
 import unicodedata
 from pathlib import Path
 
+import numbers_en as _ne
+
 WEEKS = 72
 TOOLS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOLS_DIR.parent.parent
 
 HANGUL = re.compile(r"[가-힣]")
-HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿𠀀-𯨟]")
 FOREIGN = re.compile(r"[Ѐ-ӿ؀-ۿ฀-๿֐-׿Ͱ-Ͽ぀-ヿ]")
 DAY_MAX = 7
 WORD_DAY_MAX = 4          # new words / patterns are introduced on D1..D4 (design 2.2); D5..D7 have no new words
@@ -69,6 +71,27 @@ def nfkc(text):
 
 def tokenize(text):
     return re.findall(r"[^\W_]+(?:'[^\W_]+)*", nfkc(text).lower())
+
+
+# words that only exist because a number / symbol is read aloud ("minus five degrees", "nine oh five"): exempt in `say`
+NUMBER_GLUE = {"oh", "point", "percent", "and", "a", "m", "p", "am", "pm", "o'clock", "minus", "negative", "to", "through", "celsius",
+               "fahrenheit", "degrees", "dollars", "dollar", "cents", "cent", "plus", "at", "equals", "equal", "number", "hash", "pound"}
+
+
+def item_tokens(en, say=""):
+    """Tokens that must be lexicon words for an item: the ordinary words of `en` (numbers, symbols, abbreviations and acronyms
+    are read through `say`, not looked up) plus every word of `say` (glue words of a number reading excepted)."""
+    en = en if isinstance(en, str) else ""
+    say = say if isinstance(say, str) else ""
+    toks = tokenize(_ne.plain_text(en))
+    if say.strip():
+        glue = _ne.has_numeric(en)
+        for t in tokenize(say):
+            if glue and t in NUMBER_GLUE:
+                continue
+            if t not in toks:
+                toks.append(t)
+    return toks
 
 
 def norm_en(text):
