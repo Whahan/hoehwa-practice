@@ -1455,7 +1455,7 @@ def main(argv=None):
     ap.add_argument("--skeleton", action="store_true")
     ap.add_argument("--grammar", action="store_true")
     ap.add_argument("--grammar-backend", dest="grammar_path", default=None, help="path of backend/grammar.py (default: this repo's)")
-    ap.add_argument("--lt-dir", dest="lt_dir", default=None, help="LanguageTool folder (default: backend\tools\languagetool of this repo or of the main checkout)")
+    ap.add_argument("--lt-dir", dest="lt_dir", default=None, help="LanguageTool folder (default: backend/tools/languagetool of this repo or of the main checkout)")
     ap.add_argument("--lexicon-from", dest="lexicon_from", choices=["files", "skeleton"], default="files")
     ap.add_argument("--tatoeba-db", dest="tatoeba_db", default=None)
     ap.add_argument("--count-items", dest="count_items", action="store_true")
