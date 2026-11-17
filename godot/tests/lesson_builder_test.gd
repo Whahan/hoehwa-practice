@@ -10,7 +10,8 @@ extends Node
 ##
 ## 위반 판정은 LexiconGuard 와 **따로 짠 oracle**(이 파일의 Oracle 클래스)이 한다: 토큰화도 규칙도 별도 구현이다.
 
-const FIXTURE := "res://tests/fixtures/course_builder/mini.json"
+const FIXTURE_DIR := "res://tests/fixtures/course_builder/mini"
+const K1_DIR := "res://tests/fixtures/course_builder/k1_mini"
 const KINDS := ["new", "listen", "speak", "check", "month", "recap"]
 const INF_O := 1000000000
 ## 독이 든 문장이 정말로 쓸 수 있게 되는 날(o). INF 는 어느 날에도 쓰면 안 된다(수동 낱말을 scope all 에 넣음).
@@ -19,6 +20,7 @@ const POISON_TRUE_O := {"s9001": 32, "s9002": 44, "s9003": 1000000000, "s9004": 
 var passed: int = 0
 var failed: int = 0
 var mini_raw: Dictionary = {}
+var k1_raw: Dictionary = {}
 var seeds_mini: int = 120
 var seeds_big: int = 12
 var break_guard: bool = false
@@ -50,12 +52,10 @@ func _ready() -> void:
 			break_guard = true
 		elif s == "--break=order":
 			break_order = true
-	var f: FileAccess = FileAccess.open(FIXTURE, FileAccess.READ)
-	if f != null:
-		var parsed: Variant = JSON.parse_string(f.get_as_text())
-		if parsed is Dictionary:
-			mini_raw = parsed
-	ok(not mini_raw.is_empty(), "fixture loaded")
+	mini_raw = load_k1_dir(FIXTURE_DIR)
+	k1_raw = load_k1_dir(K1_DIR)
+	ok(not mini_raw.is_empty(), "fixture mini loaded (K1 file format, wrapping keys stripped)")
+	ok(not k1_raw.is_empty() and k1_raw["words"].size() == 23, "K1 good_mini build output loaded (23 words)")
 	if break_guard:
 		LexiconGuard.enabled = false
 		print("BREAK guard off (LexiconGuard.enabled = false)")
@@ -72,6 +72,23 @@ func _ready() -> void:
 	LexiconGuard.enabled = true
 	print("== lesson_builder: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+
+## K1(build_course.py) 출력 폴더를 읽어 빌더가 받는 data 로 바꾼다: 감싸는 키({"v":1,"lang":"en","<key>":[...]})를 벗긴 배열.
+static func load_k1_dir(dir: String) -> Dictionary:
+	var keys: Dictionary = {"en_weeks.json": ["weeks", "weeks"], "en_lexicon.json": ["words", "words"], "en_patterns.json": ["patterns", "patterns"],
+		"en_sentences.json": ["sentences", "sentences"], "en_dialogues.json": ["dialogues", "dialogues"], "en_speak_prompts.json": ["prompts", "speak_prompts"]}
+	var data: Dictionary = {}
+	for fname in keys.keys():
+		var f: FileAccess = FileAccess.open(dir.path_join(fname), FileAccess.READ)
+		if f == null:
+			return {}
+		var parsed: Variant = JSON.parse_string(f.get_as_text())
+		if not (parsed is Dictionary) or not (parsed.get(keys[fname][0]) is Array):
+			return {}
+		data[keys[fname][1]] = parsed[keys[fname][0]]
+	return data
 
 
 # ------------------------------------------------------------------ 작은 도우미
@@ -208,7 +225,27 @@ func _test_composition() -> void:
 	var rc1: Dictionary = _build("check", 1, 6, 5, data)
 	ok(rc1["exercises"].size() == 12, "check on week 1 still has 12 exercises (no previous weeks)")
 	var rm: Dictionary = _build("month", 4, 6, 5, data)
-	ok(rm["ok"] and rm["exercises"].size() == 5 and _count_part(rm["exercises"], "ask") == 2 and _count_part(rm["exercises"], "intro") == 1, "month unit: 2 read + 2 ask + 1 intro")
+	ok(rm["ok"] and rm["exercises"].size() == 5 and _count_part(rm["exercises"], "ask") == 2 and _count_part(rm["exercises"], "intro") == 1 and _count_part(rm["exercises"], "read") == 2, "month unit from K1-format speak_prompts: 2 read + 2 ask + 1 intro")
+	var ids_m: Array = []
+	for e in rm["exercises"]:
+		ids_m.append(String(e["id"]))
+	ok(ids_m.has("x:4:6:chk:sp0401") and ids_m.has("x:4:6:chk:sp0402") and ids_m.has("x:4:6:chk:sp0403") and ids_m.has("x:4:6:chk:sp0404"), "month unit uses the prompt ids sp0401..sp0404 (read, answer, question, intro)")
+	var rm_early: Dictionary = _build("month", 4, 5, 5, data)
+	ok(rm_early["ok"] and _count_part(rm_early["exercises"], "ask") == 0 and _count_part(rm_early["exercises"], "intro") == 0, "month prompts with o 46 are not used on day 5 (o 45)")
+	var k1d: Dictionary = LessonBuilder.prepare(k1_raw)
+	var rk: Dictionary = _build("month", 4, 6, 5, k1d)
+	ok(rk["ok"] and rk["dropped"] == 0 and rk["exercises"].size() == 5 and _count_part(rk["exercises"], "read") == 3 and _count_part(rk["exercises"], "ask") == 1 and _count_part(rk["exercises"], "intro") == 1, "month unit from the real K1 good_mini output: read 3 (1 prompt + 2 sentences), ask 1, intro 1")
+	var rk_ids: Array = []
+	for e in rk["exercises"]:
+		rk_ids.append(String(e["id"]))
+	ok(rk_ids.has("x:4:6:chk:sp0401") and rk_ids.has("x:4:6:chk:sp0402") and rk_ids.has("x:4:6:chk:sp0403"), "K1 output: sp0401 (read), sp0402 (answer), sp0403 (intro) became exercises")
+	# 감싸는 키가 붙은 K1 파일 객체를 그대로 넘겨도 같은 결과
+	var wrapped: Dictionary = {}
+	for k in k1_raw.keys():
+		var wk: String = "prompts" if k == "speak_prompts" else String(k)
+		wrapped[k] = {"v": 1, "lang": "en", wk: k1_raw[k]}
+	var rw: Dictionary = _build("month", 4, 6, 5, wrapped)
+	ok(JSON.stringify(rw["exercises"]) == JSON.stringify(rk["exercises"]), "wrapped K1 file objects give the same month unit")
 	var rr: Dictionary = _build("recap", 3, 1, 5, data)
 	ok(rr["ok"] and rr["exercises"].size() == 6 and rr["dropped"] == 0, "recap unit = 6 exercises")
 	var rl: Dictionary = _build("listen", 3, 6, 5, data)
@@ -342,7 +379,7 @@ func _test_shapes() -> void:
 	var m0: Dictionary = _build("month", 4, 6, 1, data)
 	var asks_ok: bool = true
 	for e in m0["exercises"]:
-		if e.get("part", "") == "ask" and not (e["accept"].size() >= 1 and String(e["prompt_en"]) != ""):
+		if e.get("part", "") == "ask" and not (e["expect_any"].size() >= 1 and String(e["prompt_en"]) != ""):
 			asks_ok = false
 	ok(asks_ok, "shape: month ask questions carry prompt_en and expected phrases")
 
@@ -581,6 +618,13 @@ func _test_judge() -> void:
 		[spk, "I like apples", true, false, "speak repeat compares to target"],
 		[sub, "I like tea.", true, false, "speak substitute accepts the new sentence"],
 		[sub, "I like apples.", false, false, "speak substitute does not accept the old sentence"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["my name is", "i am"]}, "My name is Min.", true, false, "answer: expected phrase inside the transcript"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["my name is", "i am"]}, "well, I am Min", true, false, "answer: second expected phrase, whole words"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["my name is", "i am"]}, "Hello", false, false, "answer: no expected phrase"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["name"]}, "my username", false, false, "answer: expected word must be a whole word"],
+		[{"type": "speak", "mode": "intro", "expect_any": ["name", "min"]}, "My name is Min", true, false, "intro: any expected word"],
+		[{"type": "speak", "mode": "intro", "expect_any": []}, "anything", false, false, "intro: no expectations -> not ok"],
+		[{"type": "speak", "mode": "answer", "expect_any": "x"}, "x", false, false, "answer: expect_any not a list"],
 		[null, 1, false, false, "ex null"],
 		[{}, 1, false, false, "ex empty"],
 		[{"type": "speak"}, 5, false, false, "speak without accept and a number answer"],
@@ -622,6 +666,8 @@ func _self_judge_answer(e: Dictionary) -> Variant:
 		"listen":
 			return e["answer"] if e["mode"] == "choose_ko" else e["accept"][0]
 		"speak":
+			if e["mode"] == "answer" or e["mode"] == "intro":
+				return e["expect_any"][0]
 			return e["accept"][0] if e["mode"] != "repeat" else e["target"]
 	return null
 
@@ -1152,6 +1198,16 @@ func _test_properties() -> void:
 	if break_order:
 		_break_order(raw_mini)
 		_break_order(raw_big)
+	var raw_k1: Dictionary = k1_raw.duplicate(true)
+	if break_order:
+		_break_order(raw_k1)
+	var rk1: Dictionary = _run_matrix("k1mini", raw_k1, 4, seeds_mini, true)
+	ok(rk1["units"] == 4 * 7 * 6 * seeds_mini and rk1["checked"] > 0, "k1mini (K1 good_mini build output): %d units, %d exercises" % [rk1["units"], rk1["checked"]])
+	ok(rk1["violations"] == 0, "E2-3 k1mini: violations 0 on the real K1 build output")
+	ok(rk1["dropped"] == 0, "E2-3 k1mini: nothing had to be dropped on the real K1 build output (dropped %d)" % rk1["dropped"])
+	ok(rk1["inconsistent"] == 0, "k1mini: every exercise judges its own answer correct (%d bad)" % rk1["inconsistent"])
+	for kind in KINDS:
+		ok(int(rk1["by_kind"].get(kind, 0)) == 0, "E2-3 k1mini kind %s: violations 0" % kind)
 	var rm: Dictionary = _run_matrix("mini", raw_mini, 4, seeds_mini, true)
 	ok(rm["checked"] > 0 and rm["units"] == 4 * 7 * 6 * seeds_mini, "mini: %d units built" % rm["units"])
 	ok(rm["violations"] == 0, "E2-3 mini: violations 0 (not-yet-learned words, options, tiles, listening, dialogues)")
@@ -1167,6 +1223,12 @@ func _test_properties() -> void:
 	for kind in KINDS:
 		ok(int(rb["by_kind"].get(kind, 0)) == 0, "E2-3 big kind %s: violations 0" % kind)
 	# 독이 든 데이터: 가드가 켜져 있으면 위반 0 이고 버려진 문제가 있어야 한다. 꺼져 있으면 위반이 나온다.
+	var raw_kp: Dictionary = k1_raw.duplicate(true)
+	raw_kp["sentences"].append({"id": "s9101", "en": "Hello, friend.", "ko": "독 1", "say": "", "words": [], "pat": "", "o": 11, "scope": "all", "accept": [], "src": "own", "tid": 0})
+	raw_kp["sentences"].append({"id": "s9102", "en": "Bye, colour.", "ko": "독 2", "say": "", "words": [], "pat": "", "o": 12, "scope": "all", "accept": [], "src": "own", "tid": 0})
+	var rkp: Dictionary = _run_matrix("k1poison", raw_kp, 4, maxi(seeds_mini / 4, 8), false)
+	ok(rkp["violations"] == 0, "E2-3 poisoned K1 output (2 sentences with future words declared as day 1-2): violations 0")
+	ok(rkp["dropped"] > 0, "E2-3 poisoned K1 output: the guard dropped %d exercises (caught, not silent)" % rkp["dropped"])
 	var raw_p: Dictionary = _poison(mini_raw)
 	var rp: Dictionary = _run_matrix("poison", raw_p, 4, maxi(seeds_mini / 4, 8), false)
 	ok(rp["violations"] == 0, "E2-3 poisoned data: violations 0 (the guard keeps it out)")
@@ -1174,4 +1236,4 @@ func _test_properties() -> void:
 	ok(rp["poison_leaks"] == 0, "E2-3 poisoned data: none of the 5 poisoned sentences nor the poisoned dialogue line appeared before it was learnable (leaks %d)" % rp["poison_leaks"])
 	for kind in KINDS:
 		ok(int(rp["by_kind"].get(kind, 0)) == 0, "E2-3 poisoned data kind %s: violations 0" % kind)
-	print("property summary: checked %d, violations %d" % [rm["checked"] + rb["checked"] + rp["checked"], rm["violations"] + rb["violations"] + rp["violations"]])
+	print("property summary: checked %d, violations %d" % [rk1["checked"] + rm["checked"] + rb["checked"] + rp["checked"], rk1["violations"] + rm["violations"] + rb["violations"] + rp["violations"]])

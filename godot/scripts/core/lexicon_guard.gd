@@ -20,7 +20,8 @@ static var enabled: bool = true
 
 # ------------------------------------------------------------------ 토큰화 (R2)
 
-## 소문자 + 공백·하이픈에서 쪼갬 + 토큰 앞뒤 부호 제거 + 안쪽 `'` 유지.
+## K1(course_src\tools\course_common.py tokenize)과 같은 규칙: 소문자, 토큰 = 글자·숫자 연속(앞뒤에 글자가 있는 안쪽 `'` 는 이어 붙임),
+## 하이픈·공백·그 밖의 모든 부호는 토큰을 가른다(thirty-five -> thirty five, I'm 은 한 토큰, 5.99 -> 5 99).
 ## `say` 가 비어 있지 않으면 `say` 를 토큰 원천으로 쓴다.
 static func tokens(text: String, say: String = "") -> Array:
 	var src: String = say if say.strip_edges() != "" else text
@@ -68,36 +69,27 @@ static func _tok(src: String) -> Array:
 	var out: Array = []
 	var chunk: String = ""
 	var n: int = src.length()
-	for i in range(n + 1):
-		var c: int = 0
-		var u: int = 32
-		if i < n:
-			u = src.unicode_at(i)
-			if u >= 0xFF01 and u <= 0xFF5E:
-				u -= 0xFEE0 # 전각 ASCII -> 반각
-			elif u == 0x2019 or u == 0x2018 or u == 0x2032 or u == 0x2BC or u == 0x60 or u == 0xB4:
-				u = 39
-			c = _cls(u)
-		if c == 0:
-			if chunk != "":
-				var t: String = _trim_ends(chunk).to_lower()
-				if t != "":
-					out.append(t)
-				chunk = ""
-		else:
-			chunk += char(u)
+	var us: Array = []
+	for i in range(n):
+		var u: int = src.unicode_at(i)
+		if u >= 0xFF01 and u <= 0xFF5E:
+			u -= 0xFEE0 # 전각 ASCII -> 반각
+		elif u == 0x2019 or u == 0x2018 or u == 0x2032 or u == 0x2BC or u == 0x60 or u == 0xB4:
+			u = 39
+		us.append(u)
+	for i in range(n):
+		var u2: int = us[i]
+		var c: int = _cls(u2)
+		if c == 1:
+			chunk += char(u2)
+		elif c == 3 and chunk != "" and i + 1 < n and _cls(us[i + 1]) == 1:
+			chunk += "'"
+		elif chunk != "":
+			out.append(chunk.to_lower())
+			chunk = ""
+	if chunk != "":
+		out.append(chunk.to_lower())
 	return out
-
-
-## 앞뒤의 글자·숫자가 아닌 문자(부호·아포스트로피)를 뗀다.
-static func _trim_ends(s: String) -> String:
-	var a: int = 0
-	var b: int = s.length()
-	while a < b and _cls(s.unicode_at(a)) != 1:
-		a += 1
-	while b > a and _cls(s.unicode_at(b - 1)) != 1:
-		b -= 1
-	return s.substr(a, b - a)
 
 
 # ------------------------------------------------------------------ 색인
@@ -137,6 +129,13 @@ static func _sorted_keys(d: Dictionary) -> Array:
 	return k
 
 
+## K1 파일 모양({"v":1,"lang":"en","<key>":[...]})이 통째로 들어와도 안의 배열을 꺼낸다.
+static func unwrap(v: Variant, key: String) -> Variant:
+	if v is Dictionary and v.get(key) is Array and (v.has("v") or v.has("lang")):
+		return v[key]
+	return v
+
+
 ## data 에 색인("_idx")을 더한 얕은 복사본. 이미 있으면 그대로.
 static func index(data: Variant) -> Dictionary:
 	if data is Dictionary and data.get("_idx") is Dictionary:
@@ -156,12 +155,12 @@ static func _get_idx(data: Variant) -> Dictionary:
 
 static func _build_idx(data: Dictionary) -> Dictionary:
 	var idx: Dictionary = {}
-	var words: Dictionary = coll(data.get("words"))
-	var sents: Dictionary = coll(data.get("sentences"))
-	var pats: Dictionary = coll(data.get("patterns"))
-	var dlgs: Dictionary = coll(data.get("dialogues"))
+	var words: Dictionary = coll(unwrap(data.get("words"), "words"))
+	var sents: Dictionary = coll(unwrap(data.get("sentences"), "sentences"))
+	var pats: Dictionary = coll(unwrap(data.get("patterns"), "patterns"))
+	var dlgs: Dictionary = coll(unwrap(data.get("dialogues"), "dialogues"))
 	var weeks: Dictionary = {}
-	var wv: Variant = data.get("weeks")
+	var wv: Variant = unwrap(data.get("weeks"), "weeks")
 	if wv is Array:
 		for e in wv:
 			if e is Dictionary:
@@ -202,7 +201,9 @@ static func _build_idx(data: Dictionary) -> Dictionary:
 					continue
 				var pid: String = String(f.get("pat", ""))
 				var fo: int
-				if pid == "":
+				if f.has("o"):
+					fo = maxi(wo, int_o(f["o"])) # K1 이 이미 max(낱말 o, 문형 o) 로 계산해 준다
+				elif pid == "":
 					fo = wo
 				elif pats.has(pid):
 					fo = maxi(wo, int_o(pats[pid].get("o")))
@@ -625,7 +626,7 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 			if ex.has("target") and ex["target"] is String:
 				_cover(toks_c(idx, ex["target"], String(ex.get("say", ""))), cur_o, idx, false, bad, "target")
 			if ex.has("prompt_en") and ex["prompt_en"] is String:
-				_cover(toks_c(idx, ex["prompt_en"]), cur_o, idx, false, bad, "prompt_en")
+				_cover(toks_c(idx, ex["prompt_en"], String(ex.get("say", ""))), cur_o, idx, false, bad, "prompt_en")
 			_chk_strings(bad, "accept", ex.get("accept"), cur_o, idx, false)
 			var cue: Variant = ex.get("cue")
 			if cue is Dictionary and cue.has("with") and cue["with"] is String:

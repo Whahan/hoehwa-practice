@@ -5,7 +5,7 @@ extends Node
 ## 종료 코드 0 = 전부 통과. 마지막 줄: "== lexicon_guard: N passed, M failed =="
 ## 시험 데이터: tests/fixtures/course_builder/mini.json(4주 작은 코스) + 이 파일 안의 손으로 만든 작은 데이터.
 
-const FIXTURE := "res://tests/fixtures/course_builder/mini.json"
+const FIXTURE_DIR := "res://tests/fixtures/course_builder/mini"
 
 var passed: int = 0
 var failed: int = 0
@@ -23,12 +23,10 @@ func ok(cond: bool, name: String) -> void:
 
 func _ready() -> void:
 	print("== lexicon_guard start ==")
-	var f: FileAccess = FileAccess.open(FIXTURE, FileAccess.READ)
-	if f != null:
-		var parsed: Variant = JSON.parse_string(f.get_as_text())
-		if parsed is Dictionary:
-			mini = LexiconGuard.index(parsed)
-	ok(not mini.is_empty(), "fixture loaded")
+	var raw: Dictionary = load_k1_dir(FIXTURE_DIR)
+	if not raw.is_empty():
+		mini = LexiconGuard.index(raw)
+	ok(not mini.is_empty(), "fixture loaded (K1 file format, wrapping keys stripped)")
 	_test_tokens()
 	_test_index_and_input()
 	_test_sentences()
@@ -36,6 +34,23 @@ func _ready() -> void:
 	_test_selfcheck()
 	print("== lexicon_guard: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+
+## K1(build_course.py) 출력 폴더를 읽어 빌더가 받는 data 로 바꾼다: 감싸는 키({"v":1,"lang":"en","<key>":[...]})를 벗긴 배열.
+static func load_k1_dir(dir: String) -> Dictionary:
+	var keys: Dictionary = {"en_weeks.json": ["weeks", "weeks"], "en_lexicon.json": ["words", "words"], "en_patterns.json": ["patterns", "patterns"],
+		"en_sentences.json": ["sentences", "sentences"], "en_dialogues.json": ["dialogues", "dialogues"], "en_speak_prompts.json": ["prompts", "speak_prompts"]}
+	var data: Dictionary = {}
+	for fname in keys.keys():
+		var f: FileAccess = FileAccess.open(dir.path_join(fname), FileAccess.READ)
+		if f == null:
+			return {}
+		var parsed: Variant = JSON.parse_string(f.get_as_text())
+		if not (parsed is Dictionary) or not (parsed.get(keys[fname][0]) is Array):
+			return {}
+		data[keys[fname][1]] = parsed[keys[fname][0]]
+	return data
 
 
 # ------------------------------------------------------------------ E2-2 토큰화 표 (>= 30행)
@@ -46,7 +61,7 @@ func _test_tokens() -> void:
 		["Mr. Smith", "", ["mr", "smith"]],
 		["thirty-five", "", ["thirty", "five"]],
 		["$5.99", "five ninety-nine", ["five", "ninety", "nine"]],
-		["$5.99", "", ["5.99"]],
+		["$5.99", "", ["5", "99"]],
 		["Hello, world!", "", ["hello", "world"]],
 		["HELLO", "", ["hello"]],
 		["  spaced   out  ", "", ["spaced", "out"]],
@@ -67,14 +82,18 @@ func _test_tokens() -> void:
 		["dogs'", "", ["dogs"]],
 		["'tis", "", ["tis"]],
 		["rock'n'roll", "", ["rock'n'roll"]],
-		["3:30", "", ["3:30"]],
-		["e.g.", "", ["e.g"]],
-		["a_b", "", ["a_b"]],
+		["3:30", "", ["3", "30"]],
+		["e.g.", "", ["e", "g"]],
+		["a_b", "", ["a", "b"]],
 		["I like ___.", "", ["i", "like"]],
 		["line1\nline2\tline3", "", ["line1", "line2", "line3"]],
 		["hi \u2605 there", "", ["hi", "there"]],
 		["hi * there", "", ["hi", "there"]],
-		["colour/color", "", ["colour/color"]],
+		["colour/color", "", ["colour", "color"]],
+		["Hello,world", "", ["hello", "world"]],
+		["I'm.", "", ["i'm"]],
+		["it''s", "", ["it", "s"]],
+		["It's John's", "", ["it's", "john's"]],
 		["Hi", "   ", ["hi"]],
 		["Ünder", "", ["ünder"]],
 		["zero​width", "", ["zero", "width"]],
@@ -95,6 +114,10 @@ func _test_tokens() -> void:
 	ok(LexiconGuard.tokens("thirty-five") == ["thirty", "five"], "token: hyphen splits")
 	ok(LexiconGuard.tokens("$5.99", "five ninety-nine") == ["five", "ninety", "nine"], "token: say wins over text")
 	ok(LexiconGuard.tokens("x  y　z") == ["x", "y", "z"], "token: odd spaces")
+	ok(LexiconGuard.tokens("Hello,world") == ["hello", "world"] and LexiconGuard.tokens("5.99") == ["5", "99"], "token: K1 rule, every punctuation splits")
+	var wrapped: Dictionary = {"words": {"v": 1, "lang": "en", "words": [{"id": "z1", "en": "hi", "o": 11}]}, "weeks": {"v": 1, "lang": "en", "weeks": [{"w": 1}]}}
+	var wi: Dictionary = LexiconGuard.index(wrapped)["_idx"]
+	ok(wi["words"].has("z1") and wi["weeks"].has(1), "wrapped K1 file objects are unwrapped by index()")
 	# 정수 o
 	ok(LexiconGuard.int_o(52) == 52 and LexiconGuard.int_o(52.0) == 52, "int_o int and integral float")
 	ok(LexiconGuard.int_o(null) == LexiconGuard.INF_O and LexiconGuard.int_o("5") == LexiconGuard.INF_O, "int_o null/string -> INF")
@@ -236,6 +259,8 @@ func _test_sentences() -> void:
 	ok(LexiconGuard.check_text("works", 33, d)["ok"] and not LexiconGuard.check_text("works", 32, d)["ok"], "R3: works follows p_s (33)")
 	ok(not LexiconGuard.check_text("working", 99, d)["ok"], "R3: form with unknown pattern is never learned")
 	ok(LexiconGuard.check_text("worker", 31, d)["ok"], "R3: form with empty pat uses the word o")
+	var k1form: Dictionary = {"words": [{"id": "k1", "en": "work", "o": 31, "role": "active", "forms": [{"f": "worked", "pat": "p_gone", "o": 44}]}]}
+	ok(LexiconGuard.check_text("worked", 44, k1form)["ok"] and not LexiconGuard.check_text("worked", 43, k1form)["ok"], "R3: K1 form o is used as given (pattern need not be in the data)")
 	# 대소문자·부호·전각
 	ok(LexiconGuard.check_text("  I   LIKE tea!!! ", 21, d)["ok"], "case, spaces, punctuation ignored")
 	ok(LexiconGuard.check_text("Ｉ like tea", 21, d)["ok"], "fullwidth letters")

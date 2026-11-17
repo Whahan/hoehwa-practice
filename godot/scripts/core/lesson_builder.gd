@@ -1083,42 +1083,66 @@ static func _unit_recap(ctx: Ctx, out: Array) -> void:
 		ex["stage"] = "recap"
 
 
+## 월말 말하기 평가. K1 의 en_speak_prompts.json(= data["speak_prompts"]) 모양을 그대로 쓴다:
+##   [{"month":1,"w":4,"prompts":[{"id","kind":"read|answer|question|intro","en","ko","say","expect_any":[...],"o"}]}]
+## read -> 따라 읽기, answer·question -> 질문에 대답, intro -> 자기소개. o 가 cur 보다 큰 프롬프트와 가드에 걸리는 프롬프트는 쓰지 않는다.
+## 5문제가 안 되면 배운 문장 따라 읽기로 채운다. expect_any 는 채점용 기대 표현이라 화면에 보이지 않으므로 가드 검사 대상이 아니다.
 static func _unit_month(ctx: Ctx, out: Array) -> void:
 	_make_qpool(ctx)
 	var m: int = (ctx.w + 3) / 4
 	var cs: Array = _sents(ctx, false, maxi(0, (m - 1) * 40), ctx.cur, true)
-	_fill(ctx, out, cs, 2, "repeat", "read")
-	var pr: Dictionary = {}
-	var sp: Variant = ctx.data.get("speak_prompts")
+	var sp: Variant = LexiconGuard.unwrap(ctx.data.get("speak_prompts"), "prompts")
 	var plist: Array = []
 	if sp is Array:
 		plist = sp
 	elif sp is Dictionary:
 		plist = sp.values()
-	for e in plist:
-		if e is Dictionary and LexiconGuard.int_o(e.get("m")) == m:
-			pr = e
-			break
-	var asks: Variant = pr.get("ask")
-	if asks is Array:
-		var k: int = 0
-		for a in asks:
-			if k >= 2 or not (a is Dictionary):
+	var reads: Array = []
+	var asks: Array = []
+	var intros: Array = []
+	for grp in plist:
+		if not (grp is Dictionary) or LexiconGuard.int_o(grp.get("month")) != m or not (grp.get("prompts") is Array):
+			continue
+		for pr in grp["prompts"]:
+			if not (pr is Dictionary) or String(pr.get("id", "")) == "" or LexiconGuard.int_o(pr.get("o")) > ctx.cur:
 				continue
-			var ex: Dictionary = {"type": "speak", "id": _id(ctx, "chk", "ask%d" % (k + 1)), "stage": "month", "part": "ask",
-				"mode": "answer", "prompt_en": String(a.get("en", "")), "ko": String(a.get("ko", "")),
-				"tts": String(a.get("en", "")), "accept": a.get("expect_any", [])}
-			if _probe(ctx, ex) and _emit(ctx, out, ex):
-				k += 1
-	var intro: Variant = pr.get("intro")
-	if intro is Dictionary:
-		var ex2: Dictionary = {"type": "speak", "id": _id(ctx, "chk", "intro"), "stage": "month", "part": "intro",
-			"mode": "intro", "prompt_en": String(intro.get("en", "")), "ko": String(intro.get("ko", "")),
-			"tts": String(intro.get("en", "")), "accept": intro.get("expect_any", [])}
-		if _probe(ctx, ex2):
-			_emit(ctx, out, ex2)
-	if out.size() < 5:
-		_fill(ctx, out, cs, 5 - out.size(), "repeat", "read")
+			var kind: String = String(pr.get("kind", ""))
+			var en: String = String(pr.get("en", ""))
+			var say: String = String(pr.get("say", ""))
+			var tts: String = say if say.strip_edges() != "" else en
+			var expect: Array = []
+			if pr.get("expect_any") is Array:
+				for e in pr["expect_any"]:
+					if e is String:
+						expect.append(e)
+			var base: Dictionary = {"type": "speak", "id": _id(ctx, "chk", String(pr["id"])), "stage": "month", "ko": String(pr.get("ko", "")),
+				"say": say, "tts": tts, "expect_any": expect, "prompt_id": String(pr["id"])}
+			var ex: Dictionary = base.duplicate()
+			if kind == "read":
+				ex["part"] = "read"
+				ex["mode"] = "repeat"
+				ex["target"] = en
+				ex["accept"] = []
+				if _probe(ctx, ex) and _emit(ctx, reads, ex):
+					pass
+			elif kind == "answer" or kind == "question":
+				ex["part"] = "ask"
+				ex["mode"] = "answer"
+				ex["prompt_en"] = en
+				if _probe(ctx, ex) and _emit(ctx, asks, ex):
+					pass
+			elif kind == "intro":
+				ex["part"] = "intro"
+				ex["mode"] = "intro"
+				ex["prompt_en"] = en
+				if _probe(ctx, ex) and _emit(ctx, intros, ex):
+					pass
+	var have: int = reads.size() + asks.size() + intros.size()
+	if have < 5:
+		_fill(ctx, reads, cs, 5 - have, "repeat", "read")
+	out.append_array(reads)
+	out.append_array(asks)
+	out.append_array(intros)
 	for ex3 in out:
 		ex3["stage"] = "month"
 
@@ -1206,6 +1230,17 @@ static func judge(ex: Variant, answer: Variant) -> Dictionary:
 			elif l is String:
 				txt = l
 			if got != "" and norm_answer(txt) == got:
+				res["ok"] = true
+				return res
+		return res
+	if typ == "speak" and (mode == "answer" or mode == "intro"):
+		# 월말 평가: 대답(전사)에 기대 표현(expect_any) 중 하나가 단어 단위로 들어 있으면 맞다
+		if not (answer is String) or not (ex.get("expect_any") is Array):
+			return res
+		var ga: String = " " + norm_answer(answer) + " "
+		for e in ex["expect_any"]:
+			var ne: String = norm_answer(e)
+			if ne != "" and ga.contains(" " + ne + " "):
 				res["ok"] = true
 				return res
 		return res
