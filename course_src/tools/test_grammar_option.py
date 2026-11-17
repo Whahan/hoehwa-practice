@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""--grammar / --lt-dir: LanguageTool through backend\grammar.py, tested with a stand-in module file (no Java is started)."""
+"""--grammar / --lt-dir: LanguageTool through backend/grammar.py, tested with a stand-in module file (no Java is started)."""
 import unittest
 from pathlib import Path
 
