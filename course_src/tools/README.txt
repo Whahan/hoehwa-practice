@@ -14,7 +14,7 @@ check_course.py   linter (design docs\v200_design.md 9.2). Exit 0 = pass, 1 = fa
     --skeleton            check skeleton.json (72 weeks, counts, id_ranges, assignment table, pattern `needs`)  [K0]
     --lexicon-from skeleton   words come from the assignment table of skeleton.json (and week files must match it exactly)
     --tatoeba-db <path>   tatoeba.sqlite (read only) or a small {"id": "text"} .json (tests)
-    --grammar [--grammar-backend <grammar.py>]   LanguageTool via backend\grammar.py; without it `GRAMMAR_SKIPPED` (not verified)
+    --grammar [--lt-dir <folder>] [--grammar-backend <grammar.py>]   LanguageTool (en-CA); without it `GRAMMAR_SKIPPED` (not verified)
     --count-items         prints `ITEMS weeks=.. word=.. pattern=.. sentence=.. dialogue_line=.. total=N`
     --review <tsv>        checks R1_X*.tsv (columns id type verdict issue fix): every item once, verdict OK/M/C
                           -> `REVIEW_OK rows=N C=.. M=..` (with --strict C must be 0)
@@ -83,7 +83,7 @@ policy.json       K0 layout: blocked {category:[words]} (or a list), blocked_pre
    centre/center neighbour flavour honour labour behaviour theatre metre grey/gray (US form in text or as headword ->
    CANON; a Canadian headword needs the US form in `alt`).
 
-LanguageTool (--grammar): backend\grammar.py is loaded from the file (default <repo>ackend\grammar.py) and pointed at
-   --lt-dir, else COURSE_LT_DIR, else <repo>ackend	ools\languagetool, else the main checkout's copy next to the worktree
-   (..ppackend	ools\languagetool). Language en-CA (so colour is not flagged). The Java server is started by that
+LanguageTool (--grammar): backend\grammar.py is loaded from the file (default <repo>\backend\grammar.py) and pointed at
+   --lt-dir, else COURSE_LT_DIR, else <repo>\backend\tools\languagetool, else the main checkout's copy next to the worktree
+   (..\app\backend\tools\languagetool). Language en-CA (so colour is not flagged). The Java server is started by that
    module on a free port of its own and stopped by PID (grammar.stop); the note line shows pid and port.
