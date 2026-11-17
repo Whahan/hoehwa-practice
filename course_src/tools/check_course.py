@@ -826,7 +826,7 @@ def _lt_dir_candidates(lt_dir):
 
 
 def check_grammar(ctx, grammar_module, grammar_path=None, lt_dir=None):
-    """LanguageTool through backend\grammar.py. The module starts the Java server on a free port of its own and is
+    """LanguageTool through backend/grammar.py. The module starts the Java server on a free port of its own and is
     stopped here by PID (grammar.stop). Any problem (no module, no jar, no Java, server does not start) = GRAMMAR_SKIPPED."""
     mod = grammar_module
     if mod is None:
