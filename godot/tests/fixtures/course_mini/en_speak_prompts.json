@@ -1,0 +1,1 @@
+{"v":1,"lang":"en","prompts":[{"month":1,"prompts":[{"id":"m01a","ko":"이름을 말해 보세요.","en":"My name is ...","expect_any":["my name is","i am"]},{"id":"m01b","ko":"인사해 보세요.","en":"Hello.","expect_any":["hello","hi"]},{"id":"m01c","ko":"고마워요 라고 말해 보세요.","en":"Thanks.","expect_any":["thanks"]}]}]}
