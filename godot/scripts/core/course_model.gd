@@ -274,7 +274,8 @@ static func states(done: Variant, cur_w: Variant, avail: Variant, look: Variant 
 
 ## THE one place that builds "value/target" progress text (REVIEW.md). kind: words patterns sentences questions cards
 ## days weeks minutes blocks (e.g. "단어 12/25개", "20/45분"), "percent" ("80%": value only), anything else: plain "12/25".
-## Counts are clamped to 0..9999 (never a 5-digit number); a value above a positive target is shown as the target.
+## Counts are clamped to 0..9999 (never a 5-digit number); a value above a positive target is shown as the target;
+## without a positive target only the value is shown ("단어 5개", "5일", "5").
 static func progress_label(kind: Variant, value: Variant, target: Variant) -> String:
 	var v: int = clampi(_int_or_neg(value), 0, MAX_SHOWN)
 	var t: int = clampi(_int_or_neg(target), 0, MAX_SHOWN)
@@ -284,6 +285,8 @@ static func progress_label(kind: Variant, value: Variant, target: Variant) -> St
 	if k == "percent":
 		return str(mini(v, 100)) + "%"
 	var pair: Array = PROGRESS_KINDS.get(k, ["", ""])
+	if t <= 0:  # no target (0 or less, or not a number): the value alone, never "5/0"
+		return str(pair[0]) + str(v) + str(pair[1])
 	return str(pair[0]) + str(v) + "/" + str(t) + str(pair[1])
 
 

@@ -12,7 +12,8 @@ extends RefCounted
 ## every other file keeps loading and its accessors keep working (`r.files[name]` is "ok" or the err_code).
 ## Lookups never raise: unknown / invalid ids give {} (or [] / 0). Records without a usable id are skipped (stats().skipped).
 ## Returned dictionaries are shared with the index: callers must treat them as read-only.
-## Numbers: JSON gives floats; whole numbers in the known numeric fields are turned into int (o, w, d, ...).
+## Numbers: JSON gives floats; whole numbers in the known integer fields are turned into int (o, w, d, ...); a record
+## with a non-integer value there is skipped (stats().skipped), so order comparisons never see text.
 ## Tests: `CourseData.base_dir = "res://tests/fixtures/course_mini"` or a copy under user://test_*; `CourseData.reset()`.
 
 const DEFAULT_DIR := "res://data/course"
@@ -37,7 +38,15 @@ const FILES := {
 	F_DIALOGUES: [["dialogues", "items"], true],
 	F_PROMPTS: [["prompts", "speak_prompts", "items"], false],
 }
-const INT_KEYS := ["o", "w", "n", "k", "d", "tid", "stage", "legacy_stage"]
+## Integer fields per container. A record whose value for one of these keys (when the key is present) is not an
+## integer or a whole float (text "52", 4.5, null, ...) is skipped; whole floats (52.0) become int.
+const INT_WEEK := ["w", "n", "k", "stage", "legacy_stage"]
+const INT_WORD := ["o"]
+const INT_PATTERN := ["o"]
+const INT_SENTENCE := ["o", "tid"]
+const INT_DIALOGUE := ["w", "o"]
+const INT_LINE := ["o"]
+const INT_PROMPT := ["w", "n", "k", "d", "o", "month"]
 const TEXT_KO := {
 	ERR_MISSING: "새 코스 데이터를 찾을 수 없어요. 앱을 다시 설치해 주세요.",
 	ERR_CORRUPT: "새 코스 데이터가 손상됐어요. 앱을 다시 설치해 주세요.",
@@ -209,13 +218,19 @@ static func _read_file(name: String, entry: Dictionary, keys: Array) -> Dictiona
 	var p: String = base_dir.path_join(name)
 	if not FileAccess.file_exists(p):
 		return {"code": ERR_MISSING, "items": []}
-	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(p)
 	var want_bytes: Variant = entry.get("bytes", null)
 	var want_sha: Variant = entry.get("sha256", null)
 	if not (want_bytes is float or want_bytes is int) or not (want_sha is String):
 		return {"code": ERR_CORRUPT, "items": []}
-	if bytes.is_empty() or bytes.size() != int(want_bytes):  # an empty file is never valid (and HashingContext rejects it)
+	# Size first, from the file length, before the whole file is read (an empty file is never valid either).
+	var fa := FileAccess.open(p, FileAccess.READ)
+	if fa == null:
+		return {"code": ERR_MISSING, "items": []}
+	var length: int = fa.get_length()
+	if length <= 0 or length != int(want_bytes):
 		return {"code": ERR_CORRUPT, "items": []}
+	var bytes: PackedByteArray = fa.get_buffer(length)
+	fa.close()
 	if _sha256(bytes) != (want_sha as String).to_lower():
 		return {"code": ERR_CORRUPT, "items": []}
 	var parsed: Variant = _parse(bytes.get_string_from_utf8())
@@ -264,24 +279,29 @@ static func _index(name: String, items: Array) -> void:
 					_skipped += 1
 					continue
 				var e: Dictionary = _ints_deep(it)
-				var w: int = _to_int(e.get("w", null))
-				if w < 1 or w > MAX_WEEK or _weeks.has(w):
+				var w: Variant = e.get("w", null)
+				if not _int_fields(e, INT_WEEK) or not (w is int) or w < 1 or w > MAX_WEEK or _weeks.has(w) or not _days_ok(e):
 					_skipped += 1
 					continue
 				_weeks[w] = e
 		F_LEXICON:
-			_index_by_id(items, _lexicon, false)
+			_index_by_id(items, _lexicon, INT_WORD, false)
 		F_PATTERNS:
-			_index_by_id(items, _patterns, false)
+			_index_by_id(items, _patterns, INT_PATTERN, false)
 		F_SENTENCES:
-			_index_by_id(items, _sentences, false)
+			_index_by_id(items, _sentences, INT_SENTENCE, false)
 		F_DIALOGUES:
-			_index_by_id(items, _dialogues, true)
+			_index_by_id(items, _dialogues, INT_DIALOGUE, true)
 		F_PROMPTS:
-			_prompts = items
+			_prompts = []
+			for it in items:
+				if it is Dictionary and _int_fields(it, INT_PROMPT):
+					_prompts.append(it)
+				else:
+					_skipped += 1
 
 
-static func _index_by_id(items: Array, into: Dictionary, deep: bool) -> void:
+static func _index_by_id(items: Array, into: Dictionary, int_keys: Array, lines: bool) -> void:
 	for it in items:
 		if not (it is Dictionary):
 			_skipped += 1
@@ -291,11 +311,14 @@ static func _index_by_id(items: Array, into: Dictionary, deep: bool) -> void:
 		if not (id is String) or (id as String) == "" or into.has(id):
 			_skipped += 1
 			continue
-		_ints_shallow(e)
-		if deep and e.get("lines", null) is Array:
+		var good: bool = _int_fields(e, int_keys)
+		if good and lines and e.get("lines", null) is Array:
 			for ln in e["lines"]:
-				if ln is Dictionary:
-					_ints_shallow(ln)
+				if ln is Dictionary and not _int_fields(ln, INT_LINE):
+					good = false
+		if not good:
+			_skipped += 1
+			continue
 		into[id] = e
 
 
@@ -342,11 +365,30 @@ static func _to_int(v: Variant) -> int:
 	return 0
 
 
-static func _ints_shallow(e: Dictionary) -> void:
-	for k in INT_KEYS:
-		var v: Variant = e.get(k, null)
+## true when every present key in `keys` holds an integer; whole floats are replaced by the int. false = skip the record.
+static func _int_fields(e: Dictionary, keys: Array) -> bool:
+	for k in keys:
+		if not e.has(k):
+			continue
+		var v: Variant = e[k]
+		if v is int:
+			continue
 		if v is float and is_equal_approx(v, roundf(v)) and absf(v) < 1.0e9:
 			e[k] = int(v)
+			continue
+		return false
+	return true
+
+
+## Every day record of a week has an integer `d` (when present).
+static func _days_ok(week_rec: Dictionary) -> bool:
+	var days: Variant = week_rec.get("days", null)
+	if not (days is Array):
+		return true
+	for dd in days:
+		if dd is Dictionary and not _int_fields(dd, ["d"]):
+			return false
+	return true
 
 
 static func _ints_deep(v: Variant) -> Variant:

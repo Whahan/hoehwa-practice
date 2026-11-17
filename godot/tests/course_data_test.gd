@@ -24,6 +24,8 @@ func _ready() -> void:
 	_broken_data()
 	_manifest_problems()
 	_record_problems()
+	_integer_fields()
+	_manifest_size()
 	_performance()
 	_source_scan()
 	_cleanup()
@@ -476,6 +478,7 @@ func _record_problems() -> void:
 	for s in CourseData.sentences_for(2):
 		ids.append(s["id"])
 	eq(ids, ["s0", "s2", "s1"], "sentences_for(2) sorted by o then id")
+	eq(CourseData.stats()["skipped"], 1, "sentence with o \"x\" skipped")
 	eq(CourseData.sentences_for(0), [], "sentences without a week (o < 10) are in no week")
 	d = fresh("rec5")
 	put_file(d, "en_dialogues.json", JSON.stringify({"v": 1, "dialogues": [
@@ -485,6 +488,101 @@ func _record_problems() -> void:
 	eq(typeof(CourseData.dialogue("d1")["lines"][0]["o"]), TYPE_INT, "dialogue line o 11.0 -> int")
 	eq(CourseData.dialogue("d2"), {"id": "d2"}, "dialogue without lines is kept as it is")
 	ok(CourseData.dialogue("d3").is_empty(), "unknown dialogue -> {}")
+
+
+## True when every record of `list` holds an int (or no value) under `key`.
+func all_int(list: Array, key: String) -> bool:
+	for r in list:
+		if r.has(key) and typeof(r[key]) != TYPE_INT:
+			return false
+	return true
+
+
+## Integer fields (w, o, d, tid, ...) in every container: text / 4.5 / null / bool skip the record, 52.0 becomes int 52.
+func _integer_fields() -> void:
+	# self check: the helper notices a text number
+	var fake_ok: bool = all_int([{"o": 11}, {"o": "52"}], "o")
+	print("selfcheck %s all_int() on a list holding \"52\"" % ("FAIL-as-expected" if not fake_ok else "UNEXPECTED-PASS"))
+	ok(not fake_ok, "selfcheck: all_int() flags a text number")
+	var d: String = fresh("int1")
+	put_file(d, "en_weeks.json", JSON.stringify({"v": 1, "weeks": [
+		{"w": 1}, {"w": "52"}, {"w": 4.5}, {"w": 2, "n": "1"}, {"w": 3, "stage": 1.5}, {"w": 4, "days": [{"d": 1}, {"d": "x"}]},
+		{"w": 5.0, "k": 2.0, "days": [{"d": 2.0}]}, {"w": 6, "legacy_stage": null}, {"w": true}]}))
+	load_dir(d)
+	eq(CourseData.stats()["weeks"], 2, "weeks: only w=1 and w=5.0 kept")
+	eq(CourseData.stats()["skipped"], 7, "weeks: 7 records with a non-integer field skipped")
+	eq(typeof(CourseData.week(5)["w"]), TYPE_INT, "week w 5.0 -> int")
+	eq(typeof(CourseData.week(5)["k"]), TYPE_INT, "week k 2.0 -> int")
+	eq(typeof(CourseData.week(5)["days"][0]["d"]), TYPE_INT, "week day d 2.0 -> int")
+	eq(CourseData.week("52"), {}, "week(\"52\") is not a loaded week")
+	d = fresh("int2")
+	put_file(d, "en_lexicon.json", JSON.stringify({"v": 1, "words": [
+		{"id": "a", "o": 52}, {"id": "b", "o": "52"}, {"id": "c", "o": 4.5}, {"id": "d", "o": null}, {"id": "e", "o": 52.0},
+		{"id": "f", "o": true}, {"id": "g"}]}))
+	put_file(d, "en_patterns.json", JSON.stringify({"v": 1, "patterns": [{"id": "p", "o": "x"}, {"id": "q", "o": 24.0}, {"id": "r", "o": 3.5}]}))
+	put_file(d, "en_sentences.json", JSON.stringify({"v": 1, "sentences": [
+		{"id": "s1", "o": 25, "tid": 3.0}, {"id": "s2", "o": 25, "tid": 4.5}, {"id": "s3", "o": "25"}, {"id": "s4", "o": 26.0, "tid": "7"}, {"id": "s5", "o": 27}]}))
+	put_file(d, "en_dialogues.json", JSON.stringify({"v": 1, "dialogues": [
+		{"id": "d1", "w": 1, "lines": [{"o": 11}, {"o": 12.0}]}, {"id": "d2", "w": "1"}, {"id": "d3", "w": 2.5},
+		{"id": "d4", "w": 3, "lines": [{"o": 11}, {"o": "x"}]}, {"id": "d5", "w": 4.0}]}))
+	put_file(d, "en_speak_prompts.json", JSON.stringify({"v": 1, "prompts": [
+		{"month": 1.0, "prompts": []}, {"month": "1"}, {"month": 2.5}, "junk", {"w": 4}]}))
+	var r: Dictionary = load_dir(d)
+	ok(bool(r["ok"]), "records with bad integer fields: the files still load")
+	var words: Array = CourseData.lexicon().values()
+	eq(words.size(), 3, "words: a, e (52.0) and g (no o) kept")
+	ok(all_int(words, "o"), "every loaded word o is an int")
+	eq(CourseData.word("b"), {}, "word with o \"52\" skipped")
+	eq(CourseData.word("c"), {}, "word with o 4.5 skipped")
+	eq(CourseData.word("d"), {}, "word with o null skipped")
+	eq(CourseData.word("f"), {}, "word with o true skipped")
+	eq(CourseData.word("e")["o"], 52, "word o 52.0 -> 52")
+	ok(not CourseData.word("g").is_empty(), "word without o is kept (key absent, not wrong)")
+	ok(CourseData.pattern("p").is_empty() and CourseData.pattern("r").is_empty(), "patterns with o \"x\" / 3.5 skipped")
+	eq(CourseData.pattern("q")["o"], 24, "pattern o 24.0 -> 24")
+	var sents: Array = CourseData.sentences_for(2)
+	eq(sents.size(), 2, "week 2 holds s1 and s5 (s2, s3, s4 skipped)")
+	ok(all_int(sents, "o") and all_int(sents, "tid"), "every loaded sentence o and tid is an int")
+	eq(CourseData.sentence("s1")["tid"], 3, "sentence tid 3.0 -> 3")
+	ok(CourseData.sentence("s2").is_empty() and CourseData.sentence("s3").is_empty() and CourseData.sentence("s4").is_empty(), "sentences with tid 4.5 / o \"25\" / tid \"7\" skipped")
+	ok(not CourseData.dialogue("d1").is_empty() and not CourseData.dialogue("d5").is_empty(), "dialogues d1, d5 (w 4.0) kept")
+	eq(typeof(CourseData.dialogue("d5")["w"]), TYPE_INT, "dialogue w 4.0 -> int")
+	eq(typeof(CourseData.dialogue("d1")["lines"][1]["o"]), TYPE_INT, "dialogue line o 12.0 -> int")
+	ok(CourseData.dialogue("d2").is_empty() and CourseData.dialogue("d3").is_empty() and CourseData.dialogue("d4").is_empty(), "dialogues with w \"1\" / w 2.5 / a line o \"x\" skipped")
+	eq(CourseData.speak_prompts().size(), 2, "prompts: month 1.0 and the {w:4} entry kept")
+	eq(typeof(CourseData.speak_prompts()[0]["month"]), TYPE_INT, "prompt month 1.0 -> int")
+	eq(CourseData.stats()["skipped"], 4 + 2 + 3 + 3 + 3, "skipped counts of all five containers add up (15)")
+
+
+## A manifest whose size is wrong while the hash is right (the size check must still reject it).
+func _manifest_size() -> void:
+	for delta in [1, -1, 1000]:
+		var d: String = fresh("size%d" % (delta + 2))
+		var man: Dictionary = read_json(d.path_join("course_manifest.json"))
+		for e in man["files"]:
+			if e["path"] == "en_lexicon.json":
+				e["bytes"] = int(e["bytes"]) + delta
+				ok(str(e["sha256"]).length() == 64, "size test keeps the correct sha256 (delta %d)" % delta)
+		put_manifest(d, man)
+		var r: Dictionary = load_dir(d)
+		eq(r["files"]["en_lexicon.json"], "course_corrupt", "wrong size, right hash (delta %d): course_corrupt" % delta)
+		eq(r["err_code"], "course_corrupt", "wrong size, right hash (delta %d): err_code" % delta)
+		eq(CourseData.word("w0011"), {}, "wrong size (delta %d): that file's words unavailable" % delta)
+		eq(CourseData.week(1)["title_ko"], "인사", "wrong size (delta %d): other files fine" % delta)
+	var d2: String = fresh("size_zero")
+	var man2: Dictionary = read_json(d2.path_join("course_manifest.json"))
+	for e in man2["files"]:
+		if e["path"] == "en_lexicon.json":
+			e["bytes"] = 0
+	put_manifest(d2, man2)
+	eq(load_dir(d2)["files"]["en_lexicon.json"], "course_corrupt", "manifest bytes 0 for a real file: course_corrupt")
+	var d3: String = fresh("size_text")
+	var man3: Dictionary = read_json(d3.path_join("course_manifest.json"))
+	for e in man3["files"]:
+		if e["path"] == "en_lexicon.json":
+			e["bytes"] = "5213"
+	put_manifest(d3, man3)
+	eq(load_dir(d3)["files"]["en_lexicon.json"], "course_corrupt", "manifest bytes as text: course_corrupt")
 
 
 func _performance() -> void:

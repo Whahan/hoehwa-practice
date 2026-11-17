@@ -476,9 +476,15 @@ func _progress_labels() -> void:
 	eq(CourseModel.progress_label(null, 3, 5), "3/5", "kind null: plain 3/5")
 	eq(CourseModel.progress_label("words", 30, 25), "단어 25/25개", "value above target is shown as the target")
 	eq(CourseModel.progress_label("words", -4, 25), "단어 0/25개", "negative value is 0")
-	eq(CourseModel.progress_label("words", 5, 0), "단어 5/0개", "target 0: value kept")
+	eq(CourseModel.progress_label("words", 5, 0), "단어 5개", "target 0: the value alone, not 5/0")
+	eq(CourseModel.progress_label("words", 5, -3), "단어 5개", "negative target: the value alone")
+	eq(CourseModel.progress_label("words", 5, null), "단어 5개", "target null: the value alone")
+	eq(CourseModel.progress_label("days", 3, 0), "3일", "days with target 0")
+	eq(CourseModel.progress_label("minutes", 20, 0), "20분", "minutes with target 0")
+	eq(CourseModel.progress_label("zzz", 5, 0), "5", "unknown kind with target 0: just 5")
+	eq(CourseModel.progress_label("words", 0, 0), "단어 0개", "0 of nothing: 단어 0개")
 	eq(CourseModel.progress_label("words", "7", "9"), "단어 7/9개", "integer strings accepted")
-	eq(CourseModel.progress_label("words", null, null), "단어 0/0개", "null counts are 0")
+	eq(CourseModel.progress_label("words", null, null), "단어 0개", "null counts are 0, no target")
 	eq(CourseModel.progress_label("words", 999999, 999999), "단어 9999/9999개", "999999 is shown as 9999")
 	var long_ok := true
 	var inputs := [0, 1, 99, 9999, 10000, 12345, 999999, 1234567890, 1.0e12, -1.0e12, INF, NAN, "99999", "x", null]
