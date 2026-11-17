@@ -266,58 +266,12 @@ static func apply_judge(done: Dictionary, pending: Array, resp: Variant, me_text
 
 const JA_EVIDENCE_MIN := 3        ## 정규화한 일본어 증거의 최소 길이(2글자 이하는 "はい" 같은 우연한 일치라 인정하지 않는다)
 const JA_EVIDENCE_MIN_CONTENT := 2 ## 장음(ー)을 뺀 글자 수의 최소값("ーーー" 처럼 장음만 있는 증거 거부)
-const _HW_KATA := "ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン"  ## U+FF66..FF9D 를 전각으로
 
 
-## 일본어 규칙 판정과 같은 규약의 정규화(설계 2.3.1 normalize_ja): 앞 300자, NFKC 부분집합(전각 ASCII, U+3000, 반각 가타카나와
-## 탁점·반탁점 결합), 영문 소문자, 가타카나 -> 히라가나, 남기는 글자(가나·ー·한자·々·〇·a-z·0-9) 외에는 지운다.
-## 이 화면 안에서 양쪽(증거·내 문장)에 같은 함수를 쓰므로 비교는 서로 일치한다. (B3 의 MissionText.norm_ja 와 같은 규약.)
+## 일본어 규칙 판정과 같은 규약의 정규화(설계 2.3.1 normalize_ja). 구현은 MissionText.norm_ja 한 곳뿐이다(PC 의 missions.normalize_ja 와
+## 시험으로 일치를 확인): 이 함수는 그쪽으로 넘기기만 한다 (v1.7.0 W: 예전에는 여기에 따로 구현이 있었다).
 static func norm_ja(s: String) -> String:
-	var cps: Array = []
-	var src: String = s.left(300)
-	for i in src.length():
-		var c: int = src.unicode_at(i)
-		if c >= 0xFF01 and c <= 0xFF5E:
-			c -= 0xFEE0                     # 전각 ASCII -> ASCII
-		elif c == 0x3000:
-			c = 0x20
-		elif c >= 0xFF66 and c <= 0xFF9D:
-			c = _HW_KATA.unicode_at(c - 0xFF66)  # 반각 가타카나 -> 전각
-		elif (c == 0xFF9E or c == 0xFF9F) and not cps.is_empty():
-			var prev: int = int(cps[cps.size() - 1])  # 탁점·반탁점은 앞 글자와 결합
-			var comb: int = _voice(prev, c == 0xFF9F)
-			if comb != 0:
-				cps[cps.size() - 1] = comb
-			continue
-		cps.append(c)
-	var out := ""
-	for c2 in cps:
-		var c: int = int(c2)
-		if c >= 0x41 and c <= 0x5A:
-			c += 0x20
-		if c >= 0x30A1 and c <= 0x30F6:
-			c -= 0x60
-		elif c == 0x30FD:
-			c = 0x309D
-		elif c == 0x30FE:
-			c = 0x309E
-		var keep: bool = (c >= 0x3041 and c <= 0x3096) or c == 0x309D or c == 0x309E or c == 0x30FC 			or (c >= 0x4E00 and c <= 0x9FFF) or (c >= 0x3400 and c <= 0x4DBF) or c == 0x3005 or c == 0x3007 			or (c >= 0x61 and c <= 0x7A) or (c >= 0x30 and c <= 0x39)
-		if keep:
-			out += String.chr(c)
-	return out
-
-
-## 전각 가타카나 prev 에 탁점(semi=false)·반탁점(true)을 붙인 글자. 못 붙이면 0.
-static func _voice(prev: int, semi: bool) -> int:
-	if semi:
-		if prev >= 0x30CF and prev <= 0x30DB and (prev - 0x30CF) % 3 == 0:  # ハヒフヘホ -> パピプペポ
-			return prev + 2
-		return 0
-	if prev == 0x30A6:
-		return 0x30F4                                                        # ウ -> ヴ
-	if (prev >= 0x30AB and prev <= 0x30C1 and prev % 2 == 1) or (prev >= 0x30C4 and prev <= 0x30C6 and prev % 2 == 0) 			or (prev >= 0x30C8 and prev <= 0x30C8) or (prev >= 0x30CF and prev <= 0x30DB and (prev - 0x30CF) % 3 == 0):
-		return prev + 1
-	return 0
+	return MissionText.norm_ja(str(s))
 
 
 ## norm_ja 를 거친 증거가 인정할 만한지: 길이 JA_EVIDENCE_MIN 이상 + 장음 뺀 글자 JA_EVIDENCE_MIN_CONTENT 이상.

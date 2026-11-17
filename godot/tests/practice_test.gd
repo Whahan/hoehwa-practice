@@ -286,7 +286,7 @@ func _test_hub() -> void:
 		var h := host(v, sz)
 		v.refresh()
 		await frames(3)
-		ok(v.card_kinds().size() == 6 and v.card_kinds().has("mission") and v.card_kinds().has("shadow") and v.card_kinds().has("dictation") and v.card_kinds().has("phoneme") and v.card_kinds().has("kana") and v.card_kinds().has("speed"), "%s: 6 cards" % str(sz))
+		ok(v.card_kinds().size() == 7 and v.card_kinds().has("mission") and v.card_kinds().has("shadow") and v.card_kinds().has("dictation") and v.card_kinds().has("phoneme") and v.card_kinds().has("kana") and v.card_kinds().has("speed") and v.card_kinds().has("diary"), "%s: 7 cards" % str(sz))
 		ok(v._grid.columns == (1 if sz.x < 700 else 2), "%s: grid columns follow the width (%d)" % [str(sz), v._grid.columns])
 		ok(await layout_ok(v, sz.x, "hub " + str(sz)), "%s: layout rules L1/L2" % str(sz))
 		await free_host(h)
@@ -295,7 +295,7 @@ func _test_hub() -> void:
 	var h2 := host(v2, Vector2(412, 915))
 	v2.refresh()
 	await frames(2)
-	var want := {"mission": "MissionScreen", "shadow": "ShadowScreen", "dictation": "DictationScreen", "phoneme": "PhonemeScreen"}
+	var want := {"mission": "MissionScreen", "shadow": "ShadowScreen", "dictation": "DictationScreen", "phoneme": "PhonemeScreen", "diary": "DiaryScreen"}
 	for kind in want.keys():
 		PracticeView.pending = {"kind": kind}
 		v2.refresh()
@@ -343,7 +343,7 @@ func _test_hub() -> void:
 	Store.prefs["lang"] = "ja"
 	v2.refresh()
 	await frames(3)
-	ok((v2._cards["dictation"] as Button).disabled and (v2._cards["phoneme"] as Button).disabled and not (v2._cards["shadow"] as Button).disabled, "ja: dictation and weak sounds are disabled, shadowing is not")
+	ok(not (v2._cards["dictation"] as Button).disabled and not (v2._cards["phoneme"] as Button).disabled and not (v2._cards["shadow"] as Button).disabled, "ja: dictation, weak sounds and shadowing are all enabled")
 	Store.prefs["lang"] = "en"
 	PhonemeScreen.weak_provider = func(_l: String, _n: int) -> Array: return [{"p": "θ", "n": 10, "bad": 6, "rate": 0.6, "heard": {"s": 5}}, {"p": "ɹ", "n": 8, "bad": 3, "rate": 0.375, "heard": {}}]
 	v2.refresh()
@@ -687,7 +687,8 @@ func _test_dictation() -> void:
 	requests.clear()
 	dj.open("ja", {})
 	await frames(2)
-	ok(dj.stage == "unsupported" and reqs("/practice/sentences").is_empty(), "ja -> English-only notice, no request")
+	var jreq: Array = reqs("/practice/sentences")
+	ok(dj.stage == "run" and jreq.size() == 1 and "lang=ja" in str(jreq[0]["path"]) and "mode=dictation" in str(jreq[0]["path"]), "ja -> sentences requested with lang=ja&mode=dictation (stage %s, %d request)" % [dj.stage, jreq.size()])
 	await free_host(hj)
 
 

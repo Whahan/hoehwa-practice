@@ -453,7 +453,7 @@ func _hub_test() -> void:
 	host.add_child(v)
 	v.size = host.size
 	await _frames(4)
-	ok(v.card_kinds() == ["mission", "shadow", "dictation", "phoneme", "kana", "speed"], "hub cards in order: %s" % str(v.card_kinds()))
+	ok(v.card_kinds() == ["mission", "shadow", "dictation", "phoneme", "kana", "speed", "diary"], "hub cards in order: %s" % str(v.card_kinds()))
 	for k in v.card_kinds():
 		ok(PracticeView.KINDS.has(k), "card kind %s is in KINDS" % k)
 		ok(v._make_screen(k) != null, "_make_screen(%s) builds a screen" % k)
@@ -471,15 +471,16 @@ func _hub_test() -> void:
 	ok((v._cards["mission"] as Button).get_global_rect().size.y >= (47.5 if _phone else 40.0), "start button height %.0f" % (v._cards["mission"] as Button).get_global_rect().size.y)
 	ok(v.header_block() != null and v.scroll_host() != null, "hub gives the app bar its header block and scroll host")
 	ok(v.page_title() == "", "hub has no page title of its own (main uses the tab name)")
-	var dict_desc_en := _label_with(v, "문장을 듣고 직접 타자로 써요. 단어마다 맞고 틀린 것을 알려 줘요.")
+	var dict_desc_en := _label_with(v, "문장을 듣고 직접 타자로 써요. 칸마다 맞고 틀린 것을 알려 줘요.")
 	ok(dict_desc_en != null, "english: dictation description is the normal one")
-	# japanese: dictation and weak sounds are off with their own text
+	# japanese: dictation and weak sounds (JaSoundScreen) are on, nothing says "english only"
 	Store.prefs["lang"] = "ja"
 	v.refresh()
 	await _frames(3)
-	ok((v._cards["dictation"] as Button).disabled and (v._cards["phoneme"] as Button).disabled, "japanese: dictation and weak sounds are disabled")
+	ok(not (v._cards["dictation"] as Button).disabled and not (v._cards["phoneme"] as Button).disabled, "japanese: dictation and weak sounds are enabled")
 	ok(not (v._cards["mission"] as Button).disabled and not (v._cards["shadow"] as Button).disabled, "japanese: mission and shadowing stay enabled")
-	ok(_label_with(v, "받아쓰기는 영어만 지원해요.") != null and _label_with(v, "약한 소리 연습은 영어만 지원해요.") != null, "japanese: the 'english only' texts show")
+	ok(_label_with(v, "받아쓰기는 영어만 지원해요.") == null and _label_with(v, "약한 소리 연습은 영어만 지원해요.") == null, "japanese: no 'english only' text for dictation or weak sounds")
+	ok(_label_with(v, "길게 끄는 소리, 작은 っ, 탁음처럼 일본어에서 헷갈리기 쉬운 소리를 골라 듣고 따라 말해요.") != null, "japanese: weak sounds card has the Japanese description")
 	ok(not (v._cards["kana"] as Button).disabled, "japanese: the kana card is enabled")
 	v.open_screen("kana")
 	ok(v.current_screen() is KanaScreen, "japanese: the kana card opens KanaScreen")
@@ -500,7 +501,7 @@ func _hub_test() -> void:
 	ok(v.page_title() == "받아쓰기", "sub screen title for the bar (%s)" % v.page_title())
 	ok(v.go_back(), "go_back closes the sub screen")
 	await _frames(3)
-	ok(v.current_screen() == null and v.card_kinds().size() == 6, "back at the hub with its cards")
+	ok(v.current_screen() == null and v.card_kinds().size() == 7, "back at the hub with its cards")
 	# the widget test of the phone: touch targets on the hub
 	if _phone:
 		var small := 0

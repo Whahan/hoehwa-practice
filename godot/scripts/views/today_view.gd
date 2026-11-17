@@ -224,7 +224,7 @@ func _build() -> void:
 		Store.toggle_today(lang)
 		refresh())
 	_cards["streak"] = streak_card
-	# "이번 주" 카드(v1.6.0): 연속 카드 바로 아래. 주간 리포트 숫자 + 60초 퀴즈 · 가나 코스 · 배지 바로가기.
+	# "이번 주" 카드(v1.6.0): 연속 카드 바로 아래. 주간 리포트 숫자 + 60초 퀴즈 · 가나 코스 · 일기 · 배지 바로가기.
 	var fun_card: Control = FunParts.home_card(lang, WeekReport.for_lang(lang), BadgeEngine.counts(), _on_fun_open)
 	_cards["fun"] = fun_card
 	var ai_card: Control = null
@@ -377,7 +377,7 @@ func _make_ring() -> Control:
 
 # ---------------------------------------------------------------- navigation
 
-## "이번 주" 카드의 바로가기(FunParts.home_card 의 on_open). 스피드·가나 코스는 연습 허브의 pending 계약으로, 배지·리포트는 화면 이름으로 간다.
+## "이번 주" 카드의 바로가기(FunParts.home_card 의 on_open). 스피드·가나 코스·일기는 연습 허브의 pending 계약으로, 배지·리포트는 화면 이름으로 간다.
 func _on_fun_open(kind: String) -> void:
 	var lang: String = Store.lang()
 	match kind:
@@ -387,6 +387,9 @@ func _on_fun_open(kind: String) -> void:
 		"kana":
 			PracticeView.pending = {"kind": "kana", "view": "course"}
 			Store.navigate.emit("practice", "ja")
+		"diary":
+			PracticeView.pending = {"kind": "diary"}
+			Store.navigate.emit("practice", lang)
 		"badges":
 			Store.navigate.emit("badges", lang)
 		"report":

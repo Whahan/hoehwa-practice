@@ -477,6 +477,14 @@ static func _units_of(d: Variant) -> Array:
 	return out
 
 
+## 철자 틀림 칩 글: 쓴 글자가 있으면 괄호로 보이고, 비어 있으면 괄호를 뺀다("철자 틀림 ()" 로 나오지 않게).
+static func _typo_chip(w: String, said: String) -> String:
+	var s: String = said.strip_edges()
+	if s == "":
+		return "✕ %s  · 철자 틀림" % w
+	return "✕ %s  · 철자 틀림 (%s)" % [w, said]
+
+
 ## 칸(units)을 화면 칩으로: [{text, kind "ok"|"bad"}]. 가나는 한 글자씩 칸이 있어서 이어지는 같은 상태끼리 한 칩으로 묶는다.
 ## 틀린 칩은 ✕ 와 이유 글(빠짐 / 철자 틀림 (쓴 글자) / 한자가 달라요)을 함께 가진다(색만으로 구분하지 않는다).
 static func ja_chips(d: Dictionary) -> Array:
@@ -498,7 +506,7 @@ static func ja_chips(d: Dictionary) -> Array:
 			elif kind == "kanji_diff":
 				out.append({"text": "✕ %s  · 한자가 달라요 (같은 소리의 다른 한자일 수 있어요)" % w_rd, "kind": "bad"})
 			elif kind == "typo":
-				out.append({"text": "✕ %s  · 철자 틀림 (%s)" % [w_rd, said], "kind": "bad"})
+				out.append({"text": _typo_chip(w_rd, said), "kind": "bad"})
 			else:
 				out.append({"text": "✕ %s  · 빠짐" % w_rd, "kind": "bad"})
 			i += 1
@@ -521,7 +529,7 @@ static func ja_chips(d: Dictionary) -> Array:
 		if good:
 			out.append({"text": "✓ " + run_w, "kind": "ok"})
 		elif typo:
-			out.append({"text": "✕ %s  · 철자 틀림 (%s)" % [run_w, run_said], "kind": "bad"})
+			out.append({"text": _typo_chip(run_w, run_said), "kind": "bad"})
 		else:
 			out.append({"text": "✕ %s  · 빠짐" % run_w, "kind": "bad"})
 		i = j

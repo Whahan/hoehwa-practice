@@ -168,7 +168,10 @@ static func fix_private_ok() -> bool:
 	return Backend.health.get("fix_private", false) is bool and bool(Backend.health.get("fix_private", false))
 
 
+## [말해서 쓰기] 가능: PC 연결 + 새 PC 프로그램(fix_private_ok). 옛 PC 프로그램에는 /stt 도 보내지 않는다 (일기 요청 0건 원칙, 설계 R-C1).
 static func stt_ok() -> bool:
+	if not fix_private_ok():
+		return false
 	if stt_hook.is_valid():
 		return bool(stt_hook.call())
 	var st: Dictionary = (Route.caps()["items"] as Dictionary).get("stt", {})
@@ -292,6 +295,7 @@ func save_only() -> void:
 		_say("같은 일기가 오늘 이미 저장돼 있어요.", false)
 	else:
 		_say("저장했어요. 나중에 목록의 [고치기]로 고칠 수 있어요.", false)
+		_note_diary()
 	_scroll_to_list = true
 	_render()
 
@@ -343,6 +347,8 @@ func _fix_text_after_consent() -> void:
 		_say(_add_fail_text(str(r["reason"])), true)
 		return
 	var id: String = str(r["id"])
+	if not bool(r.get("existed", false)):
+		_note_diary() # 새 일기가 저장됐다 (고치기가 실패해도 저장돼 있으니 diary_7 평가는 돈다)
 	if bool(r.get("existed", false)):
 		var e: Dictionary = DiaryStore.get_entry(id)
 		if str(e.get("state", "")) == "fixed":
@@ -499,7 +505,13 @@ func _finish_fix(id: String, items: Array) -> void:
 	view_id = id
 	_cards_msg = _make_cards(id)
 	stage = "result"
+	_note_diary()
 	_render()
+
+
+## 일기를 저장하거나 고친 직후 배지 평가를 부탁한다 (diary_first / diary_7 알림이 늦지 않게). 일기 글은 내보내지 않고 종류 이름만 보낸다.
+func _note_diary() -> void:
+	Store.note_activity("diary")
 
 
 ## 고친 문장만 복습 카드로 넣는다 (원문·AI 의 이유는 카드에 넣지 않는다: DiaryLogic.cards_for). 안내 문구를 돌려준다.
@@ -893,5 +905,5 @@ func _add_fixed_cards(c: VBoxContainer, e: Dictionary) -> void:
 			card.body.add_child(UI.label(str(d["fix"]), "Strong"))
 			card.body.add_child(UI.label("이유", "Eyebrow", false))
 			card.body.add_child(UI.label(str(d["why"]), "Muted"))
-			ReadingLine.add(card.body, str(d.get("reading", "")), lang, Store.pref_bool("show_reading"), 0.0, str(d.get("pron", "")))
+			ReadingLine.add(card.body, str(d.get("reading", "")), lang, Store.pref_bool("show_reading"), 0.0, str(d.get("pron", "")), str(d.get("fix", "")))
 		c.add_child(card)

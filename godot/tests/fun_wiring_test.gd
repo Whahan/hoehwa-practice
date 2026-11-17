@@ -4,7 +4,7 @@ extends Node
 ##   PC:    godot --headless --path <project> --resolution 1280x800 res://tests/fun_wiring_test.tscn -- --api=http://127.0.0.1:9
 ##   phone: godot --headless --path <project> --resolution 412x915 res://tests/fun_wiring_test.tscn -- --phone --api=http://127.0.0.1:9
 ## Checks: the 배지 tab (right after 기록, in the 기록 group of the phone menu / the PC side nav, never in the bottom bar), the home
-## "이번 주" card (place, buttons, jumps), the practice hub (6 cards), the badge watcher through main (a 첫 평가 right after the start
+## "이번 주" card (place, buttons, jumps), the practice hub (7 cards), the badge watcher through main (a 첫 평가 right after the start
 ## without any activity, then an activity -> one toast), and wrong inputs (unknown pending kind, empty provider, broken counts).
 ## Users files are user://test_fun_w_* only. Last line: "== fun_wiring: N passed, M failed ==", exit code 1 on any failure.
 
@@ -370,8 +370,8 @@ func _test_hub() -> void:
 	_main.show_view("practice")
 	pv.refresh()
 	await _frames(4)
-	var want: Array = ["mission", "shadow", "dictation", "phoneme", "kana", "speed"]
-	ok(pv.card_kinds() == want, "W-5: the hub has 6 cards in order (%s)" % str(pv.card_kinds()))
+	var want: Array = ["mission", "shadow", "dictation", "phoneme", "kana", "speed", "diary"]
+	ok(pv.card_kinds() == want, "W-5: the hub has 7 cards in order (%s)" % str(pv.card_kinds()))
 	ok(not (pv._cards["speed"] as Button).disabled and (pv._cards["kana"] as Button).disabled, "W-5: english: speed on, kana off")
 	ok(_label_has(pv, "60초 스피드 퀴즈") and _label_has(pv, "가나 기초 코스"), "W-5: the cards read \"60초 스피드 퀴즈\" and \"가나 기초 코스\"")
 	ok((pv._cards["speed"] as Button).text == "퀴즈 시작" and (pv._cards["kana"] as Button).text == "코스 시작", "W-5: the buttons read 퀴즈 시작 / 코스 시작")
@@ -470,7 +470,7 @@ func _test_wrong_inputs() -> void:
 	var bad_reports: Array = [null, "x", {}, {"minutes": "a", "lessons": NAN, "empty": 5}]
 	drawn = 0
 	for r in bad_reports:
-		var card2: Control = FunParts.home_card("en", r, {"got": 1, "total": 23, "unseen": 0}, Callable())
+		var card2: Control = FunParts.home_card("en", r, {"got": 1, "total": 25, "unseen": 0}, Callable())
 		if card2 != null:
 			drawn += 1
 			card2.free()
