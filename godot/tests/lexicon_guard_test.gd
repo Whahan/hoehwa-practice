@@ -32,6 +32,7 @@ func _ready() -> void:
 	_test_sentences()
 	_test_exercises()
 	_test_selfcheck()
+	_test_junk_types()
 	print("== lexicon_guard: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -457,3 +458,94 @@ func _test_selfcheck() -> void:
 	var e: Dictionary = LexiconGuard.check_sentence({"id": "z", "en": "It is $5.99.", "say": "It is five work.", "o": 21, "scope": "all"}, 21, d)
 	print("selfcheck FAIL-as-expected say-with-future-word: ok=", e["ok"], " bad=", e["bad"].size())
 	ok(not e["ok"], "selfcheck (e) future word in say fails")
+
+
+# ------------------------------------------------------------------ 이상한 타입 (검토 1라운드 중요 1)
+
+func _good_set(d: Dictionary) -> Array:
+	return [
+		{"type": "recognize", "id": "t", "mode": "en_ko", "item": "a3", "prompt": "tea", "tts": "tea", "options": ["\ucc28", "\ub098", "\uc88b\uc544\ud558\ub2e4"], "option_ids": ["a3", "a1", "a2"], "answer": 0},
+		{"type": "recall", "id": "t", "mode": "ko_en_choice", "item": "a3", "prompt_ko": "x", "tts": "tea", "options": ["tea", "I"], "option_ids": ["a3", "a1"], "answer": 0, "accept": ["tea"]},
+		{"type": "build", "id": "t", "sent": "s1", "ko": "x", "answer": ["I", "like", "tea"], "extra": ["coffee"], "accept": [["I", "like", "tea"]], "tts": "I like tea."},
+		{"type": "listen", "id": "t", "mode": "choose_ko", "sent": "s1", "tts": "I like tea.", "options": ["\uc800\ub294 \ucc28\ub97c \uc88b\uc544\ud574\uc694.", "\uc800\ub294 \ud604\uae08\uc744 \uc88b\uc544\ud574\uc694."], "option_ids": ["s1", "s2"], "answer": 0},
+		{"type": "listen", "id": "t", "mode": "type", "sent": "s1", "tts": "I like tea.", "accept": ["I like tea."]},
+		{"type": "speak", "id": "t", "mode": "substitute", "sent": "s1", "target": "I like tea.", "tts": "I like tea.", "cue": {"slot": "tea", "with": "coffee"}, "accept": ["I like coffee."]},
+		{"type": "speak", "id": "t", "mode": "answer", "prompt_en": "I like tea.", "tts": "I like tea.", "expect_any": ["tea"]},
+		{"type": "teach_word", "id": "t", "item": "a3", "prompt": "tea", "tts": "tea", "example": {"sent": "s1", "en": "I like tea.", "tts": "I like tea."}},
+		{"type": "teach_pattern", "id": "t", "pattern": "p_s", "tpl": "I tea", "examples": [{"sent": "s1", "en": "I like tea.", "tts": "I like tea."}]},
+		{"type": "dialogue_script", "id": "t", "dialogue": "d1", "lines": [{"s": "A", "en": "I like tea.", "ko": "x", "tts": "I like tea.", "you": false}]},
+	]
+
+
+func _test_junk_types() -> void:
+	var d: Dictionary = LexiconGuard.index(_small())
+	var seen: Array = ["a3", "a2", "a1"]
+	# 재현 입력 (검토자가 낸 것)
+	var r1: Dictionary = LexiconGuard.check_exercise({"type": "recognize", "id": "t", "mode": "en_ko", "item": "a3", "prompt": "tea", "tts": "tea", "options": [null, 5, {}], "option_ids": ["a3", "a1", "a2"], "answer": 0}, 21, seen, d)
+	print("selfcheck FAIL-as-expected junk-options: ok=", r1["ok"], " bad=", r1["bad"].size())
+	ok(not r1["ok"] and _has_why(r1, "not_string"), "junk: options [null, 5, {}] -> ok=false (not_string)")
+	var r2: Dictionary = LexiconGuard.check_exercise({"type": "build", "id": "t", "sent": "s1", "ko": "x", "answer": ["I", "like", "tea"], "extra": [null, 5], "accept": [], "tts": "I like tea."}, 21, [], d)
+	print("selfcheck FAIL-as-expected junk-extra-tiles: ok=", r2["ok"], " bad=", r2["bad"].size())
+	ok(not r2["ok"] and _has_why(r2, "not_string"), "junk: build extra [null, 5] -> ok=false (not_string)")
+	var r3: Dictionary = LexiconGuard.check_exercise({"type": "build", "id": "t", "sent": "s1", "ko": "x", "answer": ["I", null, {}], "extra": [], "accept": [[1, 2], 5, null], "tts": "I like tea."}, 21, [], d)
+	ok(not r3["ok"] and _has_why(r3, "not_string"), "junk: build answer/accept elements that are not text -> ok=false")
+	var r4: Dictionary = LexiconGuard.check_exercise({"type": "recognize", "id": "t", "mode": "en_ko", "item": "a3", "prompt": "tea", "options": ["\ucc28", "\ub098"], "option_ids": [null, {}], "answer": 0}, 21, seen, d)
+	ok(not r4["ok"], "junk: option_ids [null, {}] -> ok=false")
+	var r5: Dictionary = LexiconGuard.check_exercise({"type": "listen", "id": "t", "mode": "choose_ko", "sent": "s1", "tts": "x", "options": [5, null], "option_ids": [1, 2], "answer": 0}, 21, [], d)
+	ok(not r5["ok"] and _has_why(r5, "not_string"), "junk: listen options [5, null] -> ok=false")
+	var r6: Dictionary = LexiconGuard.check_exercise({"type": "recognize", "id": "t", "mode": "en_ko", "item": {}, "prompt": [], "tts": 5, "options": ["a", "b"], "answer": 0}, 21, [], d)
+	ok(not r6["ok"] and _has_why(r6, "not_string"), "junk: item {}, prompt [], tts 5 -> ok=false")
+	var r7: Dictionary = LexiconGuard.check_exercise({"type": "speak", "id": "t", "mode": "substitute", "sent": "s1", "target": "I like tea.", "cue": 5, "accept": []}, 21, [], d)
+	ok(not r7["ok"], "junk: cue 5 -> ok=false")
+	var r8: Dictionary = LexiconGuard.check_exercise({"type": "dialogue_script", "id": "t", "lines": [{"en": 5, "tts": [], "say": {}}, 7]}, 21, [], d)
+	ok(not r8["ok"], "junk: dialogue lines with non-text fields and a non-dict line -> ok=false")
+	# 가드를 통과해야 하는 정상 문제 10개(비교용)
+	var goods: Array = _good_set(d)
+	var good_ok: int = 0
+	for e in goods:
+		var gr: Dictionary = LexiconGuard.check_exercise(e, 21, seen, d)
+		if gr["ok"] or e["type"] in ["teach_pattern", "dialogue_script", "speak", "listen"]:
+			good_ok += 1
+	ok(good_ok == goods.size(), "the 10 base exercises used for the type fuzz are sane (%d)" % good_ok)
+	# 필드마다 이상한 값을 넣어 본다: 에러(SCRIPT ERROR) 없이 항상 {ok, bad} 가 와야 한다
+	var junk: Array = [null, 5, 1.5, true, {}, [], [null], [{}], [[]], [5, null], "", RefCounted.new()]
+	var cases: int = 0
+	var shaped: int = 0
+	var flipped: int = 0
+	for e in goods:
+		for k in e.keys():
+			for jv in junk:
+				var copy: Dictionary = e.duplicate(true)
+				copy[k] = jv
+				var res: Variant = LexiconGuard.check_exercise(copy, 21, seen, d)
+				cases += 1
+				if res is Dictionary and res.has("ok") and res["ok"] is bool and res.get("bad") is Array:
+					shaped += 1
+					if k in ["type", "mode", "item", "tts", "prompt", "target"] and jv is Dictionary and not res["ok"]:
+						flipped += 1
+	print("fuzz: %d junk-field cases, %d well-formed results" % [cases, shaped])
+	ok(cases >= 800 and shaped == cases, "type fuzz: %d cases (10 exercises x every field x 12 odd values), all give {ok, bad} without a script error" % cases)
+	ok(flipped > 0, "type fuzz: a Dictionary in a text field is reported, not ignored (%d)" % flipped)
+	# 문장·텍스트 입력의 이상한 타입
+	var junk_sent: Array = [null, 5, [], {}, {"en": 5}, {"en": null, "o": {}}, {"id": [], "en": "x"}, {"words": 5, "en": "hi", "o": 11, "scope": []}]
+	var s_cases: int = 0
+	var s_ok: int = 0
+	for js in junk_sent:
+		var sr: Variant = LexiconGuard.check_sentence(js, 21, d)
+		s_cases += 1
+		if sr is Dictionary and sr.has("ok") and not sr["ok"]:
+			s_ok += 1
+	ok(s_ok == s_cases, "junk sentences (null, 5, [], {}, odd fields) -> ok=false for all %d" % s_cases)
+	# item 7: expect_any, cue.slot 도 검사
+	var e7: Dictionary = {"type": "speak", "id": "t", "mode": "answer", "prompt_en": "I like tea.", "tts": "I like tea.", "expect_any": ["tea", "work"]}
+	var r9: Dictionary = LexiconGuard.check_exercise(e7, 21, [], d)
+	ok(not r9["ok"] and _has_why(r9, "future"), "expect_any with a not-yet-learned word is checked")
+	e7["expect_any"] = ["tea", 5]
+	ok(not LexiconGuard.check_exercise(e7, 21, [], d)["ok"], "expect_any with a non-text item -> not ok")
+	var e8: Dictionary = {"type": "speak", "id": "t", "mode": "substitute", "sent": "s1", "target": "I like tea.", "tts": "I like tea.", "cue": {"slot": "work", "with": "coffee"}, "accept": ["I like coffee."]}
+	ok(not LexiconGuard.check_exercise(e8, 21, [], d)["ok"], "cue.slot with a not-yet-learned word is checked")
+	# 가드를 끄면 이 시험들이 통과하지 못해야 한다(selfcheck): 켜진 상태에서만 not ok
+	LexiconGuard.enabled = false
+	var off: bool = LexiconGuard.check_exercise({"type": "recognize", "options": [null, 5, {}]}, 21, [], d)["ok"]
+	LexiconGuard.enabled = true
+	ok(off, "enabled=false: even junk passes (test-only switch), restored afterwards")

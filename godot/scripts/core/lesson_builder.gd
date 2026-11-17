@@ -8,6 +8,8 @@ extends RefCounted
 ##   spec = {"kind":"new|listen|speak|check|month|recap","w":5,"d":2,"seen":[낱말 id], "speed":1.0, "half":false}
 ##   data = LexiconGuard 와 같은 모양({"weeks","words","patterns","sentences","dialogues", 선택 "speak_prompts"}).
 ##   seen = 이 세션에서 이미 소개 카드를 본 낱말 id(중간에 나갔다 돌아온 경우). `new` 는 seen 에 없는 낱말만 카드로 다시 보인다.
+## 호출자는 prepare() 결과를 재사용한다(색인 없이 build 를 부르면 호출마다 색인을 만들어 느리다: 낱말 5,000개에서 약 125ms).
+## 월말 answer/intro 채점(judge)은 expect_any 항목이 전사에 하나라도 들어 있으면 정답이다(입문자 말하기는 관대하게: 긴 답에 낱말 하나만 있어도 맞다).
 ## 같은 (spec, data, seed) 는 항상 같은 결과. `new` 는 어떤 시드로도 같은 항목 집합(순서·보기만 다름).
 
 const KINDS := ["new", "listen", "speak", "check", "month", "recap"]
@@ -65,7 +67,7 @@ static func build(spec: Variant, data: Variant, seed_value: int) -> Dictionary:
 	if not (spec is Dictionary):
 		res["errors"].append("spec_not_dict")
 		return res
-	var kind: String = String(spec.get("kind", "")) if spec.get("kind") is String else ""
+	var kind: String = LexiconGuard.str_of(spec.get("kind", "")) if spec.get("kind") is String else ""
 	if not KINDS.has(kind):
 		res["errors"].append("bad_kind")
 	var w: int = _int_of(spec.get("w"))
@@ -155,7 +157,7 @@ static func _rotate(a: Array, k: int) -> Array:
 
 
 static func _emit(ctx: Ctx, out: Array, ex: Dictionary) -> bool:
-	var id: String = String(ex.get("id", ""))
+	var id: String = LexiconGuard.str_of(ex.get("id", ""))
 	if ctx.used.has(id):
 		return false
 	var g: Dictionary = LexiconGuard.check_exercise_set(ex, ctx.cur, ctx.seen, ctx.idx)
@@ -175,8 +177,8 @@ static func _probe(ctx: Ctx, ex: Dictionary) -> bool:
 
 
 static func _tts_of(rec: Dictionary) -> String:
-	var say: String = String(rec.get("say", "")).strip_edges()
-	return say if say != "" else String(rec.get("en", ""))
+	var say: String = LexiconGuard.str_of(rec.get("say", "")).strip_edges()
+	return say if say != "" else LexiconGuard.str_of(rec.get("en", ""))
 
 
 static func _id(ctx: Ctx, abbr: String, item: String, mode: String = "") -> String:
@@ -203,9 +205,9 @@ static func _bidx(idx: Dictionary) -> Dictionary:
 	var keys: Array = []
 	for wid in idx["word_ids"]:
 		var wd: Dictionary = idx["words"][wid]
-		if String(wd.get("role", "active")) != "active":
+		if LexiconGuard.str_of(wd.get("role", "active")) != "active":
 			continue
-		if String(wd.get("en", "")).strip_edges() == "" or String(wd.get("ko", "")).strip_edges() == "":
+		if LexiconGuard.str_of(wd.get("en", "")).strip_edges() == "" or LexiconGuard.str_of(wd.get("ko", "")).strip_edges() == "":
 			continue
 		var o: int = idx["word_o"][wid]
 		if o >= LexiconGuard.INF_O:
@@ -216,11 +218,11 @@ static func _bidx(idx: Dictionary) -> Dictionary:
 	var act_o: Array = []
 	var pos_lists: Dictionary = {}
 	for k in keys:
-		var parts: PackedStringArray = String(k).split("|", true, 1)
+		var parts: PackedStringArray = LexiconGuard.str_of(k).split("|", true, 1)
 		var wd2: Dictionary = idx["words"][parts[1]]
 		act.append(wd2)
 		act_o.append(int(parts[0]))
-		var pos: String = String(wd2.get("pos", ""))
+		var pos: String = LexiconGuard.str_of(wd2.get("pos", ""))
 		if not pos_lists.has(pos):
 			pos_lists[pos] = {"list": [], "os": []}
 		pos_lists[pos]["list"].append(wd2)
@@ -236,9 +238,9 @@ static func _bidx(idx: Dictionary) -> Dictionary:
 		var so: int = LexiconGuard.int_o(s.get("o"))
 		if so >= LexiconGuard.INF_O:
 			continue
-		if String(s.get("ko", "")).strip_edges() == "" or String(s.get("en", "")).strip_edges() == "":
+		if LexiconGuard.str_of(s.get("ko", "")).strip_edges() == "" or LexiconGuard.str_of(s.get("en", "")).strip_edges() == "":
 			continue
-		var sc: String = String(s.get("scope", "all"))
+		var sc: String = LexiconGuard.str_of(s.get("scope", "all"))
 		if sc == "":
 			sc = "all"
 		if sc != "all" and sc != "listen":
@@ -249,9 +251,9 @@ static func _bidx(idx: Dictionary) -> Dictionary:
 			sk_all.append(key)
 		if s.get("words") is Array:
 			for wid2 in s["words"]:
-				if not by_word.has(String(wid2)):
-					by_word[String(wid2)] = []
-				by_word[String(wid2)].append(s)
+				if not by_word.has(LexiconGuard.str_of(wid2)):
+					by_word[LexiconGuard.str_of(wid2)] = []
+				by_word[LexiconGuard.str_of(wid2)].append(s)
 	b["sents_all"] = _sorted_list(idx, sk_all)
 	b["sents_any"] = _sorted_list(idx, sk_any)
 	b["by_word"] = by_word
@@ -265,7 +267,7 @@ static func _sorted_list(idx: Dictionary, keys: Array) -> Dictionary:
 	var lst: Array = []
 	var os: Array = []
 	for k in keys:
-		var parts: PackedStringArray = String(k).split("|", true, 1)
+		var parts: PackedStringArray = LexiconGuard.str_of(k).split("|", true, 1)
 		lst.append(idx["sents"][parts[1]])
 		os.append(int(parts[0]))
 	return {"list": lst, "os": os}
@@ -304,7 +306,7 @@ static func _make_qpool(ctx: Ctx) -> void:
 
 
 static func _q_ok(ctx: Ctx, wd: Dictionary) -> bool:
-	return int(ctx.idx["word_o"][String(wd["id"])]) < ctx.cur or ctx.seen.has(String(wd["id"]))
+	return int(ctx.idx["word_o"][LexiconGuard.str_of(wd["id"])]) < ctx.cur or ctx.seen.has(LexiconGuard.str_of(wd["id"]))
 
 
 ## arr[0..n) 에서 보기 후보를 최대 need 개 더한다(정답과 같은 뜻·같은 글 제외, R6).
@@ -324,7 +326,7 @@ static func _sample_words(ctx: Ctx, arr: Array, n: int, need: int, picks: Array,
 			return
 		if wd["id"] == aw["id"] or LexiconGuard.is_syn(aw, wd) or not _q_ok(ctx, wd):
 			continue
-		var disp: String = String(wd.get("ko", "")) if lang == "ko" else String(wd.get("en", ""))
+		var disp: String = LexiconGuard.str_of(wd.get("ko", "")) if lang == "ko" else LexiconGuard.str_of(wd.get("en", ""))
 		if disp == "" or shown.has(disp.to_lower()):
 			continue
 		shown[disp.to_lower()] = true
@@ -333,10 +335,10 @@ static func _sample_words(ctx: Ctx, arr: Array, n: int, need: int, picks: Array,
 
 ## 단어 보기. lang "ko" 면 뜻, "en" 이면 영어. 보기가 모자라면 줄이고(최소 2), 안 배운 낱말로 채우지 않는다.
 static func _word_opts(ctx: Ctx, aw: Dictionary, lang: String, n: int) -> Dictionary:
-	var ans_disp: String = String(aw.get("ko", "")) if lang == "ko" else String(aw.get("en", ""))
+	var ans_disp: String = LexiconGuard.str_of(aw.get("ko", "")) if lang == "ko" else LexiconGuard.str_of(aw.get("en", ""))
 	var shown: Dictionary = {ans_disp.to_lower(): true}
 	var picks: Array = []
-	var pl: Dictionary = ctx.b["pos"].get(String(aw.get("pos", "")), {"list": [], "os": []})
+	var pl: Dictionary = ctx.b["pos"].get(LexiconGuard.str_of(aw.get("pos", "")), {"list": [], "os": []})
 	_sample_words(ctx, pl["list"], _upper(pl["os"], ctx.cur), n - 1, picks, shown, aw, lang)
 	if picks.size() < n - 1:
 		_sample_words(ctx, ctx.b["act"], ctx.n_all, n - 1 - picks.size(), picks, shown, aw, lang)
@@ -348,8 +350,8 @@ static func _word_opts(ctx: Ctx, aw: Dictionary, lang: String, n: int) -> Dictio
 	var options: Array = []
 	var ids: Array = []
 	for wd in all:
-		options.append(String(wd.get("ko", "")) if lang == "ko" else String(wd.get("en", "")))
-		ids.append(String(wd["id"]))
+		options.append(LexiconGuard.str_of(wd.get("ko", "")) if lang == "ko" else LexiconGuard.str_of(wd.get("en", "")))
+		ids.append(LexiconGuard.str_of(wd["id"]))
 	return {"options": options, "ids": ids, "answer": at}
 
 
@@ -360,7 +362,7 @@ static func tiles_of(en: String) -> Array:
 	for ch in [" ", "　", "\t", "\n", "\r", " ", " "]:
 		s = s.replace(ch, " ")
 	for raw in s.split(" ", false):
-		var t: String = String(raw)
+		var t: String = LexiconGuard.str_of(raw)
 		var a: int = 0
 		var b: int = t.length()
 		while a < b and ".,!?;:\"()…¿¡“”".contains(t[a]):
@@ -376,22 +378,22 @@ static func tiles_of(en: String) -> Array:
 ## ------------------------------------------------------------------ 문제 만들기
 
 static func _mk_teach_word(ctx: Ctx, wd: Dictionary, example: Variant) -> Dictionary:
-	var ex: Dictionary = {"type": "teach_word", "id": _id(ctx, "tw", String(wd["id"])), "stage": "intro",
-		"item": String(wd["id"]), "prompt": String(wd.get("en", "")), "ko": String(wd.get("ko", "")),
-		"pos": String(wd.get("pos", "")), "ipa": String(wd.get("ipa", "")), "tts": _tts_of(wd)}
+	var ex: Dictionary = {"type": "teach_word", "id": _id(ctx, "tw", LexiconGuard.str_of(wd["id"])), "stage": "intro",
+		"item": LexiconGuard.str_of(wd["id"]), "prompt": LexiconGuard.str_of(wd.get("en", "")), "ko": LexiconGuard.str_of(wd.get("ko", "")),
+		"pos": LexiconGuard.str_of(wd.get("pos", "")), "ipa": LexiconGuard.str_of(wd.get("ipa", "")), "tts": _tts_of(wd)}
 	if example is Dictionary:
-		ex["example"] = {"sent": String(example["id"]), "en": String(example.get("en", "")), "ko": String(example.get("ko", "")),
-			"say": String(example.get("say", "")), "tts": _tts_of(example)}
+		ex["example"] = {"sent": LexiconGuard.str_of(example["id"]), "en": LexiconGuard.str_of(example.get("en", "")), "ko": LexiconGuard.str_of(example.get("ko", "")),
+			"say": LexiconGuard.str_of(example.get("say", "")), "tts": _tts_of(example)}
 	return ex
 
 
 static func _mk_teach_pattern(ctx: Ctx, pt: Dictionary, examples: Array) -> Dictionary:
 	var exs: Array = []
 	for s in examples:
-		exs.append({"sent": String(s["id"]), "en": String(s.get("en", "")), "ko": String(s.get("ko", "")),
-			"say": String(s.get("say", "")), "tts": _tts_of(s)})
-	return {"type": "teach_pattern", "id": _id(ctx, "tp", String(pt["id"])), "stage": "intro", "pattern": String(pt["id"]),
-		"tpl": String(pt.get("tpl", "")), "title_ko": String(pt.get("title_ko", "")),
+		exs.append({"sent": LexiconGuard.str_of(s["id"]), "en": LexiconGuard.str_of(s.get("en", "")), "ko": LexiconGuard.str_of(s.get("ko", "")),
+			"say": LexiconGuard.str_of(s.get("say", "")), "tts": _tts_of(s)})
+	return {"type": "teach_pattern", "id": _id(ctx, "tp", LexiconGuard.str_of(pt["id"])), "stage": "intro", "pattern": LexiconGuard.str_of(pt["id"]),
+		"tpl": LexiconGuard.str_of(pt.get("tpl", "")), "title_ko": LexiconGuard.str_of(pt.get("title_ko", "")),
 		"grammar_ko": pt.get("grammar_ko", []), "examples": exs, "tts": ""}
 
 
@@ -401,28 +403,28 @@ static func _mk_recognize(ctx: Ctx, wd: Dictionary, mode: String) -> Dictionary:
 	if o.is_empty():
 		ctx.skipped += 1
 		return {}
-	return {"type": "recognize", "id": _id(ctx, "rec", String(wd["id"]), mode), "stage": "recognize", "mode": mode,
-		"item": String(wd["id"]), "prompt": String(wd.get("en", "")) if mode == "en_ko" else "", "tts": _tts_of(wd),
+	return {"type": "recognize", "id": _id(ctx, "rec", LexiconGuard.str_of(wd["id"]), mode), "stage": "recognize", "mode": mode,
+		"item": LexiconGuard.str_of(wd["id"]), "prompt": LexiconGuard.str_of(wd.get("en", "")) if mode == "en_ko" else "", "tts": _tts_of(wd),
 		"options": o["options"], "option_ids": o["ids"], "answer": o["answer"]}
 
 
 static func _hint_of(en: String) -> String:
 	var parts: Array = []
 	for t in en.split(" ", false):
-		var s: String = String(t)
+		var s: String = LexiconGuard.str_of(t)
 		parts.append(s.substr(0, 1) + "_".repeat(maxi(s.length() - 1, 0)))
 	return " ".join(PackedStringArray(parts))
 
 
 static func _mk_recall(ctx: Ctx, wd: Dictionary, mode: String) -> Dictionary:
-	var en: String = String(wd.get("en", ""))
+	var en: String = LexiconGuard.str_of(wd.get("en", ""))
 	if mode == "ko_en_choice":
 		var o: Dictionary = _word_opts(ctx, wd, "en", 4)
 		if o.is_empty():
 			ctx.skipped += 1
 			return {}
-		return {"type": "recall", "id": _id(ctx, "rcl", String(wd["id"]), mode), "stage": "recall", "mode": mode,
-			"item": String(wd["id"]), "prompt_ko": String(wd.get("ko", "")), "tts": _tts_of(wd),
+		return {"type": "recall", "id": _id(ctx, "rcl", LexiconGuard.str_of(wd["id"]), mode), "stage": "recall", "mode": mode,
+			"item": LexiconGuard.str_of(wd["id"]), "prompt_ko": LexiconGuard.str_of(wd.get("ko", "")), "tts": _tts_of(wd),
 			"options": o["options"], "option_ids": o["ids"], "answer": o["answer"], "accept": [en]}
 	var accept: Array = [en]
 	var alt: Variant = wd.get("alt")
@@ -431,12 +433,12 @@ static func _mk_recall(ctx: Ctx, wd: Dictionary, mode: String) -> Dictionary:
 			if a is String and not accept.has(a):
 				accept.append(a)
 	# 같은 뜻의 다른 낱말도 정답으로(배운 것만)
-	for oid in ctx.idx["by_ko"].get(String(wd.get("ko", "")), []):
+	for oid in ctx.idx["by_ko"].get(LexiconGuard.str_of(wd.get("ko", "")), []):
 		var other: Dictionary = ctx.idx["words"][oid]
-		if oid != wd["id"] and String(other.get("role", "active")) == "active" and ctx.idx["word_o"][oid] <= ctx.cur and _q_ok(ctx, other) and not accept.has(String(other.get("en", ""))):
-			accept.append(String(other.get("en", "")))
-	return {"type": "recall", "id": _id(ctx, "rcl", String(wd["id"]), mode), "stage": "recall", "mode": mode,
-		"item": String(wd["id"]), "prompt_ko": String(wd.get("ko", "")), "tts": _tts_of(wd),
+		if oid != wd["id"] and LexiconGuard.str_of(other.get("role", "active")) == "active" and ctx.idx["word_o"][oid] <= ctx.cur and _q_ok(ctx, other) and not accept.has(LexiconGuard.str_of(other.get("en", ""))):
+			accept.append(LexiconGuard.str_of(other.get("en", "")))
+	return {"type": "recall", "id": _id(ctx, "rcl", LexiconGuard.str_of(wd["id"]), mode), "stage": "recall", "mode": mode,
+		"item": LexiconGuard.str_of(wd["id"]), "prompt_ko": LexiconGuard.str_of(wd.get("ko", "")), "tts": _tts_of(wd),
 		"accept": accept, "hint": _hint_of(en)}
 
 
@@ -449,10 +451,10 @@ static func _extra_tiles(ctx: Ctx, s: Dictionary, tiles: Array) -> Array:
 	var sw: Variant = s.get("words")
 	if sw is Array:
 		for wid in sw:
-			var wd: Variant = ctx.idx["words"].get(String(wid))
+			var wd: Variant = ctx.idx["words"].get(LexiconGuard.str_of(wid))
 			if wd != null:
 				swords.append(wd)
-				sposs[String(wd.get("pos", ""))] = true
+				sposs[LexiconGuard.str_of(wd.get("pos", ""))] = true
 	var picks: Array = []
 	var shown: Dictionary = {}
 	if ctx.n_all == 0:
@@ -462,10 +464,10 @@ static func _extra_tiles(ctx: Ctx, s: Dictionary, tiles: Array) -> Array:
 			if picks.size() >= 2:
 				break
 			var c: Dictionary = ctx.b["act"][ctx.rng.randi_range(0, ctx.n_all - 1)]
-			var en: String = String(c.get("en", ""))
+			var en: String = LexiconGuard.str_of(c.get("en", ""))
 			if en == "" or en.contains(" ") or en.contains("-") or not _q_ok(ctx, c):
 				continue
-			if pass_i == 0 and not sposs.has(String(c.get("pos", ""))):
+			if pass_i == 0 and not sposs.has(LexiconGuard.str_of(c.get("pos", ""))):
 				continue
 			if shown.has(en.to_lower()) or ans_set.has(en.to_lower()):
 				continue
@@ -482,23 +484,23 @@ static func _extra_tiles(ctx: Ctx, s: Dictionary, tiles: Array) -> Array:
 
 
 static func _mk_build(ctx: Ctx, s: Dictionary) -> Dictionary:
-	var tiles: Array = tiles_of(String(s.get("en", "")))
+	var tiles: Array = tiles_of(LexiconGuard.str_of(s.get("en", "")))
 	if tiles.size() < 2 or tiles.size() > 10:
 		return {}
 	var accept: Array = [tiles]
 	var acc: Variant = s.get("accept")
 	if acc is Array:
 		for a in acc:
-			var t2: Array = tiles_of(String(a)) if a is String else []
+			var t2: Array = tiles_of(LexiconGuard.str_of(a)) if a is String else []
 			if not t2.is_empty() and not accept.has(t2):
 				accept.append(t2)
-	return {"type": "build", "id": _id(ctx, "bld", String(s["id"])), "stage": "build", "sent": String(s["id"]),
-		"ko": String(s.get("ko", "")), "answer": tiles, "extra": _extra_tiles(ctx, s, tiles), "accept": accept,
+	return {"type": "build", "id": _id(ctx, "bld", LexiconGuard.str_of(s["id"])), "stage": "build", "sent": LexiconGuard.str_of(s["id"]),
+		"ko": LexiconGuard.str_of(s.get("ko", "")), "answer": tiles, "extra": _extra_tiles(ctx, s, tiles), "accept": accept,
 		"tts": _tts_of(s)}
 
 
 static func _mk_listen_choose(ctx: Ctx, s: Dictionary, pool: Array) -> Dictionary:
-	var ko: String = String(s.get("ko", ""))
+	var ko: String = LexiconGuard.str_of(s.get("ko", ""))
 	var picks: Array = []
 	var shown: Dictionary = {ko: true}
 	var order: Array = []
@@ -513,8 +515,8 @@ static func _mk_listen_choose(ctx: Ctx, s: Dictionary, pool: Array) -> Dictionar
 			break
 		if c["id"] == s["id"]:
 			continue
-		var ck: String = String(c.get("ko", ""))
-		if ck == "" or shown.has(ck) or String(c.get("en", "")).to_lower() == String(s.get("en", "")).to_lower():
+		var ck: String = LexiconGuard.str_of(c.get("ko", ""))
+		if ck == "" or shown.has(ck) or LexiconGuard.str_of(c.get("en", "")).to_lower() == LexiconGuard.str_of(s.get("en", "")).to_lower():
 			continue
 		shown[ck] = true
 		picks.append(c)
@@ -527,45 +529,45 @@ static func _mk_listen_choose(ctx: Ctx, s: Dictionary, pool: Array) -> Dictionar
 	var options: Array = []
 	var ids: Array = []
 	for x in all:
-		options.append(String(x.get("ko", "")))
-		ids.append(String(x["id"]))
-	return {"type": "listen", "id": _id(ctx, "lis", String(s["id"])), "stage": "listen", "mode": "choose_ko",
-		"sent": String(s["id"]), "tts": _tts_of(s), "options": options, "option_ids": ids, "answer": at, "speed": ctx.speed}
+		options.append(LexiconGuard.str_of(x.get("ko", "")))
+		ids.append(LexiconGuard.str_of(x["id"]))
+	return {"type": "listen", "id": _id(ctx, "lis", LexiconGuard.str_of(s["id"])), "stage": "listen", "mode": "choose_ko",
+		"sent": LexiconGuard.str_of(s["id"]), "tts": _tts_of(s), "options": options, "option_ids": ids, "answer": at, "speed": ctx.speed}
 
 
 static func _mk_listen_type(ctx: Ctx, s: Dictionary) -> Dictionary:
-	if String(s.get("say", "")).strip_edges() != "":
+	if LexiconGuard.str_of(s.get("say", "")).strip_edges() != "":
 		return {}
-	var n: int = LexiconGuard.toks_c(ctx.idx, String(s.get("en", ""))).size()
+	var n: int = LexiconGuard.toks_c(ctx.idx, LexiconGuard.str_of(s.get("en", ""))).size()
 	if n < 3 or n > 6:
 		return {}
-	var accept: Array = [String(s.get("en", ""))]
+	var accept: Array = [LexiconGuard.str_of(s.get("en", ""))]
 	var acc: Variant = s.get("accept")
 	if acc is Array:
 		for a in acc:
 			if a is String and not accept.has(a):
 				accept.append(a)
-	return {"type": "listen", "id": _id(ctx, "lis", String(s["id"]), "type"), "stage": "listen", "mode": "type",
-		"sent": String(s["id"]), "tts": _tts_of(s), "prompt_ko": String(s.get("ko", "")), "accept": accept, "speed": ctx.speed}
+	return {"type": "listen", "id": _id(ctx, "lis", LexiconGuard.str_of(s["id"]), "type"), "stage": "listen", "mode": "type",
+		"sent": LexiconGuard.str_of(s["id"]), "tts": _tts_of(s), "prompt_ko": LexiconGuard.str_of(s.get("ko", "")), "accept": accept, "speed": ctx.speed}
 
 
 static func _mk_repeat(ctx: Ctx, s: Dictionary) -> Dictionary:
-	return {"type": "speak", "id": _id(ctx, "spk", String(s["id"]), "repeat"), "stage": "speak", "mode": "repeat",
-		"sent": String(s["id"]), "target": String(s.get("en", "")), "say": String(s.get("say", "")),
-		"ko": String(s.get("ko", "")), "tts": _tts_of(s), "accept": []}
+	return {"type": "speak", "id": _id(ctx, "spk", LexiconGuard.str_of(s["id"]), "repeat"), "stage": "speak", "mode": "repeat",
+		"sent": LexiconGuard.str_of(s["id"]), "target": LexiconGuard.str_of(s.get("en", "")), "say": LexiconGuard.str_of(s.get("say", "")),
+		"ko": LexiconGuard.str_of(s.get("ko", "")), "tts": _tts_of(s), "accept": []}
 
 
 ## 문형 바꿔 말하기: 틀의 칸에 오는 낱말 하나를 같은 품사의 배운 낱말로 바꾼다(관사 a/an 앞은 건너뜀).
 static func _mk_sub(ctx: Ctx, s: Dictionary) -> Dictionary:
-	if String(s.get("say", "")).strip_edges() != "":
+	if LexiconGuard.str_of(s.get("say", "")).strip_edges() != "":
 		return {}
-	var pat: Variant = ctx.idx["pats"].get(String(s.get("pat", "")))
+	var pat: Variant = ctx.idx["pats"].get(LexiconGuard.str_of(s.get("pat", "")))
 	if pat == null or not (pat.get("slots") is Array) or pat["slots"].is_empty() or not (pat["slots"][0] is Dictionary):
 		return {}
 	var poss: Variant = pat["slots"][0].get("pos")
 	if not (poss is Array) or poss.is_empty():
 		return {}
-	var tiles: Array = tiles_of(String(s.get("en", "")))
+	var tiles: Array = tiles_of(LexiconGuard.str_of(s.get("en", "")))
 	var sw: Variant = s.get("words")
 	if not (sw is Array):
 		return {}
@@ -574,14 +576,14 @@ static func _mk_sub(ctx: Ctx, s: Dictionary) -> Dictionary:
 	var sw_rev: Array = sw.duplicate()
 	sw_rev.reverse() # 틀의 빈칸은 문장 끝쪽에 있다: 마지막으로 맞는 낱말을 쓴다
 	for wid in sw_rev:
-		var wd: Variant = ctx.idx["words"].get(String(wid))
-		if wd == null or not poss.has(String(wd.get("pos", ""))) or String(wd.get("role", "active")) != "active":
+		var wd: Variant = ctx.idx["words"].get(LexiconGuard.str_of(wid))
+		if wd == null or not poss.has(LexiconGuard.str_of(wd.get("pos", ""))) or LexiconGuard.str_of(wd.get("role", "active")) != "active":
 			continue
-		var en: String = String(wd.get("en", "")).to_lower()
+		var en: String = LexiconGuard.str_of(wd.get("en", "")).to_lower()
 		if en.contains(" "):
 			continue
 		for i in tiles.size():
-			if String(tiles[i]).to_lower() == en:
+			if LexiconGuard.str_of(tiles[i]).to_lower() == en:
 				slot_word = wd
 				ti = i
 				break
@@ -589,11 +591,11 @@ static func _mk_sub(ctx: Ctx, s: Dictionary) -> Dictionary:
 			break
 	if ti < 0:
 		return {}
-	if ti > 0 and ["a", "an"].has(String(tiles[ti - 1]).to_lower()):
+	if ti > 0 and ["a", "an"].has(LexiconGuard.str_of(tiles[ti - 1]).to_lower()):
 		return {}
 	# 문법이 틀린 문장을 만들지 않으려고 바꿀 수 있는 품사를 좁힌다: 동사·조동사는 바꾸지 않고,
 	# 명사는 tags 가 겹칠 때만(가산·불가산 문제), 형용사·숫자·이름은 그대로 바꾼다.
-	var spos: String = String(slot_word.get("pos", ""))
+	var spos: String = LexiconGuard.str_of(slot_word.get("pos", ""))
 	if not ["n", "adj", "num", "propn"].has(spos):
 		return {}
 	var pl: Dictionary = ctx.b["pos"].get(spos, {"list": [], "os": []})
@@ -607,7 +609,7 @@ static func _mk_sub(ctx: Ctx, s: Dictionary) -> Dictionary:
 			cands.append(pl["list"][ctx.rng.randi_range(0, pn - 1)])
 	var rep: Dictionary = {}
 	for c in cands:
-		var cen: String = String(c.get("en", ""))
+		var cen: String = LexiconGuard.str_of(c.get("en", ""))
 		if c["id"] == slot_word["id"] or cen.contains(" ") or cen.contains("-") or LexiconGuard.is_syn(slot_word, c) or not _q_ok(ctx, c):
 			continue
 		if spos == "n":
@@ -626,16 +628,16 @@ static func _mk_sub(ctx: Ctx, s: Dictionary) -> Dictionary:
 	if rep.is_empty():
 		return {}
 	var new_tiles: Array = tiles.duplicate()
-	var rtxt: String = String(rep["en"])
+	var rtxt: String = LexiconGuard.str_of(rep["en"])
 	if ti == 0:
 		rtxt = rtxt.substr(0, 1).to_upper() + rtxt.substr(1)
 	new_tiles[ti] = rtxt
-	var en_full: String = String(s["en"]).strip_edges()
+	var en_full: String = LexiconGuard.str_of(s["en"]).strip_edges()
 	var tail: String = en_full.substr(en_full.length() - 1) if ".!?".contains(en_full.substr(en_full.length() - 1)) else ""
 	var accept: String = " ".join(PackedStringArray(new_tiles)) + tail
-	return {"type": "speak", "id": _id(ctx, "spk", String(s["id"]), "substitute"), "stage": "speak", "mode": "substitute",
-		"sent": String(s["id"]), "target": String(s["en"]), "ko": String(s.get("ko", "")), "tts": _tts_of(s),
-		"cue": {"slot": String(tiles[ti]), "with": String(rep["en"]), "with_ko": String(rep.get("ko", ""))},
+	return {"type": "speak", "id": _id(ctx, "spk", LexiconGuard.str_of(s["id"]), "substitute"), "stage": "speak", "mode": "substitute",
+		"sent": LexiconGuard.str_of(s["id"]), "target": LexiconGuard.str_of(s["en"]), "ko": LexiconGuard.str_of(s.get("ko", "")), "tts": _tts_of(s),
+		"cue": {"slot": LexiconGuard.str_of(tiles[ti]), "with": LexiconGuard.str_of(rep["en"]), "with_ko": LexiconGuard.str_of(rep.get("ko", ""))},
 		"accept": [accept]}
 
 
@@ -644,19 +646,19 @@ static func _mk_dialogue(ctx: Ctx, did: String, role: bool) -> Dictionary:
 	var dl: Variant = ctx.idx["dlgs"].get(did)
 	if dl == null or not (dl.get("lines") is Array) or dl["lines"].is_empty():
 		return {}
-	var user: String = String(dl.get("user", "B"))
+	var user: String = LexiconGuard.str_of(dl.get("user", "B"))
 	var lines: Array = []
 	for ln in dl["lines"]:
 		if not (ln is Dictionary):
 			return {}
-		var you: bool = role and String(ln.get("s", "")) == user
-		var item: Dictionary = {"s": String(ln.get("s", "")), "en": String(ln.get("en", "")), "ko": String(ln.get("ko", "")),
+		var you: bool = role and LexiconGuard.str_of(ln.get("s", "")) == user
+		var item: Dictionary = {"s": LexiconGuard.str_of(ln.get("s", "")), "en": LexiconGuard.str_of(ln.get("en", "")), "ko": LexiconGuard.str_of(ln.get("ko", "")),
 			"tts": _tts_of(ln), "you": you}
-		if String(ln.get("say", "")) != "":
-			item["say"] = String(ln["say"])
+		if LexiconGuard.str_of(ln.get("say", "")) != "":
+			item["say"] = LexiconGuard.str_of(ln["say"])
 		if you:
-			item["hint_ko"] = String(ln.get("ko", ""))
-			item["accept"] = [String(ln.get("en", ""))]
+			item["hint_ko"] = LexiconGuard.str_of(ln.get("ko", ""))
+			item["accept"] = [LexiconGuard.str_of(ln.get("en", ""))]
 		lines.append(item)
 	return {"type": "dialogue_script", "id": _id(ctx, "dlg", did), "stage": "dialogue", "mode": "role" if role else "listen",
 		"dialogue": did, "lines": lines}
@@ -721,7 +723,7 @@ static func _cap_tatoeba(cands: Array, n: int) -> Array:
 	var late: Array = []
 	var cnt: int = 0
 	for s in cands:
-		if String(s.get("src", "own")) == "tatoeba":
+		if LexiconGuard.str_of(s.get("src", "own")) == "tatoeba":
 			if cnt < cap:
 				cnt += 1
 				main.append(s)
@@ -782,10 +784,10 @@ static func _unit_new(ctx: Ctx, out: Array, half: bool) -> void:
 	var wids: Variant = day.get("words")
 	if wids is Array:
 		for wid in wids:
-			var wd: Variant = idx["words"].get(String(wid))
+			var wd: Variant = idx["words"].get(LexiconGuard.str_of(wid))
 			if wd == null:
-				ctx.warnings.append("word_missing:" + String(wid))
-			elif String(wd.get("role", "active")) == "active":
+				ctx.warnings.append("word_missing:" + LexiconGuard.str_of(wid))
+			elif LexiconGuard.str_of(wd.get("role", "active")) == "active":
 				nw.append(wd)
 	if half and nw.size() > 3:
 		nw = nw.slice(0, 3)
@@ -793,10 +795,10 @@ static func _unit_new(ctx: Ctx, out: Array, half: bool) -> void:
 	var pv: Variant = day.get("patterns")
 	if pv is Array:
 		for pid in pv:
-			if idx["pats"].has(String(pid)):
-				pids.append(String(pid))
+			if idx["pats"].has(LexiconGuard.str_of(pid)):
+				pids.append(LexiconGuard.str_of(pid))
 			else:
-				ctx.warnings.append("pattern_missing:" + String(pid))
+				ctx.warnings.append("pattern_missing:" + LexiconGuard.str_of(pid))
 	if nw.is_empty() and pids.is_empty():
 		ctx.errors.append("empty_day")
 		return
@@ -804,35 +806,35 @@ static func _unit_new(ctx: Ctx, out: Array, half: bool) -> void:
 	ctx.b = _bidx(idx)
 	var best: Dictionary = {}
 	for wd in nw:
-		for s in ctx.b["by_word"].get(String(wd["id"]), []):
+		for s in ctx.b["by_word"].get(LexiconGuard.str_of(wd["id"]), []):
 			var so: int = LexiconGuard.int_o(s.get("o"))
-			if so > ctx.cur or String(s.get("scope", "all")) not in ["all", ""]:
+			if so > ctx.cur or LexiconGuard.str_of(s.get("scope", "all")) not in ["all", ""]:
 				continue
-			var sc: int = (0 if so == ctx.cur else 1) * 100 + String(s.get("en", "")).length()
-			var wid: String = String(wd["id"])
+			var sc: int = (0 if so == ctx.cur else 1) * 100 + LexiconGuard.str_of(s.get("en", "")).length()
+			var wid: String = LexiconGuard.str_of(wd["id"])
 			if not best.has(wid) or best[wid][0] > sc:
 				best[wid] = [sc, s]
 	# (1) 소개
 	for wd in nw:
-		if ctx.seen.has(String(wd["id"])):
+		if ctx.seen.has(LexiconGuard.str_of(wd["id"])):
 			continue
-		var exm: Variant = best[String(wd["id"])][1] if best.has(String(wd["id"])) else null
+		var exm: Variant = best[LexiconGuard.str_of(wd["id"])][1] if best.has(LexiconGuard.str_of(wd["id"])) else null
 		var ex: Dictionary = _mk_teach_word(ctx, wd, exm)
 		if _emit(ctx, out, ex):
-			ctx.seen[String(wd["id"])] = true
+			ctx.seen[LexiconGuard.str_of(wd["id"])] = true
 		elif exm != null:
 			# 예문 때문에 버려졌을 수 있다: 예문 없이 한 번 더
 			var ex2: Dictionary = _mk_teach_word(ctx, wd, null)
 			if _emit(ctx, out, ex2):
-				ctx.seen[String(wd["id"])] = true
+				ctx.seen[LexiconGuard.str_of(wd["id"])] = true
 	for pid in pids:
 		var pt: Dictionary = idx["pats"][pid]
 		var exs: Array = []
 		var ids: Variant = pt.get("examples")
 		if ids is Array:
 			for sid in ids:
-				var s2: Variant = idx["sents"].get(String(sid))
-				if s2 != null and LexiconGuard.int_o(s2.get("o")) <= ctx.cur and LexiconGuard.check_sentence(s2, ctx.cur, ctx.data)["ok"] and String(s2.get("scope", "all")) in ["all", ""]:
+				var s2: Variant = idx["sents"].get(LexiconGuard.str_of(sid))
+				if s2 != null and LexiconGuard.int_o(s2.get("o")) <= ctx.cur and LexiconGuard.check_sentence(s2, ctx.cur, ctx.data)["ok"] and LexiconGuard.str_of(s2.get("scope", "all")) in ["all", ""]:
 					exs.append(s2)
 					if exs.size() >= 3:
 						break
@@ -840,7 +842,7 @@ static func _unit_new(ctx: Ctx, out: Array, half: bool) -> void:
 	_make_qpool(ctx)
 	var qwords: Array = []
 	for wd in nw:
-		if ctx.seen.has(String(wd["id"])):
+		if ctx.seen.has(LexiconGuard.str_of(wd["id"])):
 			qwords.append(wd)
 	# (2) 알아보기: 낱말당 2
 	var rec: Array = []
@@ -871,14 +873,14 @@ static func _unit_new(ctx: Ctx, out: Array, half: bool) -> void:
 	# (5) 듣기 4 (뜻 고르기 3 + 받아쓰기 1)
 	var lc: Array = _cap_tatoeba(_sents(ctx, true, 0, ctx.cur, false), 4)
 	var got: int = _fill(ctx, out, lc, 3, "listen_choose")
-	var lc_rest: Array = lc.filter(func(s): return not ctx.used.has(_id(ctx, "lis", String(s["id"]))))
+	var lc_rest: Array = lc.filter(func(s): return not ctx.used.has(_id(ctx, "lis", LexiconGuard.str_of(s["id"]))))
 	var typed: int = _fill(ctx, out, lc_rest, 1, "listen_type")
 	if got + typed < 4:
 		_fill(ctx, out, lc_rest, 4 - got - typed, "listen_choose")
 	# (6) 말하기 5
 	_speak_set(ctx, out, 5, 2, false)
-	if ctx.d == 4 and not String(ctx.week.get("dialogue", "")).is_empty():
-		var dx: Dictionary = _mk_dialogue(ctx, String(ctx.week["dialogue"]), ctx.script_ok)
+	if ctx.d == 4 and not LexiconGuard.str_of(ctx.week.get("dialogue", "")).is_empty():
+		var dx: Dictionary = _mk_dialogue(ctx, LexiconGuard.str_of(ctx.week["dialogue"]), ctx.script_ok)
 		if not dx.is_empty():
 			_emit(ctx, out, dx)
 
@@ -893,8 +895,8 @@ static func _speak_set(ctx: Ctx, out: Array, total: int, n_sub: int, seeded: boo
 		_fill(ctx, subs, cands, n_sub, "sub")
 	var sub_sents: Dictionary = {}
 	for e in subs:
-		sub_sents[String(e["sent"])] = true
-	var rest: Array = cands.filter(func(s): return not sub_sents.has(String(s["id"])))
+		sub_sents[LexiconGuard.str_of(e["sent"])] = true
+	var rest: Array = cands.filter(func(s): return not sub_sents.has(LexiconGuard.str_of(s["id"])))
 	var reps: Array = []
 	_fill(ctx, reps, rest, total - subs.size(), "repeat")
 	out.append_array(reps)
@@ -907,7 +909,7 @@ static func _unit_listen(ctx: Ctx, out: Array) -> void:
 	_make_qpool(ctx)
 	var cands: Array = _cap_tatoeba(_sents(ctx, true, 0, ctx.cur, true), 8)
 	var got: int = _fill(ctx, out, cands, 6, "listen_choose")
-	var rest: Array = cands.filter(func(s): return not ctx.used.has(_id(ctx, "lis", String(s["id"]))))
+	var rest: Array = cands.filter(func(s): return not ctx.used.has(_id(ctx, "lis", LexiconGuard.str_of(s["id"]))))
 	var typed: int = _fill(ctx, out, rest, 2, "listen_type")
 	if got + typed < 8:
 		_fill(ctx, out, rest, 8 - got - typed, "listen_choose")
@@ -915,7 +917,7 @@ static func _unit_listen(ctx: Ctx, out: Array) -> void:
 
 static func _unit_speak(ctx: Ctx, out: Array) -> void:
 	_make_qpool(ctx)
-	var did: String = String(ctx.week.get("dialogue", ""))
+	var did: String = LexiconGuard.str_of(ctx.week.get("dialogue", ""))
 	if (ctx.d == 4 or ctx.d == 5) and ctx.script_ok and did != "":
 		var dx: Dictionary = _mk_dialogue(ctx, did, true)
 		if not dx.is_empty():
@@ -955,7 +957,7 @@ static func _words_in(ctx: Ctx, lo: int, hi: int) -> Array:
 
 static func _dialogue_choose(ctx: Ctx, lo: int, hi: int, tag: String) -> Dictionary:
 	var ids: Array = []
-	var wk: String = String(ctx.week.get("dialogue", ""))
+	var wk: String = LexiconGuard.str_of(ctx.week.get("dialogue", ""))
 	if wk != "" and ctx.idx["dlgs"].has(wk) and ctx.w * 10 >= lo and ctx.w * 10 <= hi + 9:
 		ids.append(wk)
 	for did in ctx.idx["dlg_ids"]:
@@ -971,24 +973,24 @@ static func _dialogue_choose(ctx: Ctx, lo: int, hi: int, tag: String) -> Diction
 		_shuffle(ctx.rng, order)
 		for i in order:
 			var ln: Variant = dl["lines"][i]
-			if not (ln is Dictionary) or String(ln.get("ko", "")) == "" or String(ln.get("en", "")) == "" or LexiconGuard.int_o(ln.get("o")) > ctx.cur:
+			if not (ln is Dictionary) or LexiconGuard.str_of(ln.get("ko", "")) == "" or LexiconGuard.str_of(ln.get("en", "")) == "" or LexiconGuard.int_o(ln.get("o")) > ctx.cur:
 				continue
-			var ko: String = String(ln["ko"])
+			var ko: String = LexiconGuard.str_of(ln["ko"])
 			var picks: Array = []
 			var shown: Dictionary = {ko: true}
 			var pool: Array = _sents(ctx, true, 0, ctx.cur, true)
 			for j in dl["lines"].size():
 				var l2: Variant = dl["lines"][j]
-				if j != i and l2 is Dictionary and String(l2.get("ko", "")) != "" and LexiconGuard.int_o(l2.get("o")) <= ctx.cur and not shown.has(String(l2["ko"])) and picks.size() < 1:
-					shown[String(l2["ko"])] = true
-					picks.append(["%s#%d" % [did, j], String(l2["ko"])])
+				if j != i and l2 is Dictionary and LexiconGuard.str_of(l2.get("ko", "")) != "" and LexiconGuard.int_o(l2.get("o")) <= ctx.cur and not shown.has(LexiconGuard.str_of(l2["ko"])) and picks.size() < 1:
+					shown[LexiconGuard.str_of(l2["ko"])] = true
+					picks.append(["%s#%d" % [did, j], LexiconGuard.str_of(l2["ko"])])
 			for s in pool:
 				if picks.size() >= 3:
 					break
-				var sk: String = String(s.get("ko", ""))
+				var sk: String = LexiconGuard.str_of(s.get("ko", ""))
 				if not shown.has(sk):
 					shown[sk] = true
-					picks.append([String(s["id"]), sk])
+					picks.append([LexiconGuard.str_of(s["id"]), sk])
 			if picks.is_empty():
 				continue
 			var at: int = ctx.rng.randi_range(0, picks.size())
@@ -1078,7 +1080,7 @@ static func _unit_recap(ctx: Ctx, out: Array) -> void:
 			if got >= pl[1]:
 				break
 		if got < pl[1]:
-			ctx.warnings.append("recap_short:" + String(pl[0]))
+			ctx.warnings.append("recap_short:" + LexiconGuard.str_of(pl[0]))
 	for ex in out:
 		ex["stage"] = "recap"
 
@@ -1086,7 +1088,8 @@ static func _unit_recap(ctx: Ctx, out: Array) -> void:
 ## 월말 말하기 평가. K1 의 en_speak_prompts.json(= data["speak_prompts"]) 모양을 그대로 쓴다:
 ##   [{"month":1,"w":4,"prompts":[{"id","kind":"read|answer|question|intro","en","ko","say","expect_any":[...],"o"}]}]
 ## read -> 따라 읽기, answer·question -> 질문에 대답, intro -> 자기소개. o 가 cur 보다 큰 프롬프트와 가드에 걸리는 프롬프트는 쓰지 않는다.
-## 5문제가 안 되면 배운 문장 따라 읽기로 채운다. expect_any 는 채점용 기대 표현이라 화면에 보이지 않으므로 가드 검사 대상이 아니다.
+## 5문제가 안 되면 배운 문장 따라 읽기로 채운다. expect_any 는 학습자에게 말하라고 요구하는 표현이라 배운 낱말이어야 한다:
+## 안 배운 낱말이 든 항목은 그 항목만 빼고, 남는 항목이 없으면 문제를 버리고 dropped 로 센다.
 static func _unit_month(ctx: Ctx, out: Array) -> void:
 	_make_qpool(ctx)
 	var m: int = (ctx.w + 3) / 4
@@ -1104,19 +1107,30 @@ static func _unit_month(ctx: Ctx, out: Array) -> void:
 		if not (grp is Dictionary) or LexiconGuard.int_o(grp.get("month")) != m or not (grp.get("prompts") is Array):
 			continue
 		for pr in grp["prompts"]:
-			if not (pr is Dictionary) or String(pr.get("id", "")) == "" or LexiconGuard.int_o(pr.get("o")) > ctx.cur:
+			if not (pr is Dictionary) or LexiconGuard.str_of(pr.get("id", "")) == "" or LexiconGuard.int_o(pr.get("o")) > ctx.cur:
 				continue
-			var kind: String = String(pr.get("kind", ""))
-			var en: String = String(pr.get("en", ""))
-			var say: String = String(pr.get("say", ""))
+			var kind: String = LexiconGuard.str_of(pr.get("kind", ""))
+			var en: String = LexiconGuard.str_of(pr.get("en", ""))
+			var say: String = LexiconGuard.str_of(pr.get("say", ""))
 			var tts: String = say if say.strip_edges() != "" else en
 			var expect: Array = []
 			if pr.get("expect_any") is Array:
 				for e in pr["expect_any"]:
 					if e is String:
 						expect.append(e)
-			var base: Dictionary = {"type": "speak", "id": _id(ctx, "chk", String(pr["id"])), "stage": "month", "ko": String(pr.get("ko", "")),
-				"say": say, "tts": tts, "expect_any": expect, "prompt_id": String(pr["id"])}
+			if not expect.is_empty():
+				var kept: Array = []
+				for e2 in expect:
+					if LexiconGuard.check_text(e2, ctx.cur, ctx.data)["ok"]:
+						kept.append(e2)
+				if kept.is_empty():
+					ctx.dropped += 1
+					if ctx.dinfo.size() < 20:
+						ctx.dinfo.append({"id": _id(ctx, "chk", LexiconGuard.str_of(pr["id"])), "bad": [{"where": "expect_any", "token": "", "why": "expect_any_unlearned", "o": -1}]})
+					continue
+				expect = kept
+			var base: Dictionary = {"type": "speak", "id": _id(ctx, "chk", LexiconGuard.str_of(pr["id"])), "stage": "month", "ko": LexiconGuard.str_of(pr.get("ko", "")),
+				"say": say, "tts": tts, "expect_any": expect, "prompt_id": LexiconGuard.str_of(pr["id"])}
 			var ex: Dictionary = base.duplicate()
 			if kind == "read":
 				ex["part"] = "read"
@@ -1149,26 +1163,47 @@ static func _unit_month(ctx: Ctx, out: Array) -> void:
 
 ## ------------------------------------------------------------------ 채점 (E2-9)
 
-## 비교용 정규화: 소문자, 앞뒤 공백·끝 부호 무시, 연속 공백 하나로, 굽은 따옴표는 곧은 것으로.
+## 비교용 정규화: 가드(LexiconGuard.tokens, K1 규칙)와 같은 토큰 열을 공백 한 칸으로 이은 글.
+## 대소문자·앞뒤 공백·부호·전각·굽은 따옴표·하이픈 차이는 무시한다. 글이 아니면 "".
 static func norm_answer(s: Variant) -> String:
 	if not (s is String):
 		return ""
-	var t: String = String(s)
-	for ch in ["’", "‘", "ʼ", "`", "´"]:
-		t = t.replace(ch, "'")
-	for ch in [" ", "　", "\t", "\n", "\r", " ", " ", "​"]:
-		t = t.replace(ch, " ")
-	t = t.strip_edges().to_lower()
-	while t.contains("  "):
-		t = t.replace("  ", " ")
-	var a: int = 0
-	var b: int = t.length()
-	var punct: String = ".,!?;:\"()…“”¿¡ "
-	while a < b and punct.contains(t[a]):
-		a += 1
-	while b > a and punct.contains(t[b - 1]):
-		b -= 1
-	return t.substr(a, b - a)
+	return " ".join(PackedStringArray(LexiconGuard.tokens(s)))
+
+
+## 고르기 답으로 쓸 수 있는 값(int, 또는 소수 부분이 없는 float). bool·문자열·1.5 는 아니다.
+static func _is_index(v: Variant) -> bool:
+	if v is int:
+		return true
+	if v is float:
+		var f: float = v
+		return not is_nan(f) and not is_inf(f) and f == floorf(f) and absf(f) < 1.0e9
+	return false
+
+
+## 타일 배열을 한 줄 글로. 글이 아닌 원소가 하나라도 있으면 null.
+static func _tiles_text(v: Array) -> Variant:
+	var parts: PackedStringArray = PackedStringArray()
+	for x in v:
+		if not (x is String):
+			return null
+		parts.append(x)
+	return " ".join(parts)
+
+
+## 토큰 열 hay 안에 needle 이 연속으로 들어 있는가.
+static func _contains_seq(hay: Array, needle: Array) -> bool:
+	if needle.is_empty() or needle.size() > hay.size():
+		return false
+	for i in range(hay.size() - needle.size() + 1):
+		var m: bool = true
+		for j in needle.size():
+			if hay[i + j] != needle[j]:
+				m = false
+				break
+		if m:
+			return true
+	return false
 
 
 static func _edit1(a: String, b: String) -> bool:
@@ -1198,21 +1233,25 @@ static func _edit1(a: String, b: String) -> bool:
 
 
 ## 답 판정 -> {ok, near}. 고르기(int)·조립(Array/String)·쓰기·말하기(String). 이상한 입력은 {ok:false, near:false}.
+## 글 비교는 모두 norm_answer(가드와 같은 토큰 규칙)로 한다. 월말 answer/intro 는 전사에 expect_any 항목의 토큰 열이 연속으로 들어 있으면 맞다.
 static func judge(ex: Variant, answer: Variant) -> Dictionary:
 	var res: Dictionary = {"ok": false, "near": false}
 	if not (ex is Dictionary):
 		return res
-	var typ: String = String(ex.get("type", ""))
-	var mode: String = String(ex.get("mode", ""))
+	var typ: String = LexiconGuard.str_of(ex.get("type", ""))
+	var mode: String = LexiconGuard.str_of(ex.get("mode", ""))
 	var is_choice: bool = typ == "recognize" or (typ == "listen" and mode == "choose_ko") or (typ == "recall" and mode == "ko_en_choice")
 	if is_choice:
-		if (answer is int or answer is float) and (ex.get("answer") is int or ex.get("answer") is float):
+		if _is_index(answer) and _is_index(ex.get("answer")):
 			res["ok"] = int(answer) == int(ex["answer"])
 		return res
 	if typ == "build":
 		var got: String = ""
 		if answer is Array:
-			got = norm_answer(" ".join(PackedStringArray(answer.map(func(x): return String(x)))))
+			var joined: Variant = _tiles_text(answer)
+			if joined == null:
+				return res
+			got = norm_answer(joined)
 		elif answer is String:
 			got = norm_answer(answer)
 		else:
@@ -1226,7 +1265,10 @@ static func judge(ex: Variant, answer: Variant) -> Dictionary:
 		for l in lists:
 			var txt: String = ""
 			if l is Array:
-				txt = " ".join(PackedStringArray(l.map(func(x): return String(x))))
+				var jl: Variant = _tiles_text(l)
+				if jl == null:
+					continue
+				txt = jl
 			elif l is String:
 				txt = l
 			if got != "" and norm_answer(txt) == got:
@@ -1234,13 +1276,11 @@ static func judge(ex: Variant, answer: Variant) -> Dictionary:
 				return res
 		return res
 	if typ == "speak" and (mode == "answer" or mode == "intro"):
-		# 월말 평가: 대답(전사)에 기대 표현(expect_any) 중 하나가 단어 단위로 들어 있으면 맞다
 		if not (answer is String) or not (ex.get("expect_any") is Array):
 			return res
-		var ga: String = " " + norm_answer(answer) + " "
+		var ga: Array = LexiconGuard.tokens(answer)
 		for e in ex["expect_any"]:
-			var ne: String = norm_answer(e)
-			if ne != "" and ga.contains(" " + ne + " "):
+			if e is String and _contains_seq(ga, LexiconGuard.tokens(e)):
 				res["ok"] = true
 				return res
 		return res
@@ -1253,8 +1293,8 @@ static func judge(ex: Variant, answer: Variant) -> Dictionary:
 		var accepts: Array = []
 		if ex.get("accept") is Array:
 			accepts = ex["accept"].duplicate()
-		if typ == "speak" and String(ex.get("target", "")) != "" and mode == "repeat":
-			accepts.append(String(ex["target"]))
+		if typ == "speak" and ex.get("target") is String and LexiconGuard.str_of(ex["target"]) != "" and mode == "repeat":
+			accepts.append(ex["target"])
 		for a in accepts:
 			if a is String and norm_answer(a) == g:
 				res["ok"] = true

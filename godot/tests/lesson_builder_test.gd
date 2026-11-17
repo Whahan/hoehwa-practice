@@ -239,6 +239,25 @@ func _test_composition() -> void:
 	for e in rk["exercises"]:
 		rk_ids.append(String(e["id"]))
 	ok(rk_ids.has("x:4:6:chk:sp0401") and rk_ids.has("x:4:6:chk:sp0402") and rk_ids.has("x:4:6:chk:sp0403"), "K1 output: sp0401 (read), sp0402 (answer), sp0403 (intro) became exercises")
+	# 안 배운 낱말이 든 expect_any: 그 항목만 빼고, 남는 항목이 없으면 문제를 버리고 dropped 로 센다 (review 7)
+	var kp: Dictionary = k1_raw.duplicate(true)
+	for grp in kp["speak_prompts"]:
+		for pr in grp["prompts"]:
+			if pr["id"] == "sp0402":
+				pr["expect_any"] = ["yes", "welcome zebra"]
+			elif pr["id"] == "sp0403":
+				pr["expect_any"] = ["zzzfuture", "qqqfuture"]
+	var rkp: Dictionary = _build("month", 4, 6, 5, LessonBuilder.prepare(kp))
+	var ask_ex: Dictionary = {}
+	var intro_seen: bool = false
+	for e in rkp["exercises"]:
+		if e["id"] == "x:4:6:chk:sp0402":
+			ask_ex = e
+		if e["id"] == "x:4:6:chk:sp0403":
+			intro_seen = true
+	print("selfcheck FAIL-as-expected month-expect-any: dropped=", rkp["dropped"], " kept=", ask_ex.get("expect_any", []))
+	ok(not ask_ex.is_empty() and ask_ex["expect_any"] == ["yes"], "month: an expect_any item with a not-yet-learned word is removed, the others stay")
+	ok(not intro_seen and rkp["dropped"] == 1 and rkp["dropped_info"][0]["bad"][0]["why"] == "expect_any_unlearned", "month: a prompt left with no expect_any is dropped and counted")
 	# 감싸는 키가 붙은 K1 파일 객체를 그대로 넘겨도 같은 결과
 	var wrapped: Dictionary = {}
 	for k in k1_raw.keys():
@@ -625,6 +644,21 @@ func _test_judge() -> void:
 		[{"type": "speak", "mode": "intro", "expect_any": ["name", "min"]}, "My name is Min", true, false, "intro: any expected word"],
 		[{"type": "speak", "mode": "intro", "expect_any": []}, "anything", false, false, "intro: no expectations -> not ok"],
 		[{"type": "speak", "mode": "answer", "expect_any": "x"}, "x", false, false, "answer: expect_any not a list"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["yes", "no"]}, "Yes, I do", true, false, "answer: inner comma does not hide the expected word (review 2)"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["yes", "no"]}, "No, thanks", true, false, "answer: No, thanks"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["my name is"]}, "well, my  NAME is... Min", true, false, "answer: phrase with odd punctuation and spacing"],
+		[{"type": "speak", "mode": "answer", "expect_any": ["my name is"]}, "my is name", false, false, "answer: phrase tokens must stay in order"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["don't"]}, "\uff44\uff4f\uff4e't", true, false, "recall: fullwidth letters match (review 5)"],
+		[{"type": "recall", "mode": "ko_en_type", "accept": ["don't"]}, "don\u2019t", true, false, "recall: curly apostrophe matches"],
+		[{"type": "listen", "mode": "type", "accept": ["I like apples."]}, "i, like apples", true, false, "listen type: inner comma ignored"],
+		[{"type": "recognize", "answer": 1}, 1.5, false, false, "choice: 1.5 is not index 1 (review 3)"],
+		[{"type": "recognize", "answer": 1}, true, false, false, "choice: bool is not an index"],
+		[{"type": "recognize", "answer": 1}, "1", false, false, "choice: string is not an index"],
+		[{"type": "recognize", "answer": 1.5}, 1, false, false, "choice: a broken ex answer 1.5 never matches"],
+		[{"type": "recognize", "answer": 1}, 1.0, true, false, "choice: integral float is index 1"],
+		[{"type": "build", "answer": ["I", "like"], "accept": []}, ["I", null], false, false, "build: a non-text tile -> wrong, no error"],
+		[{"type": "build", "answer": ["I", "like"], "accept": []}, [5, {}], false, false, "build: numbers and dicts as tiles -> wrong, no error"],
+		[{"type": "build", "answer": ["I", null], "accept": [[1, 2], 5, null, ["I", "like"]]}, ["I", "like"], true, false, "build: junk inside accept is skipped, a good accept still matches"],
 		[null, 1, false, false, "ex null"],
 		[{}, 1, false, false, "ex empty"],
 		[{"type": "speak"}, 5, false, false, "speak without accept and a number answer"],
@@ -638,7 +672,7 @@ func _test_judge() -> void:
 			print("    judge row mismatch: ", r[4], " got ", res)
 	ok(rows.size() >= 25, "E2-9 judge table has >= 25 rows (%d)" % rows.size())
 	ok(bad == 0, "E2-9 all judge rows match (%d bad)" % bad)
-	ok(LessonBuilder.norm_answer("  Hello,  WORLD!! ") == "hello, world", "norm_answer: case, spaces, end punctuation")
+	ok(LessonBuilder.norm_answer("  Hello,  WORLD!! ") == "hello world", "norm_answer: same token rule as the guard (case, spaces, punctuation)")
 	ok(LessonBuilder.norm_answer("It’s") == "it's" and LessonBuilder.norm_answer(null) == "", "norm_answer: curly apostrophe, null")
 	# 만든 문제는 자기 정답을 맞다고 판정한다(만든 쪽과 채점이 어긋나지 않는다)
 	var data: Dictionary = _idx(mini_raw)
@@ -1164,7 +1198,7 @@ func _run_matrix(name: String, raw: Dictionary, weeks_max: int, seeds: int, expe
 					var r: Dictionary = LessonBuilder.build({"kind": kind, "w": w, "d": d, "seen": []}, data, sd * 7919 + w * 31 + d)
 					units += 1
 					dropped += int(r["dropped"])
-					if r["dropped"] > 0 and printed_drop < 6 and not name == "poison":
+					if r["dropped"] > 0 and printed_drop < 6 and not name.ends_with("poison"):
 						printed_drop += 1
 						print("    DROPPED %s %s w%d d%d seed %d: %s" % [name, kind, w, d, sd, JSON.stringify(r["dropped_info"].slice(0, 2))])
 					if not r["ok"]:

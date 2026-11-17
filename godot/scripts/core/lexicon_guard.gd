@@ -106,18 +106,48 @@ static func int_o(v: Variant) -> int:
 	return INF_O
 
 
+## 어떤 값이든 안전하게 문자열로: String/StringName/숫자만 글로 바꾸고, null·Dictionary·Array·Object 등은 "" 이다(에러 없음).
+## 글이어야 하는 자리에서는 호출하는 쪽이 따로 `not_string` 위반으로 센다.
+static func str_of(v: Variant) -> String:
+	if v is String:
+		return v
+	if v is StringName:
+		return String(v)
+	if v is int or v is float:
+		return str(v)
+	return ""
+
+
+## d[key] 가 있는데 String 이 아니면 not_string 위반.
+static func _fields_str(bad: Array, d: Dictionary, keys: Array, where: String) -> void:
+	for k in keys:
+		if d.has(k) and not (d[k] is String):
+			bad.append(_b(where + "." + k, "", "not_string", -1))
+
+
+## 타일·글 배열을 한 줄 글로 합친다. 글이 아닌 원소는 not_string 위반으로 세고 건너뛴다.
+static func _join_strs(bad: Array, arr: Array, where: String) -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	for i in arr.size():
+		if arr[i] is String:
+			parts.append(arr[i])
+		else:
+			bad.append(_b("%s[%d]" % [where, i], "", "not_string", -1))
+	return " ".join(parts)
+
+
 ## Array(원소에 "id") 또는 Dictionary 를 id -> Dictionary 로 바꾼다. 이상한 원소는 건너뛴다.
 static func coll(v: Variant) -> Dictionary:
 	var out: Dictionary = {}
 	if v is Array:
 		for e in v:
-			if e is Dictionary and e.get("id") is String and String(e["id"]) != "":
-				out[String(e["id"])] = e
+			if e is Dictionary and e.get("id") is String and str_of(e["id"]) != "":
+				out[str_of(e["id"])] = e
 	elif v is Dictionary:
 		for k in v.keys():
 			var e: Variant = v[k]
 			if e is Dictionary:
-				var id: String = String(e.get("id", k))
+				var id: String = str_of(e.get("id", k))
 				if id != "":
 					out[id] = e
 	return out
@@ -172,8 +202,8 @@ static func _build_idx(data: Dictionary) -> Dictionary:
 				var wn: int = INF_O
 				if e.has("w"):
 					wn = int_o(e["w"])
-				elif String(k).is_valid_int():
-					wn = int(String(k))
+				elif str_of(k).is_valid_int():
+					wn = int(str_of(k))
 				weeks[wn] = e
 	idx["words"] = words
 	idx["sents"] = sents
@@ -192,14 +222,14 @@ static func _build_idx(data: Dictionary) -> Dictionary:
 		var wd: Dictionary = words[wid]
 		var wo: int = int_o(wd.get("o"))
 		word_o[wid] = wo
-		var pv: bool = String(wd.get("role", "active")) == "passive"
-		_add_seq(seqs, tokens(String(wd.get("en", ""))), wo, wid, pv)
+		var pv: bool = str_of(wd.get("role", "active")) == "passive"
+		_add_seq(seqs, tokens(str_of(wd.get("en", ""))), wo, wid, pv)
 		var forms: Variant = wd.get("forms")
 		if forms is Array:
 			for f in forms:
 				if not (f is Dictionary):
 					continue
-				var pid: String = String(f.get("pat", ""))
+				var pid: String = str_of(f.get("pat", ""))
 				var fo: int
 				if f.has("o"):
 					fo = maxi(wo, int_o(f["o"])) # K1 이 이미 max(낱말 o, 문형 o) 로 계산해 준다
@@ -209,13 +239,13 @@ static func _build_idx(data: Dictionary) -> Dictionary:
 					fo = maxi(wo, int_o(pats[pid].get("o")))
 				else:
 					fo = INF_O
-				_add_seq(seqs, tokens(String(f.get("f", ""))), fo, wid, pv)
+				_add_seq(seqs, tokens(str_of(f.get("f", ""))), fo, wid, pv)
 		var alt: Variant = wd.get("alt")
 		if alt is Array:
 			for a in alt:
 				if a is String:
 					_add_seq(seqs, tokens(a), wo, wid, pv)
-		var ko: String = String(wd.get("ko", ""))
+		var ko: String = str_of(wd.get("ko", ""))
 		if ko != "":
 			if not by_ko.has(ko):
 				by_ko[ko] = []
@@ -229,7 +259,7 @@ static func _build_idx(data: Dictionary) -> Dictionary:
 	# 듣기 보기용: 뜻(ko) -> 문장 id 또는 대화 줄 "d0005#1"
 	var sent_by_ko: Dictionary = {}
 	for sid in idx["sent_ids"]:
-		var ko2: String = String(sents[sid].get("ko", ""))
+		var ko2: String = str_of(sents[sid].get("ko", ""))
 		if ko2 != "":
 			if not sent_by_ko.has(ko2):
 				sent_by_ko[ko2] = []
@@ -239,7 +269,7 @@ static func _build_idx(data: Dictionary) -> Dictionary:
 		if lines is Array:
 			for i in lines.size():
 				if lines[i] is Dictionary:
-					var ko3: String = String(lines[i].get("ko", ""))
+					var ko3: String = str_of(lines[i].get("ko", ""))
 					if ko3 != "":
 						if not sent_by_ko.has(ko3):
 							sent_by_ko[ko3] = []
@@ -327,7 +357,7 @@ static func _cover(toks: Array, cur_o: int, idx: Dictionary, allow_passive: bool
 
 
 static func _scope_of(s: Dictionary) -> String:
-	var sc: String = String(s.get("scope", "all"))
+	var sc: String = str_of(s.get("scope", "all"))
 	return "all" if sc == "" else sc
 
 
@@ -357,7 +387,7 @@ static func _check_sentence_into(sent: Variant, cur_o: int, idx: Dictionary, bad
 	if sent is String:
 		s = idx["sents"].get(sent, {})
 		if s.is_empty():
-			bad.append(_b(where, String(sent), "unknown_sentence", -1))
+			bad.append(_b(where, str_of(sent), "unknown_sentence", -1))
 			return
 	elif sent is Dictionary:
 		s = sent
@@ -366,27 +396,27 @@ static func _check_sentence_into(sent: Variant, cur_o: int, idx: Dictionary, bad
 		return
 	var so: int = int_o(s.get("o"))
 	if so > cur_o:
-		bad.append(_b(where, String(s.get("id", "")), "sentence_future", so))
+		bad.append(_b(where, str_of(s.get("id", "")), "sentence_future", so))
 	var sc: String = _scope_of(s)
 	if sc != "all" and sc != "listen":
 		bad.append(_b(where, sc, "scope", -1))
 	if general_only and sc != "all":
-		bad.append(_b(where, String(s.get("id", "")), "scope_listen", -1))
+		bad.append(_b(where, str_of(s.get("id", "")), "scope_listen", -1))
 	var ids: Variant = s.get("words")
 	if ids is Array:
 		for wid in ids:
-			var wd: Variant = idx["words"].get(String(wid))
+			var wd: Variant = idx["words"].get(str_of(wid))
 			if wd == null:
-				bad.append(_b(where, String(wid), "words_unknown", -1))
+				bad.append(_b(where, str_of(wid), "words_unknown", -1))
 			elif int_o(wd.get("o")) > cur_o:
-				bad.append(_b(where, String(wid), "words_future", int_o(wd.get("o"))))
-			elif String(wd.get("role", "active")) == "passive" and sc != "listen":
-				bad.append(_b(where, String(wid), "passive", int_o(wd.get("o"))))
-	var en: String = String(s.get("en", ""))
+				bad.append(_b(where, str_of(wid), "words_future", int_o(wd.get("o"))))
+			elif str_of(wd.get("role", "active")) == "passive" and sc != "listen":
+				bad.append(_b(where, str_of(wid), "passive", int_o(wd.get("o"))))
+	var en: String = str_of(s.get("en", ""))
 	if en.strip_edges() == "":
 		bad.append(_b(where, "", "empty", -1))
 		return
-	_cover(toks_c(idx, en, String(s.get("say", ""))), cur_o, idx, sc == "listen" and not general_only, bad, where)
+	_cover(toks_c(idx, en, str_of(s.get("say", ""))), cur_o, idx, sc == "listen" and not general_only, bad, where)
 
 
 ## 낱말 id 가 이 문제의 항목으로 쓸 수 있는가. need_seen 이면 (o < cur_o) 이거나 이 세션에서 소개 카드를 본 것이어야 한다(R6).
@@ -397,7 +427,7 @@ static func item_ok(wid: String, cur_o: int, seen_set: Dictionary, idx: Dictiona
 	var o: int = idx["word_o"][wid]
 	if o > cur_o:
 		return "future"
-	if String(wd.get("role", "active")) == "passive":
+	if str_of(wd.get("role", "active")) == "passive":
 		return "passive"
 	if need_seen and o >= cur_o and not seen_set.has(wid):
 		return "unseen"
@@ -412,7 +442,7 @@ static func _chk_item(bad: Array, where: String, wid: String, cur_o: int, seen_s
 
 ## 두 낱말이 같은 뜻(보기로 함께 쓰면 안 됨)인가.
 static func is_syn(a: Dictionary, b: Dictionary) -> bool:
-	if String(a.get("ko", "")) == String(b.get("ko", "")):
+	if str_of(a.get("ko", "")) == str_of(b.get("ko", "")):
 		return true
 	var sa: Variant = a.get("syn")
 	var sb: Variant = b.get("syn")
@@ -436,19 +466,25 @@ static func _chk_word_options(bad: Array, ex: Dictionary, cur_o: int, seen_set: 
 	var have_ids: bool = ids is Array and ids.size() == opts.size()
 	var shown: Dictionary = {}
 	for j in opts.size():
-		var txt: String = String(opts[j])
 		var where: String = "options[%d]" % j
+		if not (opts[j] is String):
+			bad.append(_b(where, "", "not_string", -1))
+			continue
+		var txt: String = opts[j]
 		if shown.has(txt):
 			bad.append(_b(where, txt, "dup_option", -1))
 		shown[txt] = true
 		if have_ids:
-			var wid: String = String(ids[j])
+			if not (ids[j] is String):
+				bad.append(_b(where, "", "not_string", -1))
+				continue
+			var wid: String = ids[j]
 			var wd: Variant = idx["words"].get(wid)
 			if wd == null:
 				bad.append(_b(where, wid, "unknown_item", -1))
 			else:
 				_chk_item(bad, where, wid, cur_o, seen_set, idx, true)
-				var disp: String = String(wd.get("ko", "")) if lang == "ko" else String(wd.get("en", ""))
+				var disp: String = str_of(wd.get("ko", "")) if lang == "ko" else str_of(wd.get("en", ""))
 				if disp != txt:
 					bad.append(_b(where, txt, "option_mismatch", -1))
 		elif lang == "ko":
@@ -463,14 +499,14 @@ static func _chk_word_options(bad: Array, ex: Dictionary, cur_o: int, seen_set: 
 		if lang == "en":
 			_cover(toks_c(idx, txt), cur_o, idx, false, bad, where)
 	if have_ids and ans_ok:
-		var aw: Variant = idx["words"].get(String(ids[int(ans)]))
+		var aw: Variant = idx["words"].get(str_of(ids[int(ans)]))
 		if aw != null:
 			for j in opts.size():
 				if j == int(ans):
 					continue
-				var ow: Variant = idx["words"].get(String(ids[j]))
+				var ow: Variant = idx["words"].get(str_of(ids[j]))
 				if ow != null and is_syn(aw, ow):
-					bad.append(_b("options[%d]" % j, String(ids[j]), "syn_option", -1))
+					bad.append(_b("options[%d]" % j, str_of(ids[j]), "syn_option", -1))
 
 
 ## 듣기 보기(뜻 문장)의 한 참조("s0145" 또는 "d0005#1")가 쓸 수 있는가.
@@ -488,7 +524,7 @@ static func ref_ok(ref: String, cur_o: int, idx: Dictionary) -> String:
 		if int_o(line.get("o")) > cur_o:
 			return "future"
 		var bad: Array = []
-		_cover(toks_c(idx, String(line.get("en", "")), String(line.get("say", ""))), cur_o, idx, true, bad, "ref")
+		_cover(toks_c(idx, str_of(line.get("en", "")), str_of(line.get("say", ""))), cur_o, idx, true, bad, "ref")
 		return "" if bad.is_empty() else "future"
 	var s: Variant = idx["sents"].get(ref)
 	if s == null:
@@ -510,20 +546,26 @@ static func _chk_sent_options(bad: Array, ex: Dictionary, cur_o: int, idx: Dicti
 	var have_ids: bool = ids is Array and ids.size() == opts.size()
 	var shown: Dictionary = {}
 	for j in opts.size():
-		var txt: String = String(opts[j])
 		var where: String = "options[%d]" % j
+		if not (opts[j] is String):
+			bad.append(_b(where, "", "not_string", -1))
+			continue
+		var txt: String = opts[j]
 		if shown.has(txt):
 			bad.append(_b(where, txt, "dup_option", -1))
 		shown[txt] = true
 		if have_ids:
-			var why: String = ref_ok(String(ids[j]), cur_o, idx)
+			if not (ids[j] is String):
+				bad.append(_b(where, "", "not_string", -1))
+				continue
+			var why: String = ref_ok(ids[j], cur_o, idx)
 			if why != "":
-				bad.append(_b(where, String(ids[j]), why, -1))
+				bad.append(_b(where, str_of(ids[j]), why, -1))
 		else:
 			var refs: Array = idx["sent_by_ko"].get(txt, [])
 			var any_ok: bool = false
 			for r in refs:
-				if ref_ok(String(r), cur_o, idx) == "":
+				if ref_ok(str_of(r), cur_o, idx) == "":
 					any_ok = true
 					break
 			if not any_ok:
@@ -568,8 +610,9 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 	if not (ex is Dictionary):
 		bad.append(_b("exercise", "", "not_dict", -1))
 		return {"ok": false, "bad": bad}
-	var typ: String = String(ex.get("type", ""))
-	var mode: String = String(ex.get("mode", ""))
+	_fields_str(bad, ex, ["type", "mode", "tts", "prompt", "prompt_en", "target", "say", "sent", "item", "pattern", "dialogue", "tpl", "ko"], "exercise")
+	var typ: String = str_of(ex.get("type", ""))
+	var mode: String = str_of(ex.get("mode", ""))
 	var listenish: bool = typ == "listen" or typ == "dialogue_script"
 	# tts: 소리 내어 읽을 글도 배운 것만
 	if ex.has("tts") and ex["tts"] is String:
@@ -578,22 +621,22 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 		"teach_word":
 			_chk_item_card(bad, ex, cur_o, idx)
 		"teach_pattern":
-			var pid: String = String(ex.get("pattern", ""))
+			var pid: String = str_of(ex.get("pattern", ""))
 			var pt: Variant = idx["pats"].get(pid)
 			if pt == null:
 				bad.append(_b("pattern", pid, "unknown_pattern", -1))
 			else:
 				if int_o(pt.get("o")) > cur_o:
 					bad.append(_b("pattern", pid, "future", int_o(pt.get("o"))))
-				_cover(toks_c(idx, String(pt.get("tpl", ""))), cur_o, idx, false, bad, "tpl")
+				_cover(toks_c(idx, str_of(pt.get("tpl", ""))), cur_o, idx, false, bad, "tpl")
 			var exs: Variant = ex.get("examples")
 			if exs is Array:
 				for i in exs.size():
 					_chk_example(bad, exs[i], cur_o, idx, "examples[%d]" % i)
 		"recognize":
-			_chk_item(bad, "item", String(ex.get("item", "")), cur_o, seen_set, idx, true)
+			_chk_item(bad, "item", str_of(ex.get("item", "")), cur_o, seen_set, idx, true)
 			if mode == "en_ko":
-				_cover(toks_c(idx, String(ex.get("prompt", ""))), cur_o, idx, false, bad, "prompt")
+				_cover(toks_c(idx, str_of(ex.get("prompt", ""))), cur_o, idx, false, bad, "prompt")
 			if mode == "en_ko" or mode == "hear_ko":
 				_chk_word_options(bad, ex, cur_o, seen_set, idx, "ko")
 			elif mode == "hear_en":
@@ -601,7 +644,7 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 			else:
 				bad.append(_b("mode", mode, "mode", -1))
 		"recall":
-			_chk_item(bad, "item", String(ex.get("item", "")), cur_o, seen_set, idx, true)
+			_chk_item(bad, "item", str_of(ex.get("item", "")), cur_o, seen_set, idx, true)
 			_chk_strings(bad, "accept", ex.get("accept"), cur_o, idx, false)
 			if mode == "ko_en_choice":
 				_chk_word_options(bad, ex, cur_o, seen_set, idx, "en")
@@ -610,7 +653,7 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 		"build":
 			_chk_build(bad, ex, cur_o, idx)
 		"listen":
-			var sid: String = String(ex.get("sent", ""))
+			var sid: String = str_of(ex.get("sent", ""))
 			if sid != "":
 				_check_sentence_into(sid, cur_o, idx, bad, "sent", false)
 			if mode == "choose_ko":
@@ -620,17 +663,24 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 			else:
 				bad.append(_b("mode", mode, "mode", -1))
 		"speak":
-			var sid2: String = String(ex.get("sent", ""))
+			var sid2: String = str_of(ex.get("sent", ""))
 			if sid2 != "":
 				_check_sentence_into(sid2, cur_o, idx, bad, "sent", true)
 			if ex.has("target") and ex["target"] is String:
-				_cover(toks_c(idx, ex["target"], String(ex.get("say", ""))), cur_o, idx, false, bad, "target")
+				_cover(toks_c(idx, ex["target"], str_of(ex.get("say", ""))), cur_o, idx, false, bad, "target")
 			if ex.has("prompt_en") and ex["prompt_en"] is String:
-				_cover(toks_c(idx, ex["prompt_en"], String(ex.get("say", ""))), cur_o, idx, false, bad, "prompt_en")
+				_cover(toks_c(idx, ex["prompt_en"], str_of(ex.get("say", ""))), cur_o, idx, false, bad, "prompt_en")
 			_chk_strings(bad, "accept", ex.get("accept"), cur_o, idx, false)
+			_chk_strings(bad, "expect_any", ex.get("expect_any"), cur_o, idx, false)
 			var cue: Variant = ex.get("cue")
-			if cue is Dictionary and cue.has("with") and cue["with"] is String:
-				_cover(toks_c(idx, cue["with"]), cur_o, idx, false, bad, "cue.with")
+			if cue is Dictionary:
+				_fields_str(bad, cue, ["slot", "with"], "cue")
+				if cue.get("with") is String:
+					_cover(toks_c(idx, cue["with"]), cur_o, idx, false, bad, "cue.with")
+				if cue.get("slot") is String:
+					_cover(toks_c(idx, cue["slot"]), cur_o, idx, false, bad, "cue.slot")
+			elif cue != null:
+				bad.append(_b("cue", "", "not_dict", -1))
 		"dialogue_script":
 			_chk_dialogue(bad, ex, cur_o, idx)
 		_:
@@ -639,16 +689,16 @@ static func check_exercise_set(ex: Variant, cur_o: int, seen_set: Dictionary, id
 
 
 static func _chk_item_card(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionary) -> void:
-	var wid: String = String(ex.get("item", ""))
+	var wid: String = str_of(ex.get("item", ""))
 	var wd: Variant = idx["words"].get(wid)
 	if wd == null:
 		bad.append(_b("item", wid, "unknown_item", -1))
 		return
 	if idx["word_o"][wid] > cur_o:
 		bad.append(_b("item", wid, "future", idx["word_o"][wid]))
-	if String(wd.get("role", "active")) == "passive":
+	if str_of(wd.get("role", "active")) == "passive":
 		bad.append(_b("item", wid, "passive", idx["word_o"][wid]))
-	_cover(toks_c(idx, String(ex.get("prompt", ""))), cur_o, idx, false, bad, "prompt")
+	_cover(toks_c(idx, str_of(ex.get("prompt", ""))), cur_o, idx, false, bad, "prompt")
 	if ex.get("example") is Dictionary:
 		_chk_example(bad, ex["example"], cur_o, idx, "example")
 
@@ -658,16 +708,17 @@ static func _chk_example(bad: Array, e: Variant, cur_o: int, idx: Dictionary, wh
 	if not (e is Dictionary):
 		bad.append(_b(where, "", "not_dict", -1))
 		return
-	var sid: String = String(e.get("sent", ""))
+	_fields_str(bad, e, ["sent", "en", "say", "tts"], where)
+	var sid: String = str_of(e.get("sent", ""))
 	if sid != "":
 		_check_sentence_into(sid, cur_o, idx, bad, where, true)
-	_cover(toks_c(idx, String(e.get("en", "")), String(e.get("say", ""))), cur_o, idx, false, bad, where)
+	_cover(toks_c(idx, str_of(e.get("en", "")), str_of(e.get("say", ""))), cur_o, idx, false, bad, where)
 	if e.has("tts") and e["tts"] is String:
 		_cover(toks_c(idx, e["tts"]), cur_o, idx, false, bad, where + ".tts")
 
 
 static func _chk_build(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionary) -> void:
-	var sid: String = String(ex.get("sent", ""))
+	var sid: String = str_of(ex.get("sent", ""))
 	var s: Dictionary = {}
 	if sid != "":
 		_check_sentence_into(sid, cur_o, idx, bad, "sent", true)
@@ -677,10 +728,10 @@ static func _chk_build(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionary) 
 	if not (ans is Array) or ans.size() < 2:
 		bad.append(_b("answer", "", "answer_tiles", -1))
 	else:
-		var txt: String = " ".join(PackedStringArray(ans.map(func(x): return String(x))))
+		var txt: String = _join_strs(bad, ans, "answer")
 		var say: String = ""
-		if not s.is_empty() and String(s.get("say", "")) != "" and toks_c(idx, txt) == toks_c(idx, String(s.get("en", ""))):
-			say = String(s["say"])
+		if not s.is_empty() and str_of(s.get("say", "")) != "" and toks_c(idx, txt) == toks_c(idx, str_of(s.get("en", ""))):
+			say = str_of(s["say"])
 		var toks: Array = toks_c(idx, txt, say)
 		for t in toks:
 			ans_toks[t] = true
@@ -688,7 +739,10 @@ static func _chk_build(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionary) 
 	var extra: Variant = ex.get("extra")
 	if extra is Array:
 		for i in extra.size():
-			var t2: String = String(extra[i])
+			if not (extra[i] is String):
+				bad.append(_b("extra[%d]" % i, "", "not_string", -1))
+				continue
+			var t2: String = extra[i]
 			_cover(toks_c(idx, t2), cur_o, idx, false, bad, "extra[%d]" % i)
 			for t3 in toks_c(idx, t2):
 				if ans_toks.has(t3):
@@ -697,17 +751,19 @@ static func _chk_build(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionary) 
 	if acc is Array:
 		for i in acc.size():
 			if acc[i] is Array:
-				var txt2: String = " ".join(PackedStringArray(acc[i].map(func(x): return String(x))))
+				var txt2: String = _join_strs(bad, acc[i], "accept[%d]" % i)
 				var say2: String = ""
-				if not s.is_empty() and String(s.get("say", "")) != "" and toks_c(idx, txt2) == toks_c(idx, String(s.get("en", ""))):
-					say2 = String(s["say"])
+				if not s.is_empty() and str_of(s.get("say", "")) != "" and toks_c(idx, txt2) == toks_c(idx, str_of(s.get("en", ""))):
+					say2 = str_of(s["say"])
 				_cover(toks_c(idx, txt2, say2), cur_o, idx, false, bad, "accept[%d]" % i)
 			elif acc[i] is String:
 				_cover(toks_c(idx, acc[i]), cur_o, idx, false, bad, "accept[%d]" % i)
+			else:
+				bad.append(_b("accept[%d]" % i, "", "not_string", -1))
 
 
 static func _chk_dialogue(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionary) -> void:
-	var did: String = String(ex.get("dialogue", ""))
+	var did: String = str_of(ex.get("dialogue", ""))
 	var dl: Variant = idx["dlgs"].get(did)
 	if did != "" and dl == null:
 		bad.append(_b("dialogue", did, "unknown_dialogue", -1))
@@ -721,7 +777,8 @@ static func _chk_dialogue(bad: Array, ex: Dictionary, cur_o: int, idx: Dictionar
 			bad.append(_b("lines[%d]" % i, "", "not_dict", -1))
 			continue
 		var w: String = "lines[%d]" % i
-		_cover(toks_c(idx, String(line.get("en", "")), String(line.get("say", ""))), cur_o, idx, true, bad, w)
+		_fields_str(bad, line, ["en", "say", "tts", "ko"], w)
+		_cover(toks_c(idx, str_of(line.get("en", "")), str_of(line.get("say", ""))), cur_o, idx, true, bad, w)
 		if line.has("tts") and line["tts"] is String:
 			_cover(toks_c(idx, line["tts"]), cur_o, idx, true, bad, w + ".tts")
 		_chk_strings(bad, w + ".accept", line.get("accept"), cur_o, idx, true)
