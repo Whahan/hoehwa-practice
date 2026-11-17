@@ -1,0 +1,2363 @@
+{
+ "v": 1,
+ "note": "beginner sentences with the word forms they use; lemma/pos are weeks 1-16 active words of the K0 skeleton; 'wrong' are misspelled or invented forms that must be rejected",
+ "sentences": [
+  {
+   "en": "I like cats.",
+   "forms": [
+    [
+     "cat",
+     "n",
+     "cats"
+    ]
+   ]
+  },
+  {
+   "en": "The dogs are big.",
+   "forms": [
+    [
+     "dog",
+     "n",
+     "dogs"
+    ]
+   ]
+  },
+  {
+   "en": "Two buses are here.",
+   "forms": [
+    [
+     "bus",
+     "n",
+     "buses"
+    ]
+   ]
+  },
+  {
+   "en": "She has two bags.",
+   "forms": [
+    [
+     "bag",
+     "n",
+     "bags"
+    ]
+   ]
+  },
+  {
+   "en": "I have three hats.",
+   "forms": [
+    [
+     "hat",
+     "n",
+     "hats"
+    ]
+   ]
+  },
+  {
+   "en": "Two beds are small.",
+   "forms": [
+    [
+     "bed",
+     "n",
+     "beds"
+    ]
+   ]
+  },
+  {
+   "en": "I have two pens.",
+   "forms": [
+    [
+     "pen",
+     "n",
+     "pens"
+    ]
+   ]
+  },
+  {
+   "en": "Two cups, please.",
+   "forms": [
+    [
+     "cup",
+     "n",
+     "cups"
+    ]
+   ]
+  },
+  {
+   "en": "Two cities are near.",
+   "forms": [
+    [
+     "city",
+     "n",
+     "cities"
+    ]
+   ]
+  },
+  {
+   "en": "My friends are here.",
+   "forms": [
+    [
+     "friend",
+     "n",
+     "friends"
+    ]
+   ]
+  },
+  {
+   "en": "My friend's sister is nice.",
+   "forms": [
+    [
+     "friend",
+     "n",
+     "friend's"
+    ]
+   ]
+  },
+  {
+   "en": "My brothers are tall.",
+   "forms": [
+    [
+     "brother",
+     "n",
+     "brothers"
+    ]
+   ]
+  },
+  {
+   "en": "Her sisters are nice.",
+   "forms": [
+    [
+     "sister",
+     "n",
+     "sisters"
+    ]
+   ]
+  },
+  {
+   "en": "The women are here.",
+   "forms": [
+    [
+     "woman",
+     "n",
+     "women"
+    ]
+   ]
+  },
+  {
+   "en": "Two men are here.",
+   "forms": [
+    [
+     "man",
+     "n",
+     "men"
+    ]
+   ]
+  },
+  {
+   "en": "My mother's name is Anna.",
+   "forms": [
+    [
+     "mother",
+     "n",
+     "mother's"
+    ]
+   ]
+  },
+  {
+   "en": "The fathers are busy.",
+   "forms": [
+    [
+     "father",
+     "n",
+     "fathers"
+    ]
+   ]
+  },
+  {
+   "en": "The girls are happy.",
+   "forms": [
+    [
+     "girl",
+     "n",
+     "girls"
+    ]
+   ]
+  },
+  {
+   "en": "The books are new.",
+   "forms": [
+    [
+     "book",
+     "n",
+     "books"
+    ]
+   ]
+  },
+  {
+   "en": "The tables are small.",
+   "forms": [
+    [
+     "table",
+     "n",
+     "tables"
+    ]
+   ]
+  },
+  {
+   "en": "Two doors are open.",
+   "forms": [
+    [
+     "door",
+     "n",
+     "doors"
+    ]
+   ]
+  },
+  {
+   "en": "I have two keys.",
+   "forms": [
+    [
+     "key",
+     "n",
+     "keys"
+    ]
+   ]
+  },
+  {
+   "en": "The cars are new.",
+   "forms": [
+    [
+     "car",
+     "n",
+     "cars"
+    ]
+   ]
+  },
+  {
+   "en": "The windows are big.",
+   "forms": [
+    [
+     "window",
+     "n",
+     "windows"
+    ]
+   ]
+  },
+  {
+   "en": "The workers are here.",
+   "forms": [
+    [
+     "worker",
+     "n",
+     "workers"
+    ]
+   ]
+  },
+  {
+   "en": "The teachers are nice.",
+   "forms": [
+    [
+     "teacher",
+     "n",
+     "teachers"
+    ]
+   ]
+  },
+  {
+   "en": "Two nurses are here.",
+   "forms": [
+    [
+     "nurse",
+     "n",
+     "nurses"
+    ]
+   ]
+  },
+  {
+   "en": "The doctors are busy.",
+   "forms": [
+    [
+     "doctor",
+     "n",
+     "doctors"
+    ]
+   ]
+  },
+  {
+   "en": "The chefs are busy.",
+   "forms": [
+    [
+     "chef",
+     "n",
+     "chefs"
+    ]
+   ]
+  },
+  {
+   "en": "Two cafes are near.",
+   "forms": [
+    [
+     "cafe",
+     "n",
+     "cafes"
+    ]
+   ]
+  },
+  {
+   "en": "The farms are big.",
+   "forms": [
+    [
+     "farm",
+     "n",
+     "farms"
+    ]
+   ]
+  },
+  {
+   "en": "The managers are here.",
+   "forms": [
+    [
+     "manager",
+     "n",
+     "managers"
+    ]
+   ]
+  },
+  {
+   "en": "Two cashiers are here.",
+   "forms": [
+    [
+     "cashier",
+     "n",
+     "cashiers"
+    ]
+   ]
+  },
+  {
+   "en": "The customers are here.",
+   "forms": [
+    [
+     "customer",
+     "n",
+     "customers"
+    ]
+   ]
+  },
+  {
+   "en": "The companies are big.",
+   "forms": [
+    [
+     "company",
+     "n",
+     "companies"
+    ]
+   ]
+  },
+  {
+   "en": "Two jobs are open.",
+   "forms": [
+    [
+     "job",
+     "n",
+     "jobs"
+    ]
+   ]
+  },
+  {
+   "en": "The students are here.",
+   "forms": [
+    [
+     "student",
+     "n",
+     "students"
+    ]
+   ]
+  },
+  {
+   "en": "The factories are big.",
+   "forms": [
+    [
+     "factory",
+     "n",
+     "factories"
+    ]
+   ]
+  },
+  {
+   "en": "The warehouses are big.",
+   "forms": [
+    [
+     "warehouse",
+     "n",
+     "warehouses"
+    ]
+   ]
+  },
+  {
+   "en": "Two dollars, please.",
+   "forms": [
+    [
+     "dollar",
+     "n",
+     "dollars"
+    ]
+   ]
+  },
+  {
+   "en": "Five cents, please.",
+   "forms": [
+    [
+     "cent",
+     "n",
+     "cents"
+    ]
+   ]
+  },
+  {
+   "en": "The prices are cheap.",
+   "forms": [
+    [
+     "price",
+     "n",
+     "prices"
+    ]
+   ]
+  },
+  {
+   "en": "My hobbies are fun.",
+   "forms": [
+    [
+     "hobby",
+     "n",
+     "hobbies"
+    ]
+   ]
+  },
+  {
+   "en": "The movies are fun.",
+   "forms": [
+    [
+     "movie",
+     "n",
+     "movies"
+    ]
+   ]
+  },
+  {
+   "en": "Her songs are nice.",
+   "forms": [
+    [
+     "song",
+     "n",
+     "songs"
+    ]
+   ]
+  },
+  {
+   "en": "The tickets are here.",
+   "forms": [
+    [
+     "ticket",
+     "n",
+     "tickets"
+    ]
+   ]
+  },
+  {
+   "en": "The taxes are high.",
+   "forms": [
+    [
+     "tax",
+     "n",
+     "taxes"
+    ]
+   ]
+  },
+  {
+   "en": "Two zoos are near.",
+   "forms": [
+    [
+     "zoo",
+     "n",
+     "zoos"
+    ]
+   ]
+  },
+  {
+   "en": "The shops are open.",
+   "forms": [
+    [
+     "shop",
+     "n",
+     "shops"
+    ]
+   ]
+  },
+  {
+   "en": "The chairs are red.",
+   "forms": [
+    [
+     "chair",
+     "n",
+     "chairs"
+    ]
+   ]
+  },
+  {
+   "en": "The cakes are big.",
+   "forms": [
+    [
+     "cake",
+     "n",
+     "cakes"
+    ]
+   ]
+  },
+  {
+   "en": "The cup is hotter.",
+   "forms": [
+    [
+     "hot",
+     "adj",
+     "hotter"
+    ]
+   ]
+  },
+  {
+   "en": "This dog is bigger.",
+   "forms": [
+    [
+     "big",
+     "adj",
+     "bigger"
+    ]
+   ]
+  },
+  {
+   "en": "That is the biggest dog.",
+   "forms": [
+    [
+     "big",
+     "adj",
+     "biggest"
+    ]
+   ]
+  },
+  {
+   "en": "It is the hottest day.",
+   "forms": [
+    [
+     "hot",
+     "adj",
+     "hottest"
+    ]
+   ]
+  },
+  {
+   "en": "She is happier now.",
+   "forms": [
+    [
+     "happy",
+     "adj",
+     "happier"
+    ]
+   ]
+  },
+  {
+   "en": "He is the happiest man.",
+   "forms": [
+    [
+     "happy",
+     "adj",
+     "happiest"
+    ]
+   ]
+  },
+  {
+   "en": "I was busier today.",
+   "forms": [
+    [
+     "busy",
+     "adj",
+     "busier"
+    ]
+   ]
+  },
+  {
+   "en": "It is easier now.",
+   "forms": [
+    [
+     "easy",
+     "adj",
+     "easier"
+    ]
+   ]
+  },
+  {
+   "en": "It is the easiest one.",
+   "forms": [
+    [
+     "easy",
+     "adj",
+     "easiest"
+    ]
+   ]
+  },
+  {
+   "en": "My older brother is here.",
+   "forms": [
+    [
+     "old",
+     "adj",
+     "older"
+    ]
+   ]
+  },
+  {
+   "en": "She is the oldest sister.",
+   "forms": [
+    [
+     "old",
+     "adj",
+     "oldest"
+    ]
+   ]
+  },
+  {
+   "en": "He is nicer than me.",
+   "forms": [
+    [
+     "nice",
+     "adj",
+     "nicer"
+    ]
+   ]
+  },
+  {
+   "en": "She is the nicest girl.",
+   "forms": [
+    [
+     "nice",
+     "adj",
+     "nicest"
+    ]
+   ]
+  },
+  {
+   "en": "It is greater now.",
+   "forms": [
+    [
+     "great",
+     "adj",
+     "greater"
+    ]
+   ]
+  },
+  {
+   "en": "She is the cutest.",
+   "forms": [
+    [
+     "cute",
+     "adj",
+     "cutest"
+    ]
+   ]
+  },
+  {
+   "en": "This is harder.",
+   "forms": [
+    [
+     "hard",
+     "adj",
+     "harder"
+    ]
+   ]
+  },
+  {
+   "en": "He is sadder today.",
+   "forms": [
+    [
+     "sad",
+     "adj",
+     "sadder"
+    ]
+   ]
+  },
+  {
+   "en": "The red one is redder.",
+   "forms": [
+    [
+     "red",
+     "adj",
+     "redder"
+    ]
+   ]
+  },
+  {
+   "en": "This is cheaper.",
+   "forms": [
+    [
+     "cheap",
+     "adj",
+     "cheaper"
+    ]
+   ]
+  },
+  {
+   "en": "This is the cheapest.",
+   "forms": [
+    [
+     "cheap",
+     "adj",
+     "cheapest"
+    ]
+   ]
+  },
+  {
+   "en": "It is newer.",
+   "forms": [
+    [
+     "new",
+     "adj",
+     "newer"
+    ]
+   ]
+  },
+  {
+   "en": "It is smaller.",
+   "forms": [
+    [
+     "small",
+     "adj",
+     "smaller"
+    ]
+   ]
+  },
+  {
+   "en": "It is longer.",
+   "forms": [
+    [
+     "long",
+     "adj",
+     "longer"
+    ]
+   ]
+  },
+  {
+   "en": "It is the largest.",
+   "forms": [
+    [
+     "large",
+     "adj",
+     "largest"
+    ]
+   ]
+  },
+  {
+   "en": "It is worse.",
+   "forms": [
+    [
+     "bad",
+     "adj",
+     "worse"
+    ]
+   ]
+  },
+  {
+   "en": "It is better.",
+   "forms": [
+    [
+     "good",
+     "adj",
+     "better"
+    ]
+   ]
+  },
+  {
+   "en": "It is the best.",
+   "forms": [
+    [
+     "good",
+     "adj",
+     "best"
+    ]
+   ]
+  },
+  {
+   "en": "He is hungrier.",
+   "forms": [
+    [
+     "hungry",
+     "adj",
+     "hungrier"
+    ]
+   ]
+  },
+  {
+   "en": "She waits happily.",
+   "forms": [
+    [
+     "happy",
+     "adj",
+     "happily"
+    ]
+   ]
+  },
+  {
+   "en": "It is easily done.",
+   "forms": [
+    [
+     "easy",
+     "adj",
+     "easily"
+    ]
+   ]
+  },
+  {
+   "en": "It is finer.",
+   "forms": [
+    [
+     "fine",
+     "adj",
+     "finer"
+    ]
+   ]
+  },
+  {
+   "en": "He sits here.",
+   "forms": [
+    [
+     "sit",
+     "v",
+     "sits"
+    ]
+   ]
+  },
+  {
+   "en": "She is sitting.",
+   "forms": [
+    [
+     "sit",
+     "v",
+     "sitting"
+    ]
+   ]
+  },
+  {
+   "en": "She loved it.",
+   "forms": [
+    [
+     "love",
+     "v",
+     "loved"
+    ]
+   ]
+  },
+  {
+   "en": "I am loving it.",
+   "forms": [
+    [
+     "love",
+     "v",
+     "loving"
+    ]
+   ]
+  },
+  {
+   "en": "My sister loves cats.",
+   "forms": [
+    [
+     "love",
+     "v",
+     "loves"
+    ],
+    [
+     "cat",
+     "n",
+     "cats"
+    ]
+   ]
+  },
+  {
+   "en": "He says hi.",
+   "forms": [
+    [
+     "say",
+     "v",
+     "says"
+    ]
+   ]
+  },
+  {
+   "en": "He said it again.",
+   "forms": [
+    [
+     "say",
+     "v",
+     "said"
+    ]
+   ]
+  },
+  {
+   "en": "We spelled it.",
+   "forms": [
+    [
+     "spell",
+     "v",
+     "spelled"
+    ]
+   ]
+  },
+  {
+   "en": "She spelt it.",
+   "forms": [
+    [
+     "spell",
+     "v",
+     "spelt"
+    ]
+   ]
+  },
+  {
+   "en": "I'm spelling my name.",
+   "forms": [
+    [
+     "spell",
+     "v",
+     "spelling"
+    ]
+   ]
+  },
+  {
+   "en": "He excused himself.",
+   "forms": [
+    [
+     "excuse",
+     "v",
+     "excused"
+    ]
+   ]
+  },
+  {
+   "en": "She speaks English.",
+   "forms": [
+    [
+     "speak",
+     "v",
+     "speaks"
+    ]
+   ]
+  },
+  {
+   "en": "I'm speaking Korean.",
+   "forms": [
+    [
+     "speak",
+     "v",
+     "speaking"
+    ]
+   ]
+  },
+  {
+   "en": "He travels a lot.",
+   "forms": [
+    [
+     "travel",
+     "v",
+     "travels"
+    ]
+   ]
+  },
+  {
+   "en": "We are travelling now.",
+   "forms": [
+    [
+     "travel",
+     "v",
+     "travelling"
+    ]
+   ]
+  },
+  {
+   "en": "We travelled together.",
+   "forms": [
+    [
+     "travel",
+     "v",
+     "travelled"
+    ]
+   ]
+  },
+  {
+   "en": "We are traveling now.",
+   "forms": [
+    [
+     "travel",
+     "v",
+     "traveling"
+    ]
+   ]
+  },
+  {
+   "en": "We traveled together.",
+   "forms": [
+    [
+     "travel",
+     "v",
+     "traveled"
+    ]
+   ]
+  },
+  {
+   "en": "I played hockey.",
+   "forms": [
+    [
+     "play",
+     "v",
+     "played"
+    ]
+   ]
+  },
+  {
+   "en": "She plays soccer.",
+   "forms": [
+    [
+     "play",
+     "v",
+     "plays"
+    ]
+   ]
+  },
+  {
+   "en": "He is playing a game.",
+   "forms": [
+    [
+     "play",
+     "v",
+     "playing"
+    ]
+   ]
+  },
+  {
+   "en": "She works here.",
+   "forms": [
+    [
+     "work",
+     "v",
+     "works"
+    ]
+   ]
+  },
+  {
+   "en": "He worked there.",
+   "forms": [
+    [
+     "work",
+     "v",
+     "worked"
+    ]
+   ]
+  },
+  {
+   "en": "We are working.",
+   "forms": [
+    [
+     "work",
+     "v",
+     "working"
+    ]
+   ]
+  },
+  {
+   "en": "He lives here.",
+   "forms": [
+    [
+     "live",
+     "v",
+     "lives"
+    ]
+   ]
+  },
+  {
+   "en": "I lived there.",
+   "forms": [
+    [
+     "live",
+     "v",
+     "lived"
+    ]
+   ]
+  },
+  {
+   "en": "She is living here.",
+   "forms": [
+    [
+     "live",
+     "v",
+     "living"
+    ]
+   ]
+  },
+  {
+   "en": "He studies English.",
+   "forms": [
+    [
+     "study",
+     "v",
+     "studies"
+    ]
+   ]
+  },
+  {
+   "en": "I studied English.",
+   "forms": [
+    [
+     "study",
+     "v",
+     "studied"
+    ]
+   ]
+  },
+  {
+   "en": "She is studying.",
+   "forms": [
+    [
+     "study",
+     "v",
+     "studying"
+    ]
+   ]
+  },
+  {
+   "en": "He eats lunch.",
+   "forms": [
+    [
+     "eat",
+     "v",
+     "eats"
+    ]
+   ]
+  },
+  {
+   "en": "I ate lunch.",
+   "forms": [
+    [
+     "eat",
+     "v",
+     "ate"
+    ]
+   ]
+  },
+  {
+   "en": "She is eating.",
+   "forms": [
+    [
+     "eat",
+     "v",
+     "eating"
+    ]
+   ]
+  },
+  {
+   "en": "He drinks tea.",
+   "forms": [
+    [
+     "drink",
+     "v",
+     "drinks"
+    ]
+   ]
+  },
+  {
+   "en": "I drank tea.",
+   "forms": [
+    [
+     "drink",
+     "v",
+     "drank"
+    ]
+   ]
+  },
+  {
+   "en": "She sleeps late.",
+   "forms": [
+    [
+     "sleep",
+     "v",
+     "sleeps"
+    ]
+   ]
+  },
+  {
+   "en": "I slept well.",
+   "forms": [
+    [
+     "sleep",
+     "v",
+     "slept"
+    ]
+   ]
+  },
+  {
+   "en": "He cooks dinner.",
+   "forms": [
+    [
+     "cook",
+     "v",
+     "cooks"
+    ]
+   ]
+  },
+  {
+   "en": "She cooked dinner.",
+   "forms": [
+    [
+     "cook",
+     "v",
+     "cooked"
+    ]
+   ]
+  },
+  {
+   "en": "He takes the bus.",
+   "forms": [
+    [
+     "take",
+     "v",
+     "takes"
+    ]
+   ]
+  },
+  {
+   "en": "I took the bus.",
+   "forms": [
+    [
+     "take",
+     "v",
+     "took"
+    ]
+   ]
+  },
+  {
+   "en": "She is taking a taxi.",
+   "forms": [
+    [
+     "take",
+     "v",
+     "taking"
+    ]
+   ]
+  },
+  {
+   "en": "He makes coffee.",
+   "forms": [
+    [
+     "make",
+     "v",
+     "makes"
+    ]
+   ]
+  },
+  {
+   "en": "She made coffee.",
+   "forms": [
+    [
+     "make",
+     "v",
+     "made"
+    ]
+   ]
+  },
+  {
+   "en": "He is making tea.",
+   "forms": [
+    [
+     "make",
+     "v",
+     "making"
+    ]
+   ]
+  },
+  {
+   "en": "He drives a car.",
+   "forms": [
+    [
+     "drive",
+     "v",
+     "drives"
+    ]
+   ]
+  },
+  {
+   "en": "She drove home.",
+   "forms": [
+    [
+     "drive",
+     "v",
+     "drove"
+    ]
+   ]
+  },
+  {
+   "en": "I am driving now.",
+   "forms": [
+    [
+     "drive",
+     "v",
+     "driving"
+    ]
+   ]
+  },
+  {
+   "en": "He watches TV.",
+   "forms": [
+    [
+     "watch",
+     "v",
+     "watches"
+    ]
+   ]
+  },
+  {
+   "en": "She watched a movie.",
+   "forms": [
+    [
+     "watch",
+     "v",
+     "watched"
+    ]
+   ]
+  },
+  {
+   "en": "He goes home.",
+   "forms": [
+    [
+     "go",
+     "v",
+     "goes"
+    ]
+   ]
+  },
+  {
+   "en": "She went home.",
+   "forms": [
+    [
+     "go",
+     "v",
+     "went"
+    ]
+   ]
+  },
+  {
+   "en": "I have gone home.",
+   "forms": [
+    [
+     "go",
+     "v",
+     "gone"
+    ]
+   ]
+  },
+  {
+   "en": "I am going home.",
+   "forms": [
+    [
+     "go",
+     "v",
+     "going"
+    ]
+   ]
+  },
+  {
+   "en": "He writes a song.",
+   "forms": [
+    [
+     "write",
+     "v",
+     "writes"
+    ]
+   ]
+  },
+  {
+   "en": "She wrote a song.",
+   "forms": [
+    [
+     "write",
+     "v",
+     "wrote"
+    ]
+   ]
+  },
+  {
+   "en": "It was written.",
+   "forms": [
+    [
+     "write",
+     "v",
+     "written"
+    ]
+   ]
+  },
+  {
+   "en": "He is writing.",
+   "forms": [
+    [
+     "write",
+     "v",
+     "writing"
+    ]
+   ]
+  },
+  {
+   "en": "He reads a book.",
+   "forms": [
+    [
+     "read",
+     "v",
+     "reads"
+    ]
+   ]
+  },
+  {
+   "en": "He sees a dog.",
+   "forms": [
+    [
+     "see",
+     "v",
+     "sees"
+    ]
+   ]
+  },
+  {
+   "en": "I saw a dog.",
+   "forms": [
+    [
+     "see",
+     "v",
+     "saw"
+    ]
+   ]
+  },
+  {
+   "en": "I have seen it.",
+   "forms": [
+    [
+     "see",
+     "v",
+     "seen"
+    ]
+   ]
+  },
+  {
+   "en": "I am seeing a friend.",
+   "forms": [
+    [
+     "see",
+     "v",
+     "seeing"
+    ]
+   ]
+  },
+  {
+   "en": "I bought a ticket.",
+   "forms": [
+    [
+     "buy",
+     "v",
+     "bought"
+    ]
+   ]
+  },
+  {
+   "en": "He pays cash.",
+   "forms": [
+    [
+     "pay",
+     "v",
+     "pays"
+    ]
+   ]
+  },
+  {
+   "en": "She paid cash.",
+   "forms": [
+    [
+     "pay",
+     "v",
+     "paid"
+    ]
+   ]
+  },
+  {
+   "en": "She sends money.",
+   "forms": [
+    [
+     "send",
+     "v",
+     "sends"
+    ]
+   ]
+  },
+  {
+   "en": "He sent a card.",
+   "forms": [
+    [
+     "send",
+     "v",
+     "sent"
+    ]
+   ]
+  },
+  {
+   "en": "He carries a bag.",
+   "forms": [
+    [
+     "carry",
+     "v",
+     "carries"
+    ]
+   ]
+  },
+  {
+   "en": "She carried it.",
+   "forms": [
+    [
+     "carry",
+     "v",
+     "carried"
+    ]
+   ]
+  },
+  {
+   "en": "I am carrying it.",
+   "forms": [
+    [
+     "carry",
+     "v",
+     "carrying"
+    ]
+   ]
+  },
+  {
+   "en": "He brings tea.",
+   "forms": [
+    [
+     "bring",
+     "v",
+     "brings"
+    ]
+   ]
+  },
+  {
+   "en": "She brought tea.",
+   "forms": [
+    [
+     "bring",
+     "v",
+     "brought"
+    ]
+   ]
+  },
+  {
+   "en": "He picks a hat.",
+   "forms": [
+    [
+     "pick",
+     "v",
+     "picks"
+    ]
+   ]
+  },
+  {
+   "en": "She picked a hat.",
+   "forms": [
+    [
+     "pick",
+     "v",
+     "picked"
+    ]
+   ]
+  },
+  {
+   "en": "He rides a bus.",
+   "forms": [
+    [
+     "ride",
+     "v",
+     "rides"
+    ]
+   ]
+  },
+  {
+   "en": "She rode a bus.",
+   "forms": [
+    [
+     "ride",
+     "v",
+     "rode"
+    ]
+   ]
+  },
+  {
+   "en": "He has ridden it.",
+   "forms": [
+    [
+     "ride",
+     "v",
+     "ridden"
+    ]
+   ]
+  },
+  {
+   "en": "He wears a hat.",
+   "forms": [
+    [
+     "wear",
+     "v",
+     "wears"
+    ]
+   ]
+  },
+  {
+   "en": "She wore a hat.",
+   "forms": [
+    [
+     "wear",
+     "v",
+     "wore"
+    ]
+   ]
+  },
+  {
+   "en": "It is worn.",
+   "forms": [
+    [
+     "wear",
+     "v",
+     "worn"
+    ]
+   ]
+  },
+  {
+   "en": "He learns English.",
+   "forms": [
+    [
+     "learn",
+     "v",
+     "learns"
+    ]
+   ]
+  },
+  {
+   "en": "She learned English.",
+   "forms": [
+    [
+     "learn",
+     "v",
+     "learned"
+    ]
+   ]
+  },
+  {
+   "en": "I learnt English.",
+   "forms": [
+    [
+     "learn",
+     "v",
+     "learnt"
+    ]
+   ]
+  },
+  {
+   "en": "He calls me.",
+   "forms": [
+    [
+     "call",
+     "v",
+     "calls"
+    ]
+   ]
+  },
+  {
+   "en": "She called me.",
+   "forms": [
+    [
+     "call",
+     "v",
+     "called"
+    ]
+   ]
+  },
+  {
+   "en": "He talks a lot.",
+   "forms": [
+    [
+     "talk",
+     "v",
+     "talks"
+    ]
+   ]
+  },
+  {
+   "en": "He needs help.",
+   "forms": [
+    [
+     "need",
+     "v",
+     "needs"
+    ]
+   ]
+  },
+  {
+   "en": "She needed help.",
+   "forms": [
+    [
+     "need",
+     "v",
+     "needed"
+    ]
+   ]
+  },
+  {
+   "en": "He wants coffee.",
+   "forms": [
+    [
+     "want",
+     "v",
+     "wants"
+    ]
+   ]
+  },
+  {
+   "en": "She wanted tea.",
+   "forms": [
+    [
+     "want",
+     "v",
+     "wanted"
+    ]
+   ]
+  },
+  {
+   "en": "He meets friends.",
+   "forms": [
+    [
+     "meet",
+     "v",
+     "meets"
+    ]
+   ]
+  },
+  {
+   "en": "I met a friend.",
+   "forms": [
+    [
+     "meet",
+     "v",
+     "met"
+    ]
+   ]
+  },
+  {
+   "en": "He asks me.",
+   "forms": [
+    [
+     "ask",
+     "v",
+     "asks"
+    ]
+   ]
+  },
+  {
+   "en": "She asked me.",
+   "forms": [
+    [
+     "ask",
+     "v",
+     "asked"
+    ]
+   ]
+  },
+  {
+   "en": "She told me.",
+   "forms": [
+    [
+     "tell",
+     "v",
+     "told"
+    ]
+   ]
+  },
+  {
+   "en": "He tells me.",
+   "forms": [
+    [
+     "tell",
+     "v",
+     "tells"
+    ]
+   ]
+  },
+  {
+   "en": "He knows it.",
+   "forms": [
+    [
+     "know",
+     "v",
+     "knows"
+    ]
+   ]
+  },
+  {
+   "en": "I knew it.",
+   "forms": [
+    [
+     "know",
+     "v",
+     "knew"
+    ]
+   ]
+  },
+  {
+   "en": "I have known him.",
+   "forms": [
+    [
+     "know",
+     "v",
+     "known"
+    ]
+   ]
+  },
+  {
+   "en": "He opens the door.",
+   "forms": [
+    [
+     "open",
+     "v",
+     "opens"
+    ]
+   ]
+  },
+  {
+   "en": "She opened the door.",
+   "forms": [
+    [
+     "open",
+     "v",
+     "opened"
+    ]
+   ]
+  },
+  {
+   "en": "He closes it.",
+   "forms": [
+    [
+     "close",
+     "v",
+     "closes"
+    ]
+   ]
+  },
+  {
+   "en": "She closed it.",
+   "forms": [
+    [
+     "close",
+     "v",
+     "closed"
+    ]
+   ]
+  },
+  {
+   "en": "He waits here.",
+   "forms": [
+    [
+     "wait",
+     "v",
+     "waits"
+    ]
+   ]
+  },
+  {
+   "en": "She waited.",
+   "forms": [
+    [
+     "wait",
+     "v",
+     "waited"
+    ]
+   ]
+  },
+  {
+   "en": "We are waiting.",
+   "forms": [
+    [
+     "wait",
+     "v",
+     "waiting"
+    ]
+   ]
+  },
+  {
+   "en": "She helps me.",
+   "forms": [
+    [
+     "help",
+     "v",
+     "helps"
+    ]
+   ]
+  },
+  {
+   "en": "He helped me.",
+   "forms": [
+    [
+     "help",
+     "v",
+     "helped"
+    ]
+   ]
+  },
+  {
+   "en": "She is helping me.",
+   "forms": [
+    [
+     "help",
+     "v",
+     "helping"
+    ]
+   ]
+  },
+  {
+   "en": "He repeats it.",
+   "forms": [
+    [
+     "repeat",
+     "v",
+     "repeats"
+    ]
+   ]
+  },
+  {
+   "en": "She repeated it.",
+   "forms": [
+    [
+     "repeat",
+     "v",
+     "repeated"
+    ]
+   ]
+  },
+  {
+   "en": "He understands.",
+   "forms": [
+    [
+     "understand",
+     "v",
+     "understands"
+    ]
+   ]
+  },
+  {
+   "en": "I understood.",
+   "forms": [
+    [
+     "understand",
+     "v",
+     "understood"
+    ]
+   ]
+  },
+  {
+   "en": "She uses it.",
+   "forms": [
+    [
+     "use",
+     "v",
+     "uses"
+    ]
+   ]
+  },
+  {
+   "en": "He used it.",
+   "forms": [
+    [
+     "use",
+     "v",
+     "used"
+    ]
+   ]
+  },
+  {
+   "en": "I am using it.",
+   "forms": [
+    [
+     "use",
+     "v",
+     "using"
+    ]
+   ]
+  },
+  {
+   "en": "He shows me.",
+   "forms": [
+    [
+     "show",
+     "v",
+     "shows"
+    ]
+   ]
+  },
+  {
+   "en": "She showed me.",
+   "forms": [
+    [
+     "show",
+     "v",
+     "showed"
+    ]
+   ]
+  },
+  {
+   "en": "I was shown.",
+   "forms": [
+    [
+     "show",
+     "v",
+     "shown"
+    ]
+   ]
+  },
+  {
+   "en": "He listens.",
+   "forms": [
+    [
+     "listen",
+     "v",
+     "listens"
+    ]
+   ]
+  },
+  {
+   "en": "She listened.",
+   "forms": [
+    [
+     "listen",
+     "v",
+     "listened"
+    ]
+   ]
+  },
+  {
+   "en": "He looks.",
+   "forms": [
+    [
+     "look",
+     "v",
+     "looks"
+    ]
+   ]
+  },
+  {
+   "en": "She looked.",
+   "forms": [
+    [
+     "look",
+     "v",
+     "looked"
+    ]
+   ]
+  },
+  {
+   "en": "He comes.",
+   "forms": [
+    [
+     "come",
+     "v",
+     "comes"
+    ]
+   ]
+  },
+  {
+   "en": "She came.",
+   "forms": [
+    [
+     "come",
+     "v",
+     "came"
+    ]
+   ]
+  },
+  {
+   "en": "He is coming.",
+   "forms": [
+    [
+     "come",
+     "v",
+     "coming"
+    ]
+   ]
+  },
+  {
+   "en": "She cleans.",
+   "forms": [
+    [
+     "clean",
+     "v",
+     "cleans"
+    ]
+   ]
+  },
+  {
+   "en": "He cleaned.",
+   "forms": [
+    [
+     "clean",
+     "v",
+     "cleaned"
+    ]
+   ]
+  },
+  {
+   "en": "He is cleaning.",
+   "forms": [
+    [
+     "clean",
+     "v",
+     "cleaning"
+    ]
+   ]
+  }
+ ],
+ "wrong": [
+  [
+   "run",
+   "v",
+   "runing"
+  ],
+  [
+   "stop",
+   "v",
+   "stoped"
+  ],
+  [
+   "big",
+   "adj",
+   "biger"
+  ],
+  [
+   "hot",
+   "adj",
+   "hoter"
+  ],
+  [
+   "sit",
+   "v",
+   "siting"
+  ],
+  [
+   "sit",
+   "v",
+   "sitted"
+  ],
+  [
+   "go",
+   "v",
+   "goed"
+  ],
+  [
+   "go",
+   "v",
+   "gos"
+  ],
+  [
+   "eat",
+   "v",
+   "eated"
+  ],
+  [
+   "child",
+   "n",
+   "childs"
+  ],
+  [
+   "man",
+   "n",
+   "mans"
+  ],
+  [
+   "woman",
+   "n",
+   "womans"
+  ],
+  [
+   "have",
+   "v",
+   "haves"
+  ],
+  [
+   "be",
+   "v",
+   "bes"
+  ],
+  [
+   "good",
+   "adj",
+   "gooder"
+  ],
+  [
+   "hello",
+   "interj",
+   "hellos"
+  ],
+  [
+   "hello",
+   "interj",
+   "helloing"
+  ],
+  [
+   "hello",
+   "interj",
+   "helloer"
+  ],
+  [
+   "study",
+   "v",
+   "studyed"
+  ],
+  [
+   "study",
+   "v",
+   "studys"
+  ],
+  [
+   "happy",
+   "adj",
+   "happyer"
+  ],
+  [
+   "make",
+   "v",
+   "maked"
+  ],
+  [
+   "make",
+   "v",
+   "makeing"
+  ],
+  [
+   "like",
+   "v",
+   "likeing"
+  ],
+  [
+   "sad",
+   "adj",
+   "sader"
+  ],
+  [
+   "travel",
+   "v",
+   "travelld"
+  ],
+  [
+   "see",
+   "v",
+   "seed"
+  ],
+  [
+   "take",
+   "v",
+   "taked"
+  ],
+  [
+   "write",
+   "v",
+   "writed"
+  ],
+  [
+   "cat",
+   "n",
+   "cates"
+  ],
+  [
+   "bus",
+   "n",
+   "buss"
+  ],
+  [
+   "city",
+   "n",
+   "cityes"
+  ],
+  [
+   "Min",
+   "propn",
+   "Mins"
+  ],
+  [
+   "play",
+   "v",
+   "playd"
+  ],
+  [
+   "plan",
+   "v",
+   "planed"
+  ],
+  [
+   "drive",
+   "v",
+   "drived"
+  ],
+  [
+   "friend",
+   "n",
+   "friendes"
+  ],
+  [
+   "big",
+   "adj",
+   "bigest"
+  ],
+  [
+   "hot",
+   "adj",
+   "hotest"
+  ],
+  [
+   "nice",
+   "adj",
+   "nicr"
+  ],
+  [
+   "I",
+   "pron",
+   "mine"
+  ],
+  [
+   "she",
+   "pron",
+   "hers"
+  ],
+  [
+   "some",
+   "det",
+   "something"
+  ],
+  [
+   "any",
+   "det",
+   "anything"
+  ],
+  [
+   "we",
+   "pron",
+   "ours"
+  ],
+  [
+   "thanks",
+   "interj",
+   "thankses"
+  ]
+ ]
+}
