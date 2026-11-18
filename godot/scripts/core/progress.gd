@@ -157,7 +157,7 @@ static func quarantine(path: String) -> void:
 ## Test safety net: Store turns this on for test scenes (TEST_GUARD). While on, the real app files may not be written.
 static var test_guard: bool = false
 ## File names of the user's real app files.
-const REAL_FILE_NAMES := ["prefs.json", "progress.json", "studylog.json", "remote.json", "curriculum.json", "diary.json"]
+const REAL_FILE_NAMES := ["prefs.json", "progress.json", "studylog.json", "remote.json", "curriculum.json", "diary.json", "course.json"]
 
 
 ## True when test_guard is on and `path` is one of the real app files (by name) outside user://test*.
