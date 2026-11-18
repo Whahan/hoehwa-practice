@@ -12,12 +12,33 @@ extends RefCounted
 ##   "day":{"2026-12-01":{"new":1,"review":1,"listen":1,"speak":1,"rp":0}},
 ##   "last_active":"2026-12-01","skips":[3]}
 ## `rp` (new) = that day's plan was "review first" (DayPlan reads it back through review_state()).
-## Unknown top-level keys (and unknown keys inside week / month / day records) are kept when the file is written again.
+## `prev_active` (new) = the last study day before `last_active`; away_days() counts from it while today already has activity,
+## so a day that started as "21 days away" stays that way for the whole day (recap / reopen do not vanish after one block).
+## Unknown top-level keys (and unknown keys inside pos / week / check / month / day records) are kept when the file is written again.
 ## A file with `v` greater than VERSION is read-only: it is read, but never written over (this app does not know the new fields).
 ## A broken file (cut JSON, empty, an array) is moved to `<path>.bad` (.bad.1, .bad.2: three at most) and the state starts empty.
 ## A file that exists but cannot be opened: read-only for this run (nothing is saved over it).
 ## Values are clamped: w 1..72, d 1..7, scores 0..100, tries 0..99; a week / month key outside its range is dropped.
 ## Tests: CourseStore.path = "user://test_*.json", CourseStore.reset_memory(), CourseStore.today_override = <day number>.
+##
+## pos moves ONLY like this (no jumps):
+##   - unit_done: a result for the cell that IS pos finishes it and pos goes to the next cell (day 7 -> day 1 of the next week).
+##     A cell before pos is recorded again (first date kept) and pos stays. A cell AHEAD of pos is refused: {"ignored": true,
+##     "reason": "ahead"}, nothing is written. One exception (design §6.2 U5, going on without the weekly check): when pos is
+##     day 6 or 7 of week w, a result for day 1 of week w+1 is accepted and pos goes to that week's day 2.
+##   - check_done(w): moves pos only when pos is in week w on day 6 or 7 (a pass, or the second failure, finishes cell w/6); in every
+##     other case only the check result is recorded. Skip by check (skip: true) marks the week done and moves pos only when pos is in it.
+##   - reopen_weeks moves pos back to the first reopened week; month_done / mark_block / note_review_priority never move it.
+##
+## unit_done `block` contract (E4b: read this). Values "new" | "review" | "listen" | "speak" = which of the four daily blocks of
+## DayPlan the unit belongs to. Leave it out only when it is unambiguous: if `block` is missing, the unit counts as the day's NEW
+## block when result.unit equals the kind of day (w, d) (CourseModel.day_kind: new on D1-D4, speak on D5, free on D7; D6 is check_done),
+## and otherwise by unit: new / free / recap -> new, listen -> listen, speak -> speak. So on D5 a bare unit "speak" is the main block
+## of the day and finishes the cell; the 12-minute speaking block of ANY day (D5 too) must send block "speak". Always send "block"
+## "review" for the review block. unit "recap" marks the new block but never finishes a cell.
+##
+## Every result carries "saved": true when what the call did is on disk (false: nothing was written, a write failed, the file is
+## read-only, or the call was ignored).
 ## Never calls StudyLog / Store writers (except Store.set_pref in set_mode): the old 12-month path records stay untouched.
 
 const VERSION := 1
@@ -35,7 +56,9 @@ const WEAK_AFTER_TRIES := 2 ## failed twice -> progress is allowed, the week get
 const BLOCK_IDS := ["new", "review", "listen", "speak"]
 const SPEAK_VALUES := ["pass", "fail", "unverified"]
 const MONTH_MODES := ["stt", "self"]
-const KNOWN_KEYS := ["v", "started", "pos", "weeks", "months", "day", "last_active", "skips"]
+const KNOWN_KEYS := ["v", "started", "pos", "weeks", "months", "day", "last_active", "prev_active", "skips"]
+const POS_KEYS := ["w", "d"]
+const CHECK_KEYS := ["best", "tries", "last", "speak"]
 const WEEK_KEYS := ["done", "days", "check", "weak"]
 const MONTH_KEYS := ["score", "date", "tries", "mode"]
 const DAY_KEYS := ["new", "review", "listen", "speak", "rp"]
@@ -52,7 +75,9 @@ static var last_save_ok: bool = true
 
 static var _data: Dictionary = {}
 static var _loaded: bool = false
-static var _read_only: bool = false ## file exists but cannot be opened, or has a newer `v`
+static var _read_only: bool = false ## file exists but cannot be opened, has a newer `v`, or is a real user file under the test guard
+## true while _data is only an empty placeholder made in legacy mode (the file was not read): course mode reads the file first.
+static var _placeholder: bool = false
 
 
 # ---------------------------------------------------------------- mode
@@ -92,6 +117,7 @@ static func reset_memory() -> void:
 	_loaded = false
 	_data = {}
 	_read_only = false
+	_placeholder = false
 
 
 ## Reads the file (never writes, except that a broken file is moved to `.bad`). Always call it as `CourseStore.load()`: inside
@@ -103,8 +129,14 @@ static func load() -> void:
 static func _load_file() -> void:
 	_loaded = true
 	_read_only = false
+	_placeholder = false
 	_data = _blank()
 	last_load_status = "new"
+	if Progress.test_guard and Progress.guard_blocks(path):
+		## a test run must not even read (or move to .bad) the user's real file: empty state, memory only
+		_read_only = true
+		last_load_status = "guarded"
+		return
 	if not FileAccess.file_exists(path):
 		return
 	var r: Dictionary = Progress.read_json_file(path)
@@ -137,8 +169,16 @@ static func is_read_only() -> bool:
 
 
 static func _ensure() -> void:
-	if not _loaded:
-		_load_file()
+	if mode() == MODE_COURSE:
+		if not _loaded or _placeholder:
+			_load_file()
+	elif not _loaded:
+		## legacy / Japanese: the file is not read (a broken file would be moved to .bad); an empty state answers
+		_loaded = true
+		_placeholder = true
+		_read_only = false
+		_data = _blank()
+		last_load_status = "legacy"
 
 
 static func _write() -> bool:
@@ -188,10 +228,13 @@ static func elapsed_days() -> int:
 	return 0 if s == "" else maxi(today() - Plan.iso_to_days(s), 0)
 
 
-## Calendar days since the last day with any course activity (0 when there is none yet).
+## Calendar days since the last study day BEFORE today (0 when there is none). Activity today does not reset it: a day that
+## starts as "25 days away" says 25 all day long (recap and reopen stay), the next day it counts from yesterday (1).
 static func away_days() -> int:
 	_ensure()
 	var s: String = str(_data["last_active"])
+	if s == today_iso():
+		s = str(_data["prev_active"])
 	return 0 if s == "" else maxi(today() - Plan.iso_to_days(s), 0)
 
 
@@ -303,54 +346,74 @@ static func check_pending() -> Dictionary:
 # ---------------------------------------------------------------- recording
 
 ## One unit of the day ended. result (design §10.4): {"unit","w","d","ok","total","first_try","wrong","words_new","completed","seconds", optional "block"}.
-## Only `completed == true` counts. The unit marks its block (result.block, else by unit: new/free/recap -> new, listen, speak) in
-## today's record. A block "new" with unit new / speak / free finishes the cell (w, d): its date is kept once (the same cell again
-## changes nothing), day 7 also finishes the week, and pos moves to the cell after it unless pos is already further ("recap" never
-## moves it). Units check / month go through check_done / month_done and are ignored here.
-## Returns {"w","d","finished","advanced","week_done","ignored"}. Legacy mode: nothing is written ("ignored": true).
+## Only `completed == true` counts. The unit marks its block (see "block contract" above) in today's record. A unit of the NEW block
+## (unit new / speak / free, not recap) finishes the cell (w, d) under the pos rules above: only the cell that is pos moves pos on;
+## a cell before pos is recorded again; a cell ahead of pos is refused ("ignored", reason "ahead"). Day 7 also finishes the week.
+## Units check / month go through check_done / month_done and are ignored here.
+## Returns {"w","d","finished","advanced","week_done","ignored","reason","saved"} (w, d = pos after the call).
+## reason: "" | "mode" (legacy) | "bad_result" | "not_completed" | "unit" | "ahead". Legacy mode: nothing is written.
 static func unit_done(result: Variant) -> Dictionary:
-	var out: Dictionary = {"advanced": false, "week_done": false, "ignored": false}
-	if not (result is Dictionary) or not _begin():
-		_fill_pos(out)
-		out["ignored"] = true
-		return out
+	var out: Dictionary = {"advanced": false, "week_done": false, "ignored": false, "reason": "", "saved": false}
+	if not (result is Dictionary):
+		return _ignored(out, "bad_result")
+	if not _begin():
+		return _ignored(out, "mode")
 	var res: Dictionary = result
 	var unit: String = str(res.get("unit", "new")) if res.get("unit", "new") is String else ""
-	var block: String = str(res["block"]) if (res.get("block") is String and BLOCK_IDS.has(res["block"])) else str(UNIT_BLOCK.get(unit, ""))
+	if unit == "check" or unit == "month" or not UNIT_BLOCK.has(unit):
+		return _ignored(out, "unit")
 	var completed: Variant = res.get("completed", false)
-	if unit == "check" or unit == "month" or block == "" or not (completed is bool and completed):
-		_fill_pos(out)
-		out["ignored"] = true
-		return out
-	var changed: bool = _touch()
-	changed = _set_block(block) or changed
-	var cell_unit: bool = block == "new" and unit != "recap"
+	if not (completed is bool and completed):
+		return _ignored(out, "not_completed")
 	var wi: int = _strict(res.get("w"), 1, MAX_WEEK)
 	var di: int = _strict(res.get("d"), 1, DAYS)
-	if cell_unit and wi > 0 and di > 0:
+	var block: String = ""
+	if res.get("block") is String and BLOCK_IDS.has(res["block"]):
+		block = res["block"]
+	elif wi > 0 and di > 0 and unit == CourseModel.day_kind(wi, di):
+		block = "new"
+	else:
+		block = str(UNIT_BLOCK.get(unit, ""))
+	var cell_unit: bool = block == "new" and unit != "recap" and wi > 0 and di > 0
+	var jump_week := false
+	if cell_unit:
+		var p: Dictionary = _data["pos"]
+		if wi * 10 + di > int(p["w"]) * 10 + int(p["d"]):
+			## ahead of pos: refused, except the first cell of the next week once pos is on day 6 or 7 (no weekly check done)
+			jump_week = int(p["d"]) >= 6 and wi == int(p["w"]) + 1 and di == 1
+			if not jump_week:
+				return _ignored(out, "ahead")
+	var changed: bool = _touch()
+	changed = _set_block(block) or changed
+	if cell_unit:
+		if jump_week:
+			var p2: Dictionary = _data["pos"]
+			p2["w"] = wi
+			p2["d"] = 1
 		var r: Dictionary = _complete_cell(wi, di)
 		out["advanced"] = r["advanced"]
 		out["week_done"] = r["week_done"]
 		changed = true
-	if changed:
-		_write()
+	out["saved"] = _write() if changed else not _read_only
 	_fill_pos(out)
 	return out
 
 
 ## Weekly check result for week w: {"ok": auto-graded right, "total": auto-graded questions, "speak": "pass"|"fail"|"unverified", "skip": bool}.
-## pct = ok / total (0..100). Regular check: pct >= 80 passes. First failure: the cell (w, 6) stays open (tomorrow again);
-## the second failure still opens the way (cell finished) but marks the week weak. A pass clears weak.
+## pct = ok / total (0..100). The result is always recorded (tries, best, last, speak, weak). Regular check: pct >= 80 passes.
+## pos moves ONLY when pos is in week w on day 6 or 7: a pass finishes cell w/6 (pos 6 -> 7), the first failure keeps the cell open
+## (tomorrow again), the second failure still opens the way (cell finished) but marks the week weak. A pass clears weak.
+## A check for any other week or day (a late check of an earlier week, a check ahead of pos) changes no cell, no block and no pos.
 ## skip == true ("skip by check", design §7.1): pct >= 90 marks the week done and skipped (pos moves on when it is this week);
 ## a lower score changes nothing (it is not counted as a failed check).
-## Returns {"ok": processed, "pass","pct","tries","best","weak","skip","w","d","finished","ignored"}.
+## Returns {"ok": processed, "pass","pct","tries","best","weak","skip","w","d","finished","ignored","reason","saved"}.
 static func check_done(w: Variant, result: Variant) -> Dictionary:
-	var out: Dictionary = {"ok": false, "pass": false, "pct": 0, "tries": 0, "best": 0, "weak": false, "skip": false, "ignored": false}
+	var out: Dictionary = {"ok": false, "pass": false, "pct": 0, "tries": 0, "best": 0, "weak": false, "skip": false, "ignored": false, "reason": "", "saved": false}
 	var wi: int = _strict(w, 1, MAX_WEEK)
-	if wi < 0 or not (result is Dictionary) or not _begin():
-		_fill_pos(out)
-		out["ignored"] = true
-		return out
+	if wi < 0 or not (result is Dictionary):
+		return _ignored(out, "bad_result")
+	if not _begin():
+		return _ignored(out, "mode")
 	var res: Dictionary = result
 	var total: int = _int_in(res.get("total", 0), 0, 999, 0)
 	var right: int = _int_in(res.get("ok", 0), 0, total, 0)
@@ -365,6 +428,7 @@ static func check_done(w: Variant, result: Variant) -> Dictionary:
 	if not SPEAK_VALUES.has(speak):
 		speak = ""
 	if skip:
+		var wrote := false
 		if pct >= SKIP_PASS:
 			out["pass"] = true
 			if str(rec["done"]) == "":
@@ -380,7 +444,10 @@ static func check_done(w: Variant, result: Variant) -> Dictionary:
 			var p: Dictionary = _data["pos"]
 			if int(p["w"]) == wi:
 				_advance_to_week(wi + 1)
-			_write()
+			wrote = true
+			out["saved"] = _write()
+		if not wrote:
+			out["saved"] = not _read_only
 		_fill_pos(out)
 		_fill_check(out, rec)
 		return out
@@ -398,22 +465,29 @@ static func check_done(w: Variant, result: Variant) -> Dictionary:
 		weak = int(chk["tries"]) >= WEAK_AFTER_TRIES and int(chk["best"]) < CHECK_PASS
 		rec["weak"] = weak
 	_touch()
-	_set_block("new")
-	if passed or weak:
-		_complete_cell(wi, 6)
-	_write()
+	var pp: Dictionary = _data["pos"]
+	if int(pp["w"]) == wi and int(pp["d"]) >= 6:
+		_set_block("new")
+		if passed or weak:
+			_complete_cell(wi, 6)
+	out["saved"] = _write()
 	_fill_pos(out)
 	_fill_check(out, rec)
 	return out
 
 
 ## Month-end speaking evaluation of block n (1..18): result {"score": 0..100, "mode": "stt"|"self"}. Keeps the latest score / date /
-## mode and counts the tries. Does not move pos. Returns {"ok","n","score","tries","ignored"}.
+## mode and counts the tries. Does not move pos. Returns {"ok","n","score","tries","ignored","reason","saved"}.
 static func month_done(n: Variant, result: Variant) -> Dictionary:
 	var ni: int = _strict(n, 1, MAX_BLOCK)
-	var out: Dictionary = {"ok": false, "n": maxi(ni, 0), "score": 0, "tries": 0, "ignored": false}
-	if ni < 0 or not (result is Dictionary) or not _begin():
+	var out: Dictionary = {"ok": false, "n": maxi(ni, 0), "score": 0, "tries": 0, "ignored": false, "reason": "", "saved": false}
+	if ni < 0 or not (result is Dictionary):
 		out["ignored"] = true
+		out["reason"] = "bad_result"
+		return out
+	if not _begin():
+		out["ignored"] = true
+		out["reason"] = "mode"
 		return out
 	var res: Dictionary = result
 	var months: Dictionary = _data["months"]
@@ -425,7 +499,7 @@ static func month_done(n: Variant, result: Variant) -> Dictionary:
 	rec["mode"] = m if MONTH_MODES.has(m) else "self"
 	months[str(ni)] = rec
 	_touch()
-	_write()
+	out["saved"] = _write()
 	out["ok"] = true
 	out["score"] = int(rec["score"])
 	out["tries"] = int(rec["tries"])
@@ -493,6 +567,7 @@ static func _touch() -> bool:
 	var changed := false
 	var t: String = today_iso()
 	if str(_data["last_active"]) != t:
+		_data["prev_active"] = str(_data["last_active"])
 		_data["last_active"] = t
 		changed = true
 	if str(_data["started"]) == "":
@@ -534,7 +609,8 @@ static func _check_rec(rec: Dictionary) -> Dictionary:
 	return rec["check"]
 
 
-## Finishes cell (w, d). Returns {"advanced","week_done"}.
+## Records cell (w, d) as finished (its first date is kept). pos moves on ONLY when (w, d) is pos itself (to the next cell;
+## week 72 day 7 stays: finished() is true then). A cell before pos is just recorded. Returns {"advanced","week_done"}.
 static func _complete_cell(w: int, d: int) -> Dictionary:
 	var out: Dictionary = {"advanced": false, "week_done": false}
 	var rec: Dictionary = _wk(w)
@@ -544,24 +620,18 @@ static func _complete_cell(w: int, d: int) -> Dictionary:
 	if d == DAYS and str(rec.get("done", "")) == "":
 		rec["done"] = today_iso()
 		out["week_done"] = true
-	# pos: the cell after (w, d), unless pos is already further
-	var nw: int = w
-	var nd: int = d + 1
-	if nd > DAYS:
-		nw = w + 1
-		nd = 1
 	var p: Dictionary = _data["pos"]
-	if nw > MAX_WEEK: ## week 72 day 7: the course is finished, pos stays on the last cell
-		if int(p["w"]) != MAX_WEEK or int(p["d"]) != DAYS:
-			p["w"] = MAX_WEEK
-			p["d"] = DAYS
-			out["advanced"] = true
+	if int(p["w"]) != w or int(p["d"]) != d:
 		return out
-	if nw * 10 + nd > int(p["w"]) * 10 + int(p["d"]):
-		p["w"] = nw
-		p["d"] = nd
-		out["advanced"] = true
-		_skip_placed_weeks()
+	if d == DAYS:
+		if w >= MAX_WEEK:
+			return out
+		p["w"] = w + 1
+		p["d"] = 1
+	else:
+		p["d"] = d + 1
+	out["advanced"] = true
+	_skip_placed_weeks()
 	return out
 
 
@@ -588,6 +658,14 @@ static func _advance_to_week(w: int) -> void:
 	_skip_placed_weeks()
 
 
+static func _ignored(out: Dictionary, reason: String) -> Dictionary:
+	out["ignored"] = true
+	out["reason"] = reason
+	out["saved"] = false
+	_fill_pos(out)
+	return out
+
+
 static func _fill_pos(out: Dictionary) -> void:
 	var p: Dictionary = pos()
 	out["w"] = p["w"]
@@ -605,7 +683,7 @@ static func _fill_check(out: Dictionary, rec: Dictionary) -> void:
 # ---------------------------------------------------------------- normalizing (reading a file)
 
 static func _blank() -> Dictionary:
-	return {"v": VERSION, "started": "", "pos": {"w": 1, "d": 1}, "weeks": {}, "months": {}, "day": {}, "last_active": "", "skips": []}
+	return {"v": VERSION, "started": "", "pos": {"w": 1, "d": 1}, "weeks": {}, "months": {}, "day": {}, "last_active": "", "prev_active": "", "skips": []}
 
 
 ## The whole file as a clean state: every known field clamped, unknown keys carried over unchanged.
@@ -620,9 +698,13 @@ static func _normalize(raw: Variant) -> Dictionary:
 	out["v"] = _int_in(src.get("v", VERSION), 0, 1000000000, VERSION)
 	out["started"] = _iso(src.get("started", ""))
 	out["last_active"] = _iso(src.get("last_active", ""))
+	out["prev_active"] = _iso(src.get("prev_active", ""))
 	var p: Variant = src.get("pos", {})
 	if p is Dictionary:
-		out["pos"] = {"w": _int_in((p as Dictionary).get("w", 1), 1, MAX_WEEK, 1), "d": _int_in((p as Dictionary).get("d", 1), 1, DAYS, 1)}
+		var np: Dictionary = _carry(p, POS_KEYS)
+		np["w"] = _int_in((p as Dictionary).get("w", 1), 1, MAX_WEEK, 1)
+		np["d"] = _int_in((p as Dictionary).get("d", 1), 1, DAYS, 1)
+		out["pos"] = np
 	var weeks: Dictionary = {}
 	if src.get("weeks", null) is Dictionary:
 		for k in (src["weeks"] as Dictionary).keys():
@@ -669,8 +751,12 @@ static func _norm_week(r: Dictionary) -> Dictionary:
 	if r.get("check", null) is Dictionary:
 		var c: Dictionary = r["check"]
 		var sp: String = str(c.get("speak", "")) if c.get("speak", "") is String else ""
-		out["check"] = {"best": _int_in(c.get("best", 0), 0, 100, 0), "tries": _int_in(c.get("tries", 0), 0, MAX_TRIES, 0),
-			"last": _iso(c.get("last", "")), "speak": sp if SPEAK_VALUES.has(sp) else ""}
+		var nc: Dictionary = _carry(c, CHECK_KEYS)
+		nc["best"] = _int_in(c.get("best", 0), 0, 100, 0)
+		nc["tries"] = _int_in(c.get("tries", 0), 0, MAX_TRIES, 0)
+		nc["last"] = _iso(c.get("last", ""))
+		nc["speak"] = sp if SPEAK_VALUES.has(sp) else ""
+		out["check"] = nc
 	var weak: Variant = r.get("weak", false)
 	out["weak"] = weak is bool and weak
 	return out

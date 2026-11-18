@@ -40,6 +40,12 @@ func _ready() -> void:
 	_legacy_writes_nothing()
 	_set_mode()
 	_unit_done_table()
+	_no_jumps()
+	_away_all_day()
+	_d5_block()
+	_unknown_pos_check_keys()
+	_guard_and_legacy_read()
+	_saved_flag()
 	_unit_done_bad_input()
 	_check_done_table()
 	_check_done_skip()
@@ -345,31 +351,42 @@ func _unit_done_table() -> void:
 	eq(CourseStore.path_flags()[0], true, "path_flags()[0] is true")
 	eq(CourseStore.path_flags().size(), 72, "path_flags() has 72 entries")
 	eq(CourseStore.path_flags()[1], false, "path_flags()[1] is false")
-	# out of order: an earlier cell after pos moved on
+	# a cell before pos: recorded again, pos stays
 	var r4: Dictionary = CourseStore.unit_done(_cell(1, 3))
-	eq([r4["w"], r4["d"], r4["advanced"]], [2, 1, false], "an earlier cell again never moves pos back")
-	# a cell ahead of pos moves pos to the cell after it
+	eq([r4["w"], r4["d"], r4["advanced"], r4["ignored"]], [2, 1, false, false], "an earlier cell again never moves pos back")
+	# a cell ahead of pos is refused and writes nothing (policy: pos never jumps)
+	var before_ahead: String = _read_text(P)
 	var r5: Dictionary = CourseStore.unit_done(_cell(3, 2))
-	eq([r5["w"], r5["d"], r5["advanced"]], [3, 3, true], "a cell ahead of pos: pos = the cell after it")
+	eq([r5["w"], r5["d"], r5["advanced"], r5["ignored"], r5["reason"], r5["saved"]], [2, 1, false, true, "ahead", false], "a cell ahead of pos (3/2 at 2/1) is ignored with reason ahead")
+	eq(_read_text(P), before_ahead, "an ahead result writes nothing (file unchanged)")
+	ok(not CourseStore.week_state(3)["days"].has(2), "an ahead result records no day")
 	var r6: Dictionary = CourseStore.unit_done(_cell(2, 5))
-	eq([r6["w"], r6["d"]], [3, 3], "finishing a cell before pos (2/5) leaves pos at 3/3")
-	# speak day: a unit of kind speak that is the "new" block finishes the cell
-	var r7: Dictionary = CourseStore.unit_done(_cell(3, 3, "speak", {"block": "new"}))
-	eq([r7["w"], r7["d"]], [3, 4], "a speak unit that is the new block finishes its cell")
+	eq([r6["w"], r6["d"], r6["ignored"], r6["reason"]], [2, 1, true, "ahead"], "2/5 at pos 2/1 is ahead too")
+	# walk week 2 up to its speak day with the real kinds
+	CourseStore.unit_done(_cell(2, 1))
+	CourseStore.unit_done(_cell(2, 2))
+	CourseStore.unit_done(_cell(2, 3))
+	CourseStore.unit_done(_cell(2, 4))
+	eq(CourseStore.pos(), {"w": 2, "d": 5}, "week 2: pos 2/5 (the speak day)")
+	var r7: Dictionary = CourseStore.unit_done(_cell(2, 5, "speak", {"block": "new"}))
+	eq([r7["w"], r7["d"], r7["advanced"]], [2, 6, true], "a speak unit that is the new block finishes its cell")
 	# listen / speak blocks only mark their block
-	var r8: Dictionary = CourseStore.unit_done(_cell(3, 4, "listen"))
-	eq([r8["w"], r8["d"], r8["advanced"]], [3, 4, false], "a listen unit does not finish a cell")
+	var r8: Dictionary = CourseStore.unit_done(_cell(2, 6, "listen"))
+	eq([r8["w"], r8["d"], r8["advanced"]], [2, 6, false], "a listen unit does not finish a cell")
 	ok(CourseStore.blocks_today()["listen"], "a listen unit marks the listen block")
-	CourseStore.unit_done(_cell(3, 4, "speak"))
+	CourseStore.unit_done(_cell(2, 6, "speak"))
 	ok(CourseStore.blocks_today()["speak"], "a speak unit (block speak) marks the speak block")
-	eq(CourseStore.pos(), {"w": 3, "d": 4}, "speak block alone does not move pos")
-	# recap marks block new, last_active, but no cell
+	eq(CourseStore.pos(), {"w": 2, "d": 6}, "speak block alone does not move pos")
+	# recap marks block new, last_active, but no cell; and it does not reset away_days for the rest of that day
 	_day(40)
-	var r9: Dictionary = CourseStore.unit_done(_cell(3, 4, "recap"))
-	eq([r9["w"], r9["d"], r9["advanced"]], [3, 4, false], "a recap unit does not finish a cell")
+	eq(CourseStore.away_days(), 39, "before the recap: 39 days away (last study day was day 1)")
+	var r9: Dictionary = CourseStore.unit_done(_cell(2, 6, "recap"))
+	eq([r9["w"], r9["d"], r9["advanced"]], [2, 6, false], "a recap unit does not finish a cell")
 	ok(CourseStore.blocks_today()["new"], "a recap unit marks the new block")
-	eq(CourseStore.away_days(), 0, "a recap unit counts as activity (away_days 0)")
-	ok(not CourseStore.week_state(3)["days"].has(4), "recap did not mark day 4 of week 3")
+	eq(CourseStore.away_days(), 39, "after the recap the same day still says 39 days away")
+	ok(not CourseStore.week_state(2)["days"].has(6), "recap did not mark day 6 of week 2")
+	_day(41)
+	eq(CourseStore.away_days(), 1, "the next day it counts from yesterday: 1")
 	# the end of the course
 	_fresh()
 	for w in range(1, 73):
@@ -386,10 +403,107 @@ func _unit_done_table() -> void:
 	eq([again["w"], again["d"], again["finished"], again["advanced"]], [72, 7, true, false], "finished: asking again changes nothing")
 	eq(CourseStore.path_flags().count(true), 72, "all 72 weeks are done")
 	ok(_shape_problems(_read_json(P)).is_empty(), "the finished file still has the §10.6 shape")
-	# the last cell finished first (out of order) also moves pos to the end
+	# the last cell finished first (out of order) is refused
 	_fresh()
 	var jump: Dictionary = CourseStore.unit_done(_cell(72, 7))
-	eq([jump["w"], jump["d"], jump["finished"]], [72, 7, true], "72/7 finished first: pos 72/7, finished")
+	eq([jump["w"], jump["d"], jump["finished"], jump["ignored"], jump["reason"]], [1, 1, false, true, "ahead"], "72/7 at pos 1/1: ignored (ahead), not finished")
+	ok(not FileAccess.file_exists(P), "and nothing was written")
+
+
+## The reviewer's reproductions: pos must never jump to a result's cell.
+func _no_jumps() -> void:
+	_fresh()
+	var a: Dictionary = CourseStore.unit_done(_cell(10, 3))
+	eq([a["w"], a["d"], a["ignored"], a["reason"]], [1, 1, true, "ahead"], "repro 1: unit_done(10/3) at pos 1/1 -> ignored ahead, pos 1/1")
+	var b: Dictionary = CourseStore.unit_done(_cell(72, 7))
+	eq([b["w"], b["d"], b["finished"], b["ignored"]], [1, 1, false, true], "repro 2: unit_done(72/7) at pos 1/1 -> ignored, not finished")
+	var c: Dictionary = CourseStore.check_done(40, {"ok": 10, "total": 10})
+	eq([c["ok"], c["pass"], c["w"], c["d"]], [true, true, 1, 1], "repro 3: check_done(40, perfect) is recorded but pos stays 1/1")
+	eq(CourseStore.week_state(40)["best"], 100, "repro 3: the check result of week 40 is recorded")
+	ok(not CourseStore.week_state(40)["days"].has(6), "repro 3: no day of week 40 is marked")
+	ok(not CourseStore.blocks_today()["new"], "repro 3: a check ahead of pos does not mark the new block")
+	for d in range(1, 4):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.pos(), {"w": 1, "d": 4}, "repro 4 setup: pos 1/4")
+	var e: Dictionary = CourseStore.check_done(1, {"ok": 10, "total": 10})
+	eq([e["pass"], e["w"], e["d"]], [true, 1, 4], "repro 4: check_done(1) at pos 1/4 -> pos stays 1/4 (days 4 and 5 are not skipped)")
+	ok(not CourseStore.week_state(1)["days"].has(6), "repro 4: day 6 is not marked")
+	# the weekly check moves pos only on days 6 and 7 of that week
+	for d in range(4, 6):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.pos(), {"w": 1, "d": 6}, "pos 1/6")
+	var f: Dictionary = CourseStore.check_done(2, {"ok": 10, "total": 10})
+	eq([f["w"], f["d"]], [1, 6], "a check for week 2 at pos 1/6 does not move pos")
+	var g: Dictionary = CourseStore.check_done(1, {"ok": 10, "total": 10})
+	eq([g["w"], g["d"], g["pass"]], [1, 7, true], "a check for week 1 at pos 1/6 -> pos 1/7")
+	var h: Dictionary = CourseStore.check_done(1, {"ok": 10, "total": 10})
+	eq([h["w"], h["d"]], [1, 7], "the same check again at pos 1/7 keeps pos 1/7")
+	# a late check of an earlier week records only
+	CourseStore.unit_done(_cell(1, 7))
+	eq(CourseStore.pos(), {"w": 2, "d": 1}, "week 1 done: pos 2/1")
+	var late: Dictionary = CourseStore.check_done(1, {"ok": 3, "total": 10})
+	eq([late["w"], late["d"], late["pass"]], [2, 1, false], "a late check of week 1 at pos 2/1: recorded, pos stays")
+	eq(CourseStore.week_state(1)["tries"], 4, "the late check was counted (4 tries in all)")
+	# the one exception: pos on day 6 / 7 and the first cell of the next week arrives (going on without the weekly check)
+	_fresh()
+	for d in range(1, 6):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.pos(), {"w": 1, "d": 6}, "exception setup: pos 1/6 (check not done)")
+	var x: Dictionary = CourseStore.unit_done(_cell(2, 1))
+	eq([x["w"], x["d"], x["advanced"], x["ignored"]], [2, 2, true, false], "pos 1/6 + result 2/1 -> accepted, pos 2/2")
+	ok(not CourseStore.week_state(1)["done"], "week 1 stays not done (its check and day 7 are open)")
+	eq(CourseStore.check_pending()["pending"], true, "and its check is pending")
+	var y: Dictionary = CourseStore.unit_done(_cell(3, 1))
+	eq([y["ignored"], y["reason"], y["w"], y["d"]], [true, "ahead", 2, 2], "2/2 -> 3/1 is not the exception (pos is on day 2)")
+	_fresh()
+	for d in range(1, 7):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.pos(), {"w": 1, "d": 7}, "exception setup 2: pos 1/7")
+	eq(CourseStore.unit_done(_cell(2, 1))["d"], 2, "pos 1/7 + result 2/1 -> pos 2/2")
+	_fresh()
+	for d in range(1, 5):
+		CourseStore.unit_done(_cell(1, d))
+	var z: Dictionary = CourseStore.unit_done(_cell(2, 1))
+	eq([z["ignored"], z["reason"], z["d"]], [true, "ahead", 5], "pos 1/5 + result 2/1: no exception (pos is before day 6)")
+	_fresh()
+	for d in range(1, 6):
+		CourseStore.unit_done(_cell(1, d))
+	var z2: Dictionary = CourseStore.unit_done(_cell(2, 2))
+	eq([z2["ignored"], z2["reason"]], [true, "ahead"], "pos 1/6 + result 2/2: the exception is only day 1 of the next week")
+	var z3: Dictionary = CourseStore.unit_done(_cell(3, 1))
+	eq([z3["ignored"], z3["reason"]], [true, "ahead"], "pos 1/6 + result 3/1: only the very next week")
+	# every other pos-moving path: reopen goes back, skip needs pos in that week, month never moves
+	_fresh()
+	CourseStore.month_done(1, {"score": 80})
+	CourseStore.mark_block("listen")
+	CourseStore.note_review_priority(true)
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "month_done / mark_block / note_review_priority never move pos")
+	CourseStore.check_done(5, {"ok": 10, "total": 10, "skip": true})
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "skip by check of week 5 at pos 1/1: week 5 done, pos stays")
+	eq(CourseStore.reopen_weeks([1, 2, 3]), 0, "reopening weeks that were never started changes nothing")
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "and pos stays")
+	# invariant over a random-ish storm of results: pos is only ever the cell after a finished one, never ahead of the first open cell
+	_fresh()
+	var seed_v := 12345
+	var storm_bad := 0
+	for i in 600:
+		seed_v = (seed_v * 1103515245 + 12345) & 0x7fffffff
+		var w: int = 1 + seed_v % 6
+		seed_v = (seed_v * 1103515245 + 12345) & 0x7fffffff
+		var dd: int = 1 + seed_v % 7
+		var before: Dictionary = CourseStore.pos()
+		var res: Dictionary
+		if seed_v % 5 == 0:
+			res = CourseStore.check_done(w, {"ok": 8, "total": 10})
+		else:
+			res = CourseStore.unit_done(_cell(w, dd))
+		var after: Dictionary = CourseStore.pos()
+		var ob: int = int(before["w"]) * 10 + int(before["d"])
+		var oa: int = int(after["w"]) * 10 + int(after["d"])
+		# one step at most: the next cell, the 2nd cell of the next week (U5 exception), or the next week's first cell after a placed-out week
+		if oa < ob or oa - ob > 12:
+			storm_bad += 1
+	eq(storm_bad, 0, "600 random results: pos never goes back and never moves more than one step (%d)" % storm_bad)
 
 
 func _unit_done_bad_input() -> void:
@@ -943,6 +1057,172 @@ func _full_walk() -> void:
 	ok(_shape_problems(d2).is_empty(), "the file after 504 records has the §10.6 shape")
 	eq((d2["day"] as Dictionary).size(), 120, "the walk (252 calendar days) keeps 120 day records")
 	ok(_read_text(P).length() < 65536, "the finished file is small (< 64 KB, %d bytes)" % _read_text(P).length())
+
+
+## Review round 1, item 2: activity today must not erase "I was away for N days" for the rest of that day.
+func _away_all_day() -> void:
+	_fresh()
+	CourseStore.mark_block("new")
+	_day(25)
+	eq(CourseStore.away_days(), 25, "25 days off: away_days 25 before any block")
+	var plan0: Dictionary = DayPlan.today({"mode": "course", "w": 5, "d": 2, "away_days": CourseStore.away_days(), "due": 10})
+	ok(plan0["recap"] and plan0["reopen"] == [3, 4], "DayPlan: recap + reopen (3, 4) at 25 days away")
+	ok(CourseStore.mark_block("review"), "one block (review) is marked today")
+	eq(CourseStore.away_days(), 25, "after one block the same day still says away_days 25")
+	var plan1: Dictionary = DayPlan.today({"mode": "course", "w": 5, "d": 2, "away_days": CourseStore.away_days(), "due": 10})
+	ok(plan1["recap"] and plan1["reopen"] == [3, 4], "DayPlan after the block: the recap and the reopen list are still there")
+	CourseStore.unit_done(_cell(1, 1, "listen"))
+	CourseStore.month_done(1, {"score": 70})
+	eq(CourseStore.away_days(), 25, "a unit and a month result later the same day: still 25")
+	CourseStore.reset_memory()
+	eq(CourseStore.away_days(), 25, "and after reloading the file: still 25 (prev_active is saved)")
+	eq(_read_json(P).get("prev_active"), _iso(0), "the file keeps prev_active (the last study day before today)")
+	eq(_read_json(P).get("last_active"), _iso(25), "last_active is today")
+	_day(26)
+	eq(CourseStore.away_days(), 1, "the next day: 1 day away (from yesterday)")
+	_day(27)
+	eq(CourseStore.away_days(), 2, "two days later: 2")
+	_fresh()
+	eq(CourseStore.away_days(), 0, "a fresh course: 0")
+	CourseStore.mark_block("new")
+	eq(CourseStore.away_days(), 0, "the first day of study: 0")
+	_day(1)
+	CourseStore.mark_block("new")
+	eq(CourseStore.away_days(), 1, "studying on day 1 after day 0: away_days 1 all day (counts from day 0)")
+	_day(8)
+	eq(CourseStore.away_days(), 7, "7 days after the last study day: 7")
+	# an old file without prev_active still works
+	_fresh()
+	_write_text(P, JSON.stringify({"v": 1, "started": "2026-12-01", "last_active": "2026-12-01"}))
+	eq(CourseStore.away_days(), 0, "old file (no prev_active), last_active == today: 0")
+	_day(3)
+	eq(CourseStore.away_days(), 3, "old file, 3 days later: 3")
+
+
+## Item 3: the block contract for D5.
+func _d5_block() -> void:
+	_fresh()
+	for d in range(1, 5):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.pos(), {"w": 1, "d": 5}, "D5 setup: pos 1/5")
+	var a: Dictionary = CourseStore.unit_done(_cell(1, 5, "speak", {"block": "speak"}))
+	eq([a["advanced"], a["d"]], [false, 5], "D5: unit speak with block speak is the 12-minute block: no cell")
+	ok(CourseStore.blocks_today()["speak"] and not CourseStore.week_state(1)["days"].has(5), "D5: the speak block is marked, day 5 is not")
+	var b: Dictionary = CourseStore.unit_done(_cell(1, 5, "speak"))
+	eq([b["advanced"], b["d"]], [true, 6], "D5: a bare unit speak (no block) is the day's main block and finishes the cell")
+	_fresh()
+	CourseStore.unit_done(_cell(1, 1, "speak"))
+	ok(CourseStore.blocks_today()["speak"] and not CourseStore.blocks_today()["new"], "D1: a bare unit speak is the speak block (not the day's kind)")
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "D1: and pos stays")
+	CourseStore.unit_done(_cell(1, 1, "listen"))
+	ok(CourseStore.blocks_today()["listen"], "a bare listen unit is the listen block")
+	CourseStore.unit_done(_cell(1, 1, "new", {"block": "review"}))
+	ok(CourseStore.blocks_today()["review"] and CourseStore.pos() == {"w": 1, "d": 1}, "an explicit block review marks review and does not finish the cell")
+	_fresh()
+	for d in range(1, 7):
+		CourseStore.unit_done(_cell(1, d))
+	var c: Dictionary = CourseStore.unit_done(_cell(1, 7, "free"))
+	eq([c["week_done"], c["w"], c["d"]], [true, 2, 1], "D7: a bare unit free finishes the day and the week")
+	var days_ok := true
+	for dd in range(1, 8):
+		_fresh()
+		for e in range(1, dd):
+			CourseStore.unit_done(_cell(1, e))
+		var kind: String = CourseModel.day_kind(1, dd)
+		var r: Dictionary = CourseStore.unit_done(_cell(1, dd, kind if kind != "check" else "new"))
+		if not bool(r["advanced"]):
+			days_ok = false
+	ok(days_ok, "every day finishes with its own kind as the unit (new, new, new, new, speak, new(D6), free)")
+
+
+## Item 4: unknown keys inside pos and check are kept.
+func _unknown_pos_check_keys() -> void:
+	_fresh()
+	_write_text(P, JSON.stringify({"v": 1, "pos": {"w": 2, "d": 3, "mood": "calm"},
+		"weeks": {"2": {"done": "", "days": {}, "weak": false, "check": {"best": 70, "tries": 1, "last": "2026-12-01", "speak": "pass", "note_x": [1, 2]}}}}))
+	CourseStore.unit_done(_cell(2, 3))
+	var d: Dictionary = _read_json(P)
+	eq(d["pos"].get("mood"), "calm", "an unknown key inside pos is kept")
+	eq(d["pos"], {"w": 2.0, "d": 4.0, "mood": "calm"}, "pos: known part updated, unknown part kept")
+	eq(d["weeks"]["2"]["check"].get("note_x"), [1.0, 2.0], "an unknown key inside check is kept")
+	CourseStore.check_done(2, {"ok": 9, "total": 10})
+	eq(_read_json(P)["weeks"]["2"]["check"].get("note_x"), [1.0, 2.0], "and after a new check result")
+	eq(CourseStore.pos(), {"w": 2, "d": 4}, "pos() still returns only w and d")
+	ok(_shape_problems(_read_json(P)).is_empty(), "the file still has the §10.6 shape")
+
+
+## Item 5: test guard + real file name -> not read, not moved; legacy mode does not read the file.
+func _guard_and_legacy_read() -> void:
+	var dir := "user://e3_guard_probe" ## not under user://test*: the guard counts course.json here as a real file
+	var gpath := dir + "/course.json"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+	ok(Progress.guard_blocks(gpath), "a path named course.json outside user://test* counts as a real file for the guard")
+	var broken := '{"v":1,"pos":{"w":3'
+	_write_text(gpath, broken)
+	CourseStore.path = gpath
+	_fresh()
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "guarded real name: pos() answers from an empty state")
+	eq(CourseStore.last_load_status, "guarded", "guarded real name: load status guarded")
+	ok(not FileAccess.file_exists(gpath + ".bad"), "guarded real name: the broken file was NOT moved to .bad")
+	eq(_read_text(gpath), broken, "guarded real name: the original is untouched")
+	var r: Dictionary = CourseStore.unit_done(_cell(1, 1))
+	ok(not bool(r["ignored"]) and not bool(r["saved"]), "guarded real name: the call works in memory, saved false")
+	eq(_read_text(gpath), broken, "guarded real name: still untouched after a record")
+	ok(CourseStore.is_read_only(), "guarded real name: is_read_only()")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(gpath))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir))
+	CourseStore.path = P
+	# legacy mode never reads the file
+	_fresh("legacy")
+	_write_text(P, '{"v":1,"pos":{"w":3')
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "legacy: pos() is the empty state")
+	eq(CourseStore.last_load_status, "legacy", "legacy: load status legacy (the file was not read)")
+	ok(FileAccess.file_exists(P) and not FileAccess.file_exists(P + ".bad"), "legacy: a broken file is not moved to .bad")
+	ok(CourseStore.week_state(1)["days"].is_empty() and CourseStore.path_flags().count(true) == 0 and CourseStore.away_days() == 0, "legacy: other readers answer from the empty state")
+	# switching to course mode reads the file after all (the empty legacy state is only a placeholder)
+	_write_text(P, JSON.stringify({"v": 1, "pos": {"w": 5, "d": 2}}))
+	Store.prefs["course_mode"] = "course"
+	eq(CourseStore.pos(), {"w": 5, "d": 2}, "legacy -> course: the file is read now (pos 5/2)")
+	eq(CourseStore.last_load_status, "ok", "legacy -> course: load status ok")
+	# course -> legacy keeps what was loaded, no new read
+	Store.prefs["course_mode"] = "legacy"
+	eq(CourseStore.pos(), {"w": 5, "d": 2}, "course -> legacy: the memory copy is kept")
+	# a real broken file is still moved in course mode (normal path of a test-owned file)
+	_fresh()
+	_write_text(P, '{"v":1,"pos":{"w":3')
+	CourseStore.pos()
+	ok(FileAccess.file_exists(P + ".bad"), "course mode, test-owned file: a broken file is still moved to .bad")
+
+
+## Item 8: the `saved` flag.
+func _saved_flag() -> void:
+	_fresh()
+	var u: Dictionary = CourseStore.unit_done(_cell(1, 1))
+	eq(u["saved"], true, "unit_done: saved true when the file was written")
+	eq(CourseStore.check_done(1, {"ok": 9, "total": 10})["saved"], true, "check_done: saved true")
+	eq(CourseStore.check_done(1, {"ok": 9, "total": 10, "skip": true})["saved"], true, "check_done (skip, passed): saved true")
+	eq(CourseStore.check_done(2, {"ok": 1, "total": 10, "skip": true})["saved"], true, "check_done (skip, failed, nothing to write): saved true (nothing is lost)")
+	eq(CourseStore.month_done(1, {"score": 80})["saved"], true, "month_done: saved true")
+	eq(CourseStore.unit_done(_cell(1, 5, "new", {"completed": false}))["saved"], false, "an ignored unit_done: saved false")
+	eq(CourseStore.unit_done(_cell(40, 1))["saved"], false, "an ahead unit_done: saved false")
+	Progress.write_hook = func(_tmp: String, _text: String) -> bool: return false
+	var f1: Dictionary = CourseStore.unit_done(_cell(1, 2))
+	ok(not bool(f1["ignored"]) and f1["saved"] == false, "write failure: unit_done saved false (and not ignored)")
+	eq(CourseStore.check_done(1, {"ok": 9, "total": 10})["saved"], false, "write failure: check_done saved false")
+	eq(CourseStore.check_done(1, {"ok": 9, "total": 10, "skip": true})["saved"], false, "write failure: skip check saved false")
+	eq(CourseStore.month_done(2, {"score": 80})["saved"], false, "write failure: month_done saved false")
+	Progress.write_hook = Callable()
+	eq(CourseStore.month_done(2, {"score": 80})["saved"], true, "after the failure: saved true again")
+	# read-only (newer version) file
+	_fresh()
+	_write_text(P, JSON.stringify({"v": 2, "pos": {"w": 1, "d": 1}}))
+	eq(CourseStore.unit_done(_cell(1, 1))["saved"], false, "read-only file: saved false")
+	eq(CourseStore.month_done(1, {"score": 80})["saved"], false, "read-only file: month_done saved false")
+	# legacy
+	_fresh("legacy")
+	eq(CourseStore.unit_done(_cell(1, 1))["saved"], false, "legacy: saved false")
+	eq(CourseStore.check_done(1, {"ok": 9, "total": 10})["saved"], false, "legacy: check_done saved false")
+	eq(CourseStore.month_done(1, {"score": 80})["saved"], false, "legacy: month_done saved false")
 
 
 ## CourseModel reads CourseStore dynamically (store_script_path): course mode gives the course position, legacy / Japanese do not.
