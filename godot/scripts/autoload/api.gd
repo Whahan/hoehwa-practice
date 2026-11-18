@@ -226,6 +226,9 @@ func _run_phone(req_call: ApiCall, method: String, path: String, body: Dictionar
 	var res: Dictionary = await LocalApi.dispatch(method, path, body)
 	if req_call.done:
 		return
+	if _phone_retry_wanted(req_call, res):
+		_retry_on_pc(req_call, res, report)
+		return
 	active_count = maxi(0, active_count - 1)
 	if report and not res["ok"] and res["error"] != "":
 		Toast.error(res["error"])
@@ -363,6 +366,57 @@ func _fall_back(req_call: ApiCall, report: bool) -> void:
 	if report and not res["ok"] and res["error"] != "":
 		Toast.error(res["error"])
 	req_call._complete(res)
+
+
+## One PC retry after the phone's speech engine failed (docs/v200_phone_design.md §1.8). Only POST /stt and /score,
+## only when the phone result is one of PHONE_RETRY_ERR, in auto mode with a ready (and not flaky) PC. The retry is a
+## separate ApiCall that is neither routed nor retried again, so at most ONE request goes to the PC. When it fails
+## too, the caller gets the phone's own error (the PC being down is not what the user needs to hear).
+const PHONE_RETRY_ERR := ["engine_error", "stt_timeout"]
+const PHONE_RETRY_PATHS := ["/stt", "/score"]
+
+
+func _phone_retry_wanted(req_call: ApiCall, phone_res: Dictionary) -> bool:
+	if bool(phone_res.get("ok", false)) or not (str(phone_res.get("err_code", "")) in PHONE_RETRY_ERR):
+		return false
+	if not req_call.routable or req_call.method != HTTPClient.METHOD_POST or req_call.base == "":
+		return false
+	if not (req_call.path.split("?")[0] in PHONE_RETRY_PATHS):
+		return false
+	if not Route.is_phone() or Route.normalize_mode(Route.mode) != "auto":
+		return false
+	return Route.pc_ready() and not Route.pc_flaky()
+
+
+func _retry_on_pc(req_call: ApiCall, phone_res: Dictionary, report: bool) -> void:
+	var sub := ApiCall.new()
+	sub.path = req_call.path
+	sub.method = req_call.method
+	sub.payload = req_call.payload
+	sub.timeout = req_call.timeout
+	sub.base = req_call.base
+	sub.use_auth = req_call.use_auth
+	sub.body = req_call.body
+	sub.routable = false ## no phone fallback for the retry
+	sub.retries = 1 ## and no second connection retry: exactly one PC request
+	active_count += 1
+	sub.on_cancel = func() -> void: active_count = maxi(0, active_count - 1)
+	var prev_cancel: Callable = req_call.on_cancel
+	req_call.on_cancel = func() -> void:
+		if prev_cancel.is_valid():
+			prev_cancel.call()
+		sub.cancel()
+	if _send(sub, false) != OK:
+		active_count = maxi(0, active_count - 1)
+		sub._complete(_fail(0, _transport_error(HTTPRequest.RESULT_CANT_CONNECT), "transport"))
+	var pc_res: Dictionary = await sub.wait()
+	if req_call.done or bool(pc_res.get("cancelled", false)):
+		return ## cancelled meanwhile: req_call.cancel() completes the call and gave both counts back
+	active_count = maxi(0, active_count - 1)
+	var final: Dictionary = pc_res if bool(pc_res.get("ok", false)) else phone_res
+	if report and not final["ok"] and final["error"] != "":
+		Toast.error(final["error"])
+	req_call._complete(final)
 
 
 ## True for "the connection broke" failures. Right after the app came back from the background the OS may have

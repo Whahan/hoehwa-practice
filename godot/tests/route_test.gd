@@ -16,8 +16,9 @@ const SPEC := {
 	"GET /curriculum": ["pc", "curriculum"],
 	"POST /tts": ["pc", ""],
 	"GET /tts/voices": ["pc", ""],
-	"POST /stt": ["pc", "stt"],
-	"POST /score": ["pc", "stt"],
+	"POST /stt": ["phone", "stt"],   # v2.0 phone-first scoring (score_where unset = "phone")
+	"POST /score": ["phone", "stt"],
+	"POST /score#ph": ["pc", "stt"],   # v2.0: /score with need_ph:true (phoneme screens) prefers the PC
 	"POST /prosody": ["pc", ""],
 	"POST /lesson": ["phone", "lessons"],
 	"POST /lesson#ai": ["pc", "ai"],
@@ -113,6 +114,86 @@ class FakeCorrupt:
 		return {"err_code": "pack_corrupt", "text_ko": ""}
 
 
+## In-process fake PC for the P0 retry tests: one HTTP answer per connection. reply: "ok" (200 JSON with pc_marker),
+## "500" (HTTP 500 JSON) or "hang" (no answer, closes after 1.5 s). Listens on a free local port (port 0 = chosen by the OS).
+class FakePc:
+	extends Node
+	var srv: TCPServer = null
+	var log: Array = [] ## {path, raw}
+	var reply: String = "ok"
+	var conns: Array = []
+
+	func start() -> int:
+		srv = TCPServer.new()
+		if srv.listen(0, "127.0.0.1") != OK:
+			srv = null
+			return -1
+		return srv.get_local_port()
+
+	func stop() -> void:
+		if srv != null:
+			srv.stop()
+			srv = null
+		for c in conns:
+			if c is StreamPeerTCP:
+				(c as StreamPeerTCP).disconnect_from_host()
+		conns.clear()
+
+	func _process(_d: float) -> void:
+		if srv != null and srv.is_listening():
+			while srv.is_connection_available():
+				var peer: StreamPeerTCP = srv.take_connection()
+				conns.append(peer)
+				_serve(peer)
+
+	func _serve(peer: StreamPeerTCP) -> void:
+		var buf := PackedByteArray()
+		var head_end: int = -1
+		var clen: int = 0
+		var head: String = ""
+		var t0: int = Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < 20000:
+			peer.poll()
+			if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED and peer.get_available_bytes() == 0:
+				break
+			var n: int = peer.get_available_bytes()
+			if n > 0:
+				var got: Array = peer.get_data(n)
+				if int(got[0]) == OK:
+					buf.append_array(got[1])
+			if head_end < 0:
+				var s: String = buf.slice(0, mini(buf.size(), 8192)).get_string_from_ascii()
+				var i: int = s.find("\r\n\r\n")
+				if i >= 0:
+					head_end = i + 4
+					head = s.substr(0, i)
+					for line in head.split("\r\n"):
+						if line.to_lower().begins_with("content-length:"):
+							clen = int(line.substr(15).strip_edges())
+			if head_end >= 0 and buf.size() >= head_end + clen:
+				_answer(peer, head, buf.slice(head_end, head_end + clen))
+				return
+			await get_tree().process_frame
+		peer.disconnect_from_host()
+
+	func _answer(peer: StreamPeerTCP, head: String, body: PackedByteArray) -> void:
+		var first: PackedStringArray = head.split("\r\n")[0].split(" ")
+		log.append({"path": first[1].split("?")[0], "raw": body.get_string_from_utf8()})
+		if reply == "hang":
+			# Never answers, but closes after 1.5 s: Godot 4.6.3 blocks the main thread when a threaded request times out while the
+			# server keeps the connection open (see Api.ApiCall.cancel), so the test must not rely on the request timeout.
+			await get_tree().create_timer(1.5).timeout
+			peer.disconnect_from_host()
+			return
+		var code: int = 200 if reply == "ok" else 500
+		var payload: Dictionary = {"transcript": "pc answer", "score": 88, "pc_marker": 1} if reply == "ok" else {"error": "pc broke"}
+		var data: PackedByteArray = JSON.stringify(payload).to_utf8_buffer()
+		var hd := "HTTP/1.1 %d X\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % [code, data.size()]
+		peer.put_data(hd.to_utf8_buffer())
+		peer.put_data(data)
+		peer.disconnect_from_host()
+
+
 func ok(cond: bool, name: String) -> void:
 	if cond:
 		passed += 1
@@ -174,6 +255,11 @@ func _ready() -> void:
 	await _test_pc_platform_requests()
 	await _test_phone_curriculum()
 	_test_err_texts()
+	_test_p0_policy()
+	_test_p0_decide_table()
+	await _test_p0_err_codes()
+	_test_p0_degraded()
+	await _test_p0_retry()
 
 	LocalApi.handler_override.clear()
 	Route.phone_hook = Callable()
@@ -206,6 +292,9 @@ func _split_key(key: String) -> Array:
 	if path.ends_with("#ai"):
 		path = path.trim_suffix("#ai")
 		body = {"source": "ai"}
+	elif path.ends_with("#ph"):
+		path = path.trim_suffix("#ph")
+		body = {"need_ph": true}
 	return [sp[0], path, body]
 
 
@@ -285,7 +374,8 @@ func _run_table(sabotage: bool, phone_app: bool = true) -> Array:
 
 
 func _all_keys() -> Array:
-	return SPEC.keys() + NOPOLICY
+	# The "#ph" row is covered by its own table (_test_p0_decide_table); this one stays the 26-key table of A1.
+	return SPEC.keys().filter(func(k: String) -> bool: return not k.ends_with("#ph")) + NOPOLICY
 
 
 func _test_decide_table() -> void:
@@ -846,6 +936,342 @@ func _test_err_texts() -> void:
 				break
 		hangul = hangul and has
 	ok(hangul, "every ERR_TEXT entry is Korean")
+
+
+## ------------------------------------------------------------------------------------------------ v2.0 P0
+
+const P0_NEW_CODES := ["engine_error", "stt_timeout", "ai_offline", "ai_tls", "ai_model", "ai_url", "ai_key_format", "ja_ai_pc", "no_space"]
+## Independent copies of the texts that must NOT change (design §3 #1: model_missing / engine_missing).
+const P0_MODEL_MISSING := "음성 인식 모델이 아직 없어요. 설정 > 음성 인식에서 내려받으면(약 60 MB) 폰에서 바로 채점할 수 있어요. 지금은 녹음해서 들어 보고 스스로 평가할 수 있어요."
+const P0_ENGINE_MISSING := "이 앱 빌드에는 폰 음성 인식이 들어 있지 않아요. PC에 연결하면 채점할 수 있어요."
+
+
+func _set_sw(v: Variant) -> void:
+	if v == null:
+		Store.prefs.erase("score_where")
+	else:
+		Store.prefs["score_where"] = v
+
+
+func _test_p0_policy() -> void:
+	print("[P0-2 policy: score_where, need_ph]")
+	var saved: Variant = Store.prefs.get("score_where", null)
+	_set_sw(null)
+	ok(Route.score_where() == "phone", "score_where() unset -> phone")
+	ok(Route.policy_for("POST", "/score", {}).get("prefer", "") == "phone", "P0-2: /score, score_where unset -> prefer phone")
+	ok(Route.policy_for("POST", "/stt", {}).get("prefer", "") == "phone", "P0-2: /stt, score_where unset -> prefer phone")
+	var ph: Dictionary = Route.policy_for("POST", "/score", {"need_ph": true})
+	ok(ph.get("prefer", "") == "pc" and ph.get("phone", "") == "stt" and bool(ph.get("pc", false)), "P0-2: /score + need_ph:true -> '#ph' entry, prefer pc, phone handler stt")
+	ok(Route.POLICY.has("POST /score#ph") and str(Route.POLICY["POST /score#ph"]["prefer"]) == "pc", "POLICY has 'POST /score#ph' (prefer pc)")
+	for odd in [false, "true", 1, null, "", []]:
+		ok(Route.policy_for("POST", "/score", {"need_ph": odd}).get("prefer", "") == "phone", "need_ph=%s is not '#ph' (only the bool true is)" % str(odd))
+	ok(Route.policy_for("POST", "/stt", {"need_ph": true}).get("prefer", "") == "phone", "/stt ignores need_ph")
+	_set_sw("phone")
+	ok(Route.policy_for("POST", "/score", {}).get("prefer", "") == "phone" and Route.policy_for("POST", "/stt", {}).get("prefer", "") == "phone", "score_where='phone' -> /stt and /score prefer phone")
+	_set_sw("pc")
+	ok(Route.score_where() == "pc", "score_where() 'pc'")
+	ok(Route.policy_for("POST", "/score", {}).get("prefer", "") == "pc" and Route.policy_for("POST", "/stt", {}).get("prefer", "") == "pc", "P0-2: score_where='pc' -> /stt and /score prefer pc")
+	ok(Route.policy_for("POST", "/score", {"need_ph": true}).get("prefer", "") == "pc", "score_where='pc': '#ph' still pc")
+	for odd in ["아무거나", 5, null, "PC", "Phone", ["pc"], true]:
+		_set_sw(odd)
+		ok(Route.score_where() == "phone" and Route.policy_for("POST", "/score", {}).get("prefer", "") == "phone", "score_where=%s (odd value) is treated as phone" % str(odd))
+	# Nothing else moves with score_where: every other row keeps the SPEC prefer, whatever the pref says.
+	var bad := 0
+	for sw in [null, "phone", "pc"]:
+		_set_sw(sw)
+		for key in SPEC.keys():
+			if key == "POST /stt" or key == "POST /score":
+				continue
+			var sp: Array = _split_key(key)
+			var e: Dictionary = Route.policy_for(sp[0], sp[1], sp[2])
+			if str(e.get("prefer", "")) != SPEC[key][0] or str(e.get("phone", "")) != SPEC[key][1]:
+				bad += 1
+				print("    policy moved with score_where=", sw, ": ", key)
+	ok(bad == 0, "no other POLICY row depends on score_where (AI paths stay pc-first) (bad=%d)" % bad)
+	_set_sw(saved)
+
+
+func _p0_expected(kind: String, mode: String, ready: bool, phone_ok: bool, sw: String) -> String:
+	# Hand written (design §1.8), PC address set and not flaky. kind: stt | score | ph.
+	var prefer: String = "pc" if (kind == "ph" or sw == "pc") else "phone"
+	if mode == "pc":
+		return "pc"
+	if mode == "phone":
+		return "phone" if phone_ok else "none"
+	if prefer == "phone":
+		return "phone" if phone_ok else "pc"
+	if ready:
+		return "pc"
+	return "phone" if phone_ok else "pc"
+
+
+func _p0_run_table(sabotage: bool) -> Array:
+	var saved: Variant = Store.prefs.get("score_where", null)
+	_is_phone = true
+	Route.clear_flaky()
+	Api.base_url = DEAD_PC
+	var rows := 0
+	var bad: Array = []
+	for kind in ["stt", "score", "ph"]:
+		var path: String = "/stt" if kind == "stt" else "/score"
+		var body: Dictionary = {"need_ph": true} if kind == "ph" else {}
+		for mode in Route.MODES:
+			for ready in [true, false]:
+				for phone_ok in [true, false]:
+					for sw in ["phone", "pc"]:
+						Route.mode = mode
+						Route.pc_ready_hook = func() -> bool: return ready
+						_avail(phone_ok)
+						_set_sw(null if sw == "phone" else "pc") # the "phone" column is the DEFAULT (key unset)
+						var got: String = Route.decide("POST", path, body)
+						var want: String = _p0_expected(kind, mode, ready, phone_ok, sw)
+						if sabotage and rows == 0:
+							want = "phone" if want != "phone" else "none"
+						rows += 1
+						if got != want:
+							bad.append("%s %s ready=%s phone_ok=%s score_where=%s: got %s want %s" % [kind, mode, ready, phone_ok, sw, got, want])
+	Route.mode = "auto"
+	Route.pc_ready_hook = func() -> bool: return true
+	_avail(true)
+	_set_sw(saved)
+	return [rows, bad]
+
+
+func _test_p0_decide_table() -> void:
+	print("[P0-3 decide(): /stt, /score, /score+need_ph x mode x PC ready x phone ok x score_where]")
+	var r: Array = _p0_run_table(false)
+	for m in (r[1] as Array).slice(0, 10):
+		print("    ", m)
+	print("P0-3 rows: %d" % r[0])
+	ok(r[0] == 72, "P0-3: 72 rows (got %d)" % r[0])
+	ok((r[1] as Array).is_empty(), "P0-3: all 72 rows match the hand-written table (%d mismatches)" % (r[1] as Array).size())
+	var s: Array = _p0_run_table(true)
+	print("selfcheck FAIL-as-expected: one wrong expected cell -> %d mismatch (%s)" % [(s[1] as Array).size(), str((s[1] as Array)[0]) if not (s[1] as Array).is_empty() else "none"])
+	ok((s[1] as Array).size() == 1, "P0-3 selfcheck: one deliberately wrong expected cell is reported as exactly 1 mismatch")
+	# A few named cases, so the intent reads without the table.
+	_is_phone = true
+	Route.mode = "auto"
+	Route.pc_ready_hook = func() -> bool: return true
+	Api.base_url = DEAD_PC
+	_avail(true)
+	_set_sw(null)
+	ok(Route.decide("POST", "/score", {}) == "phone", "auto, PC ready, phone ok, default -> /score on the phone")
+	ok(Route.decide("POST", "/score", {"need_ph": true}) == "pc", "auto, PC ready, need_ph -> PC")
+	_avail(false)
+	ok(Route.decide("POST", "/score", {"need_ph": true}) == "pc" and Route.decide("POST", "/score", {}) == "pc", "auto, phone off -> PC (both)")
+	Route.pc_ready_hook = func() -> bool: return false
+	_avail(true)
+	ok(Route.decide("POST", "/score", {"need_ph": true}) == "phone", "auto, PC not ready, need_ph -> phone score (phoneme_off is the handler's note)")
+	_set_sw("pc")
+	ok(Route.decide("POST", "/stt", {}) == "phone", "score_where=pc but the PC is not ready -> phone")
+	_set_sw(null)
+	Route.pc_ready_hook = func() -> bool: return true
+	_is_phone = false
+	ok(Route.decide("POST", "/score", {}) == "pc" and Route.decide("POST", "/stt", {}) == "pc", "PC app: /score and /stt stay pc (score_where is a phone matter)")
+	_is_phone = true
+
+
+func _test_p0_err_codes() -> void:  # coroutine (awaits requests)
+	print("[P0-5 new error codes]")
+	var hangul_ok := true
+	var http_ok := true
+	var distinct := true
+	for ec in P0_NEW_CODES:
+		var t: String = str(Route.ERR_TEXT.get(ec, ""))
+		var has := false
+		for ch in t:
+			if ch.unicode_at(0) >= 0xAC00 and ch.unicode_at(0) <= 0xD7A3:
+				has = true
+				break
+		hangul_ok = hangul_ok and has and Route.text_for(ec) == t
+		var h: int = int(Route.ERR_HTTP.get(ec, 0))
+		var h_good: bool = h in [400, 401, 403, 429] or (h >= 500 and h < 600)
+		http_ok = http_ok and h_good and Route.http_for(ec) == h
+		distinct = distinct and t != Route.ERR_TEXT["needs_pc"]
+		if not has or not h_good:
+			print("    bad code: ", ec, " text='", t, "' http=", h)
+	ok(hangul_ok, "P0-5: all 9 new codes have a Korean ERR_TEXT")
+	ok(http_ok, "P0-5: all 9 new codes have an ERR_HTTP in 400/401/403/429/5xx (never 0)")
+	ok(distinct, "P0-5: no new text is the generic needs_pc text")
+	ok(Route.ERR_TEXT.size() == 27 and Route.ERR_HTTP.size() == 27, "ERR_TEXT and ERR_HTTP each have 27 rows (18 old + 9 new): %d / %d" % [Route.ERR_TEXT.size(), Route.ERR_HTTP.size()])
+	var same_keys := true
+	for k in Route.ERR_TEXT.keys():
+		same_keys = same_keys and Route.ERR_HTTP.has(k)
+	ok(same_keys, "every ERR_TEXT code has an ERR_HTTP value")
+	ok(Route.ERR_TEXT["no_ai"].begins_with("AI를 쓰려면 설정 > AI 연결에서 본인 AI 키를") and not Route.ERR_TEXT["no_ai"].contains("API 키"), "P0-5: no_ai now points at 설정 > AI 연결 (본인 AI 키)")
+	ok(Route.ERR_TEXT["model_missing"] == P0_MODEL_MISSING, "P0-5: model_missing text unchanged")
+	ok(Route.ERR_TEXT["engine_missing"] == P0_ENGINE_MISSING, "P0-5: engine_missing text unchanged")
+	ok(Route.http_for("engine_error") == 500 and Route.http_for("stt_timeout") == 504 and Route.http_for("ai_url") == 400, "spot check: engine_error 500, stt_timeout 504, ai_url 400")
+	# A fake phone handler that fails with each new code: the result carries the text/code, and no code is a 401, so
+	# Api.auth_failed (a PC pairing problem) never fires. Phone mode: no retry, no PC.
+	_is_phone = true
+	Route.mode = "phone"
+	_avail(true)
+	var a0: int = _auth_failed
+	var all_good := true
+	for ec in P0_NEW_CODES:
+		Engine.set_meta("a1_fail", ec)
+		var r: Dictionary = await _req("POST", "/chat", {})
+		var good: bool = not r["ok"] and r["err_code"] == ec and r["code"] == Route.http_for(ec) and r["error"] == Route.text_for(ec) and r["code"] != 0
+		if not good:
+			print("    code ", ec, " -> ", r.get("code"), " / ", r.get("err_code"))
+		all_good = all_good and good
+	Engine.set_meta("a1_fail", "")
+	Route.mode = "auto"
+	ok(all_good, "P0-5: a phone failure with each new code carries that code, its text and its HTTP value")
+	ok(_auth_failed == a0, "P0-5: none of the new codes emits Api.auth_failed (%d -> %d)" % [a0, _auth_failed])
+
+
+func _test_p0_degraded() -> void:
+	print("[P0-6 DEGRADED]")
+	ok("score_uncalibrated" in Route.DEGRADED and "stt_tiny_model" in Route.DEGRADED, "P0-6: DEGRADED has score_uncalibrated and stt_tiny_model")
+	ok("phoneme_off" in Route.DEGRADED and Route.DEGRADED.size() == 9, "the 7 old values are still there (9 in all, got %d)" % Route.DEGRADED.size())
+	var r: Dictionary = LocalApi.ok({"x": 1}, ["score_uncalibrated"])
+	ok(r["ok"] and r["data"]["degraded"] == ["score_uncalibrated"] and r["data"]["via"] == "phone", "P0-6: LocalApi.ok(data, ['score_uncalibrated']) passes through")
+	var r2: Dictionary = LocalApi.ok({"x": 1}, ["phoneme_off", "stt_tiny_model", "score_uncalibrated"])
+	var all_known := true
+	for d in r2["data"]["degraded"]:
+		all_known = all_known and d in Route.DEGRADED
+	ok(all_known and (r2["data"]["degraded"] as Array).size() == 3, "all three degraded values of a phone score result are known ones")
+	ok(not ("bogus_flag" in Route.DEGRADED), "selfcheck FAIL-as-expected: an unknown degraded value is not in DEGRADED")
+	print("selfcheck FAIL-as-expected: 'bogus_flag' in Route.DEGRADED -> ", "bogus_flag" in Route.DEGRADED)
+
+
+func _retry_run(pc: FakePc, path: String, body: Dictionary, fail_code: String, report: bool = false) -> Dictionary:
+	Engine.set_meta("a1_fail", fail_code)
+	var n0: int = LocalApi.served_count
+	var s0: int = Api.sent_count
+	var p0: int = pc.log.size()
+	var r: Dictionary = await _req("POST", path, body, report)
+	Engine.set_meta("a1_fail", "")
+	return {"res": r, "served": LocalApi.served_count - n0, "sent": Api.sent_count - s0, "pc": pc.log.size() - p0}
+
+
+func _test_p0_retry() -> void:
+	print("[P0-4 a failed phone speech engine -> exactly one PC retry]")
+	var pc := FakePc.new()
+	add_child(pc)
+	var port: int = pc.start()
+	ok(port > 1023, "in-process fake PC listens on a port the OS picked (%d)" % port)
+	if port <= 0:
+		pc.queue_free()
+		return
+	var pc_url: String = "http://127.0.0.1:%d" % port
+	var saved_sw: Variant = Store.prefs.get("score_where", null)
+	_set_sw(null)
+	_is_phone = true
+	Route.mode = "auto"
+	Route.clear_flaky()
+	Route.pc_ready_hook = func() -> bool: return true
+	Api.base_url = pc_url
+	_avail(true)
+	var a0: int = Api.active_count
+	var au0: int = _auth_failed
+	var body := {"lang": "en", "target": "Nice to meet you.", "audio_b64": "AAAA"}
+	print("  step 1: engine_error / stt_timeout -> PC retry")
+	# 1) engine_error / stt_timeout on /score and /stt, PC fine -> the PC's answer, one phone run, one PC request
+	for cs in [["/score", "engine_error"], ["/score", "stt_timeout"], ["/stt", "engine_error"], ["/stt", "stt_timeout"]]:
+		pc.reply = "ok"
+		var c: Dictionary = await _retry_run(pc, cs[0], body, cs[1])
+		var r: Dictionary = c["res"]
+		var tag: String = "%s %s" % [cs[0], cs[1]]
+		ok(r["ok"] and r["data"] is Dictionary and int(r["data"].get("pc_marker", 0)) == 1 and not r["data"].has("via"), "P0-4: %s, PC ok -> final ok:true with the PC's answer" % tag)
+		ok(c["served"] == 1 and c["pc"] == 1 and c["sent"] == 1, "P0-4: %s -> phone handler ran once, PC got exactly 1 request (served %d, pc %d, sent %d)" % [tag, c["served"], c["pc"], c["sent"]])
+		ok(Api.active_count == a0, "active_count back to %d after the retry (%d)" % [a0, Api.active_count])
+	ok(str(pc.log.back()["path"]) == "/stt" and str(pc.log.back()["raw"]).contains("Nice to meet you."), "the PC got the same path and body as the phone")
+	print("  step 2: mode phone")
+	# 2) mode phone -> never the PC
+	Route.mode = "phone"
+	var cp: Dictionary = await _retry_run(pc, "/score", body, "engine_error")
+	ok(not cp["res"]["ok"] and cp["res"]["err_code"] == "engine_error" and cp["pc"] == 0 and cp["sent"] == 0 and cp["served"] == 1, "P0-4: mode phone -> no retry (PC requests 0), engine_error stays")
+	Route.mode = "auto"
+	print("  step 3: other paths")
+	# 3) AI paths never move to the PC after a phone failure (phone mode: they run on the phone; PC requests stay 0)
+	Route.mode = "phone"
+	for p in ["/chat", "/fix", "/feedback", "/missions/judge"]:
+		var ca: Dictionary = await _retry_run(pc, p, {"lang": "en"}, "engine_error")
+		ok(not ca["res"]["ok"] and ca["res"]["err_code"] == "engine_error" and ca["pc"] == 0 and ca["sent"] == 0, "P0-4: %s phone failure is not handed to the PC (PC requests %d)" % [p, ca["pc"]])
+	Route.mode = "auto"
+	# ... and the decision itself: auto + PC ready + a phone-served non-speech path
+	var cl: Dictionary = await _retry_run(pc, "/lesson", {"lang": "en"}, "engine_error")
+	ok(cl["served"] == 1 and cl["pc"] == 0 and cl["res"]["err_code"] == "engine_error", "P0-4: /lesson (phone first) failing with engine_error is not retried on the PC")
+	var cm: Dictionary = await _retry_run(pc, "/missions/check", {}, "stt_timeout")
+	ok(cm["served"] == 1 and cm["pc"] == 0 and cm["res"]["err_code"] == "stt_timeout", "P0-4: /missions/check failing with stt_timeout is not retried on the PC")
+	# The decision function, unit-level, for the four AI paths in the most favourable state (auto, PC ready).
+	var fails := 0
+	for p in ["/chat", "/fix", "/feedback", "/missions/judge", "/lesson", "/tts", "/prosody"]:
+		var call_ai := Api.ApiCall.new()
+		call_ai.path = p
+		call_ai.method = HTTPClient.METHOD_POST
+		call_ai.routable = true
+		call_ai.base = pc_url
+		if Api._phone_retry_wanted(call_ai, LocalApi.fail("engine_error")):
+			fails += 1
+	ok(fails == 0, "_phone_retry_wanted is false for /chat /fix /feedback /missions/judge /lesson /tts /prosody (%d wrongly true)" % fails)
+	var call_sc := Api.ApiCall.new()
+	call_sc.path = "/score?x=1"
+	call_sc.method = HTTPClient.METHOD_POST
+	call_sc.routable = true
+	call_sc.base = pc_url
+	ok(Api._phone_retry_wanted(call_sc, LocalApi.fail("engine_error")) and Api._phone_retry_wanted(call_sc, LocalApi.fail("stt_timeout")), "selfcheck: _phone_retry_wanted is true for /score with engine_error / stt_timeout")
+	ok(not Api._phone_retry_wanted(call_sc, LocalApi.ok({"x": 1})) and not Api._phone_retry_wanted(call_sc, LocalApi.fail("model_missing")) and not Api._phone_retry_wanted(call_sc, LocalApi.fail("no_ai")), "selfcheck: false for an ok result and for other error codes")
+	print("  step 4: other phone errors")
+	# 4) other phone errors are not retried
+	for code in ["model_missing", "model_corrupt", "pack_corrupt", "bad_format", "no_permission"]:
+		var co: Dictionary = await _retry_run(pc, "/score", body, code)
+		ok(co["pc"] == 0 and co["served"] == 1 and co["res"]["err_code"] == code, "P0-4: phone error %s is not retried (PC requests %d)" % [code, co["pc"]])
+	print("  step 5: PC not ready / flaky")
+	# 5) PC not ready / flaky -> no retry
+	Route.pc_ready_hook = func() -> bool: return false
+	var cn: Dictionary = await _retry_run(pc, "/score", body, "engine_error")
+	ok(cn["pc"] == 0 and cn["sent"] == 0 and cn["res"]["err_code"] == "engine_error", "P0-4: PC not ready -> no retry")
+	Route.pc_ready_hook = func() -> bool: return true
+	Route.mark_pc_flaky()
+	var cf: Dictionary = await _retry_run(pc, "/score", body, "engine_error")
+	ok(cf["pc"] == 0 and cf["res"]["err_code"] == "engine_error", "P0-4: PC marked flaky -> no retry")
+	Route.clear_flaky()
+	print("  step 6: phone and PC both fail")
+	# 6) phone fails AND the PC fails -> an error, no loop, the PC saw exactly one request
+	pc.reply = "500"
+	var cb: Dictionary = await _retry_run(pc, "/score", body, "engine_error", true)
+	ok(not cb["res"]["ok"] and cb["res"]["err_code"] == "engine_error" and cb["res"]["error"] == Route.text_for("engine_error"), "P0-4: phone fail + PC 500 -> the phone's own error is returned")
+	ok(cb["pc"] == 1 and cb["sent"] == 1 and cb["served"] == 1, "P0-4: phone fail + PC fail -> PC requests exactly 1, phone runs exactly 1 (pc %d, sent %d, served %d)" % [cb["pc"], cb["sent"], cb["served"]])
+	ok(Api.active_count == a0 and not Route.pc_flaky(), "no request left in flight, PC not marked flaky by a refused retry")
+	Api.base_url = DEAD_PC
+	var cd: Dictionary = await _retry_run(pc, "/stt", body, "stt_timeout")
+	ok(not cd["res"]["ok"] and cd["res"]["err_code"] == "stt_timeout" and cd["sent"] == 1 and cd["served"] == 1 and cd["pc"] == 0, "P0-4: phone fail + dead PC (transport) -> one send, one phone run, no phone loop (sent %d, served %d)" % [cd["sent"], cd["served"]])
+	ok(Api.active_count == a0 and not Route.pc_flaky(), "dead PC: nothing in flight, no flaky mark")
+	Api.base_url = pc_url
+	print("  step 7: cancel during the retry")
+	# 7) cancel while the PC retry is running
+	pc.reply = "hang"
+	Engine.set_meta("a1_fail", "engine_error")
+	var p0: int = pc.log.size()
+	var cc: Object = Api.post_json("/score", body, 5.0, false)
+	await _wait_until(func() -> bool: return pc.log.size() > p0, 10.0)
+	ok(pc.log.size() == p0 + 1 and not cc.done and Api.active_count == a0 + 2, "retry request is out on the PC and the call is still running (active %d)" % Api.active_count)
+	cc.cancel()
+	var ccr: Dictionary = await cc.wait()
+	Engine.set_meta("a1_fail", "")
+	ok(ccr["cancelled"] and not ccr["ok"] and Api.active_count == a0, "P0-4: cancel during the retry -> cancelled:true, active_count back to %d (%d)" % [a0, Api.active_count])
+	for i in 6:
+		await get_tree().process_frame
+	ok(cc.result["cancelled"] and Api.active_count == a0, "the late PC result is dropped, active_count stays %d" % a0)
+	await _wait_until(func() -> bool: return Api.orphan_count == 0, 15.0)
+	ok(Api.orphan_count == 0, "the cancelled request ended by itself (orphan_count %d)" % Api.orphan_count)
+	print("  step 8: auth_failed")
+	# 8) phone failures never emit auth_failed
+	ok(_auth_failed == au0, "P0-5: auth_failed never emitted by phone failures or retries")
+	# restore
+	pc.stop()
+	pc.queue_free()
+	Api.base_url = DEAD_PC
+	Route.mode = "auto"
+	Route.clear_flaky()
+	Route.pc_ready_hook = func() -> bool: return true
+	_set_sw(saved_sw)
+	_avail(true)
+	Engine.set_meta("a1_fail", "")
 
 
 func _test_phone_curriculum() -> void:
