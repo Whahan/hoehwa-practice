@@ -14,7 +14,8 @@ extends Control
 ## 흐름: LessonBuilder(CourseFeed.build_unit)가 만든 문제를 CourseExerciseView 에 한 문제씩 올린다.
 ##  - 숙달 루프(§3.1): 틀린 문제는 같은 단계 끝에 다시 나온다(최대 MAX_RETRY 번). 다시 나올 때 보기 순서·타일 순서는 첫 번째와 다르다
 ##    (보기는 다시 섞고 answer 인덱스를 맞춘다, 타일은 문제 id 에 꼬리를 붙여 view 의 섞기 시드를 바꾼다). 판정은 항상 문제 화면(view)이 한다.
-##    루프는 new·listen·speak 단위에만 돈다(점검·월말·복귀 점검은 한 번만 낸다). 말하기 "어려워요"·대화는 다시 내지 않는다.
+##    루프는 new·listen·speak 단위에만 돈다(점검·월말·복귀 점검은 한 번만 낸다). 말하기 "어려워요"는 다시 내지 않는다.
+##    역할 대화(내 줄이 있는 dialogue_script)는 틀리면 한 번만(MAX_RETRY_DIALOGUE) 다시 낸다.
 ##  - 배운 것만: 화면에 올리기 직전마다 LexiconGuard.check_exercise_set 으로 다시 검사한다. 위반 문제는 올리지 않고 dropped 로 센다(사용자에게는 보이지 않는다).
 ##    `CoursePlayer.guard_hook(ex, verdict, cur_o)` 가 있으면 검사 결과를 알려 준다(시험이 위반 0 을 확인한다).
 ##  - seen: 소개 카드(teach_word)를 올린 낱말 id. 안 본 낱말을 묻는 문제는 가드가 버린다.
@@ -22,6 +23,8 @@ extends Control
 ## 끝나면(문제 1개 이상 풀었을 때) 기록한 뒤 결과 카드를 보인다:
 ##    new/listen/speak/recap -> CourseStore.unit_done({unit,w,d,ok,total,first_try,wrong,words_new,completed,seconds,block}),
 ##    check -> CourseStore.check_done, month -> CourseStore.month_done,
+##    기록은 "준비 -> 기록" 순서다: 점수·복습 카드 목록 등을 모두 계산하고 데이터가 아직 있는지 확인한 뒤에만 쓴다(중간에 데이터가 사라지면 아무것도 기록하지 않는다).
+##    저장소가 칸 기록을 거절하면(미리 해 본 칸 ahead, 코스 모드 아님) 레슨·XP 는 남기되 결과 카드가 그렇게 알리고, ahead 면 복습 카드는 넣지 않는다.
 ##    CourseCards.add_unit(kind new 만), 틀린 문제의 복습 카드, StudyLog.add_lesson, Store.add_xp / inc_stat / mark_today, StudyLog.note_resume.
 ##    예전 12개월 길의 레슨 기록은 건드리지 않는다. 일부러 그만두면 아무것도 기록하지 않는다.
 ## 결과 카드: 시간은 CourseModel.fmt_minutes, 진행은 CourseModel.progress_label 로만 만든다(초·5자리 숫자를 직접 보이지 않는다).
@@ -31,9 +34,10 @@ signal left
 
 const LANG := "en"
 const MAX_RETRY := 2 ## 숙달 루프: 틀린 문제를 같은 단계 끝에 다시 내는 최대 횟수(§3.1)
+const MAX_RETRY_DIALOGUE := 1 ## 역할 대화는 한 번만 다시 낸다(피드백이 "나중에 한 번 더 나와요"라고 말한다)
 const RESHUFFLE := true ## 다시 낼 때 보기를 다시 섞는다(false 면 위치로 맞힐 수 있다: 시험이 잡아야 한다)
 const LOOP_KINDS := ["new", "listen", "speak"]
-const RETRY_TYPES := ["recognize", "recall", "build", "listen", "speak"]
+const RETRY_TYPES := ["recognize", "recall", "build", "listen", "speak", "dialogue_script"]
 const KINDS := ["new", "listen", "speak", "recap", "check", "month"]
 const BLOCK_OF_KIND := {"new": "new", "recap": "new", "listen": "listen", "speak": "speak", "check": "new", "month": "new"}
 const MAX_SECONDS := 7200
@@ -80,13 +84,13 @@ var error_back_btn: Button = null
 var title_label: Label = null
 var progress_label_node: Label = null
 var progress_bar: ProgressBar = null
+var retry_label_node: Label = null
 
 var _top_holder: Control = null
 var _body: Control = null
 var _result_box: Control = null
 var _error_box: Control = null
 var _leave_sheet: Sheet = null
-var _q_done: int = 0
 var _t_start: int = 0
 var _paused_total: int = 0
 var _pause_since: int = -1
@@ -180,7 +184,7 @@ func start(spec_in: Variant) -> void:
 	_t_start = _now()
 	_top_holder.visible = true
 	back_btn.visible = true
-	title_label.text = "%s  ·  %d주 %d일" % [String(KIND_TITLES.get(kind, "")), w, d]
+	title_label.text = "%d주 %d일  ·  %s" % [w, d, String(KIND_TITLES.get(kind, ""))]
 	_present()
 
 
@@ -235,13 +239,23 @@ func current_entry() -> Dictionary:
 	return {}
 
 
-## 문제로 센 개수 {total, answered}: 안 푼 재출제는 풀기 전까지 total 에만 든다.
+## 문제 개수 {total, answered, retry_left}. total 은 처음 낸 문제 수(재출제는 늘리지 않는다, 버려진 문제만 빠진다),
+## answered 는 그 중 한 번이라도 푼 수, retry_left 는 아직 안 푼 "다시 풀기" 수다.
 func question_counts() -> Dictionary:
 	var total := 0
+	var retry_left := 0
 	for e in queue:
-		if int(e["rec"]) >= 0 or int(e["rec"]) == -2:
-			total += 1
-	return {"total": total, "answered": _q_done}
+		var r: int = int(e["rec"])
+		if int(e["attempt"]) == 0:
+			if r >= 0 or r == -2:
+				total += 1
+		elif r >= 0 and not bool(e.get("done", false)):
+			retry_left += 1
+	var answered := 0
+	for rc in recs:
+		if bool(rc["answered"]):
+			answered += 1
+	return {"total": total, "answered": answered, "retry_left": retry_left}
 
 
 # ================================================================== 만들기
@@ -258,7 +272,6 @@ func _reset_run() -> void:
 	retries_made = 0
 	result = {}
 	error_text = ""
-	_q_done = 0
 	_recorded = false
 	_finished_sent = false
 	_paused_total = 0
@@ -284,7 +297,7 @@ func _make_top() -> Control:
 	st.border_width_bottom = 1
 	holder.add_theme_stylebox_override("panel", st)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 4)
 	holder.add_child(col)
 	var row := UI.hbox(8)
 	row.name = "TopRow"
@@ -293,15 +306,21 @@ func _make_top() -> Control:
 	back_btn.name = "BackBtn"
 	back_btn.pressed.connect(ask_leave)
 	row.add_child(back_btn)
-	title_label = UI.label("", "Strong", false)
-	title_label.name = "TitleLabel"
-	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_label.clip_text = true
-	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	row.add_child(title_label)
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(sp)
 	progress_label_node = UI.label("", "Small", false)
 	progress_label_node.name = "ProgressLabel"
 	row.add_child(progress_label_node)
+	# 제목은 줄을 바꿔서라도 끝까지 보인다(주·일이 잘리면 안 된다). 주·일을 앞에 둔다.
+	title_label = UI.label("", "Strong", true)
+	title_label.name = "TitleLabel"
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(UI.margin(title_label, Ds.S3, 0, Ds.S3, 0))
+	retry_label_node = UI.label("", "Small", true)
+	retry_label_node.name = "RetryLabel"
+	retry_label_node.visible = false
+	col.add_child(UI.margin(retry_label_node, Ds.S3, 0, Ds.S3, 0))
 	progress_bar = UI.progress_bar(0.0, Pal.accent(LANG), 8.0)
 	progress_bar.name = "ProgressBar"
 	col.add_child(UI.margin(progress_bar, Ds.S3, 0, Ds.S3, 8))
@@ -401,7 +420,7 @@ func _on_answered(res: Dictionary) -> void:
 	var attempt: int = int(e["attempt"])
 	var good: bool = bool(res.get("ok", false))
 	var gave_up: bool = bool(res.get("gave_up", false))
-	_q_done += 1
+	e["done"] = true
 	rc["tries"] = int(rc["tries"]) + 1
 	if attempt == 0:
 		rc["answered"] = true
@@ -413,8 +432,10 @@ func _on_answered(res: Dictionary) -> void:
 		rc["self_rated"] = true
 	if good:
 		rc["ok"] = true
-	elif LOOP_KINDS.has(kind) and RETRY_TYPES.has(String(rc["type"])) and not gave_up and attempt < MAX_RETRY:
-		_insert_retry(e)
+	elif LOOP_KINDS.has(kind) and RETRY_TYPES.has(String(rc["type"])):
+		var is_dlg: bool = String(rc["type"]) == "dialogue_script"
+		if (is_dlg or not gave_up) and attempt < (MAX_RETRY_DIALOGUE if is_dlg else MAX_RETRY):
+			_insert_retry(e)
 	_update_progress()
 
 
@@ -556,6 +577,9 @@ func _update_progress() -> void:
 	var total: int = int(c["total"])
 	progress_label_node.text = CourseModel.progress_label("questions", int(c["answered"]), total)
 	progress_bar.value = float(c["answered"]) / maxf(1.0, float(total))
+	var left_n: int = int(c["retry_left"])
+	retry_label_node.visible = left_n > 0
+	retry_label_node.text = "다시 풀기 %d개" % left_n if left_n > 0 else ""
 
 
 # ================================================================== 끝내기·기록
@@ -563,6 +587,7 @@ func _update_progress() -> void:
 func _finish_unit() -> void:
 	if view != null:
 		view.stop_all()
+	# ---- 1. 준비: 기록 없이 값만 계산한다 -------------------------------------------------
 	var total := 0
 	var good := 0
 	var first_n := 0
@@ -572,6 +597,7 @@ func _finish_unit() -> void:
 	var auto_ok := 0
 	var speak_n := 0
 	var speak_ok := 0
+	var speak_skip := 0
 	var speak_self := false
 	var self_any := false
 	for rc in recs:
@@ -595,6 +621,8 @@ func _finish_unit() -> void:
 				speak_ok += 1
 			if bool(rc["self_rated"]):
 				speak_self = true
+			if bool(rc["gave_up"]):
+				speak_skip += 1
 		else:
 			auto_total += 1
 			if bool(rc["ok"]):
@@ -602,38 +630,59 @@ func _finish_unit() -> void:
 	if total <= 0:
 		_show_error(TEXT_EMPTY)
 		return
+	# 코스 데이터가 아직 있어야 한다(복습 카드·낱말 글이 거기서 나온다). 없으면 일부만 기록되지 않게 아무것도 쓰지 않고 끝낸다.
+	var data: Dictionary = CourseFeed.builder_data()
+	if data.is_empty() or not (data.get("_idx") is Dictionary):
+		var why: String = String(CourseFeed.status().get("text_ko", ""))
+		_show_error(why if why != "" else TEXT_DATA)
+		return
+	var wrong_cards: Array = _wrong_cards()
+	var pos_before: Dictionary = CourseStore.pos()
 	var seconds: int = clampi(int((_now() - _t_start - _paused_total) / 1000), 0, MAX_SECONDS)
 	var unit_res: Dictionary = {"unit": kind, "w": w, "d": d, "ok": good, "total": total, "first_try": first_n, "wrong": wrong,
 		"words_new": words_new.duplicate() if kind == "new" else [], "completed": true, "seconds": seconds, "block": block}
+	var pct: int = clampi(roundi(good * 100.0 / float(total)), 0, 100)
+	var speak_state: String = ""
+	if kind == "check" and speak_n > 0:
+		speak_state = "unverified" if (speak_self or speak_skip == speak_n) else ("pass" if speak_ok == speak_n else "fail")
+	# ---- 2. 기록: 위에서 준비한 값만 쓴다 ----------------------------------------------------
 	var store_res: Dictionary = {}
 	var passed := false
-	var pct: int = clampi(roundi(good * 100.0 / float(total)), 0, 100)
 	match kind:
 		"check":
-			var speak_state: String = ""
-			if speak_n > 0:
-				speak_state = "unverified" if speak_self else ("pass" if speak_ok == speak_n else "fail")
 			store_res = CourseStore.check_done(w, {"ok": auto_ok, "total": auto_total, "speak": speak_state})
 			passed = bool(store_res.get("pass", false))
-			pct = int(store_res.get("pct", pct))
+			pct = int(store_res.get("pct", clampi(roundi(auto_ok * 100.0 / float(auto_total)), 0, 100) if auto_total > 0 else 0))
 		"month":
 			store_res = CourseStore.month_done(CourseModel.block_of(w), {"score": pct, "mode": "self" if self_any else "stt"})
 			passed = pct >= MONTH_PASS
 		_:
 			store_res = CourseStore.unit_done(unit_res)
+	var ahead: bool = bool(store_res.get("ignored", false)) and String(store_res.get("reason", "")) == "ahead"
 	StudyLog.add_lesson(LANG, good, total)
 	Store.add_xp(LANG, good * 10)
 	Store.inc_stat(LANG, "lessons")
 	Store.mark_today(LANG)
-	var cards_unit: int = CourseCards.add_unit(w, d) if kind == "new" else 0
-	var cards_wrong: int = Store.add_review(_wrong_cards())
+	var cards_unit := 0
+	var cards_wrong := 0
+	if not ahead: # 미리 해 본 칸의 복습 카드는 그 칸을 실제로 할 때 넣는다(중복 방지)
+		cards_unit = CourseCards.add_unit(w, d) if kind == "new" else 0
+		cards_wrong = Store.add_review(wrong_cards)
 	Store.save_progress()
 	StudyLog.note_resume("lesson", LANG)
 	_recorded = true
+	var pos_after: Dictionary = CourseStore.pos()
 	result = unit_res.duplicate(true)
 	result["kind"] = kind
 	result["pct"] = pct
 	result["pass"] = passed
+	result["auto_ok"] = auto_ok
+	result["auto_total"] = auto_total
+	result["speak_n"] = speak_n
+	result["speak_skip"] = speak_skip
+	result["speak_state"] = speak_state
+	result["pos_before"] = pos_before
+	result["moved"] = pos_after != pos_before
 	result["cards_added"] = cards_unit + cards_wrong
 	result["cards_unit"] = cards_unit
 	result["cards_wrong"] = cards_wrong
@@ -705,7 +754,12 @@ func _show_result() -> void:
 		card.body.add_child(verdict)
 	var good: int = int(result["ok"])
 	var total: int = int(result["total"])
+	if kind == "check": # 점검은 자동 채점 문제만 센다(분모와 퍼센트가 같은 기준)
+		good = int(result["auto_ok"])
+		total = int(result["auto_total"])
 	card.body.add_child(_line("ScoreLine", "%s 맞혔어요  (%s)" % [CourseModel.progress_label("questions", good, total), CourseModel.progress_label("percent", int(result["pct"]), 100)]))
+	if kind == "check" and int(result["speak_n"]) > 0:
+		card.body.add_child(_line("SpeakLine", _speak_text()))
 	if kind != "check" and kind != "month":
 		card.body.add_child(_line("FirstTryLine", "처음에 바로 맞힌 것  %s" % CourseModel.progress_label("questions", int(result["first_try"]), total)))
 	card.body.add_child(_line("TimeLine", "걸린 시간  %s" % CourseModel.fmt_minutes(int(result["seconds"]))))
@@ -746,13 +800,35 @@ func _line(node_name: String, text: String) -> Label:
 
 
 func _verdict_text() -> String:
+	var st: Dictionary = result.get("store", {})
 	if kind == "check":
 		if bool(result["pass"]):
 			return "점검을 통과했어요"
-		return "아직 통과선(%s)에 못 미쳤어요. 틀린 것은 복습에 담았으니 내일 다시 해 봐요" % CourseModel.progress_label("percent", CourseStore.CHECK_PASS, 100)
+		var moved: bool = bool(result.get("moved", false))
+		if bool(st.get("weak", false)):
+			if moved:
+				return "이번 주는 약함으로 표시하고 다음으로 넘어가요. 틀린 것은 복습 카드로 다시 나와요"
+			return "이번 주는 약함으로 표시했어요. 틀린 것은 복습 카드로 다시 나와요"
+		var head: String = "아직 통과선(%s)에 못 미쳤어요. 틀린 것은 복습에 담았어요. " % CourseModel.progress_label("percent", CourseStore.CHECK_PASS, 100)
+		if not moved and int(st.get("w", 0)) == w and int(st.get("d", 0)) == 6:
+			return head + "내일 같은 점검을 다시 해요"
+		return head + "다시 해 봐요"
 	if bool(result["pass"]):
 		return "월말 말하기를 통과했어요"
-	return "조금 더 연습하면 돼요. 틀린 문장을 복습에서 다시 말해 봐요"
+	return "조금 더 연습하면 돼요. 문장을 소리 내어 따라 말하며 연습해 봐요"
+
+
+## 점검의 말하기 줄: 통과 판정(자동 채점 문제)에는 넣지 않는다.
+func _speak_text() -> String:
+	var n: int = int(result["speak_n"])
+	if int(result["speak_skip"]) == n:
+		return "말하기 %d개는 건너뛰었어요. 통과 판정에는 넣지 않았어요" % n
+	match String(result["speak_state"]):
+		"unverified":
+			return "말하기 %d개는 직접 평가라 통과 판정에는 넣지 않았어요" % n
+		"pass":
+			return "말하기 %d개도 잘 말했어요" % n
+	return "말하기 %d개는 조금 더 연습해요. 통과 판정에는 넣지 않았어요" % n
 
 
 ## 틀렸던 낱말(최대 8개) + 문장 수.
@@ -781,14 +857,28 @@ func _wrong_text() -> String:
 	return "\n".join(PackedStringArray(parts))
 
 
+## 결과 카드의 맨 아래 안내: 진도가 어떻게 됐는지 사실대로 말한다.
 func _next_text() -> String:
 	var st: Dictionary = result.get("store", {})
-	if kind == "check" or kind == "month" or bool(st.get("ignored", false)):
-		return ""
+	if bool(st.get("ignored", false)):
+		match String(st.get("reason", "")):
+			"ahead":
+				return "미리 해 본 칸이라 진도는 그대로예요"
+			"mode":
+				return "코스 진도에는 기록되지 않아요"
+		return "코스 진도에는 기록되지 않았어요"
+	if kind == "month":
+		return "월말 말하기 점수를 기록했어요"
 	if bool(st.get("finished", false)):
 		return "72주 코스를 모두 마쳤어요"
-	if bool(st.get("advanced", false)):
+	if bool(result.get("moved", false)):
 		return "다음은 %d주 %d일이에요" % [int(st.get("w", w)), int(st.get("d", d))]
+	if kind == "check":
+		if bool(result["pass"]):
+			return "점검 결과를 기록했어요"
+		return "진도는 지금 칸(%d주 %d일)에 그대로 있어요" % [int(st.get("w", w)), int(st.get("d", d))]
+	if block == "new" and kind != "recap":
+		return "이미 끝낸 칸이라 진도는 그대로예요"
 	return "오늘 계획에 기록했어요"
 
 

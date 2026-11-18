@@ -42,6 +42,11 @@ var _holder: Control = null
 var _scheme: String = "light"
 var _font_scale: float = 1.0
 var _screen: Vector2 = PC_SCREEN
+var _prog_bad: int = 0
+var _bar_back: int = 0
+var _retry_seen: int = 0
+var _title_bad: int = 0
+var _raw_k1: Dictionary = {}
 var _layout_bad: Dictionary = {"rect": 0, "small": 0, "wide": 0, "n": 0}
 
 
@@ -88,10 +93,15 @@ func _ready() -> void:
 	_before = _user_listing()
 	_setup()
 	_selfcheck()
+	await _selfcheck_title()
 	await _test_main_flow()
 	await _test_d5_block_contract()
 	await _test_listen_recap_blocks()
 	await _test_check_and_month()
+	await _test_check_weak_and_month8()
+	await _test_store_refuses()
+	await _test_finish_vanish()
+	await _test_dialogue_retry()
 	await _test_second_data()
 	await _test_resume()
 	await _test_speak_pc()
@@ -346,8 +356,10 @@ func _snap() -> Dictionary:
 ## 첫 칸들을 끝낸 것으로 만든다(시험 준비). 흐름 시험이 아니라서 CourseStore 를 직접 부른다.
 func _advance_to(w: int, d: int) -> void:
 	CourseStore.today_override = Plan.today_days() - 3 ## 준비는 며칠 전에 한 것으로 한다(오늘의 블록 표시를 건드리지 않게)
-	for k in range(1, d):
-		CourseStore.unit_done({"unit": "new", "w": w, "d": k, "completed": true, "block": "new", "ok": 1, "total": 1})
+	for ww in range(1, w + 1):
+		var last: int = 8 if ww < w else d
+		for k in range(1, last):
+			CourseStore.unit_done({"unit": "new", "w": ww, "d": k, "completed": true, "block": "new", "ok": 1, "total": 1})
 	CourseStore.today_override = -1
 
 
@@ -395,6 +407,11 @@ func _scan(n: Node, bounds: Rect2, min_h: float, out: Dictionary) -> void:
 			if c is Button and (c as Button).size.y < min_h - 0.5:
 				out["small"] += 1
 		_scan(c, bounds, min_h, out)
+
+
+## 제목 글이 잘렸는가(줄이 숨었거나, 잘라내기가 켜졌거나, 화면 가로보다 넓다).
+func title_clipped(l: Label) -> bool:
+	return l.clip_text or l.get_visible_line_count() < l.get_line_count() or l.get_global_rect().end.x > _screen.x + 0.5
 
 
 func min_touch() -> float:
@@ -466,6 +483,33 @@ func _selfcheck() -> void:
 		"options": ["a", "b"], "answer": 0}
 	var verdict: Dictionary = LexiconGuard.check_exercise_set(bad_ex, 12, {}, data["_idx"])
 	fails(not bool(verdict.get("ok", false)), "the guard finds a question about a word of week 4 on day 1 of week 1")
+
+
+func _selfcheck_title() -> void:
+	var holder := Control.new()
+	holder.size = Vector2(120, 200)
+	add_child(holder)
+	var cut := Label.new()
+	cut.text = "1주 3일  ·  새 내용 아주 긴 제목이 여러 줄로 나뉘어요"
+	cut.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cut.max_lines_visible = 1
+	cut.size = Vector2(100, 30)
+	holder.add_child(cut)
+	var clip := Label.new()
+	clip.text = "1주 3일  ·  새 내용"
+	clip.clip_text = true
+	clip.size = Vector2(100, 30)
+	holder.add_child(clip)
+	await _frames(3)
+	fails(title_clipped(cut), "title_clipped finds a title whose lines are hidden")
+	fails(title_clipped(clip), "title_clipped finds a clipped title")
+	var fine := Label.new()
+	fine.text = "1주 3일"
+	fine.size = Vector2(100, 30)
+	holder.add_child(fine)
+	await _frames(2)
+	ok(not title_clipped(fine), "selfcheck: title_clipped accepts a short title")
+	holder.queue_free()
 
 
 # ---------------------------------------------------------------- 문제 풀기(버튼만)
@@ -548,6 +592,12 @@ func _play_unit(p: CoursePlayer, plan: Dictionary, label: String, step_ms: int =
 	var ordinal: Dictionary = {}
 	var guard: int = 0
 	var shown: int = 0
+	var total0: int = -1
+	var last_bar: float = -1.0
+	_prog_bad = 0
+	_bar_back = 0
+	_retry_seen = 0
+	_title_bad = 0
 	while p.state == "run" and guard < 400:
 		guard += 1
 		shown += 1
@@ -559,6 +609,24 @@ func _play_unit(p: CoursePlayer, plan: Dictionary, label: String, step_ms: int =
 		_layout_bad["small"] += int(sc["small"])
 		_layout_bad["wide"] += int(sc["wide"])
 		_layout_bad["n"] += 1
+		var c0: Dictionary = p.question_counts()
+		if total0 < 0:
+			total0 = int(c0["total"])
+		if p.progress_label_node.text != CourseModel.progress_label("questions", int(c0["answered"]), total0):
+			_prog_bad += 1
+		if p.progress_bar.value < last_bar - 0.0001:
+			_bar_back += 1
+		last_bar = p.progress_bar.value
+		if int(c0["retry_left"]) > 0:
+			if p.retry_label_node.is_visible_in_tree() and p.retry_label_node.text.contains("다시 풀기"):
+				_retry_seen += 1
+			else:
+				_prog_bad += 1
+		elif p.retry_label_node.visible:
+			_prog_bad += 1
+		var tt: String = p.title_label.text
+		if title_clipped(p.title_label) or not (tt.contains("주") and tt.contains("일")):
+			_title_bad += 1
 		if CourseExerciseView.is_info_card(e):
 			_fin_clock = _clock
 			press(_btn(p, "NextBtn"), "NextBtn (%s card %s)" % [label, String(e.get("type", ""))])
@@ -666,6 +734,10 @@ func _test_main_flow() -> void:
 	var log: Array = await _play_unit(p, plan, "w1d3")
 	var t1: int = _fin_clock
 	var loop: Dictionary = _check_loop(log, "w1d3")
+	eq(_prog_bad, 0, "the progress label keeps the first question count as its denominator and shows the retries on their own line")
+	eq(_bar_back, 0, "the progress bar never goes back")
+	ok(_retry_seen >= 3, "the retry line was shown while retries were waiting (%d screens)" % _retry_seen)
+	eq(_title_bad, 0, "the top title shows the week and day on every screen without being cut")
 	ok(presses - presses0 >= 40, "at least 40 button presses in this unit (%d)" % (presses - presses0))
 	var by_base: Dictionary = loop["by_base"]
 	var n_orig: int = int(loop["originals"])
@@ -719,6 +791,7 @@ func _test_main_flow() -> void:
 	# E4b-8: 결과 카드 글
 	var score_line: String = _label_text(p, "ScoreLine")
 	ok(score_line.contains(CourseModel.progress_label("questions", int(res["ok"]), int(res["total"]))), "ScoreLine uses progress_label: %s" % score_line)
+	ok(score_line.contains(CourseModel.progress_label("percent", int(res["pct"]), 100)) and int(res["pct"]) == roundi(int(res["ok"]) * 100.0 / int(res["total"])), "the percent is ok / total (same basis as the numbers)")
 	var time_line: String = _label_text(p, "TimeLine")
 	ok(time_line.contains(CourseModel.fmt_minutes(int(res["seconds"]))), "TimeLine uses fmt_minutes: %s" % time_line)
 	ok(not time_line.contains(str(int(res["seconds"]))) or int(res["seconds"]) < 100, "TimeLine does not show the seconds value")
@@ -783,6 +856,7 @@ func _test_main_flow() -> void:
 	var cards_line: String = _label_text(p, "CardsLine")
 	ok(cards_line.contains(CourseModel.progress_label("cards", int(res["cards_added"]), 0)), "CardsLine uses progress_label: %s" % cards_line)
 	ok(_label_text(p, "NextLine").contains("1주 4일"), "NextLine tells the next cell: %s" % _label_text(p, "NextLine"))
+	ok(bool(res["moved"]), "result.moved says pos moved")
 	# [완료] 는 한 번만 finished 를 낸다
 	press(_btn(p, "DoneBtn"), "DoneBtn (w1d3)")
 	eq(finished_log.size(), 1, "finished was emitted once")
@@ -796,6 +870,7 @@ func _test_main_flow() -> void:
 	ok(again.state == "result", "playing the same cell again ends with a result card")
 	eq(int(again.result["cards_unit"]), 0, "the day's cards are not added twice")
 	eq(CourseStore.pos(), {"w": 1, "d": 4}, "an earlier cell played again keeps pos")
+	ok(_label_text(again, "NextLine").contains("이미 끝낸 칸"), "a replayed cell says the progress stays: %s" % _label_text(again, "NextLine"))
 	eq(int(again.result["retries"]), 0, "all right -> no retry")
 	ok(log2.size() >= 30, "the second run answered %d questions" % log2.size())
 
@@ -867,6 +942,13 @@ func _test_check_and_month() -> void:
 	eq(CourseStore.pos(), {"w": 1, "d": 6}, "a failed first check keeps the cell open")
 	eq(int(CourseStore.week_state(1).get("tries", 0)), 1, "the check try was recorded (tries 1)")
 	ok(_has_text(pf, "통과선"), "the failed check card explains the pass line")
+	ok(_label_text(pf, "VerdictLine").contains("내일 같은 점검"), "a first failure with the cell still open says tomorrow: %s" % _label_text(pf, "VerdictLine"))
+	ok(_label_text(pf, "NextLine").contains("1주 6일") and _label_text(pf, "NextLine").contains("그대로"), "and says where the progress stays: %s" % _label_text(pf, "NextLine"))
+	var af_ok: int = int(pf.result["auto_ok"])
+	var af_total: int = int(pf.result["auto_total"])
+	eq(af_total + int(pf.result["speak_n"]), int(pf.result["total"]), "check: auto-graded + speaking questions = all questions")
+	ok(_label_text(pf, "ScoreLine").contains(CourseModel.progress_label("questions", af_ok, af_total)) and _label_text(pf, "ScoreLine").contains(CourseModel.progress_label("percent", int(pf.result["pct"]), 100)), "check card: ScoreLine counts only the auto-graded questions, with the percent of the same basis: %s" % _label_text(pf, "ScoreLine"))
+	ok(_label_text(pf, "SpeakLine").contains("건너뛰었어요"), "check card: given-up speaking is said to be skipped: %s" % _label_text(pf, "SpeakLine"))
 	eq(_lessons(), int(snap["lessons"]) + 1, "the check counts as a lesson")
 	press(_btn(pf, "DoneBtn"), "DoneBtn (check fail)")
 	# 두 번째 점검: 한 문제만 틀림 -> 통과, 칸이 끝남
@@ -876,6 +958,9 @@ func _test_check_and_month() -> void:
 	eq(CourseStore.pos(), {"w": 1, "d": 7}, "a passed check finishes week 1 day 6 (pos is day 7)")
 	ok(plog.size() >= 8, "the check had %d questions" % plog.size())
 	ok(_has_text(pp, "통과했어요"), "the passed check card says so")
+	ok(_label_text(pp, "NextLine").contains("1주 7일"), "a passed check shows the next cell: %s" % _label_text(pp, "NextLine"))
+	ok(_label_text(pp, "SpeakLine").contains("직접 평가"), "check card: self-rated speaking is said not to count: %s" % _label_text(pp, "SpeakLine"))
+	ok(_label_text(pp, "ScoreLine").contains(CourseModel.progress_label("questions", int(pp.result["auto_ok"]), int(pp.result["auto_total"]))), "check card: the passed check counts only auto-graded questions")
 	var spk_state: String = String(CourseStore.week_state(1).get("speak", ""))
 	ok(spk_state == "unverified", "self-rated speaking is 'unverified' in the check record: %s" % spk_state)
 	press(_btn(pp, "DoneBtn"), "DoneBtn (check pass)")
@@ -890,6 +975,189 @@ func _test_check_and_month() -> void:
 	eq(String(ms.get("mode", "")), "self", "self-rated speaking is recorded as mode self")
 	eq(CourseStore.pos(), {"w": 1, "d": 7}, "a month unit never moves pos")
 	ok(bool(pm.result["pass"]) and _has_text(pm, "통과"), "the month card says passed")
+
+
+func _test_check_weak_and_month8() -> void:
+	print("[check of week 2 (two failures make it weak) and the month unit of week 8 (block 2)]")
+	_world(K1_DIR)
+	_advance_to(2, 6)
+	eq(CourseStore.pos(), {"w": 2, "d": 6}, "the course is at week 2 day 6")
+	var bad_plan: Dictionary = {"lis": [99, 99, 99, 99, 99], "rct": [99, 99, 99], "bld": [99, 99], "spk": [99, 99]}
+	var c1: CoursePlayer = await _open({"kind": "check", "w": 2, "d": 6, "seed": 31})
+	await _play_unit(c1, bad_plan, "w2 check fail 1")
+	eq(int(CourseStore.week_state(2).get("tries", 0)), 1, "check_done got week 2: its try was recorded")
+	eq(int(CourseStore.week_state(1).get("tries", 0)), 0, "check_done did not touch week 1")
+	eq(CourseStore.pos(), {"w": 2, "d": 6}, "the first failed check of week 2 keeps the cell open")
+	press(_btn(c1, "DoneBtn"), "DoneBtn (w2 check fail 1)")
+	var c2: CoursePlayer = await _open({"kind": "check", "w": 2, "d": 6, "seed": 32})
+	await _play_unit(c2, bad_plan, "w2 check fail 2")
+	var st2: Dictionary = c2.result["store"]
+	ok(bool(st2.get("weak", false)), "the second failure marks the week weak")
+	eq(CourseStore.pos(), {"w": 2, "d": 7}, "the second failure lets pos move on (week 2 day 7)")
+	ok(bool(c2.result["moved"]), "result.moved is true")
+	ok(_label_text(c2, "VerdictLine").contains("다음으로 넘어가요") and _label_text(c2, "VerdictLine").contains("약함"), "the card says it moves on and marks the week weak: %s" % _label_text(c2, "VerdictLine"))
+	ok(not _label_text(c2, "VerdictLine").contains("내일 다시"), "it does not say 'try again tomorrow' when pos moved on")
+	ok(_label_text(c2, "NextLine").contains("2주 7일"), "and shows the next cell: %s" % _label_text(c2, "NextLine"))
+	eq(int(CourseStore.week_state(2).get("tries", 0)), 2, "two tries are recorded for week 2")
+	press(_btn(c2, "DoneBtn"), "DoneBtn (w2 check fail 2)")
+	var m: CoursePlayer = await _open({"kind": "month", "w": 8, "d": 6, "seed": 33})
+	ok(m.state == "run" and m.kind == "month", "a month unit of week 8 runs")
+	await _play_unit(m, {}, "w8 month")
+	eq(int(CourseStore.month_state(2).get("score", -1)), 100, "month_done got block 2 (week 8): its score is recorded")
+	eq(CourseStore.month_state(1), {}, "month_done did not write block 1")
+	eq(int(CourseStore.month_state(2).get("tries", 0)), 1, "one try for month 2")
+	press(_btn(m, "DoneBtn"), "DoneBtn (w8 month)")
+
+
+func _test_store_refuses() -> void:
+	print("[the store refuses the cell: ahead (not the cell pos is on) and legacy mode]")
+	_world(K1_DIR)
+	_use_hook(Callable(self, "_short_2"))
+	var before: Dictionary = _snap()
+	var a: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 3, "seed": 2})
+	await _play_unit(a, {"rec": [1]}, "ahead")
+	var st: Dictionary = a.result["store"]
+	ok(bool(st.get("ignored", false)) and String(st.get("reason", "")) == "ahead", "unit_done refused a cell ahead of pos (reason ahead)")
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "pos did not move")
+	ok(_label_text(a, "NextLine").contains("미리 해 본 칸이라 진도는 그대로예요"), "the card says so: %s" % _label_text(a, "NextLine"))
+	eq(_lessons(), int(before["lessons"]) + 1, "the lesson and XP are still recorded (practice is practice)")
+	ok(Store.xp("en") > int(before["xp"]), "XP was given")
+	eq(_review_n(), int(before["review"]), "no review card was added for a cell played ahead (not the day cards, not the wrong ones)")
+	eq(int(a.result["cards_added"]), 0, "result.cards_added = 0")
+	ok(a.find_child("CardsLine", true, false) == null, "the card shows no cards line")
+	press(_btn(a, "DoneBtn"), "DoneBtn (ahead)")
+	_advance_to(1, 3)
+	var unit_cards: Array = CourseCards.unit_cards(1, 3)
+	var b: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 3, "seed": 2})
+	await _play_unit(b, {}, "the real cell")
+	eq(int(b.result["cards_unit"]), unit_cards.size(), "when the cell is really done its day cards are added (%d)" % unit_cards.size())
+	ok(unit_cards.size() >= 4, "that is a real number of cards")
+	press(_btn(b, "DoneBtn"), "DoneBtn (real cell)")
+	_world(K1_DIR)
+	_use_hook(Callable(self, "_short_2"))
+	CourseStore.set_mode("legacy")
+	var before2: Dictionary = _snap()
+	var l: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 1, "seed": 2})
+	await _play_unit(l, {}, "legacy mode")
+	var st2: Dictionary = l.result["store"]
+	ok(bool(st2.get("ignored", false)) and String(st2.get("reason", "")) == "mode", "unit_done refused in legacy mode (reason mode)")
+	ok(_label_text(l, "NextLine").contains("코스 진도에는 기록되지 않아요"), "the card says so: %s" % _label_text(l, "NextLine"))
+	eq(CourseStore.pos(), before2["pos"], "pos did not move")
+	eq(_lessons(), int(before2["lessons"]) + 1, "the lesson is recorded")
+	CourseStore.set_mode("course")
+	CoursePlayer.build_hook = Callable()
+
+
+func _test_finish_vanish() -> void:
+	print("[data vanishes right before the last [다음]: nothing at all is recorded]")
+	_world(K1_DIR)
+	_use_hook(Callable(self, "_short_2"))
+	var snap: Dictionary = _snap()
+	var p: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 1, "seed": 2})
+	var guard: int = 0
+	while p.state == "run" and guard < 40:
+		guard += 1
+		if CourseExerciseView.is_info_card(p.view.ex):
+			press(_btn(p, "NextBtn"), "NextBtn (vanish: card)")
+			await _frames(1)
+			continue
+		await _answer_current(p, true, "vanish q")
+		if p.idx >= p.queue.size() - 1:
+			break
+		press(_btn(p, "NextBtn"), "NextBtn (vanish: q)")
+		await _frames(1)
+	ok(p.state == "run" and p.idx == p.queue.size() - 1 and p.view.state == "answered", "the last question is answered and [다음] is still to be pressed")
+	eq(_snap(), snap, "nothing is recorded before the last [다음]")
+	CourseData.base_dir = GONE_DIR
+	CourseData.reset()
+	press(_btn(p, "NextBtn"), "NextBtn (vanish: the last one)")
+	await _frames(2)
+	eq(p.state, "error", "data gone at the last step -> error screen")
+	eq(_snap(), snap, "no pos, XP, lesson, review card or block was recorded")
+	ok(p.result.is_empty() and finished_log.is_empty(), "no result was made")
+	ok(_ready_btn(_btn(p, "ErrorBackBtn")), "[돌아가기] is there")
+	CourseData.base_dir = K1_DIR
+	CourseData.reset()
+	CourseFeed.reset()
+	CoursePlayer.build_hook = Callable()
+
+
+func _load_raw_k1() -> Dictionary:
+	var keys: Dictionary = {"en_weeks.json": ["weeks", "weeks"], "en_lexicon.json": ["words", "words"], "en_patterns.json": ["patterns", "patterns"],
+		"en_sentences.json": ["sentences", "sentences"], "en_dialogues.json": ["dialogues", "dialogues"], "en_speak_prompts.json": ["prompts", "speak_prompts"]}
+	var data: Dictionary = {}
+	for fname in keys.keys():
+		var f: FileAccess = FileAccess.open(K1_DIR.path_join(fname), FileAccess.READ)
+		var parsed: Variant = JSON.parse_string(f.get_as_text())
+		data[keys[fname][1]] = parsed[keys[fname][0]]
+	for wk in data["weeks"]:
+		if int(wk["w"]) == 4:
+			wk["ladder"]["script"] = true ## 4주에 역할 대화(내 줄이 있는 대화)가 나오게
+	return data
+
+
+func _hook_dialogue(spec: Dictionary, sd: int) -> Dictionary:
+	if _raw_k1.is_empty():
+		_raw_k1 = _load_raw_k1()
+	var r: Dictionary = LessonBuilder.build(spec, _raw_k1, sd)
+	var out: Array = []
+	for e in r["exercises"]:
+		if String(e.get("type", "")) == "dialogue_script" and not CourseExerciseView.is_info_card(e):
+			out.append(e)
+	r["exercises"] = out
+	return r
+
+
+## 역할 대화를 끝까지: right 면 내 차례마다 말하고 자가 평가 [잘했어요], 아니면 내 차례마다 [말하기 어려워요].
+func _do_dialogue(p: CoursePlayer, right: bool, label: String) -> void:
+	var guard: int = 0
+	while p.view.state != "answered" and guard < 12:
+		guard += 1
+		if p.view.state == "turn_done":
+			press(_btn(p, "ContinueBtn"), "ContinueBtn (%s)" % label)
+		elif right:
+			p.view.drill.recorder.recorded.emit(FAKE_REC)
+			await _frames(3)
+			press(_find_text_button(p.view, "잘했어요"), "잘했어요 (%s)" % label)
+		else:
+			press(_btn(p, "SkipBtn"), "SkipBtn (%s)" % label)
+		await _frames(2)
+
+
+func _test_dialogue_retry() -> void:
+	print("[a role dialogue that went wrong comes back once]")
+	_world(K1_DIR)
+	_use_hook(Callable(self, "_hook_dialogue"))
+	var p: CoursePlayer = await _open({"kind": "speak", "w": 4, "d": 4, "block": "speak", "seed": 3})
+	ok(p.state == "run" and p.view.kind == "dialogue", "a role dialogue is shown")
+	await _do_dialogue(p, false, "dialogue 1")
+	ok(not bool(p.view.result["ok"]), "the dialogue is wrong when every turn is given up")
+	ok(_has_text(p.view, "나중에 한 번 더 나와요"), "the feedback promises that the dialogue comes back")
+	eq(p.retries_made, 1, "so the player queues it again")
+	eq(p.queue.size(), 2, "the retry is queued once")
+	press(_btn(p, "NextBtn"), "NextBtn (dialogue 1)")
+	await _frames(2)
+	ok(p.view.kind == "dialogue" and p.view.find_child("RetryChip", true, false) != null, "the dialogue comes back with the retry chip")
+	await _do_dialogue(p, true, "dialogue retry")
+	ok(bool(p.view.result["ok"]), "the retry is right")
+	press(_btn(p, "NextBtn"), "NextBtn (dialogue retry)")
+	await _frames(2)
+	eq(p.state, "result", "the unit ended after the retry")
+	eq(int(p.result["total"]), 1, "one question (the retry is not a new one)")
+	eq(int(p.result["ok"]), 1, "right in the end")
+	eq(int(p.result["first_try"]), 0, "but not on the first show")
+	press(_btn(p, "DoneBtn"), "DoneBtn (dialogue)")
+	var q: CoursePlayer = await _open({"kind": "speak", "w": 4, "d": 4, "block": "speak", "seed": 3})
+	await _do_dialogue(q, false, "dialogue 2a")
+	press(_btn(q, "NextBtn"), "NextBtn (dialogue 2a)")
+	await _frames(2)
+	await _do_dialogue(q, false, "dialogue 2b")
+	eq(q.retries_made, 1, "a dialogue is retried at most once")
+	press(_btn(q, "NextBtn"), "NextBtn (dialogue 2b)")
+	await _frames(2)
+	eq(q.state, "result", "after the second wrong show the unit ends")
+	eq(int(q.result["ok"]), 0, "it stays wrong")
+	CoursePlayer.build_hook = Callable()
 
 
 func _test_second_data() -> void:
