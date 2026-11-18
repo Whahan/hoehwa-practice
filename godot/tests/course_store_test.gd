@@ -11,6 +11,8 @@ const P := "user://test_e3_course.json"
 const PREFS := "user://test_e3_prefs.json"
 const PROG := "user://test_e3_progress.json"
 const LOG := "user://test_e3_studylog.json"
+## Not under user://test*: the guard counts a course.json here as a real file. Everything inside is removed before and after.
+const PROBE_DIR := "user://e3_guard_probe"
 const BASE_Y := 2026
 const BASE_M := 12
 const BASE_D := 1
@@ -44,6 +46,10 @@ func _ready() -> void:
 	_away_all_day()
 	_d5_block()
 	_unknown_pos_check_keys()
+	_reopen_once()
+	_u8_skipped_jump()
+	_idempotent_calls()
+	_probe_dir_cleanup()
 	_guard_and_legacy_read()
 	_saved_flag()
 	_unit_done_bad_input()
@@ -109,6 +115,7 @@ func _rm_all() -> void:
 
 
 func _restore() -> void:
+	_clean_probe_dir()
 	_rm_all()
 	Progress.write_hook = Callable()
 	Progress.open_hook = Callable()
@@ -132,6 +139,22 @@ func _fresh(m: String = "course") -> void:
 	Store.prefs = Store.DEFAULT_PREFS.duplicate(true)
 	if m != "":
 		Store.prefs["course_mode"] = m
+
+
+## Removes the probe folder with every file in it (also .bad*, .tmp, sub folders).
+func _clean_probe_dir() -> void:
+	_rm_tree(PROBE_DIR)
+
+
+func _rm_tree(dir: String) -> void:
+	var da := DirAccess.open(dir)
+	if da == null:
+		return
+	for f in da.get_files():
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(dir.path_join(f)))
+	for sub in da.get_directories():
+		_rm_tree(dir.path_join(sub))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir))
 
 
 func _day(n: int) -> void:
@@ -728,6 +751,11 @@ func _reopen() -> void:
 	CourseStore.check_done(3, {"ok": 9, "total": 10})
 	CourseStore.check_done(4, {"ok": 9, "total": 10})
 	eq(CourseStore.pos(), {"w": 5, "d": 1}, "reopen test: pos 5/1")
+	eq(CourseStore.reopen_weeks([3, 4]), 0, "reopen_weeks needs a break of 21 days: 0 on the same day")
+	ok(CourseStore.week_state(3)["done"], "no break: week 3 stays done")
+	_day(20)
+	eq(CourseStore.reopen_weeks([3, 4]), 0, "20 days away: 0")
+	_day(21)
 	eq(CourseStore.reopen_weeks([3, 4]), 2, "reopen_weeks([3, 4]) reopens 2 weeks")
 	ok(not CourseStore.week_state(3)["done"] and not CourseStore.week_state(4)["done"], "weeks 3 and 4 are not done any more")
 	eq(CourseStore.week_state(3)["days"], [], "their finished days are cleared")
@@ -739,7 +767,11 @@ func _reopen() -> void:
 	eq(CourseStore.reopen_weeks([0, 73, "x", null, 1.5]), 0, "invalid weeks: 0")
 	eq(CourseStore.reopen_weeks("3"), 0, "a non-array: 0")
 	eq(CourseStore.reopen_weeks([]), 0, "an empty list: 0")
-	eq(CourseStore.reopen_weeks([1]), 1, "reopening an earlier week still works")
+	eq(CourseStore.reopen_weeks([1]), 0, "the same break is reopened only once, even for another week")
+	eq(CourseStore.pos(), {"w": 3, "d": 1}, "pos stays 3/1")
+	CourseStore.mark_block("new")
+	_day(21 + 30)
+	eq(CourseStore.reopen_weeks([1]), 1, "after a new break of 30 days an earlier week reopens")
 	eq(CourseStore.pos(), {"w": 1, "d": 1}, "pos goes back to week 1")
 	# redoing a reopened week records its days again
 	var r: Dictionary = CourseStore.unit_done(_cell(1, 1))
@@ -750,6 +782,7 @@ func _reopen() -> void:
 	CourseStore.check_done(72, {"ok": 10, "total": 10, "skip": true})
 	ok(CourseStore.finished(), "finished before reopening")
 	CourseStore.unit_done(_cell(72, 6))
+	_day(30)
 	CourseStore.reopen_weeks([72])
 	ok(not CourseStore.finished(), "reopening week 72 clears finished()")
 
@@ -1151,10 +1184,182 @@ func _unknown_pos_check_keys() -> void:
 	ok(_shape_problems(_read_json(P)).is_empty(), "the file still has the §10.6 shape")
 
 
+## Review round 2, item 1: reopen_weeks(plan.reopen) on every redraw must not push pos back again and again.
+func _reopen_once() -> void:
+	_fresh()
+	for w in range(1, 8):
+		for d in range(1, 8):
+			CourseStore.unit_done(_cell(w, d))
+	eq(CourseStore.pos(), {"w": 8, "d": 1}, "R5 setup: weeks 1-7 done, pos 8/1 (last study day = day 0)")
+	_day(30)
+	var pos_after: Array = []
+	var counts: Array = []
+	for redraw in 4:
+		var pos: Dictionary = CourseStore.pos()
+		var plan: Dictionary = DayPlan.today({"mode": "course", "w": pos["w"], "d": pos["d"], "away_days": CourseStore.away_days(), "due": 5})
+		var n := 0
+		if not plan["reopen"].is_empty():
+			n = CourseStore.reopen_weeks(plan["reopen"]) ## the naive home screen: every redraw, no guard
+		counts.append(n)
+		var after: Dictionary = CourseStore.pos()
+		pos_after.append([after["w"], after["d"]])
+	eq(pos_after, [[6, 1], [6, 1], [6, 1], [6, 1]], "R5: four redraws on the same day: pos is 6/1 after the first and never lower")
+	eq(counts, [2, 0, 0, 0], "R5: the first call reopens 2 weeks, the next ones return 0")
+	ok(CourseStore.week_state(5)["done"] and CourseStore.week_state(1)["done"], "R5: weeks 5 and 1 keep their done mark (only 6 and 7 were reopened)")
+	ok(not CourseStore.week_state(6)["done"] and not CourseStore.week_state(7)["done"], "R5: weeks 6 and 7 are reopened")
+	ok(CourseStore.reopen_applied(), "reopen_applied() is true for this break")
+	eq(_read_json(P).get("reopened_for"), _iso(0), "the file stores reopened_for (the last study day before the break)")
+	# the plan itself stops listing it, when told
+	var plan_a: Dictionary = DayPlan.today({"mode": "course", "w": 6, "d": 1, "away_days": 30, "due": 5, "reopen_done": CourseStore.reopen_applied()})
+	ok(plan_a["recap"] and plan_a["reopen"] == [], "DayPlan with reopen_done: still a recap day, reopen list empty")
+	# a direct second call with a different list is refused too
+	eq(CourseStore.reopen_weeks([4, 5]), 0, "a second call with another list returns 0")
+	eq(CourseStore.pos(), {"w": 6, "d": 1}, "and pos stays 6/1")
+	# the recap unit later the same day (activity today) does not make it apply again
+	CourseStore.unit_done(_cell(6, 1, "recap"))
+	eq(CourseStore.reopen_weeks([4, 5]), 0, "after the recap unit (activity today) the same break is still applied")
+	CourseStore.reset_memory()
+	eq(CourseStore.reopen_weeks([4, 5]), 0, "after reloading the file: still applied")
+	# the next day: no re-application
+	_day(31)
+	eq(CourseStore.reopen_weeks([4, 5]), 0, "the next day: not applied again")
+	eq(CourseStore.pos(), {"w": 6, "d": 1}, "the next day: pos still 6/1")
+	for d in range(1, 4):
+		CourseStore.unit_done(_cell(6, d))
+	eq(CourseStore.pos(), {"w": 6, "d": 4}, "studying goes on (pos 6/4)")
+	eq(CourseStore.away_days(), 1, "after studying on day 31 the away count is 1 (from day 30's recap)")
+	eq(CourseStore.reopen_weeks([4, 5]), 0, "a break of 1 day never reopens again (still applied for the old break)")
+	# a new break of 21 days or more is reopened again
+	_day(31 + 25)
+	eq(CourseStore.away_days(), 25, "a new 25-day break")
+	ok(not CourseStore.reopen_applied(), "reopen_applied() is false for the new break")
+	var pos2: Dictionary = CourseStore.pos()
+	var plan2: Dictionary = DayPlan.today({"mode": "course", "w": pos2["w"], "d": pos2["d"], "away_days": CourseStore.away_days(), "due": 5, "reopen_done": CourseStore.reopen_applied()})
+	eq(plan2["reopen"], [4, 5], "DayPlan lists the two weeks before week 6 again")
+	eq(CourseStore.reopen_weeks(plan2["reopen"]), 2, "the new break is reopened (2 weeks)")
+	eq(CourseStore.pos(), {"w": 4, "d": 1}, "pos goes back to 4/1")
+	eq(CourseStore.reopen_weeks([2, 3]), 0, "and again only once for this break")
+	eq(CourseStore.pos(), {"w": 4, "d": 1}, "pos stays 4/1")
+	# invalid or empty calls do not use up the break
+	_fresh()
+	for w in range(1, 4):
+		for d in range(1, 8):
+			CourseStore.unit_done(_cell(w, d))
+	_day(30)
+	eq(CourseStore.reopen_weeks([40, 41]), 0, "weeks that were never started: 0")
+	ok(not CourseStore.reopen_applied(), "a call that reopened nothing does not use up the break")
+	eq(CourseStore.reopen_weeks([2, 3]), 2, "the real call still works afterwards")
+	ok(_shape_problems(_read_json(P)).is_empty(), "the file is clean after reopening")
+	# DayPlan input handling
+	for v in [true, 1]:
+		ok(DayPlan.today({"mode": "course", "w": 5, "away_days": 21, "reopen_done": v})["reopen"].is_empty(), "DayPlan: reopen_done %s empties the list" % str(v))
+	for v in [false, 0, null, "yes", [], 5.5]:
+		eq(DayPlan.today({"mode": "course", "w": 5, "away_days": 21, "reopen_done": v})["reopen"], [3, 4], "DayPlan: reopen_done %s keeps the list" % str(v))
+
+
+## Review round 2, item 3: the U5 exception never enters a week that was skipped by check.
+func _u8_skipped_jump() -> void:
+	_fresh()
+	for d in range(1, 6):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.pos(), {"w": 1, "d": 6}, "U8 setup: pos 1/6")
+	CourseStore.check_done(2, {"ok": 10, "total": 10, "skip": true})
+	CourseStore.check_done(3, {"ok": 10, "total": 10, "skip": true})
+	eq(CourseStore.week_state(2)["skipped"] and CourseStore.week_state(3)["skipped"], true, "weeks 2 and 3 are skipped by check")
+	eq(CourseStore.pos(), {"w": 1, "d": 6}, "skipping weeks ahead leaves pos")
+	var a: Dictionary = CourseStore.unit_done(_cell(2, 1))
+	eq([a["ignored"], a["reason"]], [true, "ahead"], "U8: a result for the skipped week 2 is refused")
+	var b: Dictionary = CourseStore.unit_done(_cell(3, 1))
+	eq([b["ignored"], b["reason"]], [true, "ahead"], "U8: a result for the skipped week 3 is refused")
+	var c: Dictionary = CourseStore.unit_done(_cell(4, 1))
+	eq([c["ignored"], c["w"], c["d"], c["advanced"]], [false, 4, 2, true], "U8: the first open week 4 is accepted: pos 4/2 (not inside a skipped week)")
+	ok(not CourseStore.week_state(2)["days"].has(1) and not CourseStore.week_state(3)["days"].has(1), "U8: no day was recorded in the skipped weeks")
+	# only one week skipped, pos on day 7
+	_fresh()
+	for d in range(1, 7):
+		CourseStore.unit_done(_cell(1, d))
+	CourseStore.check_done(2, {"ok": 10, "total": 10, "skip": true})
+	eq(CourseStore.unit_done(_cell(2, 1))["reason"], "ahead", "U8: pos 1/7, week 2 skipped: result for 2/1 refused")
+	eq(CourseStore.unit_done(_cell(3, 1))["d"], 2, "U8: result for 3/1 accepted, pos 3/2")
+	# without a skip the exception is unchanged
+	_fresh()
+	for d in range(1, 6):
+		CourseStore.unit_done(_cell(1, d))
+	eq(CourseStore.unit_done(_cell(2, 1))["d"], 2, "no skip: 2/1 is accepted as before (pos 2/2)")
+	# every week after pos skipped: the exception has no target (pos stays)
+	_fresh()
+	for d in range(1, 6):
+		CourseStore.unit_done(_cell(1, d))
+	for w in range(2, 73):
+		CourseStore.check_done(w, {"ok": 10, "total": 10, "skip": true})
+	var e: Dictionary = CourseStore.unit_done(_cell(2, 1))
+	eq([e["ignored"], e["reason"], e["w"], e["d"]], [true, "ahead", 1, 6], "all later weeks skipped: nothing to jump to, pos stays 1/6")
+	# a normal advance past skipped weeks, from any day of the week before
+	_fresh()
+	CourseStore.check_done(3, {"ok": 10, "total": 10, "skip": true})
+	for d in range(1, 8):
+		CourseStore.unit_done(_cell(1, d))
+	for d in range(1, 8):
+		CourseStore.unit_done(_cell(2, d))
+	eq(CourseStore.pos(), {"w": 4, "d": 1}, "a normal week 2 -> week 4 (week 3 skipped)")
+	# skip-by-check of the week pos is in (mid-week) goes to the next open week at day 1
+	_fresh()
+	CourseStore.check_done(2, {"ok": 10, "total": 10, "skip": true})
+	CourseStore.unit_done(_cell(1, 1))
+	CourseStore.check_done(1, {"ok": 10, "total": 10, "skip": true})
+	eq(CourseStore.pos(), {"w": 3, "d": 1}, "skip of week 1 while week 2 is skipped: pos 3/1")
+
+
+## Calls a home screen may repeat on every redraw: the second call changes nothing (file bytes stay equal).
+func _idempotent_calls() -> void:
+	_fresh()
+	for d in range(1, 4):
+		CourseStore.unit_done(_cell(1, d))
+	_day(30)
+	eq(CourseStore.reopen_weeks([1]), 1, "idempotence setup: the first reopen after 30 days away reopens week 1")
+	CourseStore.mark_block("new")
+	CourseStore.note_review_priority(true)
+	var once: String = _read_text(P)
+	for i in 3:
+		CourseStore.note_review_priority(true)
+		CourseStore.mark_block("new")
+		CourseStore.reopen_weeks([1, 2])
+		CourseStore.check_pending()
+		CourseStore.review_state()
+		CourseStore.away_days()
+		CourseStore.blocks_today()
+		CourseStore.week_state(1)
+		CourseStore.path_flags()
+		CourseStore.elapsed_days()
+	eq(_read_text(P), once, "repeating note_review_priority / mark_block / reopen_weeks / the readers changes nothing in the file")
+	var ro: Dictionary = {"pos": CourseStore.pos(), "flags": CourseStore.path_flags(), "pending": CourseStore.check_pending(), "rs": CourseStore.review_state()}
+	for i in 3:
+		eq({"pos": CourseStore.pos(), "flags": CourseStore.path_flags(), "pending": CourseStore.check_pending(), "rs": CourseStore.review_state()}, ro, "readers give the same answer on call %d" % (i + 2))
+	ok(CourseStore.note_review_priority(true), "note_review_priority(true) again is fine (true)")
+	ok(not CourseStore.mark_block("new"), "mark_block again: false (already marked)")
+	eq(_read_text(P), once, "the file is still byte for byte the same")
+
+
+## Review round 2, item 4: leftovers in the probe folder are cleaned before and after.
+func _probe_dir_cleanup() -> void:
+	_clean_probe_dir()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PROBE_DIR + "/sub"))
+	for f in ["/course.json.bad", "/course.json.bad.1", "/course.json.tmp", "/junk.txt", "/sub/deep.bad"]:
+		_write_text(PROBE_DIR + f, "stale")
+	ok(FileAccess.file_exists(PROBE_DIR + "/course.json.bad"), "stale files from an earlier failed run were made")
+	_clean_probe_dir()
+	ok(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(PROBE_DIR)), "the cleanup removes the folder with .bad*, .tmp, other files and sub folders")
+	# leave stale files behind on purpose: the guard test that follows must clean them first and still pass
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PROBE_DIR))
+	_write_text(PROBE_DIR + "/course.json.bad", "stale")
+	_write_text(PROBE_DIR + "/course.json.tmp", "stale")
+
+
 ## Item 5: test guard + real file name -> not read, not moved; legacy mode does not read the file.
 func _guard_and_legacy_read() -> void:
-	var dir := "user://e3_guard_probe" ## not under user://test*: the guard counts course.json here as a real file
+	var dir: String = PROBE_DIR
 	var gpath := dir + "/course.json"
+	_clean_probe_dir() ## leftovers of an earlier failed run (.bad, .tmp, anything) must not decide this test
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 	ok(Progress.guard_blocks(gpath), "a path named course.json outside user://test* counts as a real file for the guard")
 	var broken := '{"v":1,"pos":{"w":3'
@@ -1169,8 +1374,8 @@ func _guard_and_legacy_read() -> void:
 	ok(not bool(r["ignored"]) and not bool(r["saved"]), "guarded real name: the call works in memory, saved false")
 	eq(_read_text(gpath), broken, "guarded real name: still untouched after a record")
 	ok(CourseStore.is_read_only(), "guarded real name: is_read_only()")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(gpath))
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir))
+	_clean_probe_dir()
+	ok(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(dir)), "the probe folder is gone after the test")
 	CourseStore.path = P
 	# legacy mode never reads the file
 	_fresh("legacy")

@@ -17,6 +17,7 @@ extends RefCounted
 ##   rp_streak       days in a row, ending yesterday, that were "review first" (0)   CourseStore.review_state().streak
 ##   elapsed_days    calendar days since the course was started (0)       CourseStore.elapsed_days()
 ##   finished        week 72 is done (false)
+##   reopen_done     the reopen of the current break was already applied (false)   CourseStore.reopen_applied()
 ## Rules (U1..U7 of §6.2):
 ##   recap          away_days >= 7: the first day back is a recap day ("복귀 점검" instead of the new content, review first minutes).
 ##                  away_days >= 21 also lists `reopen` = the two weeks before w (CourseStore.reopen_weeks) to do again.
@@ -100,7 +101,7 @@ static func today(s: Variant) -> Dictionary:
 		total += int(b["min"])
 		blocks.append(b)
 	var reopen: Array = []
-	if away >= REOPEN_AWAY and not finished:
+	if away >= REOPEN_AWAY and not finished and not _bool(src.get("reopen_done", false)):
 		for x in [w - 2, w - 1]:
 			if x >= 1:
 				reopen.append(x)

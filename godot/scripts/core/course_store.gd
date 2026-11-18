@@ -28,7 +28,11 @@ extends RefCounted
 ##     day 6 or 7 of week w, a result for day 1 of week w+1 is accepted and pos goes to that week's day 2.
 ##   - check_done(w): moves pos only when pos is in week w on day 6 or 7 (a pass, or the second failure, finishes cell w/6); in every
 ##     other case only the check result is recorded. Skip by check (skip: true) marks the week done and moves pos only when pos is in it.
-##   - reopen_weeks moves pos back to the first reopened week; month_done / mark_block / note_review_priority never move it.
+##   - reopen_weeks moves pos back to the first reopened week, ONCE per break (see reopen_applied); month_done / mark_block /
+##     note_review_priority never move it. The U5 exception never enters a week that was skipped by check: pos goes to the next
+##     week that is not skipped.
+## `reopened_for` (new) = the last study day before the break that reopen_weeks was applied for. A home screen may call
+## `if plan.reopen: reopen_weeks(plan.reopen)` on every redraw: the second call for the same break returns 0 and changes nothing.
 ##
 ## unit_done `block` contract (E4b: read this). Values "new" | "review" | "listen" | "speak" = which of the four daily blocks of
 ## DayPlan the unit belongs to. Leave it out only when it is unambiguous: if `block` is missing, the unit counts as the day's NEW
@@ -56,7 +60,8 @@ const WEAK_AFTER_TRIES := 2 ## failed twice -> progress is allowed, the week get
 const BLOCK_IDS := ["new", "review", "listen", "speak"]
 const SPEAK_VALUES := ["pass", "fail", "unverified"]
 const MONTH_MODES := ["stt", "self"]
-const KNOWN_KEYS := ["v", "started", "pos", "weeks", "months", "day", "last_active", "prev_active", "skips"]
+const KNOWN_KEYS := ["v", "started", "pos", "weeks", "months", "day", "last_active", "prev_active", "reopened_for", "skips"]
+const REOPEN_MIN_AWAY := 21 ## reopen_weeks only works after a break of this many days (same number as DayPlan.REOPEN_AWAY)
 const POS_KEYS := ["w", "d"]
 const CHECK_KEYS := ["best", "tries", "last", "speak"]
 const WEEK_KEYS := ["done", "days", "check", "weak"]
@@ -231,11 +236,23 @@ static func elapsed_days() -> int:
 ## Calendar days since the last study day BEFORE today (0 when there is none). Activity today does not reset it: a day that
 ## starts as "25 days away" says 25 all day long (recap and reopen stay), the next day it counts from yesterday (1).
 static func away_days() -> int:
+	var s: String = _away_anchor()
+	return 0 if s == "" else maxi(today() - Plan.iso_to_days(s), 0)
+
+
+## The last study day before the current break ("" = no study yet): last_active, or prev_active once today has activity.
+static func _away_anchor() -> String:
 	_ensure()
 	var s: String = str(_data["last_active"])
 	if s == today_iso():
 		s = str(_data["prev_active"])
-	return 0 if s == "" else maxi(today() - Plan.iso_to_days(s), 0)
+	return s
+
+
+## true when reopen_weeks was already applied for the current break (feed this to DayPlan as `reopen_done`).
+static func reopen_applied() -> bool:
+	var a: String = _away_anchor()
+	return a != "" and str(_data["reopened_for"]) == a
 
 
 ## {"new","review","listen","speak": bool} for today.
@@ -380,7 +397,7 @@ static func unit_done(result: Variant) -> Dictionary:
 		var p: Dictionary = _data["pos"]
 		if wi * 10 + di > int(p["w"]) * 10 + int(p["d"]):
 			## ahead of pos: refused, except the first cell of the next week once pos is on day 6 or 7 (no weekly check done)
-			jump_week = int(p["d"]) >= 6 and wi == int(p["w"]) + 1 and di == 1
+			jump_week = int(p["d"]) >= 6 and wi == _next_open_week(int(p["w"])) and di == 1
 			if not jump_week:
 				return _ignored(out, "ahead")
 	var changed: bool = _touch()
@@ -533,8 +550,14 @@ static func note_review_priority(on: Variant) -> bool:
 
 ## After a long break (design §6.2 U4): takes the "done" mark and the finished days off the given weeks (cards, check records and
 ## the study log stay) and moves pos back to the first of them when pos is later. Returns how many weeks were reopened.
+## Needs a break of REOPEN_MIN_AWAY (21) days or more (away_days()), otherwise it returns 0.
+## Applied ONCE per break: when it already reopened something for the current break (reopen_applied()), it returns 0 and changes
+## nothing, so a home screen that calls it on every redraw cannot push pos back again and again. A new break (a new last study
+## day before it) can be reopened again.
 static func reopen_weeks(ws: Variant) -> int:
 	if not (ws is Array) or not _begin():
+		return 0
+	if away_days() < REOPEN_MIN_AWAY or reopen_applied():
 		return 0
 	var n := 0
 	var first: int = MAX_WEEK + 1
@@ -556,6 +579,7 @@ static func reopen_weeks(ws: Variant) -> int:
 		if first < int(p["w"]):
 			p["w"] = first
 			p["d"] = 1
+		_data["reopened_for"] = _away_anchor()
 		_write()
 	return n
 
@@ -635,16 +659,27 @@ static func _complete_cell(w: int, d: int) -> Dictionary:
 	return out
 
 
-## pos moves on past weeks the learner placed out of ("skip by check"). When only skipped weeks are left, pos is the last cell.
+## The week after `w` that was not skipped by check (the target of the U5 exception); MAX_WEEK + 1 when none is left.
+static func _next_open_week(w: int) -> int:
+	var sk: Array = _data["skips"]
+	var n: int = w + 1
+	while n <= MAX_WEEK and sk.has(n):
+		n += 1
+	return n
+
+
+## pos moves on past weeks the learner placed out of ("skip by check"), whatever the day. When only skipped weeks are left,
+## pos is the last cell.
 static func _skip_placed_weeks() -> void:
 	var p: Dictionary = _data["pos"]
 	var sk: Array = _data["skips"]
-	while int(p["d"]) == 1 and sk.has(int(p["w"])):
+	while sk.has(int(p["w"])):
 		if int(p["w"]) >= MAX_WEEK:
 			p["w"] = MAX_WEEK
 			p["d"] = DAYS
 			return
 		p["w"] = int(p["w"]) + 1
+		p["d"] = 1
 
 
 static func _advance_to_week(w: int) -> void:
@@ -683,7 +718,7 @@ static func _fill_check(out: Dictionary, rec: Dictionary) -> void:
 # ---------------------------------------------------------------- normalizing (reading a file)
 
 static func _blank() -> Dictionary:
-	return {"v": VERSION, "started": "", "pos": {"w": 1, "d": 1}, "weeks": {}, "months": {}, "day": {}, "last_active": "", "prev_active": "", "skips": []}
+	return {"v": VERSION, "started": "", "pos": {"w": 1, "d": 1}, "weeks": {}, "months": {}, "day": {}, "last_active": "", "prev_active": "", "reopened_for": "", "skips": []}
 
 
 ## The whole file as a clean state: every known field clamped, unknown keys carried over unchanged.
@@ -699,6 +734,7 @@ static func _normalize(raw: Variant) -> Dictionary:
 	out["started"] = _iso(src.get("started", ""))
 	out["last_active"] = _iso(src.get("last_active", ""))
 	out["prev_active"] = _iso(src.get("prev_active", ""))
+	out["reopened_for"] = _iso(src.get("reopened_for", ""))
 	var p: Variant = src.get("pos", {})
 	if p is Dictionary:
 		var np: Dictionary = _carry(p, POS_KEYS)
