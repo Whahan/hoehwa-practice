@@ -226,8 +226,7 @@ func consented() -> bool:
 
 
 func _fix_stage() -> int:
-	var pos: Dictionary = Store.position()
-	return clampi(Plan.stage_of(int(pos.get("n", 1))), 1, 4)
+	return clampi(int(CourseModel.pos_for(lang).get("stage", 1)), 1, 4) ## 코스 모드 영어는 legacy_stage, 그 밖은 달력
 
 
 func _acc() -> Color:

@@ -16,6 +16,12 @@ const JA_NOTE := "일본어 미션은 다음 버전에서 만들 예정이에요
 const OTHER_LANG_NOTE := "이 언어의 미션은 아직 없어요."
 const OLD_SERVER := "이 PC 프로그램은 미션을 아직 지원하지 않아요. PC 프로그램을 최신 버전으로 업데이트해 주세요."
 const EMPTY_NOTE := "지금 연습할 수 있는 미션이 없어요. PC 프로그램이 최신 버전인지 확인해 주세요."
+## 코스 모드(영어) 임시 안내. 쉐도잉·받아쓰기·원어민 대화·미션(AI 모드)은 아직 코스 밖 문장·AI 라서 모르는 단어가 나올 수 있다.
+## 코스 문장 연습(2.1.0)으로 바뀌면 사라진다. 코스 모드가 아니거나 일본어이면 이 안내는 없다.
+const COURSE_NOTICE := "코스에서 아직 배우지 않은 단어가 나올 수 있어요"
+const LOCK_TITLE := "아직 닫혀 있어요"
+const LOCK_GO := "그래도 해 보기"
+const LOCK_CLOSE := "닫기"
 
 var lang: String = "en"
 var status: String = "idle"   ## idle | loading | list | brief | talk | wait | result
@@ -85,6 +91,79 @@ var _send: Button
 var _mic: RecorderWidget
 var _status_label: Label
 var _opts: BoxContainer ## the two option switches: stacked next to the mic on the narrow layout, side by side on the wide one
+
+
+# ---------------------------------------------------------------- 코스 모드 (v2.0 E7: 말하기 사다리 잠금과 임시 안내)
+
+## 코스 모드(영어)이면 지금 코스 주(1..72), 아니면 0. 일본어와 예전 길은 늘 0 이다.
+static func course_week(l: String) -> int:
+	if l != "en":
+		return 0
+	return int(CourseModel.pos_for(l).get("cw", 0))
+
+
+## "아직 배우지 않은 단어" 안내 한 줄. 코스 모드 영어가 아니면 null.
+static func course_notice(l: String) -> Control:
+	if course_week(l) <= 0:
+		return null
+	var p: PanelContainer = SpeakDrill.notice(COURSE_NOTICE, false)
+	p.name = "CourseNotice"
+	return p
+
+
+## 사다리 칸(rung: "script" | "ai" | "free")이 아직 닫혀 있으면 "N주차부터 열려요" 안내 글, 열려 있거나 코스 모드가 아니면 "".
+static func lock_text(l: String, rung: String) -> String:
+	var cw: int = course_week(l)
+	if cw <= 0:
+		return ""
+	var lad: Dictionary = CourseModel.ladder(cw)
+	if lad.is_empty():
+		return ""
+	var mission: String = str(lad.get("mission", "none"))
+	var now: String = "지금은 %d주차예요." % cw
+	match rung:
+		"script":
+			if mission != "none":
+				return ""
+			return "대본으로 하는 미션은 %d주차부터 열려요. %s 그래도 미리 해 볼까요?" % [CourseModel.OPEN_MISSION_SCRIPT, now]
+		"ai":
+			if mission == "ai":
+				return ""
+			var script_part: String = "대본 모드는 지금도 할 수 있어요." if mission == "script" else "대본 모드는 %d주차부터 열려요." % CourseModel.OPEN_MISSION_SCRIPT
+			return "AI와 하는 미션은 %d주차부터 열려요. %s %s 그래도 미리 해 볼까요?" % [CourseModel.OPEN_MISSION_AI, now, script_part]
+		"free":
+			if str(lad.get("free", "none")) != "none":
+				return ""
+			return "자유 대화는 %d주차부터 열려요. %s 그래도 미리 해 볼까요?" % [CourseModel.OPEN_FREE_GUIDED, now]
+	return ""
+
+
+## 미션 목록 맨 위 한 줄(코스 모드 영어). 둘 다 열렸으면 "".
+static func ladder_note(l: String) -> String:
+	var cw: int = course_week(l)
+	if cw <= 0:
+		return ""
+	var mission: String = str(CourseModel.ladder(cw).get("mission", "none"))
+	if mission == "ai":
+		return ""
+	if mission == "script":
+		return "AI 모드 미션은 %d주차부터 열려요. 지금은 %d주차예요. 대본 모드는 지금 할 수 있어요." % [CourseModel.OPEN_MISSION_AI, cw]
+	return "미션은 %d주차부터 대본 모드로, %d주차부터 AI 모드로 열려요. 지금은 %d주차예요. 닫힌 미션도 눌러서 미리 해 볼 수 있어요." % [CourseModel.OPEN_MISSION_SCRIPT, CourseModel.OPEN_MISSION_AI, cw]
+
+
+## 닫힌 칸이면 안내 시트([그래도 해 보기] / [닫기])를 열고 true. [그래도 해 보기] 를 눌러야만 `go` 가 불린다.
+## 열려 있으면(또는 코스 모드가 아니면) 아무것도 하지 않고 false: 부르는 쪽이 그대로 진행한다.
+static func ask_locked(host: Node, l: String, rung: String, go: Callable) -> bool:
+	var msg: String = lock_text(l, rung)
+	if msg == "":
+		return false
+	var sh: Sheet = Sheet.open(host, LOCK_TITLE, UI.label(msg), [
+		{"id": "go", "text": LOCK_GO, "kind": "primary"},
+		{"id": "close", "text": LOCK_CLOSE, "kind": "flat"}])
+	sh.closed.connect(func(r: Variant) -> void:
+		if str(r) == "go" and go.is_valid():
+			go.call())
+	return true
 
 
 # ---------------------------------------------------------------- 계약 (8.3)
@@ -529,18 +608,24 @@ func _load_list(want_id: String = "") -> void:
 		_select(want_id)
 
 
+## 사용자 단계 1..4. 코스 모드 영어는 코스 주의 단계(CourseModel.legacy_stage), 그 밖은 달력(Store.position()) 기준.
 func _user_stage() -> int:
-	var p: Dictionary = Store.position()
-	return clampi(Plan.stage_of(int(p.get("n", 1))), 1, 4)
+	return clampi(int(CourseModel.pos_for(lang).get("stage", 1)), 1, 4)
 
 
 func _render_list() -> void:
 	var c: VBoxContainer = _list_page.content
 	UI.clear(c)
 	var acc: Color = Pal.accent(lang)
+	var cnote: Control = course_notice(lang)
+	if cnote != null:
+		c.add_child(cnote)
 	c.add_child(UI.label("롤플레이 미션", "Eyebrow", false))
 	c.add_child(UI.label("상황 속에서 목표를 채워 봐요", "H2"))
 	c.add_child(UI.label("말할 때마다 목표가 자동으로 체크돼요. 모두 채우면 별 3개!", "Muted"))
+	var lnote: String = ladder_note(lang)
+	if lnote != "":
+		c.add_child(SpeakDrill.notice(lnote, false))
 	if status == "loading":
 		c.add_child(UI.label("미션을 불러오는 중…", "Muted"))
 	if list_note != "":
@@ -571,7 +656,9 @@ func _mission_card(m: Dictionary, acc: Color) -> Control:
 	card.body.add_child(top)
 	card.body.add_child(UI.label(str(m["situation_ko"]), "Muted"))
 	var meta := "%d단계 · 목표 %d개" % [int(m["min_stage"]), (m["goals"] as Array).size()]
-	if not fits:
+	if course_week(lang) > 0:
+		meta += " · 맞는 단계" if fits else " · 더 나중에" ## 코스 모드: 코스 주의 단계 기준
+	elif not fits:
 		meta += " · 조금 어려워요"
 	card.body.add_child(UI.label(meta, "Small"))
 	var go := UI.button("선택", "soft", acc, 44)
@@ -599,6 +686,9 @@ func _render_brief() -> void:
 	var c: VBoxContainer = _brief_page.content
 	UI.clear(c)
 	var acc: Color = Pal.accent(lang)
+	var cnote: Control = course_notice(lang)
+	if cnote != null:
+		c.add_child(cnote)
 	var card := UI.card("BigCard", 12)
 	card.body.add_child(UI.label("미션 · %d단계" % _stage(), "Eyebrow", false))
 	card.body.add_child(UI.label(str(mission["title_ko"]), "H2"))
@@ -635,10 +725,10 @@ func _render_brief() -> void:
 		card.body.add_child(np)
 	var has_script: bool = not _script().is_empty()
 	var go := UI.button("미션 시작", "soft" if down else "primary", acc, 52)
-	go.pressed.connect(func() -> void: _start("ai"))
+	go.pressed.connect(func() -> void: _start_or_ask("ai"))
 	var sc_btn := UI.button("대본 모드로 연습", "primary" if down else "soft", acc, 52)
 	sc_btn.disabled = not has_script
-	sc_btn.pressed.connect(func() -> void: _start("script"))
+	sc_btn.pressed.connect(func() -> void: _start_or_ask("script"))
 	if down:
 		card.body.add_child(sc_btn)
 		card.body.add_child(go)
@@ -650,6 +740,13 @@ func _render_brief() -> void:
 
 
 # ---------------------------------------------------------------- 시작
+
+## 설명 화면의 두 시작 버튼. 코스 모드 영어에서 그 칸(대본 13주~, AI 25주~)이 아직 닫혀 있으면 안내 시트를 먼저 연다.
+func _start_or_ask(new_mode: String) -> void:
+	if ask_locked(self, lang, "script" if new_mode == "script" else "ai", func() -> void: _start(new_mode)):
+		return
+	_start(new_mode)
+
 
 func _start(new_mode: String) -> void:
 	if mission.is_empty():
@@ -746,7 +843,7 @@ func _resend() -> void:
 
 
 func _chat_payload() -> Dictionary:
-	var p: Dictionary = Store.position()
+	var p: Dictionary = CourseModel.pos_for(lang) ## 코스 모드 영어는 legacy_cell 값(요청 모양은 그대로), 아니면 달력
 	return {
 		"lang": lang, "stage": _stage(), "month": int(p.get("n", 1)), "week": int(p.get("w", 1)),
 		"scenario": mission.get("scenario", {}),

@@ -678,7 +678,7 @@
    ],
    "title_ko": "Do you like ~? (~ 좋아해요?)",
    "grammar_ko": [
-    "일반 질문은 Do 로 시작해요: You like music. → Do you like music?",
+    "I, you, we, they 가 주어인 일반동사 질문은 Do 로 시작해요: You like music. → Do you like music?",
     "대답은 동사를 되풀이하지 않고 do 로 받아요: Yes, I do.",
     "아니면 No, I don't. 처럼 do not 의 줄임말 don't 를 써요."
    ],
@@ -1503,6 +1503,42 @@
    "id": "s0436",
    "en": "The song is awesome.",
    "ko": "그 노래는 굉장해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0223",
+   "en": "This movie is excellent.",
+   "ko": "이 영화는 훌륭해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0224",
+   "en": "The hockey game is exciting.",
+   "ko": "하키 경기는 신나요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0225",
+   "en": "I dislike boring movies.",
+   "ko": "저는 지루한 영화를 싫어해요.",
    "say": "",
    "pat": "",
    "d": 4,

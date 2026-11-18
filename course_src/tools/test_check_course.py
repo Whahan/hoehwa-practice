@@ -221,6 +221,23 @@ class Basics(unittest.TestCase):
         r = self.res(mut)
         self.assertFalse([x for x in self.details(r, "ORDER") if x.startswith("passive")])
 
+    def test_passive_word_needs_a_sentence(self):
+        """COUNT passive_word_sentences: a passive word that no sentence of its week contains never reaches the learner."""
+        def listen_only(d):
+            ts.find(d, 1, "words", "w0013")["role"] = "passive"
+            for s in d["weeks/w001.json"]["sentences"]:
+                if "morning" in s["en"].lower():
+                    s["scope"] = "listen"
+
+        def without_sentence(d):
+            listen_only(d)
+            wk = d["weeks/w001.json"]
+            wk["sentences"] = [s for s in wk["sentences"] if "morning" not in s["en"].lower()]
+        wk = self.res(listen_only)
+        self.assertFalse([x for x in self.details(wk, "COUNT") if x.startswith("passive_word_sentences")], self.details(wk, "COUNT"))
+        bad = self.res(without_sentence)
+        self.assertTrue(any(x.startswith("passive_word_sentences=0") for x in self.details(bad, "COUNT")), self.details(bad, "COUNT"))
+
     def test_declared_words_are_verified(self):
         def unknown(d):
             ts.find(d, 1, "sentences", "s0001")["words"] = ["w9999"]

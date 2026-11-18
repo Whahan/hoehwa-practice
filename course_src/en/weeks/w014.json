@@ -453,7 +453,8 @@
    "id": "w0433",
    "en": "worker",
    "pos": "n",
-   "ko": "근로자",
+   "ko": "일하는 사람",
+   "ko2": "직원",
    "ipa": "ˈwɜːrkər",
    "say": "",
    "tags": [
@@ -788,7 +789,7 @@
    "title_ko": "He works at ~ (그는 ~에서 일해요)",
    "grammar_ko": [
     "일하는 곳에는 at 을 써요: at a cafe, at a hotel.",
-    "he/she 가 주어이면 work 에 -s 가 붙어요: He works.",
+    "he, she, it 이나 한 사람 이름이 주어이면 work 에 -s 가 붙어요: He works.",
     "큰 도시나 나라 앞에는 in 을 써요: in Toronto."
    ],
    "d": 2,
@@ -839,7 +840,7 @@
   {
    "id": "s0812",
    "en": "What do you do?",
-   "ko": "무슨 일을 해요?",
+   "ko": "무슨 일을 하세요?",
    "say": "",
    "pat": "p_what_do_you_do",
    "d": 1,
@@ -1115,7 +1116,7 @@
   {
    "id": "s0835",
    "en": "Where do you work?",
-   "ko": "어디에서 일해요?",
+   "ko": "어디에서 일하세요?",
    "say": "",
    "pat": "p_works_at",
    "d": 1,
@@ -1259,7 +1260,7 @@
   {
    "id": "s0847",
    "en": "I'm a good worker.",
-   "ko": "저는 좋은 근로자예요.",
+   "ko": "저는 일 잘하는 직원이에요.",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1271,7 +1272,7 @@
   {
    "id": "s0848",
    "en": "He is a good worker.",
-   "ko": "그는 좋은 근로자예요.",
+   "ko": "그는 일 잘하는 직원이에요.",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1543,6 +1544,42 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0239",
+   "en": "He is a bartender, and she is a painter.",
+   "ko": "그는 바텐더이고, 그녀는 페인트공이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0240",
+   "en": "The electrician is at the door.",
+   "ko": "전기 기사가 문 앞에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0241",
+   "en": "He works as a mechanic at a shop.",
+   "ko": "그는 가게에서 정비사로 일해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [
@@ -1555,13 +1592,13 @@
     {
      "s": "A",
      "en": "Hi, I'm Tom. What do you do?",
-     "ko": "안녕하세요, 저는 톰이에요. 무슨 일을 해요?",
+     "ko": "안녕하세요, 저는 톰이에요. 무슨 일을 하세요?",
      "say": ""
     },
     {
      "s": "B",
      "en": "I'm a student. I study English. What do you do?",
-     "ko": "저는 학생이에요. 영어를 공부해요. 무슨 일을 해요?",
+     "ko": "저는 학생이에요. 영어를 공부해요. 무슨 일을 하세요?",
      "say": ""
     },
     {
@@ -1573,7 +1610,7 @@
     {
      "s": "B",
      "en": "Do you like your job?",
-     "ko": "직업이 마음에 들어요?",
+     "ko": "직업이 마음에 드세요?",
      "say": ""
     },
     {
@@ -1585,7 +1622,7 @@
     {
      "s": "B",
      "en": "Is your boss nice?",
-     "ko": "상사는 친절해요?",
+     "ko": "상사는 친절하세요?",
      "say": ""
     },
     {

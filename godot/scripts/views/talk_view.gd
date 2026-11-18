@@ -71,6 +71,7 @@ var _tg: Container          ## phone: the four option toggles (folded behind "�
 var _opts_btn: Button
 var _opts_open: bool = false
 var _leave_msec: int = -100000
+var _sel_cw: int = 0            ## course week (0 = not in the course) the start selection was taken from
 var _header: Control = null     ## big title block of the setup page (PageHeader)
 var _bar_key: String = ""       ## last (status|title) the app bar was told about
 
@@ -100,8 +101,8 @@ func _ready() -> void:
 func refresh() -> void:
 	if status == "setup":
 		lang = Store.lang()
-		if sel.is_empty() or sel.get("lang", "") != lang:
-			_reset_selection()
+		if sel.is_empty() or sel.get("lang", "") != lang or _sel_cw != MissionScreen.course_week(lang):
+			_reset_selection() ## also when the course week (or the course mode) changed since the selection was taken
 		_render_setup()
 
 
@@ -172,8 +173,9 @@ func go_back() -> bool:
 
 
 func _reset_selection() -> void:
-	var p: Dictionary = Store.position()
-	sel = {"lang": lang, "scen": "month", "stage": Plan.stage_of(int(p["n"])), "n": int(p["n"]), "w": int(p["w"])}
+	var p: Dictionary = CourseModel.pos_for(lang) ## course mode (English): legacy_stage / legacy_cell of the course week, otherwise the calendar
+	sel = {"lang": lang, "scen": "month", "stage": int(p["stage"]), "n": int(p["n"]), "w": int(p["w"])}
+	_sel_cw = int(p["cw"])
 
 
 func scenes_for(l: String) -> Array:
@@ -240,6 +242,9 @@ func _render_setup() -> void:
 
 	_header = PageHeader.build("원어민 대화", "원어민 AI와 대화")
 	c.add_child(_header)
+	var cnote: Control = MissionScreen.course_notice(lang) ## course mode English only: the AI is not limited to the course words yet
+	if cnote != null:
+		c.add_child(cnote)
 
 	var top := UI.adaptive(12)
 	var seg := UI.lang_segmented(lang, func(v: String) -> void:
@@ -328,7 +333,7 @@ func _render_setup() -> void:
 	c.add_child(group)
 
 	var go := UI.button("대화 시작", "primary", acc, 56)
-	go.pressed.connect(_start_chat)
+	go.pressed.connect(_on_start_pressed)
 	c.add_child(go)
 
 	var tip := UI.tinted_panel(Pal.SUNK, Color(0, 0, 0, 0), 0, Ds.R_CARD, 16, 14)
@@ -530,6 +535,13 @@ func _update_header() -> void:
 	UI.style_button(_end_btn, "soft", acc)
 	_mic.accent = acc
 	_mic._refresh()
+
+
+## The start button. In course mode (English) the free conversation is a rung of the speaking ladder that opens later: ask first.
+func _on_start_pressed() -> void:
+	if str(sel.get("scen", "")) == "free" and MissionScreen.ask_locked(self, lang, "free", _start_chat):
+		return
+	_start_chat()
 
 
 func _start_chat() -> void:

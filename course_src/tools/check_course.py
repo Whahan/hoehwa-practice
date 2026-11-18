@@ -941,6 +941,10 @@ def check_counts(ctx):
             n = use.get(x.get("id"), 0)
             if n < lim["word_min_sentences"]:
                 ctx.add("COUNT", _where(w, x.get("id")), "word_sentences=%d want>=%d" % (n, lim["word_min_sentences"]))
+        for x in pas:            # a passive word reaches the learner only through a (listen) sentence that contains it
+            n = use.get(x.get("id"), 0)
+            if n < lim["passive_word_min_sentences"]:
+                ctx.add("COUNT", _where(w, x.get("id")), "passive_word_sentences=%d want>=%d" % (n, lim["passive_word_min_sentences"]))
         mw = (ctx.pol.get("stage0") or {}).get("max_words_per_sentence") if isinstance(ctx.pol.get("stage0"), dict) else None
         if isinstance(mw, dict) and is_int(mw.get(str(w))):
             for s in sents:
