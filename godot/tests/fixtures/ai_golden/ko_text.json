@@ -1,0 +1,1054 @@
+{
+ "version": 1,
+ "file": "ko_text.json",
+ "cases": [
+  {
+   "case": "ko_001",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요!",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕하세요!"
+   }
+  },
+  {
+   "case": "ko_002",
+   "kind": "ko",
+   "req": {
+    "text": "좋은 아침이에요! 뭘 드릴까요?",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "좋은 아침이에요! 뭘 드릴까요?"
+   }
+  },
+  {
+   "case": "ko_003",
+   "kind": "ko",
+   "req": {
+    "text": "네, 맞아요.",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "네, 맞아요."
+   }
+  },
+  {
+   "case": "ko_004",
+   "kind": "ko",
+   "req": {
+    "text": "저는 커피를 좋아해요.",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "저는 커피를 좋아해요."
+   }
+  },
+  {
+   "case": "ko_005",
+   "kind": "ko",
+   "req": {
+    "text": "오늘 날씨가 정말 좋네요.",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "오늘 날씨가 정말 좋네요."
+   }
+  },
+  {
+   "case": "ko_006",
+   "kind": "ko",
+   "req": {
+    "text": "감사합니다",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "감사합니다"
+   }
+  },
+  {
+   "case": "ko_007",
+   "kind": "ko",
+   "req": {
+    "text": "ㅎㅎ",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "ㅎㅎ"
+   }
+  },
+  {
+   "case": "ko_008",
+   "kind": "ko",
+   "req": {
+    "text": "가",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "가"
+   }
+  },
+  {
+   "case": "ko_009",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요!什么东西要买吗?",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요!?"
+   }
+  },
+  {
+   "case": "ko_010",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 (什么)",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요"
+   }
+  },
+  {
+   "case": "ko_011",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 [你好]",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요"
+   }
+  },
+  {
+   "case": "ko_012",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 （你好）",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요"
+   }
+  },
+  {
+   "case": "ko_013",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 【你好】",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요"
+   }
+  },
+  {
+   "case": "ko_014",
+   "kind": "ko",
+   "req": {
+    "text": "「谢谢」 고마워요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "고마워요"
+   }
+  },
+  {
+   "case": "ko_015",
+   "kind": "ko",
+   "req": {
+    "text": "大韓民國 만세",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "만세"
+   }
+  },
+  {
+   "case": "ko_016",
+   "kind": "ko",
+   "req": {
+    "text": "서울(首尔)에 살아요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "서울에 살아요"
+   }
+  },
+  {
+   "case": "ko_017",
+   "kind": "ko",
+   "req": {
+    "text": "사과 苹果 바나나",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "사과 바나나"
+   }
+  },
+  {
+   "case": "ko_018",
+   "kind": "ko",
+   "req": {
+    "text": "한국어 한자 漢字 섞임",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "한국어 한자 섞임"
+   }
+  },
+  {
+   "case": "ko_019",
+   "kind": "ko",
+   "req": {
+    "text": "你好",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_020",
+   "kind": "ko",
+   "req": {
+    "text": "什么东西要买吗?",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_021",
+   "kind": "ko",
+   "req": {
+    "text": "谢谢你！",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_022",
+   "kind": "ko",
+   "req": {
+    "text": "东京",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_023",
+   "kind": "ko",
+   "req": {
+    "text": "привет",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_024",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 привет 친구",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕 친구"
+   }
+  },
+  {
+   "case": "ko_025",
+   "kind": "ko",
+   "req": {
+    "text": "Привет, друг",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_026",
+   "kind": "ko",
+   "req": {
+    "text": "мир и дружба",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_027",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 мир",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요"
+   }
+  },
+  {
+   "case": "ko_028",
+   "kind": "ko",
+   "req": {
+    "text": "ёжик",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_029",
+   "kind": "ko",
+   "req": {
+    "text": "مرحبا",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_030",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 مرحبا",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕"
+   }
+  },
+  {
+   "case": "ko_031",
+   "kind": "ko",
+   "req": {
+    "text": "สวัสดีครับ",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_032",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 สวัสดี",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕"
+   }
+  },
+  {
+   "case": "ko_033",
+   "kind": "ko",
+   "req": {
+    "text": "שלום",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_034",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 שלום",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕"
+   }
+  },
+  {
+   "case": "ko_035",
+   "kind": "ko",
+   "req": {
+    "text": "γειά σου",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_036",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 γειά",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕"
+   }
+  },
+  {
+   "case": "ko_037",
+   "kind": "ko",
+   "req": {
+    "text": "Ωmega 오메가",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "mega 오메가"
+   }
+  },
+  {
+   "case": "ko_038",
+   "kind": "ko",
+   "req": {
+    "text": "",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": true,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_039",
+   "kind": "ko",
+   "req": {
+    "text": "   ",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": true,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_040",
+   "kind": "ko",
+   "req": {
+    "text": "\n",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": true,
+    "scrub_ko": ""
+   }
+  },
+  {
+   "case": "ko_041",
+   "kind": "ko",
+   "req": {
+    "text": "Hello there!",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "Hello there!"
+   }
+  },
+  {
+   "case": "ko_042",
+   "kind": "ko",
+   "req": {
+    "text": "Good morning",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "Good morning"
+   }
+  },
+  {
+   "case": "ko_043",
+   "kind": "ko",
+   "req": {
+    "text": "123 456",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "123 456"
+   }
+  },
+  {
+   "case": "ko_044",
+   "kind": "ko",
+   "req": {
+    "text": "!!!",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "!!!"
+   }
+  },
+  {
+   "case": "ko_045",
+   "kind": "ko",
+   "req": {
+    "text": "...",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "..."
+   }
+  },
+  {
+   "case": "ko_046",
+   "kind": "ko",
+   "req": {
+    "text": "OK",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "OK"
+   }
+  },
+  {
+   "case": "ko_047",
+   "kind": "ko",
+   "req": {
+    "text": "네 OK 알겠어요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "네 OK 알겠어요"
+   }
+  },
+  {
+   "case": "ko_048",
+   "kind": "ko",
+   "req": {
+    "text": "10시에 만나요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "10시에 만나요"
+   }
+  },
+  {
+   "case": "ko_049",
+   "kind": "ko",
+   "req": {
+    "text": "A, B, C",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "A, B, C"
+   }
+  },
+  {
+   "case": "ko_050",
+   "kind": "ko",
+   "req": {
+    "text": "Thank you 감사합니다",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "Thank you 감사합니다"
+   }
+  },
+  {
+   "case": "ko_051",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요. Nice to meet you.",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕하세요. Nice to meet you."
+   }
+  },
+  {
+   "case": "ko_052",
+   "kind": "ko",
+   "req": {
+    "text": "커피(coffee) 한 잔",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "커피(coffee) 한 잔"
+   }
+  },
+  {
+   "case": "ko_053",
+   "kind": "ko",
+   "req": {
+    "text": "I love 한국",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "I love 한국"
+   }
+  },
+  {
+   "case": "ko_054",
+   "kind": "ko",
+   "req": {
+    "text": "한 글자만 가",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "한 글자만 가"
+   }
+  },
+  {
+   "case": "ko_055",
+   "kind": "ko",
+   "req": {
+    "text": "좋아요 😀",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "좋아요 😀"
+   }
+  },
+  {
+   "case": "ko_056",
+   "kind": "ko",
+   "req": {
+    "text": "한국어와 日本語 mixed",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "한국어와 mixed"
+   }
+  },
+  {
+   "case": "ko_057",
+   "kind": "ko",
+   "req": {
+    "text": "こんにちは",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "こんにちは"
+   }
+  },
+  {
+   "case": "ko_058",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 こんにちは",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕 こんにちは"
+   }
+  },
+  {
+   "case": "ko_059",
+   "kind": "ko",
+   "req": {
+    "text": "ありがとう 고마워요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "ありがとう 고마워요"
+   }
+  },
+  {
+   "case": "ko_060",
+   "kind": "ko",
+   "req": {
+    "text": "漢字漢字漢字漢字漢字漢字漢字 가",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "가"
+   }
+  },
+  {
+   "case": "ko_061",
+   "kind": "ko",
+   "req": {
+    "text": "가 漢",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "가"
+   }
+  },
+  {
+   "case": "ko_062",
+   "kind": "ko",
+   "req": {
+    "text": "가나다라마바사아자차 漢",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "가나다라마바사아자차"
+   }
+  },
+  {
+   "case": "ko_063",
+   "kind": "ko",
+   "req": {
+    "text": "가나다 漢字 라마바사",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "가나다 라마바사"
+   }
+  },
+  {
+   "case": "ko_064",
+   "kind": "ko",
+   "req": {
+    "text": "(?)",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "(?)"
+   }
+  },
+  {
+   "case": "ko_065",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 ()",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕하세요 ()"
+   }
+  },
+  {
+   "case": "ko_066",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 (   )",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕하세요 (   )"
+   }
+  },
+  {
+   "case": "ko_067",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요!!    좋은   하루",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕하세요!!    좋은   하루"
+   }
+  },
+  {
+   "case": "ko_068",
+   "kind": "ko",
+   "req": {
+    "text": "  앞뒤 공백  ",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "앞뒤 공백"
+   }
+  },
+  {
+   "case": "ko_069",
+   "kind": "ko",
+   "req": {
+    "text": "\t탭 한국어\t",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "탭 한국어"
+   }
+  },
+  {
+   "case": "ko_070",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요何か요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요か요"
+   }
+  },
+  {
+   "case": "ko_071",
+   "kind": "ko",
+   "req": {
+    "text": "맛있는 食べ物 이에요",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "맛있는 べ 이에요"
+   }
+  },
+  {
+   "case": "ko_072",
+   "kind": "ko",
+   "req": {
+    "text": "그녀는 什么 말했어요 привет 끝",
+    "lang": "en"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "그녀는 말했어요 끝"
+   }
+  },
+  {
+   "case": "ko_ja_001",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요!",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "안녕하세요!"
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_002",
+   "kind": "ko",
+   "req": {
+    "text": "안녕하세요 漢字",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕하세요"
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_003",
+   "kind": "ko",
+   "req": {
+    "text": "漢字漢字漢字 가",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "가"
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_004",
+   "kind": "ko",
+   "req": {
+    "text": "你好",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": ""
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_005",
+   "kind": "ko",
+   "req": {
+    "text": "가나다라마바사아자차카타 漢字",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "가나다라마바사아자차카타 漢字"
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_006",
+   "kind": "ko",
+   "req": {
+    "text": "안녕 привет",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": false,
+    "scrub_ko": "안녕"
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_007",
+   "kind": "ko",
+   "req": {
+    "text": "ありがとう 고마워요",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": true,
+    "ko_ok_optional": true,
+    "scrub_ko": "ありがとう 고마워요"
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  },
+  {
+   "case": "ko_ja_008",
+   "kind": "ko",
+   "req": {
+    "text": "",
+    "lang": "ja"
+   },
+   "expect": {
+    "ko_ok": false,
+    "ko_ok_optional": true,
+    "scrub_ko": ""
+   },
+   "note": "lang=ja: Chinese characters are allowed up to 15 percent"
+  }
+ ]
+}

@@ -1,0 +1,1676 @@
+{
+ "version": 1,
+ "file": "clean_hist.json",
+ "cases": [
+  {
+   "case": "clean_hist_empty",
+   "kind": "clean_hist",
+   "req": {
+    "history": []
+   },
+   "expect": {
+    "result": []
+   }
+  },
+  {
+   "case": "clean_hist_one_me",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "Hello"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "Hello"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_one_ai",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "ai",
+      "text": "Hello"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "ai",
+      "text": "Hello"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_assistant_role",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "assistant",
+      "text": "Hi"
+     },
+     {
+      "role": "me",
+      "text": "Hey"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "ai",
+      "text": "Hi"
+     },
+     {
+      "role": "me",
+      "text": "Hey"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_partner_role",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "partner",
+      "text": "Hi"
+     },
+     {
+      "role": "me",
+      "text": "Hey"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "ai",
+      "text": "Hi"
+     },
+     {
+      "role": "me",
+      "text": "Hey"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_upper_roles",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "AI",
+      "text": "Hi"
+     },
+     {
+      "role": "Assistant",
+      "text": "Hello"
+     },
+     {
+      "role": "PARTNER",
+      "text": "Yo"
+     },
+     {
+      "role": "ME",
+      "text": "x"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "ai",
+      "text": "Hi"
+     },
+     {
+      "role": "ai",
+      "text": "Hello"
+     },
+     {
+      "role": "ai",
+      "text": "Yo"
+     },
+     {
+      "role": "me",
+      "text": "x"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_user_role",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "user",
+      "text": "I am the user"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "I am the user"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_unknown_role",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "robot",
+      "text": "beep"
+     },
+     {
+      "role": "",
+      "text": "empty role"
+     },
+     {
+      "role": "system",
+      "text": "sys"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "beep"
+     },
+     {
+      "role": "me",
+      "text": "empty role"
+     },
+     {
+      "role": "me",
+      "text": "sys"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_blank_text",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": ""
+     },
+     {
+      "role": "me",
+      "text": "   "
+     },
+     {
+      "role": "ai",
+      "text": "\n\t"
+     },
+     {
+      "role": "me",
+      "text": "ok"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "ok"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_strip_text",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "  padded text  "
+     },
+     {
+      "role": "ai",
+      "text": "\nnewline\n"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "padded text"
+     },
+     {
+      "role": "ai",
+      "text": "newline"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_24_default",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 24"
+     },
+     {
+      "role": "ai",
+      "text": "turn 25"
+     },
+     {
+      "role": "me",
+      "text": "turn 26"
+     },
+     {
+      "role": "ai",
+      "text": "turn 27"
+     },
+     {
+      "role": "me",
+      "text": "turn 28"
+     },
+     {
+      "role": "ai",
+      "text": "turn 29"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 24"
+     },
+     {
+      "role": "ai",
+      "text": "turn 25"
+     },
+     {
+      "role": "me",
+      "text": "turn 26"
+     },
+     {
+      "role": "ai",
+      "text": "turn 27"
+     },
+     {
+      "role": "me",
+      "text": "turn 28"
+     },
+     {
+      "role": "ai",
+      "text": "turn 29"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_exact_24",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_25",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 24"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 24"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_blank_inside_last_24",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "me",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "me",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "me",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "me",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 25"
+     },
+     {
+      "role": "me",
+      "text": "turn 26"
+     },
+     {
+      "role": "me",
+      "text": " "
+     },
+     {
+      "role": "me",
+      "text": "turn 28"
+     },
+     {
+      "role": "me",
+      "text": "turn 29"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "me",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "me",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "me",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 25"
+     },
+     {
+      "role": "me",
+      "text": "turn 26"
+     },
+     {
+      "role": "me",
+      "text": "turn 28"
+     },
+     {
+      "role": "me",
+      "text": "turn 29"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_3",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     }
+    ],
+    "limit": 3
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_40",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "ai",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "ai",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     },
+     {
+      "role": "ai",
+      "text": "turn 5"
+     },
+     {
+      "role": "me",
+      "text": "turn 6"
+     },
+     {
+      "role": "ai",
+      "text": "turn 7"
+     },
+     {
+      "role": "me",
+      "text": "turn 8"
+     },
+     {
+      "role": "ai",
+      "text": "turn 9"
+     },
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 24"
+     },
+     {
+      "role": "ai",
+      "text": "turn 25"
+     },
+     {
+      "role": "me",
+      "text": "turn 26"
+     },
+     {
+      "role": "ai",
+      "text": "turn 27"
+     },
+     {
+      "role": "me",
+      "text": "turn 28"
+     },
+     {
+      "role": "ai",
+      "text": "turn 29"
+     },
+     {
+      "role": "me",
+      "text": "turn 30"
+     },
+     {
+      "role": "ai",
+      "text": "turn 31"
+     },
+     {
+      "role": "me",
+      "text": "turn 32"
+     },
+     {
+      "role": "ai",
+      "text": "turn 33"
+     },
+     {
+      "role": "me",
+      "text": "turn 34"
+     },
+     {
+      "role": "ai",
+      "text": "turn 35"
+     },
+     {
+      "role": "me",
+      "text": "turn 36"
+     },
+     {
+      "role": "ai",
+      "text": "turn 37"
+     },
+     {
+      "role": "me",
+      "text": "turn 38"
+     },
+     {
+      "role": "ai",
+      "text": "turn 39"
+     },
+     {
+      "role": "me",
+      "text": "turn 40"
+     },
+     {
+      "role": "ai",
+      "text": "turn 41"
+     },
+     {
+      "role": "me",
+      "text": "turn 42"
+     },
+     {
+      "role": "ai",
+      "text": "turn 43"
+     },
+     {
+      "role": "me",
+      "text": "turn 44"
+     },
+     {
+      "role": "ai",
+      "text": "turn 45"
+     },
+     {
+      "role": "me",
+      "text": "turn 46"
+     },
+     {
+      "role": "ai",
+      "text": "turn 47"
+     },
+     {
+      "role": "me",
+      "text": "turn 48"
+     },
+     {
+      "role": "ai",
+      "text": "turn 49"
+     }
+    ],
+    "limit": 40
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "turn 10"
+     },
+     {
+      "role": "ai",
+      "text": "turn 11"
+     },
+     {
+      "role": "me",
+      "text": "turn 12"
+     },
+     {
+      "role": "ai",
+      "text": "turn 13"
+     },
+     {
+      "role": "me",
+      "text": "turn 14"
+     },
+     {
+      "role": "ai",
+      "text": "turn 15"
+     },
+     {
+      "role": "me",
+      "text": "turn 16"
+     },
+     {
+      "role": "ai",
+      "text": "turn 17"
+     },
+     {
+      "role": "me",
+      "text": "turn 18"
+     },
+     {
+      "role": "ai",
+      "text": "turn 19"
+     },
+     {
+      "role": "me",
+      "text": "turn 20"
+     },
+     {
+      "role": "ai",
+      "text": "turn 21"
+     },
+     {
+      "role": "me",
+      "text": "turn 22"
+     },
+     {
+      "role": "ai",
+      "text": "turn 23"
+     },
+     {
+      "role": "me",
+      "text": "turn 24"
+     },
+     {
+      "role": "ai",
+      "text": "turn 25"
+     },
+     {
+      "role": "me",
+      "text": "turn 26"
+     },
+     {
+      "role": "ai",
+      "text": "turn 27"
+     },
+     {
+      "role": "me",
+      "text": "turn 28"
+     },
+     {
+      "role": "ai",
+      "text": "turn 29"
+     },
+     {
+      "role": "me",
+      "text": "turn 30"
+     },
+     {
+      "role": "ai",
+      "text": "turn 31"
+     },
+     {
+      "role": "me",
+      "text": "turn 32"
+     },
+     {
+      "role": "ai",
+      "text": "turn 33"
+     },
+     {
+      "role": "me",
+      "text": "turn 34"
+     },
+     {
+      "role": "ai",
+      "text": "turn 35"
+     },
+     {
+      "role": "me",
+      "text": "turn 36"
+     },
+     {
+      "role": "ai",
+      "text": "turn 37"
+     },
+     {
+      "role": "me",
+      "text": "turn 38"
+     },
+     {
+      "role": "ai",
+      "text": "turn 39"
+     },
+     {
+      "role": "me",
+      "text": "turn 40"
+     },
+     {
+      "role": "ai",
+      "text": "turn 41"
+     },
+     {
+      "role": "me",
+      "text": "turn 42"
+     },
+     {
+      "role": "ai",
+      "text": "turn 43"
+     },
+     {
+      "role": "me",
+      "text": "turn 44"
+     },
+     {
+      "role": "ai",
+      "text": "turn 45"
+     },
+     {
+      "role": "me",
+      "text": "turn 46"
+     },
+     {
+      "role": "ai",
+      "text": "turn 47"
+     },
+     {
+      "role": "me",
+      "text": "turn 48"
+     },
+     {
+      "role": "ai",
+      "text": "turn 49"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_400",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "me",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "me",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     }
+    ],
+    "limit": 400
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "turn 0"
+     },
+     {
+      "role": "me",
+      "text": "turn 1"
+     },
+     {
+      "role": "me",
+      "text": "turn 2"
+     },
+     {
+      "role": "me",
+      "text": "turn 3"
+     },
+     {
+      "role": "me",
+      "text": "turn 4"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_limit_0",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "a"
+     },
+     {
+      "role": "ai",
+      "text": "b"
+     }
+    ],
+    "limit": 0
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "a"
+     },
+     {
+      "role": "ai",
+      "text": "b"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_unicode_text",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "카페에서 만나요"
+     },
+     {
+      "role": "ai",
+      "text": "Sure 😀"
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "카페에서 만나요"
+     },
+     {
+      "role": "ai",
+      "text": "Sure 😀"
+     }
+    ]
+   }
+  },
+  {
+   "case": "clean_hist_long_text_kept",
+   "kind": "clean_hist",
+   "req": {
+    "history": [
+     {
+      "role": "me",
+      "text": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word "
+     }
+    ]
+   },
+   "expect": {
+    "result": [
+     {
+      "role": "me",
+      "text": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+     }
+    ]
+   }
+  }
+ ]
+}

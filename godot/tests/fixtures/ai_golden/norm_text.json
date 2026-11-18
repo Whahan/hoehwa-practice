@@ -1,0 +1,424 @@
+{
+ "version": 1,
+ "file": "norm_text.json",
+ "cases": [
+  {
+   "case": "norm_en_01",
+   "kind": "norm_text",
+   "req": {
+    "text": "Hello, World!",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "hello world"
+   }
+  },
+  {
+   "case": "norm_en_02",
+   "kind": "norm_text",
+   "req": {
+    "text": "I'm happy",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "i am happy"
+   }
+  },
+  {
+   "case": "norm_en_03",
+   "kind": "norm_text",
+   "req": {
+    "text": "I’m happy",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "i am happy"
+   }
+  },
+  {
+   "case": "norm_en_04",
+   "kind": "norm_text",
+   "req": {
+    "text": "It's 5 o'clock.",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "it is five oclock"
+   }
+  },
+  {
+   "case": "norm_en_05",
+   "kind": "norm_text",
+   "req": {
+    "text": "Don't stop",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "do not stop"
+   }
+  },
+  {
+   "case": "norm_en_06",
+   "kind": "norm_text",
+   "req": {
+    "text": "DON'T STOP",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "do not stop"
+   }
+  },
+  {
+   "case": "norm_en_07",
+   "kind": "norm_text",
+   "req": {
+    "text": "I have 3 apples",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "i have three apples"
+   }
+  },
+  {
+   "case": "norm_en_08",
+   "kind": "norm_text",
+   "req": {
+    "text": "I have three apples",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "i have three apples"
+   }
+  },
+  {
+   "case": "norm_en_09",
+   "kind": "norm_text",
+   "req": {
+    "text": "twenty-one days",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "twenty one days"
+   }
+  },
+  {
+   "case": "norm_en_10",
+   "kind": "norm_text",
+   "req": {
+    "text": "21 days",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "twenty one days"
+   }
+  },
+  {
+   "case": "norm_en_11",
+   "kind": "norm_text",
+   "req": {
+    "text": "1,000 won",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "one thousand won"
+   }
+  },
+  {
+   "case": "norm_en_12",
+   "kind": "norm_text",
+   "req": {
+    "text": "1,000,000 people",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "one million people"
+   }
+  },
+  {
+   "case": "norm_en_13",
+   "kind": "norm_text",
+   "req": {
+    "text": "$5.50",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "five fifty"
+   }
+  },
+  {
+   "case": "norm_en_14",
+   "kind": "norm_text",
+   "req": {
+    "text": "  many   spaces  here ",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "many spaces here"
+   }
+  },
+  {
+   "case": "norm_en_15",
+   "kind": "norm_text",
+   "req": {
+    "text": "tab\tseparated",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "tab separated"
+   }
+  },
+  {
+   "case": "norm_en_16",
+   "kind": "norm_text",
+   "req": {
+    "text": "line\nbreak",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "line break"
+   }
+  },
+  {
+   "case": "norm_en_17",
+   "kind": "norm_text",
+   "req": {
+    "text": "FullｗidthＡＢＣ text",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "fullwidthabc text"
+   }
+  },
+  {
+   "case": "norm_en_18",
+   "kind": "norm_text",
+   "req": {
+    "text": "café au lait",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "caf au lait"
+   }
+  },
+  {
+   "case": "norm_en_19",
+   "kind": "norm_text",
+   "req": {
+    "text": "well-known fact",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "well known fact"
+   }
+  },
+  {
+   "case": "norm_en_20",
+   "kind": "norm_text",
+   "req": {
+    "text": "em—dash",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "em dash"
+   }
+  },
+  {
+   "case": "norm_en_21",
+   "kind": "norm_text",
+   "req": {
+    "text": "can't won't shan't",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "can not will not shall not"
+   }
+  },
+  {
+   "case": "norm_en_22",
+   "kind": "norm_text",
+   "req": {
+    "text": "she's he's they're we've",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "she is he is they are we have"
+   }
+  },
+  {
+   "case": "norm_en_23",
+   "kind": "norm_text",
+   "req": {
+    "text": "I'd like it",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "i would like it"
+   }
+  },
+  {
+   "case": "norm_en_24",
+   "kind": "norm_text",
+   "req": {
+    "text": "Mr. Smith, Ph.D.",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "mr smith ph d"
+   }
+  },
+  {
+   "case": "norm_en_25",
+   "kind": "norm_text",
+   "req": {
+    "text": "",
+    "lang": "en"
+   },
+   "expect": {
+    "result": ""
+   }
+  },
+  {
+   "case": "norm_en_26",
+   "kind": "norm_text",
+   "req": {
+    "text": "...",
+    "lang": "en"
+   },
+   "expect": {
+    "result": ""
+   }
+  },
+  {
+   "case": "norm_en_27",
+   "kind": "norm_text",
+   "req": {
+    "text": "100%",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "one hundred"
+   }
+  },
+  {
+   "case": "norm_en_28",
+   "kind": "norm_text",
+   "req": {
+    "text": "2nd floor",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "2nd floor"
+   }
+  },
+  {
+   "case": "norm_en_29",
+   "kind": "norm_text",
+   "req": {
+    "text": "1st of May",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "1st of may"
+   }
+  },
+  {
+   "case": "norm_en_30",
+   "kind": "norm_text",
+   "req": {
+    "text": "version 2.0",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "version two zero"
+   }
+  },
+  {
+   "case": "norm_en_31",
+   "kind": "norm_text",
+   "req": {
+    "text": "a/b",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "a b"
+   }
+  },
+  {
+   "case": "norm_en_32",
+   "kind": "norm_text",
+   "req": {
+    "text": "good_bye",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "good bye"
+   }
+  },
+  {
+   "case": "norm_en_33",
+   "kind": "norm_text",
+   "req": {
+    "text": "ONE two THREE",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "one two three"
+   }
+  },
+  {
+   "case": "norm_en_34",
+   "kind": "norm_text",
+   "req": {
+    "text": "12:30 pm",
+    "lang": "en"
+   },
+   "expect": {
+    "result": "twelve thirty pm"
+   }
+  },
+  {
+   "case": "norm_ja_01",
+   "kind": "norm_text",
+   "req": {
+    "text": "こんにちは、世界！",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": "こんにちは世界"
+   }
+  },
+  {
+   "case": "norm_ja_02",
+   "kind": "norm_text",
+   "req": {
+    "text": "ＡＢＣ　１２３",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": "abc123"
+   }
+  },
+  {
+   "case": "norm_ja_03",
+   "kind": "norm_text",
+   "req": {
+    "text": "「引用」（かっこ）",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": "引用かっこ"
+   }
+  },
+  {
+   "case": "norm_ja_04",
+   "kind": "norm_text",
+   "req": {
+    "text": "",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": ""
+   }
+  }
+ ]
+}

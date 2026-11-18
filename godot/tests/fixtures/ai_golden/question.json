@@ -1,0 +1,512 @@
+{
+ "version": 1,
+ "file": "question.json",
+ "cases": [
+  {
+   "case": "question_en_01",
+   "kind": "question",
+   "req": {
+    "text": "How much is this?",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_02",
+   "kind": "question",
+   "req": {
+    "text": "what does latte mean",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_03",
+   "kind": "question",
+   "req": {
+    "text": "Why",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_04",
+   "kind": "question",
+   "req": {
+    "text": "where is the station",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_05",
+   "kind": "question",
+   "req": {
+    "text": "WHEN do you open",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_06",
+   "kind": "question",
+   "req": {
+    "text": "Who is that",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_07",
+   "kind": "question",
+   "req": {
+    "text": "Which one is better",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_08",
+   "kind": "question",
+   "req": {
+    "text": "Whose bag is this",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_09",
+   "kind": "question",
+   "req": {
+    "text": "Can you help me",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_10",
+   "kind": "question",
+   "req": {
+    "text": "could you repeat that",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_11",
+   "kind": "question",
+   "req": {
+    "text": "Do you like coffee",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_12",
+   "kind": "question",
+   "req": {
+    "text": "Did you sleep well",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_13",
+   "kind": "question",
+   "req": {
+    "text": "Are you from Canada",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_14",
+   "kind": "question",
+   "req": {
+    "text": "Is it far",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_15",
+   "kind": "question",
+   "req": {
+    "text": "What a nice day",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_16",
+   "kind": "question",
+   "req": {
+    "text": "I mean the red one",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_17",
+   "kind": "question",
+   "req": {
+    "text": "meaning of life",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_18",
+   "kind": "question",
+   "req": {
+    "text": "Tell me more about it.",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_19",
+   "kind": "question",
+   "req": {
+    "text": "I like coffee.",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_20",
+   "kind": "question",
+   "req": {
+    "text": "Thank you very much",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_21",
+   "kind": "question",
+   "req": {
+    "text": "Whatever you say",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_22",
+   "kind": "question",
+   "req": {
+    "text": "Somewhere nice",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_23",
+   "kind": "question",
+   "req": {
+    "text": "Meaningful words",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_24",
+   "kind": "question",
+   "req": {
+    "text": "Wherever",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_25",
+   "kind": "question",
+   "req": {
+    "text": "Whoever called",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_26",
+   "kind": "question",
+   "req": {
+    "text": "Howard is here",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_27",
+   "kind": "question",
+   "req": {
+    "text": "I can you ok",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_28",
+   "kind": "question",
+   "req": {
+    "text": "Yes, please.",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_29",
+   "kind": "question",
+   "req": {
+    "text": "It is five dollars.",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_30",
+   "kind": "question",
+   "req": {
+    "text": "",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_31",
+   "kind": "question",
+   "req": {
+    "text": "   ",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_32",
+   "kind": "question",
+   "req": {
+    "text": "  ?  ",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_33",
+   "kind": "question",
+   "req": {
+    "text": "Really?!",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_34",
+   "kind": "question",
+   "req": {
+    "text": "no question mark but how",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_35",
+   "kind": "question",
+   "req": {
+    "text": "Good morning!",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_36",
+   "kind": "question",
+   "req": {
+    "text": "Whenever you are ready",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_37",
+   "kind": "question",
+   "req": {
+    "text": "Please call me later",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_en_38",
+   "kind": "question",
+   "req": {
+    "text": "What's up",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_39",
+   "kind": "question",
+   "req": {
+    "text": "How's it going",
+    "lang": "en"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_en_40",
+   "kind": "question",
+   "req": {
+    "text": "this is meaningless",
+    "lang": "en"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_ja_01",
+   "kind": "question",
+   "req": {
+    "text": "これは何ですか",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_ja_02",
+   "kind": "question",
+   "req": {
+    "text": "駅はどこ",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_ja_03",
+   "kind": "question",
+   "req": {
+    "text": "ありがとうございます",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_ja_04",
+   "kind": "question",
+   "req": {
+    "text": "コーヒーが好きです。",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": false
+   }
+  },
+  {
+   "case": "question_ja_05",
+   "kind": "question",
+   "req": {
+    "text": "どうして？",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": true
+   }
+  },
+  {
+   "case": "question_ja_06",
+   "kind": "question",
+   "req": {
+    "text": "",
+    "lang": "ja"
+   },
+   "expect": {
+    "result": false
+   }
+  }
+ ]
+}

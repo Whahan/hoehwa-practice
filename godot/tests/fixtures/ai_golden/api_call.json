@@ -1,0 +1,2910 @@
+{
+ "version": 1,
+ "file": "api_call.json",
+ "cases": [
+  {
+   "case": "api_ok_plain",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "body: model, messages + the schema instruction as a last system message, response_format"
+  },
+  {
+   "case": "api_ok_max_tokens",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120,
+    "max_tokens": 600
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "max_tokens": 600,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "max_tokens appears only when given"
+  },
+  {
+   "case": "api_ok_zero_max_tokens",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120,
+    "max_tokens": 0
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "max_tokens 0 is left out"
+  },
+  {
+   "case": "api_preset_deepseek",
+   "kind": "api",
+   "req": {
+    "settings": {
+     "preset": "deepseek"
+    },
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "deepseek-flash"
+    },
+    "http": [
+     {
+      "url": "https://api.deepseek.com/chat/completions",
+      "body": {
+       "model": "deepseek-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "preset base url and model"
+  },
+  {
+   "case": "api_preset_gemini",
+   "kind": "api",
+   "req": {
+    "settings": {
+     "preset": "gemini"
+    },
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "gemini-2.5-flash"
+    },
+    "http": [
+     {
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "body": {
+       "model": "gemini-2.5-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   }
+  },
+  {
+   "case": "api_preset_openrouter",
+   "kind": "api",
+   "req": {
+    "settings": {
+     "preset": "openrouter"
+    },
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "openrouter/auto"
+    },
+    "http": [
+     {
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "body": {
+       "model": "openrouter/auto",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   }
+  },
+  {
+   "case": "api_custom_model_and_base",
+   "kind": "api",
+   "req": {
+    "settings": {
+     "preset": "opencode_zen",
+     "model": "my-model-1",
+     "base_url": "https://example.test/v1/"
+    },
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "my-model-1"
+    },
+    "http": [
+     {
+      "url": "https://example.test/v1/chat/completions",
+      "body": {
+       "model": "my-model-1",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "a custom model and a base url with a trailing slash"
+  },
+  {
+   "case": "api_unknown_preset",
+   "kind": "api",
+   "req": {
+    "settings": {
+     "preset": "nope"
+    },
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hello!"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "unknown preset -> the default preset"
+  },
+  {
+   "case": "api_content_fenced",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "code fence in the content"
+  },
+  {
+   "case": "api_content_think",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "think block in the content"
+  },
+  {
+   "case": "api_content_trailing_comma",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "trailing comma repaired"
+  },
+  {
+   "case": "api_content_parts",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "content as a list of parts"
+  },
+  {
+   "case": "api_content_null",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "{\"choices\": [{\"message\": {\"content\": null}}]}"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "null content: format error"
+  },
+  {
+   "case": "api_no_choices",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "{\"choices\": []}"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "no choices: format error"
+  },
+  {
+   "case": "api_content_not_json",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "{\"choices\": [{\"message\": {\"content\": \"I cannot do that.\"}}]}"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "no JSON object: format error"
+  },
+  {
+   "case": "api_body_not_json",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "AI가 올바른 형식으로 답하지 못했어요. 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "<html>gateway</html>"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "the body is not JSON: format error"
+  },
+  {
+   "case": "api_401",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen API 키를 확인해 주세요. (키가 없거나 올바르지 않아요)",
+     "status": 503,
+     "kind": "auth",
+     "raw": "HTTP 401 invalid_request_error Incorrect key provided"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "auth"
+  },
+  {
+   "case": "api_403",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen API 키를 확인해 주세요. (키가 없거나 올바르지 않아요)",
+     "status": 503,
+     "kind": "auth",
+     "raw": "HTTP 403 forbidden"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "auth"
+  },
+  {
+   "case": "api_402",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 사용 한도(또는 잔액)에 도달했어요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "limit",
+     "raw": "HTTP 402 usage limit payment required"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "limit (balance)"
+  },
+  {
+   "case": "api_429_retry_after",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 사용 한도(또는 잔액)에 도달했어요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "limit",
+     "raw": "HTTP 429 usage limit slow down retry in 120 seconds"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "limit with Retry-After"
+  },
+  {
+   "case": "api_429_retry_after_text",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 사용 한도(또는 잔액)에 도달했어요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "limit",
+     "raw": "HTTP 429 usage limit slow down"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "Retry-After that is not a number"
+  },
+  {
+   "case": "api_429_quota",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 사용 한도(또는 잔액)에 도달했어요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "limit",
+     "raw": "HTTP 429 usage limit You exceeded your current quota"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "quota words"
+  },
+  {
+   "case": "api_200_words_never_matter",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "insufficient balance"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "words in a good answer are just data"
+  },
+  {
+   "case": "api_400_quota_word",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 사용 한도(또는 잔액)에 도달했어요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "limit",
+     "raw": "HTTP 400 usage limit insufficient balance for this call"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "balance word at status 400: limit"
+  },
+  {
+   "case": "api_404",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen에서 AI 모델 'deepseek-v4.1-flash'을(를) 찾을 수 없어요. 설정에서 모델을 다시 골라 주세요.",
+     "status": 400,
+     "kind": null,
+     "raw": "HTTP 404 not found"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "model not found"
+  },
+  {
+   "case": "api_model_not_exist_word",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen에서 AI 모델 'deepseek-v4.1-flash'을(를) 찾을 수 없어요. 설정에서 모델을 다시 골라 주세요.",
+     "status": 400,
+     "kind": null,
+     "raw": "HTTP 400 The model does not exist"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "model word at 400"
+  },
+  {
+   "case": "api_500",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 서버가 바빠요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "overload",
+     "raw": "HTTP 500 internal"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "overload"
+  },
+  {
+   "case": "api_503",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 서버가 바빠요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "overload",
+     "raw": "HTTP 503 unavailable"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "overload"
+  },
+  {
+   "case": "api_529",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 서버가 바빠요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "overload",
+     "raw": "HTTP 529 overloaded"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "overload"
+  },
+  {
+   "case": "api_418",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 호출에 실패했어요 (HTTP 418). 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "HTTP 418 teapot"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "other status: generic failure"
+  },
+  {
+   "case": "api_free_tier_word",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 무료 모델은 OpenCode 프로그램 안에서만 쓸 수 있어요. 유료 모델을 고르거나 다른 AI 엔진을 써 주세요.",
+     "status": 503,
+     "kind": "auth",
+     "raw": "HTTP 400 FreeTier model is not available here"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "free tier words"
+  },
+  {
+   "case": "api_gemini_list_error",
+   "kind": "api",
+   "req": {
+    "settings": {
+     "preset": "gemini"
+    },
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "Google Gemini 호출에 실패했어요 (HTTP 400). 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "HTTP 400 {\"code\": 400, \"message\": \"bad request\", \"status\": \"INVALID_ARGUMENT\"}"
+    },
+    "http": [
+     {
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "body": {
+       "model": "gemini-2.5-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "Gemini error body is a list"
+  },
+  {
+   "case": "api_error_echoes_key",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen API 키를 확인해 주세요. (키가 없거나 올바르지 않아요)",
+     "status": 503,
+     "kind": "auth",
+     "raw": "HTTP 401 Incorrect key <key> provided"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "the key echoed in an error body is replaced by <key>"
+  },
+  {
+   "case": "api_400_json_mode_unsupported_retry",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     },
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": [
+     [
+      "https://opencode.ai/inference/v1",
+      "deepseek-v4.1-flash"
+     ]
+    ]
+   },
+   "note": "400 naming response_format: one more call without response_format, and the pair is remembered"
+  },
+  {
+   "case": "api_400_json_word_retry",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120,
+    "max_tokens": 300
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "max_tokens": 300,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     },
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "max_tokens": 300
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": [
+     [
+      "https://opencode.ai/inference/v1",
+      "deepseek-v4.1-flash"
+     ]
+    ]
+   },
+   "note": "400 with 'json' / 'not support'"
+  },
+  {
+   "case": "api_400_retry_fails",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 서버가 바빠요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "overload",
+     "raw": "HTTP 500 internal"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     },
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": [
+     [
+      "https://opencode.ai/inference/v1",
+      "deepseek-v4.1-flash"
+     ]
+    ]
+   },
+   "note": "retry without response_format fails too"
+  },
+  {
+   "case": "api_400_unrelated_no_retry",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 호출에 실패했어요 (HTTP 400). 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": null,
+     "raw": "HTTP 400 messages must not be empty"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "other 400: no retry"
+  },
+  {
+   "case": "api_timeout_value",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 45
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "reply": "Hi"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 45,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "the timeout is passed through"
+  },
+  {
+   "case": "api_korean_messages",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "역할극을 해요."
+     },
+     {
+      "role": "user",
+      "content": "안녕하세요?"
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "ko": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "ko"
+     ]
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "result": {
+     "data": {
+      "ko": "안녕하세요!"
+     },
+     "model": "deepseek-v4.1-flash"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "역할극을 해요."
+        },
+        {
+         "role": "user",
+         "content": "안녕하세요?"
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"ko\": {\"type\": \"string\"}}, \"required\": [\"ko\"]}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "non-ASCII text in the body"
+  },
+  {
+   "case": "api_error_body_list_text",
+   "kind": "api",
+   "req": {
+    "settings": {},
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a helpful partner."
+     },
+     {
+      "role": "user",
+      "content": "Say hello in JSON."
+     }
+    ],
+    "schema": {
+     "type": "object",
+     "properties": {
+      "reply": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "reply"
+     ],
+     "additionalProperties": false
+    },
+    "temperature": 0.6,
+    "timeout": 120
+   },
+   "expect": {
+    "error": {
+     "msg": "OpenCode Zen 서버가 바빠요. 잠시 뒤에 다시 시도해 주세요.",
+     "status": 502,
+     "kind": "overload",
+     "raw": "HTTP 500 plain text, not json"
+    },
+    "http": [
+     {
+      "url": "https://opencode.ai/inference/v1/chat/completions",
+      "body": {
+       "model": "deepseek-v4.1-flash",
+       "messages": [
+        {
+         "role": "system",
+         "content": "You are a helpful partner."
+        },
+        {
+         "role": "user",
+         "content": "Say hello in JSON."
+        },
+        {
+         "role": "system",
+         "content": "Reply with ONLY one JSON object (no code fences, no extra text) that matches this JSON schema:\n{\"type\": \"object\", \"properties\": {\"reply\": {\"type\": \"string\"}}, \"required\": [\"reply\"], \"additionalProperties\": false}"
+        }
+       ],
+       "temperature": 0.6,
+       "stream": false,
+       "response_format": {
+        "type": "json_object"
+       }
+      },
+      "timeout": 120,
+      "key_sent": true
+     }
+    ],
+    "json_mode_off": []
+   },
+   "note": "an error body that is not JSON"
+  }
+ ]
+}
