@@ -87,7 +87,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "Tuesdays",
+     "pat": "p_on_in_at"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -105,7 +110,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "Wednesdays",
+     "pat": "p_on_in_at"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -123,7 +133,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "Thursdays",
+     "pat": "p_on_in_at"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -229,7 +244,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "Saturdays",
+     "pat": "p_on_in_at"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -247,7 +267,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "Sundays",
+     "pat": "p_on_in_at"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -402,7 +427,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "weekends",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -436,7 +466,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "gets",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "getting",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -471,7 +510,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "breakfasts",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -489,7 +533,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "lunches",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -539,7 +588,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "dinners",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -557,7 +611,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "afternoons",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -575,7 +634,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "evenings",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -1536,7 +1600,7 @@
     {
      "s": "A",
      "en": "Nice. I get up at ten.",
-     "ko": "좋겠네요. 저는 열 시에 일어나요.",
+     "ko": "멋지네요. 저는 열 시에 일어나요.",
      "say": ""
     }
    ]

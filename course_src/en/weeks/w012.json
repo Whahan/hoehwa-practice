@@ -59,7 +59,12 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "understands",
+     "pat": "p_he_she_verbs"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -75,7 +80,12 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "knows",
+     "pat": "p_he_she_verbs"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -92,7 +102,16 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "repeats",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "repeating",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -174,7 +193,16 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "helps",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "helping",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -190,7 +218,16 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "waits",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "waiting",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -207,7 +244,16 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "opens",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "opening",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -227,6 +273,14 @@
     {
      "f": "closed",
      "pat": "p_can_you_please"
+    },
+    {
+     "f": "closes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "closing",
+     "pat": "p_im_ving"
     }
    ],
    "alt": [],
@@ -244,7 +298,16 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "writes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "writing",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -260,7 +323,16 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "reads",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "reading",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -276,7 +348,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "needs",
+     "pat": "p_he_she_verbs"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -345,7 +422,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "listens",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "listening",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -361,9 +447,20 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "looks",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "looking",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0393"
+   ],
    "ca": false,
    "src": "own"
   },
@@ -377,7 +474,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "comes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "coming",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -393,7 +499,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "uses",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "using",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -409,7 +524,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "shows",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "showing",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -425,7 +549,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "asks",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "asking",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -473,7 +606,16 @@
    "tags": [],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "tells",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "telling",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -1192,7 +1334,7 @@
   {
    "id": "s0719",
    "en": "Please listen.",
-   "ko": "잘 들어 주세요.",
+   "ko": "들어 주세요.",
    "say": "",
    "pat": "",
    "d": 3,

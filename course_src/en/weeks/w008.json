@@ -163,12 +163,18 @@
    "en": "want",
    "pos": "v",
    "ko": "원해요",
+   "ko2": "~고 싶어요",
    "ipa": "wɑːnt",
    "say": "",
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "wants",
+     "pat": "p_he_she_verbs"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -186,7 +192,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "sandwiches",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -204,7 +215,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "soups",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -222,7 +238,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "salads",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -240,7 +261,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "pizzas",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -360,7 +386,16 @@
    "tags": [],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "goes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "going",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -379,7 +414,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "sizes",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -418,7 +458,9 @@
    "d": 4,
    "forms": [],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0014"
+   ],
    "ca": false,
    "src": "own"
   },
@@ -934,7 +976,7 @@
   {
    "id": "s0454",
    "en": "Can you say that again, please?",
-   "ko": "다시 한번 말씀해 주실 수 있어요?",
+   "ko": "다시 한번 말씀해 주실래요?",
    "say": "",
    "pat": "p_can_i_have",
    "d": 2,
@@ -1234,7 +1276,7 @@
   {
    "id": "s0479",
    "en": "What size?",
-   "ko": "어떤 사이즈로 드릴까요?",
+   "ko": "어떤 사이즈요?",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1246,7 +1288,7 @@
   {
    "id": "s0480",
    "en": "Small, medium or large?",
-   "ko": "작은 사이즈, 중간 사이즈, 큰 사이즈 중에서요?",
+   "ko": "작은 사이즈요, 중간 사이즈요, 큰 사이즈요?",
    "say": "",
    "pat": "",
    "d": 4,

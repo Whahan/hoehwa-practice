@@ -131,3 +131,6 @@ LanguageTool (--grammar): backend\grammar.py is loaded from the file (default <r
    --lt-dir, else COURSE_LT_DIR, else <repo>\backend\tools\languagetool, else the main checkout's copy next to the worktree
    (..\app\backend\tools\languagetool). Language en-CA (so colour is not flagged). The Java server is started by that
    module on a free port of its own and stopped by PID (grammar.stop); the note line shows pid and port.
+   policy.json `lt_ignore_words` [..] (lower case): Canadian words the dictionary does not know (loonie, toonie). A LanguageTool spelling
+   match (rule MORFOLOGIK/HUNSPELL/SPELL or category TYPOS) for exactly one of these words is dropped; grammar matches and the
+   spelling of every other word still fail (test_lt_ignore_words.py). The filter wraps grammar.check for the run only.

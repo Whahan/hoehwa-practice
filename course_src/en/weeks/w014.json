@@ -31,7 +31,7 @@
    "forms": [
     {
      "f": "jobs",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -54,7 +54,7 @@
    "forms": [
     {
      "f": "students",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -77,7 +77,7 @@
    "forms": [
     {
      "f": "teachers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -100,7 +100,7 @@
    "forms": [
     {
      "f": "nurses",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -123,7 +123,7 @@
    "forms": [
     {
      "f": "doctors",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -146,7 +146,7 @@
    "forms": [
     {
      "f": "engineers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -169,7 +169,7 @@
    "forms": [
     {
      "f": "chefs",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -192,7 +192,7 @@
    "forms": [
     {
      "f": "cafes",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -215,7 +215,7 @@
    "forms": [
     {
      "f": "hotels",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -238,7 +238,7 @@
    "forms": [
     {
      "f": "farms",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -261,7 +261,7 @@
    "forms": [
     {
      "f": "factories",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -284,7 +284,7 @@
    "forms": [
     {
      "f": "warehouses",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -307,7 +307,7 @@
    "forms": [
     {
      "f": "companies",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -331,7 +331,7 @@
    "forms": [
     {
      "f": "servers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -354,7 +354,7 @@
    "forms": [
     {
      "f": "cashiers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -377,7 +377,7 @@
    "forms": [
     {
      "f": "cleaners",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -400,7 +400,7 @@
    "forms": [
     {
      "f": "drivers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -423,7 +423,7 @@
    "forms": [
     {
      "f": "managers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -464,7 +464,7 @@
    "forms": [
     {
      "f": "workers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -488,7 +488,7 @@
    "forms": [
     {
      "f": "bosses",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -513,7 +513,7 @@
    "forms": [
     {
      "f": "customers",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -555,7 +555,7 @@
    "forms": [
     {
      "f": "teams",
-     "pat": "p_these_those"
+     "pat": "p_plural_s"
     }
    ],
    "alt": [],
@@ -1330,8 +1330,8 @@
   },
   {
    "id": "s0853",
-   "en": "I help the customer.",
-   "ko": "저는 손님을 도와요.",
+   "en": "I help the customers.",
+   "ko": "저는 손님들을 도와요.",
    "say": "",
    "pat": "",
    "d": 4,

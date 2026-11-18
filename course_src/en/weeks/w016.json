@@ -25,7 +25,16 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "sees",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "seeing",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -593,7 +602,7 @@
   {
    "id": "s0949",
    "en": "These cafes are very nice.",
-   "ko": "이 카페들은 아주 좋아요.",
+   "ko": "이 카페들은 아주 멋져요.",
    "say": "",
    "pat": "p_these_those",
    "d": 2,
@@ -1025,7 +1034,7 @@
   {
    "id": "s0985",
    "en": "Can I ask you something?",
-   "ko": "뭔가 물어봐도 돼요?",
+   "ko": "뭔가 물어봐도 될까요?",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1037,7 +1046,7 @@
   {
    "id": "s0986",
    "en": "Can you say something in English?",
-   "ko": "영어로 뭔가 말해 줄 수 있어요?",
+   "ko": "영어로 뭔가 말해 주실래요?",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1181,7 +1190,7 @@
   {
    "id": "s0998",
    "en": "It's a special day.",
-   "ko": "특별한 날이에요.",
+   "ko": "특별한 하루예요.",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1243,7 +1252,7 @@
     {
      "s": "B",
      "en": "Can I pay by card?",
-     "ko": "카드로 계산해도 돼요?",
+     "ko": "카드로 계산해도 될까요?",
      "say": ""
     },
     {
@@ -1255,7 +1264,7 @@
     {
      "s": "B",
      "en": "Debit, please. Thanks a lot!",
-     "ko": "체크카드로 할게요. 정말 고마워요!",
+     "ko": "체크카드로 부탁해요. 정말 고마워요!",
      "say": ""
     }
    ]

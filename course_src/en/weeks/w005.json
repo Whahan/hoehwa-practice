@@ -149,7 +149,9 @@
    "d": 2,
    "forms": [],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0204"
+   ],
    "ca": false,
    "src": "own"
   },
@@ -163,7 +165,16 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "meets",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "meeting",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -174,6 +185,7 @@
    "en": "have",
    "pos": "v",
    "ko": "가지고 있어요",
+   "ko2": "있어요, 먹어요",
    "ipa": "hæv",
    "say": "",
    "tags": [],
@@ -183,6 +195,10 @@
     {
      "f": "has",
      "pat": "p_i_have"
+    },
+    {
+     "f": "having",
+     "pat": "p_im_ving"
     }
    ],
    "alt": [],
@@ -326,7 +342,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "families",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -408,7 +429,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "men",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -426,7 +452,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "women",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -444,7 +475,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "girls",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -462,7 +498,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "husbands",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -480,7 +521,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "wives",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -778,7 +824,7 @@
   },
   {
    "id": "p_i_have",
-   "tpl": "I have a ___. / I have two ___.",
+   "tpl": "I have a sister. / I have two sisters.",
    "slots": [
     {
      "name": "thing",

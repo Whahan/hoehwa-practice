@@ -20,12 +20,18 @@
    "en": "like",
    "pos": "v",
    "ko": "좋아해요",
+   "ko2": "마음에 들어요",
    "ipa": "laɪk",
    "say": "",
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "likes",
+     "pat": "p_he_she_verbs"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -434,7 +440,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "travels",
+     "pat": "p_he_she_verbs"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -452,7 +463,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "hobbies",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -550,7 +566,9 @@
    "d": 2,
    "forms": [],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0112"
+   ],
    "ca": false,
    "src": "own"
   },

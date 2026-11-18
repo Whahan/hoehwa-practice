@@ -233,7 +233,16 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "pays",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "paying",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -401,7 +410,16 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "buys",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "buying",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -437,7 +455,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "receipts",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -471,7 +494,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "taxes",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": true,
@@ -489,7 +517,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "tips",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": true,
@@ -1130,7 +1163,7 @@
   {
    "id": "s0643",
    "en": "Can I pay with cash?",
-   "ko": "현금으로 계산해도 돼요?",
+   "ko": "현금으로 계산해도 될까요?",
    "say": "",
    "pat": "p_pay_with",
    "d": 4,
@@ -1142,7 +1175,7 @@
   {
    "id": "s0644",
    "en": "Can I pay with a card?",
-   "ko": "카드로 계산해도 돼요?",
+   "ko": "카드로 계산해도 될까요?",
    "say": "",
    "pat": "p_pay_with",
    "d": 4,
@@ -1154,7 +1187,7 @@
   {
    "id": "s0645",
    "en": "Can I pay with debit?",
-   "ko": "체크카드로 계산해도 돼요?",
+   "ko": "체크카드로 계산해도 될까요?",
    "say": "",
    "pat": "p_pay_with",
    "d": 4,
@@ -1166,7 +1199,7 @@
   {
    "id": "s0646",
    "en": "Can I pay with credit?",
-   "ko": "신용카드로 계산해도 돼요?",
+   "ko": "신용카드로 계산해도 될까요?",
    "say": "",
    "pat": "p_pay_with",
    "d": 4,
@@ -1321,7 +1354,7 @@
   },
   {
    "id": "s0659",
-   "en": "A Loonie is one dollar.",
+   "en": "A loonie is one dollar.",
    "ko": "루니는 1달러예요.",
    "say": "",
    "pat": "",
@@ -1333,7 +1366,7 @@
   },
   {
    "id": "s0660",
-   "en": "A Toonie is two dollars.",
+   "en": "A toonie is two dollars.",
    "ko": "투니는 2달러예요.",
    "say": "",
    "pat": "",
@@ -1345,7 +1378,7 @@
   },
   {
    "id": "s0661",
-   "en": "I have a Loonie.",
+   "en": "I have a loonie.",
    "ko": "저는 1달러 동전이 있어요.",
    "say": "",
    "pat": "",
@@ -1357,7 +1390,7 @@
   },
   {
    "id": "s0662",
-   "en": "I have two Toonies.",
+   "en": "I have two toonies.",
    "ko": "저는 2달러 동전이 두 개 있어요.",
    "say": "",
    "pat": "",
@@ -1369,7 +1402,7 @@
   },
   {
    "id": "s0663",
-   "en": "Do you have change for a Toonie?",
+   "en": "Do you have change for a toonie?",
    "ko": "2달러 동전을 바꿀 잔돈이 있어요?",
    "say": "",
    "pat": "",
@@ -1576,7 +1609,7 @@
     {
      "s": "B",
      "en": "Can I pay with debit?",
-     "ko": "체크카드로 계산해도 돼요?",
+     "ko": "체크카드로 계산해도 될까요?",
      "say": ""
     },
     {

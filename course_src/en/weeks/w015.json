@@ -721,7 +721,7 @@
   },
   {
    "id": "p_what_are_you_doing",
-   "tpl": "What are you eating? - I'm eating ___.",
+   "tpl": "What are you doing? - I'm eating ___.",
    "slots": [
     {
      "name": "thing",
@@ -995,11 +995,11 @@
   },
   {
    "id": "s0889",
-   "en": "What are you cooking?",
-   "ko": "뭐 요리하고 있어요?",
+   "en": "What are you doing?",
+   "ko": "뭐 하고 있어요?",
    "say": "",
    "pat": "p_what_are_you_doing",
-   "d": 1,
+   "d": 3,
    "scope": "all",
    "accept": [],
    "src": "own",
@@ -1043,11 +1043,11 @@
   },
   {
    "id": "s0893",
-   "en": "What are you making?",
-   "ko": "뭐 만들고 있어요?",
+   "en": "What are you doing now?",
+   "ko": "지금 뭐 하고 있어요?",
    "say": "",
    "pat": "p_what_are_you_doing",
-   "d": 1,
+   "d": 3,
    "scope": "all",
    "accept": [],
    "src": "own",
@@ -1287,8 +1287,8 @@
   },
   {
    "id": "s0913",
-   "en": "You're very busy.",
-   "ko": "아주 바빠요.",
+   "en": "You're going to work.",
+   "ko": "출근하고 있어요.",
    "say": "",
    "pat": "p_pres_cont_others",
    "d": 3,
@@ -1565,20 +1565,20 @@
  "dialogues": [
   {
    "id": "d0015",
-   "title_ko": "지금 바빠요?",
+   "title_ko": "뭐 하고 있어요?",
    "scene": "right_now",
    "user": "B",
    "lines": [
     {
      "s": "A",
-     "en": "Hi, Min. Are you busy now?",
-     "ko": "안녕, 민. 지금 바빠요?",
+     "en": "Hi, Min. What are you doing?",
+     "ko": "안녕, 민. 뭐 하고 있어요?",
      "say": ""
     },
     {
      "s": "B",
-     "en": "No, I'm not. I'm eating lunch.",
-     "ko": "아니요, 안 바빠요. 점심을 먹고 있어요.",
+     "en": "I'm eating lunch.",
+     "ko": "점심을 먹고 있어요.",
      "say": ""
     },
     {

@@ -53,7 +53,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "kitchens",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -120,7 +125,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "stations",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -138,7 +148,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "hospitals",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -156,7 +171,12 @@
    ],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "parks",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -269,7 +289,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "streets",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -288,9 +313,16 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "houses",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0078"
+   ],
    "ca": false,
    "src": "own"
   },
@@ -306,7 +338,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "offices",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -324,7 +361,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "schools",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -390,7 +432,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "libraries",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -408,7 +455,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "restaurants",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -427,7 +479,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "centres",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [
     "center"
    ],
@@ -857,7 +914,7 @@
   {
    "id": "s0564",
    "en": "Excuse me, where is the washroom?",
-   "ko": "저기요, 화장실이 어디에 있어요?",
+   "ko": "저기요, 화장실이 어디예요?",
    "say": "",
    "pat": "p_where_is",
    "d": 1,
@@ -1133,7 +1190,7 @@
   {
    "id": "s0587",
    "en": "Is there a restaurant in the city centre?",
-   "ko": "시내 중심에 식당이 있어요?",
+   "ko": "도시 중심에 식당이 있어요?",
    "say": "",
    "pat": "p_is_there",
    "d": 3,
@@ -1205,7 +1262,7 @@
   {
    "id": "s0593",
    "en": "It's under the table.",
-   "ko": "탁자 아래에 있어요.",
+   "ko": "테이블 아래에 있어요.",
    "say": "",
    "pat": "p_next_to",
    "d": 4,
@@ -1289,7 +1346,7 @@
   {
    "id": "s0600",
    "en": "The library is near the city centre.",
-   "ko": "도서관은 시내 중심 근처에 있어요.",
+   "ko": "도서관은 도시 중심 근처에 있어요.",
    "say": "",
    "pat": "",
    "d": 3,
@@ -1361,7 +1418,7 @@
   {
    "id": "s0606",
    "en": "Where is the bathroom?",
-   "ko": "화장실은 어디에 있어요?",
+   "ko": "화장실은 어디예요?",
    "say": "",
    "pat": "",
    "d": 1,
@@ -1457,7 +1514,7 @@
   {
    "id": "s0614",
    "en": "My neighbour is a nice man.",
-   "ko": "우리 이웃은 좋은 분이에요.",
+   "ko": "우리 이웃은 친절한 남자예요.",
    "say": "",
    "pat": "",
    "d": 4,

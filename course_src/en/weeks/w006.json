@@ -746,7 +746,7 @@
   },
   {
    "id": "p_plural_s",
-   "tpl": "one ___, two ___.",
+   "tpl": "one book, two books.",
    "slots": [
     {
      "name": "thing",

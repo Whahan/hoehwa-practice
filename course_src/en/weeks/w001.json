@@ -21,6 +21,7 @@
    "en": "hi",
    "pos": "interj",
    "ko": "안녕",
+   "ko2": "안녕하세요",
    "ipa": "haɪ",
    "say": "",
    "tags": [],
@@ -89,6 +90,7 @@
    "en": "sorry",
    "pos": "interj",
    "ko": "미안해요",
+   "ko2": "죄송해요",
    "ipa": "ˈsɑːri",
    "say": "",
    "tags": [],
@@ -144,7 +146,12 @@
    ],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "cats",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -160,7 +167,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "bags",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -176,7 +188,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "hats",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -192,7 +209,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "beds",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -208,7 +230,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "pens",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -244,7 +271,9 @@
    "d": 3,
    "forms": [],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0231"
+   ],
    "ca": false,
    "src": "own"
   },
@@ -258,7 +287,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "sits",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "sitting",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -293,7 +331,12 @@
    ],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "dogs",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -309,7 +352,12 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "buses",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -325,7 +373,12 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "cups",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -368,6 +421,7 @@
    "en": "good",
    "pos": "adj",
    "ko": "좋은",
+   "ko2": "맛있는",
    "ipa": "ɡʊd",
    "say": "",
    "tags": [],
