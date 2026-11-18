@@ -153,10 +153,8 @@ static func review_sentences(l: String) -> Array:
 
 
 func sentences_query() -> String:
-	var pos: Dictionary = Store.position()
-	var month: int = int(pos.get("n", 1))
-	var week: int = int(pos.get("w", 1))
-	var q := "lang=%s&mode=shadow&stage=%d&month=%d&week=%d&n=%d&seed=%d" % [lang, Plan.stage_of(month), month, week, SESSION_N, randi() % 100000]
+	var pos: Dictionary = CourseModel.pos_for(lang) ## 코스 모드 영어는 legacy_stage / legacy_cell 값, 그 밖은 달력(Store.position())
+	var q := "lang=%s&mode=shadow&stage=%d&month=%d&week=%d&n=%d&seed=%d" % [lang, int(pos["stage"]), int(pos["n"]), int(pos["w"]), SESSION_N, randi() % 100000]
 	var ex: Array = (seen_ids[lang] as Array).slice(-100)
 	if not ex.is_empty():
 		q += "&exclude=" + ",".join(PackedStringArray(ex.map(func(v: Variant) -> String: return str(v))))
@@ -502,6 +500,10 @@ func _render() -> void:
 		drill.get_parent().remove_child(drill)
 	_top_box = null
 	UI.clear(c)
+	if stage == "start" or source == "week": ## 이번 주 예문은 코스 밖 문장(Tatoeba)이다: 코스 모드 영어에서만 안내
+		var cnote: Control = MissionScreen.course_notice(lang)
+		if cnote != null:
+			c.add_child(cnote)
 	(_shell["title"] as Label).text = "쉐도잉"
 	_update_count()
 	if stage != "run":

@@ -185,8 +185,12 @@ func _prepare_pool() -> void:
 	var wv: Variant = w.get("words", [])
 	if words_ok and wv is Array:
 		words = wv
-	var month: int = int(Store.position().get("n", 1))
-	pool = SpeedPool.build(lang, Store.review_for(lang), month, words)
+	pool = SpeedPool.build(lang, Store.review_for(lang), _pool_month(), words)
+
+
+## 단어 난이도(레슨 단어는 이 달 + 1 까지)에 쓰는 달. 코스 모드 영어는 legacy_cell 의 달, 그 밖은 달력(Store.position()).
+func _pool_month() -> int:
+	return int(CourseModel.pos_for(lang).get("n", 1))
 
 
 func pool_ok() -> bool:
