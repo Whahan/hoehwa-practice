@@ -8,8 +8,20 @@
     "artifacts":  {
                       "android-arm64":  {
                                             "file":  "godot/bin/libwhisper_bridge.android.arm64.so",
-                                            "bytes":  1917232,
-                                            "sha256":  "d478b3e6deee2a8a39ef15148e5c67f2c4fcd7e85dac5730ed67c31f904e1fcb"
-                                        }
-                  }
+                                            "bytes":  1917376,
+                                            "sha256":  "7dbcb127619ebacacbffcd952424fc422a8ebfaf50ee28b14fa6013b9188af3a"
+                                        },
+                      "windows-x64":  {
+                                          "file":  "godot/bin/whisper_bridge.windows.x86_64.dll",
+                                          "bytes":  2356224,
+                                          "sha256":  "50774a2ae260985f1169568e50f6bb2eddd8c5e72364611f441563a9a74ae1ed"
+                                      }
+                  },
+    "whisper_cpp_patches":  [
+                                {
+                                    "file":  "native/whisper_bridge/patches/whisper_abort_in_sched.patch",
+                                    "sha256":  "623974775fc5ccf270369ad037bd0c38842a326b2b5771a7210eb24b00719a2a",
+                                    "purpose":  "abort callback also stops the ggml CPU compute inside the encoder/decoder graphs"
+                                }
+                            ]
 }

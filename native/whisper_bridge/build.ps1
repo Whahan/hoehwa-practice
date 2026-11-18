@@ -12,7 +12,8 @@ param(
     [string]$WhisperCommit,
     [string]$GodotCppCommit,
     [string]$AndroidSdk,
-    [string]$Ndk
+    [string]$Ndk,
+    [switch]$NoPatch   # measurement only: build WITHOUT the whisper.cpp patch, result in the Out folder under nopatch, nothing goes to godot/bin
 )
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
@@ -53,6 +54,26 @@ function Check-Checkout([string]$name, [string]$dir, [string]$pinned) {
     $dirty = (& git -C $dir status --porcelain 2>$null)
     if ($dirty) { Fail "$name 작업 폴더가 수정돼 있어요 (재현이 안 돼요) / $name working tree is modified" }
 }
+# Patch of the pinned whisper.cpp (patches\*.patch): applied for the build only, the checkout is restored afterwards.
+$script:Patched = $false
+$PatchFile = Join-Path $Here "patches\whisper_abort_in_sched.patch"
+function Apply-WhisperPatch {
+    $wdir = Join-Path $Deps "whisper.cpp"
+    $tmp = Join-Path $Out "whisper_abort.patch"
+    New-Item -ItemType Directory -Force $Out | Out-Null
+    [System.IO.File]::WriteAllText($tmp, ([System.IO.File]::ReadAllText($PatchFile) -replace "`r`n", "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    & git -C $wdir apply --check $tmp
+    if ($LASTEXITCODE -ne 0) { Fail "whisper.cpp 패치를 적용할 수 없어요 / cannot apply patches\whisper_abort_in_sched.patch to the pinned checkout" }
+    & git -C $wdir apply $tmp
+    if ($LASTEXITCODE -ne 0) { Fail "패치 적용 실패 / patch apply failed" }
+    $script:Patched = $true
+}
+function Restore-Whisper {
+    if ($script:Patched) {
+        & git -C (Join-Path $Deps "whisper.cpp") checkout -- src/whisper.cpp
+        $script:Patched = $false
+    }
+}
 function Sha256([string]$f) { return (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLowerInvariant() }
 
 try {
@@ -61,6 +82,7 @@ try {
     if (-not $Out) { Fail "-Out <빌드 폴더> 가 필요해요 / -Out <build folder> is required" }
     Check-Checkout "whisper.cpp" (Join-Path $Deps "whisper.cpp") $PinnedWhisper
     Check-Checkout "godot-cpp" (Join-Path $Deps "godot-cpp") $PinnedGodotCpp
+    if (-not $NoPatch) { Apply-WhisperPatch }
 
     $cmake = (Get-Command cmake -ErrorAction SilentlyContinue)
     if (-not $cmake) { Fail "cmake 를 찾지 못했어요 / cmake not found" }
@@ -86,15 +108,43 @@ try {
         $vsw = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
         if (-not (Test-Path -LiteralPath $vsw)) { Fail "Visual Studio 2022 (C++ 도구)를 찾지 못했어요 / Visual Studio 2022 C++ tools not found" }
         $vs = @(& $vsw -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)[0]
+        if (-not $vs) {
+            # vswhere hides an installation the installer still marks as incomplete: take any installation that has vcvars64.bat
+            $vs = @(& $vsw -all -products * -property installationPath | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ "VC\Auxiliary\Build\vcvars64.bat")) })[0]
+        }
         if (-not $vs) { Fail "Visual Studio 2022 의 C++ 도구가 없어요 / VS C++ tools missing" }
         $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
-        $kits = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Include"
-        $sdkOk = (Test-Path -LiteralPath $kits) -and (Get-ChildItem -LiteralPath $kits -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName "ucrt\stdio.h") })
+        $kitRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10"
+        $kits = Join-Path $kitRoot "Include"
+        $sdkVer = $null
+        if (Test-Path -LiteralPath $kits) {
+            $sdkVer = (Get-ChildItem -LiteralPath $kits -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName "ucrt\stdio.h") } | Sort-Object Name -Descending | Select-Object -First 1).Name
+        }
+        $sdkOk = [bool]$sdkVer
         if (-not $sdkOk) { Fail "Windows 10/11 SDK 가 설치돼 있지 않아요 (헤더·라이브러리 없음) / Windows 10/11 SDK is not installed" }
         $outName = "whisper_bridge.windows.x86_64.dll"
         Step "configure + build (windows x64, Ninja inside vcvars64)"
         $cfg = ($common | ForEach-Object { '"' + $_ + '"' }) -join ' '
-        cmd /c "`"$vcvars`" >nul && cmake $cfg -G Ninja && cmake --build `"$Build`" -j 8"
+        $env:Path = (Split-Path $vsw -Parent) + ";" + $env:Path   # vcvars64.bat needs vswhere.exe on PATH to find the Windows SDK
+        # vcvars64.bat does not always find a standalone Windows SDK (it reads the registry): add its folders by hand
+        $kInc = Join-Path $kits $sdkVer
+        $kLib = Join-Path $kitRoot "Lib\$sdkVer"
+        $kBin = Join-Path $kitRoot "bin\$sdkVer\x64"
+        # one command per line: cmd expands %VAR% when it reads the line, so the set lines must come after the vcvars call
+        $cmdLines = @(
+            "@echo off",
+            "@chcp 65001 >nul",
+            "call `"$vcvars`" >nul",
+            "set `"INCLUDE=%INCLUDE%;$kInc\ucrt;$kInc\um;$kInc\shared;$kInc\winrt`"",
+            "set `"LIB=%LIB%;$kLib\ucrt\x64;$kLib\um\x64`"",
+            "set `"PATH=$kBin;%PATH%`"",
+            "cmake $cfg -DCMAKE_TRY_COMPILE_CONFIGURATION=Release -G Ninja || exit /b 1",
+            "cmake --build `"$Build`" -j 8 || exit /b 1"
+        )
+        New-Item -ItemType Directory -Force $Out | Out-Null
+        $cmdFile = Join-Path $Out "win_build.cmd"
+        [System.IO.File]::WriteAllText($cmdFile, (($cmdLines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+        cmd /c "`"$cmdFile`""
         if ($LASTEXITCODE -ne 0) { Fail "Windows 빌드가 실패했어요 / windows build failed" }
     }
 
@@ -105,6 +155,14 @@ try {
 
     $built = Join-Path $Build "out\$outName"
     if (-not (Test-Path -LiteralPath $built)) { Fail "빌드 결과가 없어요 / build output missing: $built" }
+    if ($NoPatch) {
+        $np = Join-Path $Out "nopatch"
+        New-Item -ItemType Directory -Force $np | Out-Null
+        Copy-Item -LiteralPath $built -Destination (Join-Path $np $outName) -Force
+        Write-Host "OK (unpatched, measurement only) $np\$outName" -ForegroundColor Yellow
+        Restore-Whisper
+        exit 0
+    }
     New-Item -ItemType Directory -Force $BinDir | Out-Null
     $dest = Join-Path $BinDir $outName
     Copy-Item -LiteralPath $built -Destination $dest -Force
@@ -132,12 +190,15 @@ try {
     $info["godot_cpp_commit"] = $PinnedGodotCpp
     $info["godot_cpp_tag"] = "godot-4.5-stable"
     $info["ndk_version"] = $NdkVersion
+    $info["whisper_cpp_patches"] = @([ordered]@{ file = "native/whisper_bridge/patches/whisper_abort_in_sched.patch"; sha256 = (Sha256 $PatchFile); purpose = "abort callback also stops the ggml CPU compute inside the encoder/decoder graphs" })
     $info["artifacts"] = $arts
     [System.IO.File]::WriteAllText($InfoFile, (($info | ConvertTo-Json -Depth 6) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
     Write-Host ("OK {0}  {1:N0} bytes  sha256 {2}" -f $dest, $size, $hash) -ForegroundColor Green
+    Restore-Whisper
     exit 0
 } catch {
+    Restore-Whisper
     Write-Host ("FAIL: " + $_.Exception.Message) -ForegroundColor Red
     exit 1
 }

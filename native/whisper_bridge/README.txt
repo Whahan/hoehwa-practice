@@ -43,6 +43,21 @@ Safety (why a damaged file cannot crash the app)
   - The model name string has its own mutex; the thread count is always 1..16.
   - Static helpers: cpu_features() (from getauxval, no /proc access needed), memory_info() ({peak_kb, rss_kb}).
 
+whisper.cpp patch (patches\whisper_abort_in_sched.patch, 14 added lines)
+  Stock whisper.cpp v1.9.5 hands the abort callback of whisper_full_params to ggml only for a few calls; the encoder graphs (conv,
+  encoder, cross) and the decoder graph run through the scheduler overload of ggml_graph_compute_helper(), which never sets it, so
+  abort() waited until the whole encoder had finished (phone: 2.59 s). The patch sets the callback on every scheduler backend, so the
+  CPU compute stops between graph nodes. build.ps1 applies it to the pinned checkout for the build and restores the checkout
+  afterwards (git checkout), the checkout stays clean. Measured on the PC (27 s clip, base.en-q5_1, abort() after 100/300/600 ms):
+  median 642/448/129 ms without the patch, 5/6/10 ms with it. build.ps1 -NoPatch builds without it (measurement only).
+
+Windows build notes
+  Needs VS 2022 C++ tools and a Windows 10/11 SDK. build.ps1 adds the SDK folders to INCLUDE/LIB/PATH itself (vcvars64.bat does not
+  always find a standalone SDK) and builds without debug info for the compiler test (CMAKE_TRY_COMPILE_CONFIGURATION=Release).
+  Known Godot 4.6.3 behaviour: the FIRST `godot --headless --import` of a project that has just got a .gdextension ends with an
+  access violation (exit -1073741819); a second run is fine. A minimal godot-cpp extension without whisper does the same, so it
+  is not caused by this library.
+
 Behaviour notes (details: design 1.4)
   - WhisperBridge.transcribe() blocks: call it from a Thread. One model, one transcription at a time; a second call waits.
   - abort() is safe from any thread; it only applies to the transcription that is running.

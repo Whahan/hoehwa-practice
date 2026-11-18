@@ -429,6 +429,7 @@ func _test_concurrent() -> void:
 	# time of one transcription alone (the "ms" of a call that had to wait includes the waiting, so it cannot be summed)
 	var solo: Dictionary = {}
 	for f in ["coffee.wav", "s1.wav"]:
+		_transcribe(b, f)                      # first run after a load is slower (warm-up): not used
 		solo[f] = int(_transcribe(b, f)["ms"])
 	for round_no in range(2):
 		var fa: String = "coffee.wav" if round_no == 0 else "s1.wav"
