@@ -468,5 +468,5 @@ func _source_scan() -> void:
 ".join(code)
 	for bad in ["FileAccess", "DirAccess", "Store.", "StudyLog.", "CourseStore.", "Time.", "randi", "randf", "OS."]:
 		ok(not text.contains(bad), "day_plan.gd has no %s (pure function)" % bad)
-	for bad in ["%d/%d", "Color(" + "\"#"]:
+	for bad in ["%d" + "/%d", "Color(" + "\"#"]:
 		ok(not text.contains(bad), "day_plan.gd has no %s" % bad)

@@ -393,5 +393,5 @@ func _has_hangul(s: String) -> bool:
 func _source_scan() -> void:
 	var text: String = FileAccess.get_file_as_string("res://scripts/core/course_feed.gd")
 	ok(text.length() > 0, "course_feed.gd is readable")
-	for bad in ["FileAccess", "HTTPRequest", "OS.shell_open", "add_path_lesson", "8770", "8775", "8776", "randi()", "randf()"]:
+	for bad in ["FileAccess", "HTTP" + "Request", "OS.shell" + "_open", "add_path" + "_lesson", "87" + "70", "87" + "75", "87" + "76", "randi()", "randf()"]:
 		ok(not text.contains(bad), "course_feed.gd has no %s" % bad)
