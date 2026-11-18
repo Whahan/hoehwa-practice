@@ -94,6 +94,7 @@ func _ready() -> void:
 	await _test_month_speak()
 	await _test_dialogue()
 	await _test_full_unit()
+	await _test_review_fixes()
 	await _test_invalid()
 	await _test_layout()
 	await _test_keyboard()
@@ -244,7 +245,7 @@ func _gather() -> void:
 							var k: String = _key_of(e)
 							if not pool.has(k):
 								pool[k] = []
-							if (pool[k] as Array).size() < 6:
+							if (pool[k] as Array).size() < 40:
 								(pool[k] as Array).append(e)
 	print("  gathered %d units, %d exercise kinds" % [n_units, pool.size()])
 
@@ -367,6 +368,42 @@ func _scan(n: Node, bounds: Rect2, min_h: float, out: Dictionary) -> void:
 		_scan(c, bounds, min_h, out)
 
 
+## 답한 뒤에도 눌려서 상태를 바꾸는 버튼(보기·타일·[확인]·[말하기 어려워요]·[이어서]·힌트·모범 답)의 이름 목록.
+func live_state_buttons(root: Node) -> Array:
+	var out: Array = []
+	var all: Array = []
+	_buttons(root, all)
+	for b in all:
+		var n: String = String(b.name)
+		var live: bool = (b as Button).is_visible_in_tree() and not (b as Button).disabled
+		var is_state: bool = n.begins_with("Opt") or n.begins_with("Tile") or n.begins_with("Chosen") or ["ConfirmBtn", "SkipBtn", "ContinueBtn", "HintBtn", "ModelBtn"].has(n)
+		if live and is_state:
+			out.append(n)
+	return out
+
+
+## 피드백 상자 안에서 같은 글이 두 번 보이면 그 글을, 아니면 "" 를 돌려준다(줄의 "이름   값" 에서 값끼리 같거나 하나가 다른 것에 들어 있으면 중복).
+func duplicate_feedback_text(fb: Node) -> String:
+	var vals: Array = []
+	if fb == null:
+		return ""
+	_feedback_values(fb, vals)
+	for i in vals.size():
+		for j in vals.size():
+			if i != j and String(vals[i]).length() >= 2 and String(vals[j]).contains(String(vals[i])):
+				return "%s | %s" % [vals[i], vals[j]]
+	return ""
+
+
+func _feedback_values(n: Node, out: Array) -> void:
+	for c in n.get_children():
+		if c is Label and c.name != "FeedbackTitle":
+			var t: String = String(c.text).strip_edges()
+			var k: int = t.find("   ")
+			out.append(t.substr(k + 3).strip_edges() if k >= 0 else t)
+		_feedback_values(c, out)
+
+
 func min_touch() -> float:
 	return maxf(44.0, Ds.touch_min() if phone else 0.0)
 
@@ -375,6 +412,25 @@ func _selfcheck() -> void:
 	ok(not has_big_number(["12분 30초", "3 / 8 단계", "1234"]), "selfcheck: has_big_number accepts ordinary numbers (4 digits)")
 	fails(has_big_number(["걸린 시간 12345"]), "12345 on screen is found by has_big_number")
 	fails(has_big_number(["x", "ID 987654321"]), "a nine digit number is found")
+	var fake_fb := PanelContainer.new()
+	var fvb := VBoxContainer.new()
+	fake_fb.add_child(fvb)
+	for t in ["정답   안녕", "뜻 풀이   hi = 안녕"]:
+		var fl := Label.new()
+		fl.text = t
+		fvb.add_child(fl)
+	var fake_dup: String = duplicate_feedback_text(fake_fb)
+	fake_fb.queue_free()
+	fails(fake_dup != "", "the duplicate-text check finds the old '정답 안녕' + '뜻 풀이 hi = 안녕' feedback")
+	var ok_fb := PanelContainer.new()
+	var ovb := VBoxContainer.new()
+	ok_fb.add_child(ovb)
+	for t in ["정답   hello", "뜻   안녕"]:
+		var ol := Label.new()
+		ol.text = t
+		ovb.add_child(ol)
+	ok(duplicate_feedback_text(ok_fb) == "", "selfcheck: the duplicate-text check accepts '정답 hello' + '뜻 안녕'")
+	ok_fb.queue_free()
 	# 가짜 화면: 작은 버튼, 너무 넓은 글, 바깥으로 나간 상자
 	var fake := Control.new()
 	fake.size = Vector2(412, 600)
@@ -491,6 +547,11 @@ func _check_feedback(v: CourseExerciseView, right: bool, label: String) -> void:
 	var nb: Button = _button_named("NextBtn")
 	ok(nb != null and nb.is_visible_in_tree() and not nb.disabled, "%s: [다음] is visible and enabled after the answer" % label)
 	ok(_button_named("ConfirmBtn") == null or not _button_named("ConfirmBtn").is_visible_in_tree(), "%s: [확인] is gone after the answer" % label)
+	var live: Array = live_state_buttons(v)
+	ok(live.is_empty(), "%s: no answer/hint/confirm button is still live after the answer (%s)" % [label, str(live)])
+	var dup: String = duplicate_feedback_text(fb)
+	ok(dup == "", "%s: feedback shows no text twice (%s)" % [label, dup])
+	ok(v.next_btn != null, "%s: next_btn is set" % label)
 
 
 func _solve_choice(v: CourseExerciseView, e: Dictionary, right: bool, label: String) -> void:
@@ -644,8 +705,14 @@ func _test_near() -> void:
 	ok(results.is_empty() and v.state == "near", "near: no answered yet, state near")
 	var note: Node = _node("NearNote")
 	ok(note != null and _has_text(note, "거의 맞아요: " + acc0), "near: the note says '거의 맞아요: %s'" % acc0)
-	ok(v.edit.editable and not (v.confirm_btn as Button).disabled and _button_named("ConfirmBtn").is_visible_in_tree(), "near: the box is editable and [확인] works again")
+	ok(v.edit.editable and _button_named("ConfirmBtn").is_visible_in_tree(), "near: the box is editable and [확인] is still there")
+	ok(_button_named("ConfirmBtn").disabled, "near: [확인] is disabled until the text changes (no lost retry)")
+	# 연타: 같은 글로 [확인] 을 또 눌러도(신호를 직접 내도) 재시도 기회가 사라지지 않는다
+	_button_named("ConfirmBtn").pressed.emit()
+	v.edit.text_submitted.emit(v.edit.text)
+	ok(results.is_empty() and v.state == "near" and v.tries == 1, "near: pressing [확인] again with the same text keeps tries=1 state=near (got tries=%d state=%s)" % [v.tries, v.state])
 	_type_into(v, acc0)
+	ok(not _button_named("ConfirmBtn").disabled, "near: changing the text enables [확인] again")
 	press(_button_named("ConfirmBtn"), "ConfirmBtn (near 2nd right)")
 	ok(results.size() == 1 and bool(results[0]["ok"]) and not bool(results[0]["first_try"]) and results[0]["tries"] == 2, "near then right: ok, not first try, 2 tries")
 	ok(_node("NearNote") == null, "near: the note is gone after the answer")
@@ -654,7 +721,7 @@ func _test_near() -> void:
 	var v2: CourseExerciseView = await _show(e)
 	_type_into(v2, typo)
 	press(_button_named("ConfirmBtn"), "ConfirmBtn (near twice 1)")
-	_type_into(v2, typo)
+	_type_into(v2, acc0.substr(1)) # 다른 한 글자 빠짐
 	press(_button_named("ConfirmBtn"), "ConfirmBtn (near twice 2)")
 	ok(results.size() == 1 and not bool(results[0]["ok"]) and results[0]["tries"] == 2, "near twice: wrong after the second try")
 	_check_feedback(v2, false, "near twice")
@@ -1122,6 +1189,139 @@ func _test_full_unit() -> void:
 		ok(kinds_seen.has(t), "the units contained a %s exercise" % t)
 	ok(c_ok == right_n and n_answers == right_n + wrong_n, "answered was emitted once per question (%d answers)" % n_answers)
 	_leave_pc_route()
+
+
+# ---------------------------------------------------------------- 검토 지적 반영 (연타, 점수 설명, 말하기 near, 대화 버튼, 중복 글)
+
+func _test_review_fixes() -> void:
+	print("[review fixes]")
+	Route.mode = "pc" if phone else Route.mode
+	# 답하기 전 화면에는 눌려서 상태를 바꾸는 버튼이 있다(검사기가 실제로 찾아낸다)
+	var vq: CourseExerciseView = await _show(_first("recognize/en_ko"))
+	fails(not live_state_buttons(vq).is_empty(), "live_state_buttons finds the option buttons of an unanswered exercise")
+	# [다음] 연타: next_requested 는 한 문제에 한 번
+	var e: Dictionary = _first("recognize/en_ko")
+	var v: CourseExerciseView = await _show(e)
+	press(v.option_btns[int(e["answer"])], "Opt (double next)")
+	press(_button_named("ConfirmBtn"), "ConfirmBtn (double next)")
+	var nb: Button = _button_named("NextBtn")
+	press(nb, "NextBtn (double next 1)")
+	nb.pressed.emit() # 연타(같은 버튼에 신호를 또 낸다)
+	nb.pressed.emit()
+	ok(next_n == 1, "[다음] pressed three times sends next_requested once (got %d)" % next_n)
+	v.show_exercise(e)
+	await _frames(2)
+	press(v.option_btns[0], "Opt (double next, next exercise)")
+	press(_button_named("ConfirmBtn"), "ConfirmBtn (double next, next exercise)")
+	press(_button_named("NextBtn"), "NextBtn (double next, next exercise)")
+	ok(next_n == 2, "the next exercise can send next_requested again (got %d)" % next_n)
+	# 소개 카드와 건너뜀도 한 번
+	var vt: CourseExerciseView = await _show(_first("teach_word/"))
+	var tb: Button = _button_named("NextBtn")
+	press(tb, "NextBtn (teach double)")
+	tb.pressed.emit()
+	ok(next_n == 1, "teach card: [다음] twice sends next_requested once")
+	var vs0: CourseExerciseView = await _show(null)
+	var sb: Button = _button_named("NextBtn")
+	press(sb, "NextBtn (skipped double)")
+	sb.pressed.emit()
+	ok(next_n == 1, "skipped exercise: [다음] twice sends next_requested once")
+	# 듣기 고르기 오답: 정답과 뜻이 두 번 나오지 않는다
+	var le: Dictionary = _first("listen/choose_ko")
+	var vl: CourseExerciseView = await _show(le)
+	_solve_choice(vl, le, false, "listen wrong text")
+	var fl: Node = _node("Feedback")
+	var texts: Array = []
+	_texts(fl, texts)
+	var right_ko: String = String(le["options"][int(le["answer"])])
+	var n_right: int = 0
+	for t in texts:
+		if String(t).contains(right_ko):
+			n_right += 1
+	ok(n_right == 1, "listen wrong: the right Korean text '%s' appears once in the feedback (%d times)" % [right_ko, n_right])
+	# 말하기: 전사는 맞고 점수가 낮다 -> 맞음 + 설명
+	var rp: Dictionary = {}
+	for cand in _all("speak/repeat"):
+		if String(cand["target"]).length() >= 8 and String(cand.get("stage", "")) != "month":
+			rp = cand
+			break
+	ok(not rp.is_empty(), "found a repeat exercise with a long target")
+	var target: String = String(rp["target"])
+	var vw: CourseExerciseView = await _show(rp)
+	score_reply = _score(target, 40.0)
+	_start_record(vw)
+	await _wait_state(vw, "answered")
+	ok(results.size() == 1 and bool(results[0]["ok"]) and bool(results[0]["weak_score"]), "right words with a low score: ok, weak_score")
+	ok(_has_text(_node("Feedback"), "내용은 맞았어요. 발음은 조금 더 연습해 봐요"), "right words with a low score: the feedback explains both (내용은 맞았어요. 발음은 ...)")
+	_check_feedback(vw, true, "weak score")
+	var vw2: CourseExerciseView = await _show(rp)
+	score_reply = _score(target, 90.0)
+	_start_record(vw2)
+	await _wait_state(vw2, "answered")
+	ok(results.size() == 1 and bool(results[0]["ok"]) and not bool(results[0]["weak_score"]) and not _has_text(_node("Feedback"), "발음은 조금 더"), "right words with a good score: no pronunciation note")
+	# 바꿔 말하기 오답 피드백의 정답은 바꾼 문장
+	var se: Dictionary = _first("speak/substitute")
+	var vsub: CourseExerciseView = await _show(se)
+	press(_button_named("SkipBtn"), "SkipBtn (substitute shows the new sentence)")
+	ok(_has_text(_node("Feedback"), String((se["accept"] as Array)[0])), "substitute: the feedback shows the substituted sentence '%s' as the answer" % String((se["accept"] as Array)[0]))
+	# 말하기 near: 한 번 더 말할 수 있다
+	var near_text: String = target.trim_suffix(".").trim_suffix("!").trim_suffix("?")
+	near_text = near_text.substr(0, near_text.length() - 1)
+	var vn: CourseExerciseView = await _show(rp)
+	score_reply = _score(near_text, 30.0)
+	_start_record(vn)
+	await _frames(10)
+	ok(results.is_empty() and vn.state == "asking" and vn.tries == 1, "speak near: no answered yet, still asking, tries=1 (state %s)" % vn.state)
+	ok(_node("NearNote") != null and _has_text(_node("NearNote"), "거의 맞아요: " + target), "speak near: the note says '거의 맞아요: %s'" % target)
+	ok(vn.drill.recorder != null and vn.drill.recorder.is_inside_tree() and _button_named("SkipBtn") != null, "speak near: the recorder and the give-up button are still there for the retry")
+	score_reply = _score(target, 85.0)
+	_start_record(vn)
+	await _wait_state(vn, "answered")
+	ok(results.size() == 1 and bool(results[0]["ok"]) and not bool(results[0]["first_try"]) and results[0]["tries"] == 2, "speak near then right: ok, not first try, tries=2")
+	ok(_node("NearNote") == null, "speak near: the note is gone after the answer")
+	_check_feedback(vn, true, "speak near then right")
+	var vn2: CourseExerciseView = await _show(rp)
+	score_reply = _score(near_text, 30.0)
+	_start_record(vn2)
+	await _frames(10)
+	_start_record(vn2)
+	await _wait_state(vn2, "answered")
+	ok(results.size() == 1 and not bool(results[0]["ok"]) and bool(results[0]["near"]) and results[0]["tries"] == 2, "speak near twice: wrong after the second try, tries=2")
+	_check_feedback(vn2, false, "speak near twice")
+	# 대화: 끝난 줄의 힌트·모범 답 버튼이 사라지고 hint_used 를 바꾸지 못한다
+	var multi: Dictionary = {"type": "dialogue_script", "id": "x:4:4:dlg:multi2", "mode": "role", "dialogue": "dmulti2", "lines": [
+		{"s": "A", "en": "Hello.", "ko": "안녕하세요.", "tts": "Hello.", "you": false},
+		{"s": "B", "en": "Hi there.", "ko": "안녕.", "tts": "Hi there.", "you": true, "hint_ko": "안녕", "accept": ["Hi there."]},
+		{"s": "A", "en": "How are you?", "ko": "잘 지내요?", "tts": "How are you?", "you": false},
+		{"s": "B", "en": "Good, thanks.", "ko": "좋아요.", "tts": "Good, thanks.", "you": true, "hint_ko": "좋아요", "accept": ["Good, thanks."]}]}
+	var vd: CourseExerciseView = await _show(multi, {"hints": "tap"})
+	var old_model: Button = _button_named("ModelBtn")
+	var old_hint: Button = _button_named("HintBtn")
+	score_reply = _score("hi there", 85.0)
+	_start_record(vd)
+	await _frames(10)
+	ok(vd.state == "turn_done", "dialogue: first turn done")
+	ok(not old_model.is_visible_in_tree() and not old_hint.is_visible_in_tree(), "dialogue: the finished turn has no visible [힌트 보기] / [모범 답 보기]")
+	old_model.pressed.emit()
+	old_hint.pressed.emit()
+	ok(not vd.hint_used, "dialogue: a finished turn's hint buttons cannot change hint_used")
+	press(_button_named("ContinueBtn"), "ContinueBtn (dialogue hints)")
+	score_reply = _score("good thanks", 85.0)
+	_start_record(vd)
+	await _frames(10)
+	ok(vd.state == "answered" and results.size() == 1 and bool(results[0]["ok"]) and not bool(results[0]["hint_used"]), "dialogue: both turns right, hint not used")
+	_check_feedback(vd, true, "dialogue hints")
+	ok(_node("LineFeedback") != null and _count_label(vd, "맞았어요") == 2, "dialogue: the finished turn says 맞았어요 once and the summary box once (%d)" % _count_label(vd, "맞았어요"))
+	_leave_pc_route()
+
+
+func _count_label(root: Node, text: String) -> int:
+	var n: int = 0
+	for c in root.get_children():
+		if c is Label and String(c.text) == text:
+			n += 1
+		n += _count_label(c, text)
+	return n
 
 
 # ---------------------------------------------------------------- 일부러 틀린 입력 (E4a-6)

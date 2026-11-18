@@ -10,7 +10,9 @@ extends Control
 ##                     result = {id, type, mode, item, ok, near, skipped, gave_up, answer, tries, first_try, hint_used, self_rated, ...}
 ##                     깨진 문제는 show_exercise 맨 끝에서 동기로 {skipped:true, ok:false} 를 낸다(화면은 "이 문제를 건너뛰었어요" + [다음]).
 ##                     정보 카드(teach_word, teach_pattern, 듣기 대화)는 `answered` 를 내지 않는다: is_info_card() 로 구분.
-##   next_requested    [다음] 을 눌렀다. 다음 문제로 넘어가는 일은 호출한 쪽이 한다.
+##   next_requested    [다음] 을 눌렀다(한 문제에서 한 번만: 다음 show_exercise 전에 또 눌려도 다시 내지 않는다). 다음 문제로 넘어가는 일은 호출한 쪽이 한다.
+## hints("show"|"tap"|"none", 대화): show = 한국어 힌트가 처음부터 보이고 [모범 답 보기] 만 누른다, tap = [힌트 보기] 를 눌러야 보인다,
+##   none = tap 과 같은 모양(버튼은 보이되 자동으로 보이는 힌트는 없다). 힌트나 모범 답을 보면 hint_used 에 기록한다.
 ## 정답 판정은 전부 LessonBuilder.judge 를 쓴다(이 파일에는 정규화·비교 코드가 없다).
 ## 소리는 문제의 `tts` 필드 그대로 Tts.speak(tts, "en", slow) 로 읽는다(`say` 는 읽지 않는다: 데이터가 읽을 글을 정한다).
 
@@ -67,6 +69,9 @@ var _dlg_card: CardBox = null
 var _dlg_model: Label = null
 var _speak_text: String = ""
 var _last_line: Dictionary = {}
+var _next_sent: bool = false
+var _near_text: String = ""
+var _dlg_row: Control = null
 
 
 func _init() -> void:
@@ -328,6 +333,8 @@ func _item_of(e: Dictionary) -> String:
 
 ## 맞는 영어 글(피드백에 보인다): 목표 문장 > 정답 목록 첫 항목 > 타일 > 낱말.
 func _en_text() -> String:
+	if String(ex.get("type", "")) == "speak" and _mode() == "substitute" and ex.get("accept") is Array and not (ex["accept"] as Array).is_empty() and _s((ex["accept"] as Array)[0]) != "":
+		return String((ex["accept"] as Array)[0]) # 바꿔 말하기의 정답은 바꾼 문장
 	if _s(ex.get("target")) != "":
 		return String(ex["target"])
 	var acc: Variant = ex.get("accept")
@@ -390,6 +397,9 @@ func _reset() -> void:
 	_dlg_card = null
 	_dlg_model = null
 	_speak_text = ""
+	_next_sent = false
+	_near_text = ""
+	_dlg_row = null
 	page.scroll_vertical = 0
 
 
@@ -494,8 +504,18 @@ func _make_confirm(enabled: bool) -> void:
 
 func _show_next() -> void:
 	next_btn = _btn(String(ctx.get("next_text", "다음")), "NextBtn", "primary")
-	next_btn.pressed.connect(func() -> void: next_requested.emit())
+	next_btn.pressed.connect(_on_next_pressed)
+	confirm_btn = null # 답한 뒤에는 [확인]·[말하기 어려워요]·[이어서] 가 없다(바 전체를 [다음] 으로 바꾼다)
+	skip_btn = null
+	continue_btn = null
 	_footer_set([next_btn])
+
+
+func _on_next_pressed() -> void:
+	if _next_sent:
+		return
+	_next_sent = true
+	next_requested.emit()
 
 
 # ================================================================== 깨진 문제
@@ -666,21 +686,19 @@ func _judge_choice() -> void:
 	_finish(ok, false, picked, lines)
 
 
-func _explain_choice(right_text: String) -> Array:
+## 틀렸을 때 "정답" 줄 아래에 보이는 설명 줄(정답 글을 또 적지 않는다).
+func _explain_choice(_right_text: String) -> Array:
 	var typ: String = String(ex["type"])
 	var mode: String = _mode()
 	var lines: Array = []
 	if typ == "recognize" and mode == "en_ko":
-		lines.append("뜻 풀이   %s = %s" % [String(ex["prompt"]), right_text])
+		lines.append("낱말   %s" % String(ex["prompt"]))
 	elif typ == "recognize" and mode == "hear_ko":
-		lines.append("들은 말   %s = %s" % [String(ex.get("tts", "")), right_text])
-	elif typ == "recognize":
-		lines.append("들은 말   %s" % right_text)
+		lines.append("들은 말   %s" % String(ex.get("tts", "")))
 	elif typ == "recall":
-		lines.append("뜻 풀이   %s = %s" % [String(ex["prompt_ko"]), right_text])
-	else:
+		lines.append("뜻   %s" % String(ex["prompt_ko"]))
+	elif typ == "listen":
 		lines.append("들은 문장   %s" % String(ex.get("tts", "")))
-		lines.append("뜻   %s" % right_text)
 	return lines
 
 
@@ -729,25 +747,27 @@ func _judge_typed() -> void:
 	var txt: String = edit.text
 	if txt.strip_edges() == "":
 		return
+	if state == "near" and txt == _near_text:
+		return # 거의 맞아요 안내 뒤에는 글이 바뀔 때까지 다시 채점하지 않는다([확인] 연타로 재시도 기회를 잃지 않게)
 	tries += 1
 	var j: Dictionary = LessonBuilder.judge(ex, txt)
 	var ok: bool = bool(j.get("ok", false))
 	var near: bool = bool(j.get("near", false))
 	if not ok and near and tries < NEAR_TRIES:
 		state = "near"
-		_show_near()
+		_near_text = txt
+		confirm_btn.disabled = true # 글이 바뀌면(_on_text_changed) 다시 켜진다
+		_show_near("거의 맞아요: %s" % _en_text(), "한 글자나 부호만 달라요. 한 번 더 써 보세요.")
 		return
 	edit.editable = false
 	confirm_btn.disabled = true
 	var lines: Array = ["정답   %s" % _en_text()]
-	if String(ex["type"]) == "recall":
-		lines.append("뜻 풀이   %s = %s" % [String(ex["prompt_ko"]), _en_text()])
-	elif _s(ex.get("prompt_ko")) != "":
+	if _s(ex.get("prompt_ko")) != "":
 		lines.append("뜻   %s" % String(ex["prompt_ko"]))
 	_finish(ok, near and not ok, txt, lines if not ok else [_en_text()])
 
 
-func _show_near() -> void:
+func _show_near(head_text: String, hint_text: String) -> void:
 	if _near_note != null and is_instance_valid(_near_note):
 		_near_note.queue_free()
 		page.content.remove_child(_near_note)
@@ -755,13 +775,14 @@ func _show_near() -> void:
 	p.name = "NearNote"
 	var v: VBoxContainer = UI.vbox(6)
 	p.add_child(v)
-	v.add_child(_label("거의 맞아요: %s" % _en_text(), "Strong", Pal.WARN_ON))
-	v.add_child(_label("한 글자나 부호만 달라요. 한 번 더 써 보세요.", "Muted"))
+	v.add_child(_label(head_text, "Strong", Pal.WARN_ON))
+	v.add_child(_label(hint_text, "Muted"))
 	_add(p)
 	_near_note = p
-	edit.select_all()
-	if is_inside_tree():
-		edit.grab_focus.call_deferred()
+	if edit != null:
+		edit.select_all()
+		if is_inside_tree():
+			edit.grab_focus.call_deferred()
 	_fit_all()
 	_reveal.call_deferred(p)
 
@@ -909,7 +930,7 @@ func _finish(ok: bool, near: bool, answer: Variant, lines: Array, extra_result: 
 	feedback = _make_feedback(ok, lines)
 	_add(feedback)
 	result = {"id": String(ex.get("id", "")), "type": String(ex["type"]), "mode": _mode(), "item": _item_of(ex), "ok": ok, "near": near,
-		"skipped": false, "gave_up": false, "answer": answer, "tries": tries, "first_try": ok and tries <= 1, "hint_used": hint_used, "self_rated": false}
+		"skipped": false, "gave_up": false, "answer": answer, "tries": tries, "first_try": ok and tries <= 1, "hint_used": hint_used, "self_rated": false, "weak_score": false}
 	result.merge(extra_result, true)
 	_show_next()
 	_reveal.call_deferred(feedback)
@@ -1024,7 +1045,7 @@ func _speak_footer() -> void:
 
 ## 말하기 채점 결과를 맞고 틀림으로: 자가 평가는 "잘했어요" 면 맞음, 아니면 LessonBuilder.judge(전사)이거나 통과 점수.
 func _evaluate_speak(e: Dictionary, res: Dictionary) -> Dictionary:
-	var out: Dictionary = {"ok": false, "near": false, "self_rated": false, "transcript": ""}
+	var out: Dictionary = {"ok": false, "near": false, "self_rated": false, "transcript": "", "weak_score": false}
 	if SelfRatePanel.is_self_rated(res):
 		out["ok"] = true
 		out["self_rated"] = true
@@ -1039,6 +1060,8 @@ func _evaluate_speak(e: Dictionary, res: Dictionary) -> Dictionary:
 		passed = true
 	out["ok"] = passed
 	out["near"] = bool(j.get("near", false)) and not passed
+	# 전사로는 맞았는데 발음 점수가 통과선 아래: 판정은 맞음 그대로, 글로 둘을 함께 설명한다(점수 카드와 어긋나 보이지 않게)
+	out["weak_score"] = passed and (mode == "repeat" or mode == "substitute") and (res.get("score") is float or res.get("score") is int) and score < float(PASS_SCORE)
 	return out
 
 
@@ -1052,11 +1075,19 @@ func _on_drill_scored(res: Dictionary, _target: String) -> void:
 	var ev: Dictionary = _evaluate_speak(ex, res)
 	var lines: Array = []
 	var mode: String = _mode()
+	if not bool(ev["ok"]) and bool(ev["near"]) and tries < NEAR_TRIES:
+		# 거의 맞음: 쓰기처럼 한 번 더 말할 기회(answered 는 아직 내지 않는다). 녹음 부품은 그대로 둔다.
+		_near_text = String(ev["transcript"])
+		_show_near("거의 맞아요: %s" % _en_text(), "또박또박 한 번 더 말해 보세요.")
+		return
 	if bool(ev["ok"]):
 		if bool(ev["self_rated"]):
 			lines.append("스스로 '잘했어요'로 평가했어요")
 		elif mode == "answer" or mode == "intro":
 			lines.append("말한 내용   %s" % String(ev["transcript"]))
+		elif bool(ev["weak_score"]):
+			lines.append("내용은 맞았어요. 발음은 조금 더 연습해 봐요")
+			lines.append(_en_text())
 		else:
 			lines.append(_en_text())
 	else:
@@ -1071,14 +1102,14 @@ func _on_drill_scored(res: Dictionary, _target: String) -> void:
 		if _s(ex.get("ko")) != "":
 			lines.append("뜻   %s" % String(ex["ko"]))
 		if bool(ev["near"]):
-			lines.append("거의 맞아요. 한 번 더 또박또박 말해 보세요.")
-	_finish_speak(bool(ev["ok"]), bool(ev["near"]), String(ev["transcript"]), lines, bool(ev["self_rated"]))
+			lines.append("거의 맞았어요. 소리를 또박또박 내 보세요.")
+	_finish_speak(bool(ev["ok"]), bool(ev["near"]), String(ev["transcript"]), lines, bool(ev["self_rated"]), false, bool(ev["weak_score"]))
 
 
-func _finish_speak(ok: bool, near: bool, answer: Variant, lines: Array, self_rated: bool, gave_up: bool = false) -> void:
+func _finish_speak(ok: bool, near: bool, answer: Variant, lines: Array, self_rated: bool, gave_up: bool = false, weak_score: bool = false) -> void:
 	if drill != null and is_instance_valid(drill) and drill.recorder != null and is_instance_valid(drill.recorder):
 		drill.recorder.stop_if_recording()
-	_finish(ok, near, answer, lines, {"self_rated": self_rated, "gave_up": gave_up})
+	_finish(ok, near, answer, lines, {"self_rated": self_rated, "gave_up": gave_up, "weak_score": weak_score})
 
 
 func _on_give_up() -> void:
@@ -1198,15 +1229,21 @@ func _dlg_open_turn(ln: Dictionary) -> void:
 	_dlg_model = model
 	_dlg_card.body.add_child(model)
 	var row: HFlowContainer = UI.flow(8, 8)
+	var card: CardBox = _dlg_card
+	_dlg_row = row
 	if hints != "show":
 		var hb: Button = _btn("힌트 보기", "HintBtn", "outline")
 		hb.pressed.connect(func() -> void:
+			if _dlg_card != card or state != "asking":
+				return # 끝난 줄의 버튼은 힌트 사용을 바꾸지 못한다
 			hint_lbl.visible = true
 			hint_used = true
 			hb.visible = false)
 		row.add_child(hb)
 	var mb: Button = _btn("모범 답 보기", "ModelBtn", "outline")
 	mb.pressed.connect(func() -> void:
+		if _dlg_card != card or state != "asking":
+			return
 		hint_lbl.visible = true
 		model.visible = true
 		hint_used = true
@@ -1241,15 +1278,18 @@ func _dlg_line_done(ok: bool, self_rated: bool, transcript: String, gave_up: boo
 	if ok:
 		_dlg_ok += 1
 	state = "turn_done" # 이 줄은 끝났다: 같은 줄에 다시 채점이 들어와도 한 번만 센다(answered 는 대화 끝에 한 번)
-	var fb: Label = _label("맞았어요" if ok else "틀렸어요", "Strong", Pal.OK_ON if ok else Pal.BAD_ON)
-	fb.name = "LineFeedback"
-	_dlg_card.body.add_child(fb)
 	_dlg_model.visible = true
+	if _dlg_row != null and is_instance_valid(_dlg_row):
+		_dlg_row.visible = false # 끝난 줄에는 [힌트 보기]·[모범 답 보기] 가 남지 않는다
 	var more: bool = false
 	var lines: Array = ex["lines"]
 	for i in range(_dlg_pos, lines.size()):
 		if _yes((lines[i] as Dictionary).get("you")):
 			more = true
+	if more: # 마지막 줄의 맞음·틀림은 아래 요약 상자가 말한다(같은 글을 두 번 보이지 않는다)
+		var fb: Label = _label("맞았어요" if ok else "틀렸어요", "Strong", Pal.OK_ON if ok else Pal.BAD_ON)
+		fb.name = "LineFeedback"
+		_dlg_card.body.add_child(fb)
 	_last_line = {"ok": ok, "self_rated": self_rated, "gave_up": gave_up, "transcript": transcript}
 	if drill != null and is_instance_valid(drill) and drill.recorder != null and is_instance_valid(drill.recorder):
 		drill.recorder.stop_if_recording()
