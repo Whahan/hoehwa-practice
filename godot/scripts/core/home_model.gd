@@ -25,7 +25,7 @@ const LANGS := ["en", "ja"]
 const MAX_INT := 1000000000
 const COURSE_BLOCKS := ["new", "review", "listen", "speak"]
 const COURSE_FALLBACKS := ["", "data", "file"]
-const COURSE_UNIT_KIND := {"new": "new", "speak": "speak", "check": "check", "free": "new", "recap": "recap"} ## DayPlan kind -> CoursePlayer kind
+const COURSE_UNIT_KIND := {"new": "new", "speak": "speak", "check": "check", "free": "listen", "recap": "recap"} ## DayPlan kind -> CoursePlayer kind. D7(자유 날)에는 새 내용 문제가 없다: E5 레슨 탭처럼 kind "listen" + block "new" 로 연다(그 칸과 주를 끝낸다)
 const TEXT_FALLBACK := {"data": "코스 데이터를 읽지 못해 예전 할 일을 보여 드려요.", "file": "코스 진도 파일을 읽지 못해 예전 할 일을 보여 드려요."}
 const TEXT_DEVICE := "코스 진도는 이 기기에만 저장돼요."
 
@@ -312,8 +312,12 @@ static func _course_tasks(n: Dictionary, plan: Dictionary) -> Array:
 			"target": _course_target(plan, blk)}
 		match id:
 			"new":
-				row["title"] = "%s · %d주 %d일" % [blk["title"], plan["w"], plan["d"]]
-				row["sub"] = mins + (" · 절반만 해요" if bool(blk.get("half", false)) else "")
+				if str(plan["kind"]) == "free": # 자유 날: 배운 문장 듣기로 복습하며 그 주를 마친다
+					row["title"] = "%s · 듣기 복습" % blk["title"]
+					row["sub"] = "%d주 %d일 · %s" % [plan["w"], plan["d"], mins]
+				else:
+					row["title"] = "%s · %d주 %d일" % [blk["title"], plan["w"], plan["d"]]
+					row["sub"] = mins + (" · 절반만 해요" if bool(blk.get("half", false)) else "")
 			"review":
 				if st == "done":
 					row["title"] = "오늘 복습 끝!"

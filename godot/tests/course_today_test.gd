@@ -100,6 +100,9 @@ func _ready() -> void:
 	await _test_cell_persist()
 	await _test_block_specs()
 	await _test_reopen_once()
+	await _test_reopen_restart()
+	await _test_every_cell_opens()
+	await _test_d7_flow_real_data()
 	await _test_rp_once()
 	await _test_review_mark()
 	await _test_offer_view()
@@ -609,13 +612,13 @@ func _test_day_kinds() -> void:
 	eq(((t6[0] as Dictionary)["target"] as Dictionary)["args"]["kind"], "check", "D6 new block opens a check")
 	eq(((t6[0] as Dictionary)["target"] as Dictionary)["args"]["block"], "new", "D6 block new")
 	var t7: Array = HomeModel.tasks(S({"d": 7}))
-	eq((t7[0] as Dictionary)["title"], "자유 시간 · 5주 7일", "D7 title")
-	eq(((t7[0] as Dictionary)["target"] as Dictionary)["args"]["kind"], "new", "D7 new block opens kind new (the player has no 'free')")
+	eq([(t7[0] as Dictionary)["title"], (t7[0] as Dictionary)["sub"]], ["자유 시간 · 듣기 복습", "5주 7일 · 15분"], "D7 title and sub say what it is: listening review")
+	eq(((t7[0] as Dictionary)["target"] as Dictionary)["args"], {"lang": "en", "kind": "listen", "w": 5, "d": 7, "block": "new", "half": false}, "D7 new block opens kind LISTEN with block NEW (the builder has no new-content questions on D7; same as the lesson tab)")
 	for d in range(1, 8):
 		var a: Dictionary = (HomeModel.tasks(S({"d": d}))[0] as Dictionary)["target"]["args"]
 		ok(str(a["block"]) == "new" and a["w"] == 5 and a["d"] == d, "day %d: the new row spec has block new and its own cell" % d)
 	var fin: Array = HomeModel.tasks(S({"finished": true}))
-	eq(((fin[0] as Dictionary)["target"] as Dictionary)["args"]["kind"], "new", "a finished course still opens kind new")
+	eq(((fin[0] as Dictionary)["target"] as Dictionary)["args"]["kind"], "listen", "a finished course opens the same listen unit as D7")
 
 
 func _test_review_first_and_recap() -> void:
@@ -1219,6 +1222,119 @@ func _test_reopen_once() -> void:
 	eq(CourseStore.pos(), {"w": 2, "d": 3}, "reopen: a 2-day break reopens nothing")
 	await _drop(tv2)
 	await _drop(tv)
+
+
+## 쉬었다 돌아온 날(reopen) -> 새 내용을 끝냄 -> 앱을 다시 켬: 줄은 reopen 뒤 칸(1주 1일)이어야 한다(reopen 전 칸 2주 3일이 아니라).
+func _test_reopen_restart() -> void:
+	print("[reopen day, then a restart: the saved cell is the cell after the reopen]")
+	_world(true, 5)
+	var t0: int = Plan.today_days() - 30
+	_advance_to(2, 3, t0)
+	CourseStore.today_override = Plan.today_days()
+	var tv := await _make()
+	eq(CourseStore.pos(), {"w": 1, "d": 1}, "reopen restart: the first draw reopened week 1 (pos 1주 1일)")
+	eq(Store.prefs.get("course_today_cell", null), {"date": CourseStore.today_iso(), "w": 1, "d": 1}, "reopen restart: the saved cell is the reopened cell 1주 1일, not the old 2주 3일")
+	CourseStore.unit_done({"unit": "new", "w": 1, "d": 1, "completed": true, "block": "new", "ok": 1, "total": 1})
+	await _drop(tv)
+	HomeParts.reset_course_memory()
+	CourseStore.reset_memory()
+	Store.load_prefs()
+	var tv2 := await _make()
+	ok(_has_text(tv2, "복귀 점검 · 1주 1일") and not _has_text(tv2, "2주 3일"), "reopen restart: after a restart the done recap row says 1주 1일 (not 2주 3일)")
+	eq(_row_state(tv2, "new"), "done", "reopen restart: the new row is done")
+	await _drop(tv2)
+
+
+## 홈의 줄을 눌렀을 때 오류 화면으로 가는 칸이 0 이다: 실데이터(res://data/course) 1~N주 x 7일, 새 내용·듣기·말하기 줄을 플레이어로 연다.
+## 복습 우선(half)·복귀 점검(recap) 변형은 같은 spec 으로 빌더가 ok 를 돌려주는지 본다. D6 점검·D7 자유·D5 말하기 포함.
+func _test_every_cell_opens() -> void:
+	print("[every cell of the real course: no row opens an error screen]")
+	_world(true, 12)
+	CourseData.base_dir = "res://data/course"
+	CourseData.reset()
+	CourseFeed.reset()
+	var weeks: int = CourseData.available_weeks()
+	ok(weeks >= 16, "cells: the real course has %d weeks (>= 16)" % weeks)
+	CoursePlayer.build_hook = Callable() # 실제 빌더
+	_holder = Control.new()
+	_holder.size = Vector2(get_window().size)
+	add_child(_holder)
+	var opened := 0
+	var errors: Array = []
+	var builder_checks := 0
+	for w in range(1, weeks + 1):
+		for d in range(1, 8):
+			for variant in ["plain", "review_first", "recap"]:
+				var over: Dictionary = {"w": w, "d": d}
+				if variant == "review_first":
+					over["due"] = 45
+				elif variant == "recap":
+					over["away_days"] = 8
+				var s0: Dictionary = S(over)
+				for row in HomeModel.tasks(s0):
+					var id: String = str((row as Dictionary)["id"])
+					if id == "review":
+						continue
+					var args: Dictionary = ((row as Dictionary)["target"] as Dictionary)["args"].duplicate()
+					args.erase("lang")
+					if variant == "plain":
+						var p: CoursePlayer = CoursePlayer.open(_holder, args)
+						opened += 1
+						if p.state != "run":
+							errors.append("%d주 %d일 %s %s state=%s" % [w, d, variant, JSON.stringify(args), p.state])
+						p.queue_free()
+					else:
+						var bspec: Dictionary = {"kind": args["kind"], "w": w, "d": d, "seen": [], "half": args["half"]}
+						var r: Dictionary = CourseFeed.build_unit(bspec, 7)
+						builder_checks += 1
+						if not bool(r.get("ok", false)) or (r.get("exercises", []) as Array).is_empty():
+							errors.append("%d주 %d일 %s %s builder not ok" % [w, d, variant, JSON.stringify(args)])
+		await _frames(1)
+	for e in errors.slice(0, 8):
+		print("    error cell: ", e)
+	ok(opened >= weeks * 7 * 3, "cells: %d rows were opened in a player, %d more checked in the builder" % [opened, builder_checks])
+	eq(errors.size(), 0, "cells: rows that lead to an error screen: 0")
+	# 검사기도 틀릴 수 있다: 만들 수 없는 spec(D7 에 kind new)은 오류로 센다
+	var bad_p: CoursePlayer = CoursePlayer.open(_holder, {"kind": "new", "w": 2, "d": 7, "block": "new"})
+	fails(bad_p.state == "error", "selfcheck: kind new on a D7 cell is an error screen (the checker would count it)")
+	bad_p.queue_free()
+	await _frames(2)
+	_holder.queue_free()
+	_holder = null
+	CoursePlayer.build_hook = Callable(self, "_trim_build")
+	CourseData.base_dir = K1_DIR
+	CourseData.reset()
+	CourseFeed.reset()
+
+
+## 실데이터로 2주 7일까지 진행한 뒤 [오늘 45분 시작] -> 플레이어가 열리고(오류 아님) 끝내면 3주 1일.
+func _test_d7_flow_real_data() -> void:
+	print("[D7 free day with the real course: hero press -> player -> week 2 done -> 3주 1일]")
+	_world(true, 0)
+	CourseData.base_dir = "res://data/course"
+	CourseData.reset()
+	CourseFeed.reset()
+	_advance_to(2, 7)
+	eq(CourseStore.pos(), {"w": 2, "d": 7}, "D7 flow: the course is at 2주 7일")
+	var tv := await _make()
+	ok(_has_text(tv, "자유 시간 · 듣기 복습"), "D7 flow: the new row says 자유 시간 · 듣기 복습")
+	eq(tv.hero_button().text, "오늘 45분 시작", "D7 flow: the start button says 오늘 45분 시작")
+	_specs.clear()
+	press(tv.hero_button(), "[오늘 45분 시작] (D7)")
+	await _frames(4)
+	var p: CoursePlayer = tv.player()
+	ok(p != null and p.state == "run", "D7 flow: the player opened and runs (not an error screen)")
+	eq([p.kind, p.block, p.w, p.d] if p != null else [], ["listen", "new", 2, 7], "D7 flow: kind listen, block new, 2주 7일")
+	if p != null and p.state == "run":
+		var n: int = await _play_and_finish(p, "D7")
+		ok(n >= 2, "D7 flow: %d questions answered by buttons" % n)
+	eq(CourseStore.pos(), {"w": 3, "d": 1}, "D7 flow: finishing it moved pos to 3주 1일")
+	ok(CourseStore.week_state(2)["done"], "D7 flow: week 2 is done")
+	eq(_row_state(tv, "new"), "done", "D7 flow: the new row is done on the redrawn home")
+	await _drop(tv)
+	CourseData.base_dir = K1_DIR
+	CourseData.reset()
+	CourseFeed.reset()
 
 
 func _test_rp_once() -> void:
