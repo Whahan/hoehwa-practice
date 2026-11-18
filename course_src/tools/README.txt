@@ -12,7 +12,10 @@ check_course.py   linter (design docs\v200_design.md 9.2). Exit 0 = pass, 1 = fa
     --weeks a-b           only these weeks are checked (their files must exist); all other loaded weeks only feed the lexicon
     --strict              warnings (unknown keys, plain-style Korean endings, missing policy.json, unverifiable Tatoeba ...) fail
     --skeleton            check skeleton.json (72 weeks, counts, id_ranges, assignment table, pattern `needs`)  [K0]
-    --lexicon-from skeleton   words come from the assignment table of skeleton.json (and week files must match it exactly)
+    --lexicon-from skeleton|files   where the words come from. DEFAULT skeleton: the assignment table of skeleton.json (and the week
+                          files must match it exactly). A folder without skeleton.json (test fixtures) falls back to `files` (words
+                          from the week files) and says so in one line: `LEXICON_FROM files (no skeleton.json ...)`; the line comes
+                          after the violations, so a failure still starts with `CHECK_FAIL <CODE>`. build_course.py: same default.
     --tatoeba-db <path>   tatoeba.sqlite (read only) or a small {"id": "text"} .json (tests)
     --grammar [--lt-dir <folder>] [--grammar-backend <grammar.py>]   LanguageTool (en-CA); without it `GRAMMAR_SKIPPED` (not verified)
     --count-items         prints `ITEMS weeks=.. word=.. pattern=.. sentence=.. dialogue_line=.. total=N`
@@ -48,9 +51,17 @@ Say and en: the words of `en` (numbers, symbols and abbreviations are cut out fi
   percent, and, minus, to, degrees, dollars, cents, a m ...) and the letters of a letter-by-letter acronym reading; number words
   (five, twenty) are not exempt: they must have been taught. The "any" parts of a say (3D, dates, unknown symbols) are looked up
   too. An acronym (SIN, ATM) is a word when the lexicon has an entry whose `en` is in capitals (with a `say`: the letters, or one
-  word starting with the same letter); a sentence must then read it as that entry's say. An unregistered acronym (ABC) only
-  letter by letter (a b c / ay bee see) and is an unknown word anyway. A word's own `say` never registers words: it must be a number
-  reading, a letter reading, the word itself, or the registered acronym reading (3D with say "friend" is NUM_SAY).
+  word starting with the same letter); a sentence must then read it as that entry's say. An acronym entry registers the acronym
+  itself ("ATM", capitals kept) and nothing else: neither its lower-case spelling nor the words of its `say` become ordinary words
+  (en FRIEND, say friend brings nothing in: `friend` stays a word of week 4). The letters of a letter reading (a t m / ay tee em /
+  ess eye en, also mixed) are exempt like those of an unregistered acronym, so a letter name that is a later word (eye) is no ORDER;
+  a word reading (SIN -> sin) is looked up only softly: unknown is fine, a lexicon word of that spelling must have been learned
+  (ORDER `acronym_reading_token=`). An acronym assigned in a later week is ORDER (`token=ATM`), an unassigned one UNKNOWN_TOKEN.
+  An unregistered acronym (ABC) only letter by letter (a b c / ay bee see) and is an unknown word anyway. A word's own `say`
+  never registers words: it must be a number reading, a letter reading, the word itself, or the registered acronym reading (3D with
+  say "friend" is NUM_SAY). Pronunciation hints of a plain word are fine: its letter name (A -> ay), its letters (pm -> p m), itself
+  or its other spelling (OK -> okay), or words that are lexicon words already at the word's day (read -> red only when red is
+  assigned before or on that day); anything else is `say_differs_from_en`.
 Forms and alt (FORM_SUSPECT): `forms[].f` needs a non-empty `pat` and must be a form of the headword by part of speech and spelling
   (forms_en.py): n -s/-es/-ies, 's s'; v -s, -ing, -ed, agent -er; adj/adv -er/-est (e: -r, y: -ier, one-syllable CVC: doubled
   consonant), adj -ly; propn 's only; interj/pron/det/prep/conj/num/aux get no regular form, only the listed irregular forms and
@@ -58,12 +69,18 @@ Forms and alt (FORM_SUSPECT): `forms[].f` needs a non-empty `pat` and must be a 
   study-studied, stop-stopped, picnic-picnicked, learn-learnt/learned. Wrong spellings (runing, stoped, biger) and compounds
   (mine, myself, something) are rejected. A form may not be another word's headword or alt (two words may share a form: leaves,
   saw). `alt` is a spelling variant only: case, hyphen, space, Canadian/US pair; never another word's headword, form or alt.
-  fixturesorms_corpus.json = 200+ beginner sentences with their forms (all must pass) and 46 wrong forms (all must fail).
+  pos chunk / phr are for headwords of two or more words only (a one-word headword with pos chunk would get every form: SCHEMA
+  `pos_chunk_needs_a_multi_word_headword`); of such a form only the changed word is checked against other headwords (good morning
+  -> good mornings: `good` is the constituent, not "another headword").
+  fixtures\forms_corpus.json = 200+ beginner sentences with their forms (all must pass), 46 wrong forms (all must fail) and the
+  acronym sentences (ATM, SIN read letter by letter: pass; wrong readings: fail).
 Number readings (numbers_en.py), judgement rule: a plain integer is a number (25 = twenty-five, never "two five"; 30 never "three oh").
   Identifier context: a number with 3+ digits that has an identifier word (room, apartment, apt, unit, suite, flight, gate, bus,
-  route, platform, code, pin, number, no, id ...) among the 4 words before it in the same sentence is read digit by digit,
+  route, platform, code, pin, number, id ..., "#" and "No.") among the 4 words before it in the same sentence is read digit by digit,
   two digits at a time, or as a plain number (room 305: three oh five / three zero five / three hundred five; apartment 1205:
-  twelve oh five); 4+ digit numbers that are no year, and phone numbers, likewise; a leading zero is always digit by digit. 911 =
+  twelve oh five). Nothing but one be-verb (is, are ...), "not" and further identifier words may stand between the identifier word
+  and the number: "The bus has 100 seats" and "My room is the 305" are no identifier context (one hundred), neither is "No, 305
+  people" (only "No." with the dot and "#" count for the word no). 4+ digit numbers that are no year, and phone numbers, likewise; a leading zero is always digit by digit. 911 =
   "nine one one" only. Years 1000-2099: nineteen ninety-nine, twenty twenty-four, twenty oh five, two thousand (and) five; "twenty
   five" for 2005 is wrong. -5 = minus/negative five; 5 deg C = five degrees (Celsius); 5-10 = five to/through ten; 5 pm = five p m /
   five pm; 3D = three d, 2x = two x (letters spelled).
