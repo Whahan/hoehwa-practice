@@ -1,0 +1,1225 @@
+{
+ "v": 1,
+ "w": 3,
+ "title_ko": "파닉스(sh ch th ng·마법의 e)·숫자 11~100",
+ "can_do": [
+  "sh, ch, th, ng 소리와 마법의 e 를 읽을 수 있다",
+  "11부터 100까지 숫자를 말하고 알아들을 수 있다",
+  "It's ~ 로 숫자와 물건을 말할 수 있다"
+ ],
+ "scene": {
+  "id": "sounds_numbers",
+  "title_ko": "숫자와 소리 익히기",
+  "canada": []
+ },
+ "words": [
+  {
+   "id": "w0051",
+   "en": "eleven",
+   "pos": "num",
+   "ko": "십일(11)",
+   "ipa": "ɪˈlɛvən",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0052",
+   "en": "twelve",
+   "pos": "num",
+   "ko": "십이(12)",
+   "ipa": "twɛlv",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0053",
+   "en": "thirteen",
+   "pos": "num",
+   "ko": "십삼(13)",
+   "ipa": "ˌθɜːrˈtiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0054",
+   "en": "fourteen",
+   "pos": "num",
+   "ko": "십사(14)",
+   "ipa": "ˌfɔːrˈtiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0055",
+   "en": "fifteen",
+   "pos": "num",
+   "ko": "십오(15)",
+   "ipa": "ˌfɪfˈtiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0056",
+   "en": "sixteen",
+   "pos": "num",
+   "ko": "십육(16)",
+   "ipa": "ˌsɪkˈstiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0057",
+   "en": "seventeen",
+   "pos": "num",
+   "ko": "십칠(17)",
+   "ipa": "ˌsɛvənˈtiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0058",
+   "en": "eighteen",
+   "pos": "num",
+   "ko": "십팔(18)",
+   "ipa": "ˌeɪˈtiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0059",
+   "en": "nineteen",
+   "pos": "num",
+   "ko": "십구(19)",
+   "ipa": "ˌnaɪnˈtiːn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0060",
+   "en": "twenty",
+   "pos": "num",
+   "ko": "이십(20)",
+   "ipa": "ˈtwɛnti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0061",
+   "en": "thirty",
+   "pos": "num",
+   "ko": "삼십(30)",
+   "ipa": "ˈθɜːrti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0062",
+   "en": "forty",
+   "pos": "num",
+   "ko": "사십(40)",
+   "ipa": "ˈfɔːrti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0063",
+   "en": "fifty",
+   "pos": "num",
+   "ko": "오십(50)",
+   "ipa": "ˈfɪfti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0064",
+   "en": "sixty",
+   "pos": "num",
+   "ko": "육십(60)",
+   "ipa": "ˈsɪksti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0065",
+   "en": "seventy",
+   "pos": "num",
+   "ko": "칠십(70)",
+   "ipa": "ˈsɛvənti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0066",
+   "en": "eighty",
+   "pos": "num",
+   "ko": "팔십(80)",
+   "ipa": "ˈeɪti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0067",
+   "en": "ninety",
+   "pos": "num",
+   "ko": "구십(90)",
+   "ipa": "ˈnaɪnti",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0068",
+   "en": "hundred",
+   "pos": "num",
+   "ko": "백(100)",
+   "ipa": "ˈhʌndrəd",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0069",
+   "en": "it's",
+   "pos": "contr",
+   "ko": "그것은 ~예요",
+   "ipa": "ɪts",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0070",
+   "en": "a",
+   "pos": "det",
+   "ko": "하나의",
+   "ipa": "ə",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0071",
+   "en": "this",
+   "pos": "pron",
+   "ko": "이것",
+   "ipa": "ðɪs",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0072",
+   "en": "that",
+   "pos": "pron",
+   "ko": "저것",
+   "ipa": "ðæt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0073",
+   "en": "thank",
+   "pos": "v",
+   "ko": "감사해요",
+   "ipa": "θæŋk",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0074",
+   "en": "she",
+   "pos": "pron",
+   "ko": "그녀",
+   "ipa": "ʃiː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0075",
+   "en": "shop",
+   "pos": "n",
+   "ko": "가게",
+   "ipa": "ʃɑːp",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0076",
+   "en": "chair",
+   "pos": "n",
+   "ko": "의자",
+   "ipa": "tʃɛr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0077",
+   "en": "cake",
+   "pos": "n",
+   "ko": "케이크",
+   "ipa": "keɪk",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0078",
+   "en": "home",
+   "pos": "n",
+   "ko": "집",
+   "ipa": "hoʊm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_its",
+   "tpl": "It's ___.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n",
+      "adj",
+      "num"
+     ]
+    }
+   ],
+   "title_ko": "It's ~ (그것은 ~이에요)",
+   "grammar_ko": [
+    "It's 는 It is 를 줄인 말이에요. 사물·시간·숫자를 말할 때 써요.",
+    "셀 수 있는 하나의 사물 앞에는 a 를 붙여요: It's a cake.",
+    "숫자나 형용사만 말할 때는 a 가 필요 없어요: It's twelve. It's very good."
+   ],
+   "d": 3,
+   "examples": [
+    "s0121",
+    "s0122",
+    "s0123",
+    "s0124",
+    "s0125",
+    "s0126"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0101",
+   "en": "Eleven, twelve, thirteen.",
+   "ko": "열하나, 열둘, 열셋.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0102",
+   "en": "Fourteen, fifteen, sixteen.",
+   "ko": "열넷, 열다섯, 열여섯.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0103",
+   "en": "Seventeen, eighteen.",
+   "ko": "열일곱, 열여덟.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0104",
+   "en": "Ten, eleven, twelve.",
+   "ko": "열, 열하나, 열둘.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0105",
+   "en": "11, 12, 13.",
+   "ko": "십일, 십이, 십삼.",
+   "say": "eleven, twelve, thirteen.",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0106",
+   "en": "14, 15, 16.",
+   "ko": "십사, 십오, 십육.",
+   "say": "fourteen, fifteen, sixteen.",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0107",
+   "en": "17, 18.",
+   "ko": "십칠, 십팔.",
+   "say": "seventeen, eighteen.",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0108",
+   "en": "Eighteen, nineteen, twenty.",
+   "ko": "열여덟, 열아홉, 스물.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0109",
+   "en": "19, 20.",
+   "ko": "십구, 이십.",
+   "say": "nineteen, twenty.",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0110",
+   "en": "Twenty, thirty, forty.",
+   "ko": "스물, 서른, 마흔.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0111",
+   "en": "Fifty, sixty, seventy.",
+   "ko": "쉰, 예순, 일흔.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0112",
+   "en": "Ten, twenty, thirty.",
+   "ko": "십, 이십, 삼십.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0113",
+   "en": "20, 30, 40.",
+   "ko": "이십, 삼십, 사십.",
+   "say": "twenty, thirty, forty.",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0114",
+   "en": "50, 60, 70.",
+   "ko": "오십, 육십, 칠십.",
+   "say": "fifty, sixty, seventy.",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0115",
+   "en": "Twenty-one.",
+   "ko": "스물하나.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0116",
+   "en": "Thirty-five.",
+   "ko": "서른다섯.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0117",
+   "en": "Eighty, ninety, one hundred.",
+   "ko": "여든, 아흔, 백.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0118",
+   "en": "Ninety-nine.",
+   "ko": "아흔아홉.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0119",
+   "en": "One hundred.",
+   "ko": "백.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0120",
+   "en": "Eighty-eight.",
+   "ko": "여든여덟.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0121",
+   "en": "It's twelve.",
+   "ko": "열두 시예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0122",
+   "en": "It's eleven.",
+   "ko": "열한 시예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0123",
+   "en": "It's 12.",
+   "ko": "12시예요.",
+   "say": "It's twelve.",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0124",
+   "en": "It's fifteen.",
+   "ko": "열다섯이에요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0125",
+   "en": "It's a cake.",
+   "ko": "케이크예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0126",
+   "en": "It's a cat.",
+   "ko": "고양이예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0127",
+   "en": "It's a big dog.",
+   "ko": "큰 개예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0128",
+   "en": "It's a red bus.",
+   "ko": "빨간 버스예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0129",
+   "en": "It's very hot.",
+   "ko": "정말 더워요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0130",
+   "en": "It's very good.",
+   "ko": "정말 좋아요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0131",
+   "en": "It's free.",
+   "ko": "공짜예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0132",
+   "en": "It's a shop.",
+   "ko": "가게예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0133",
+   "en": "It's a chair.",
+   "ko": "의자예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0134",
+   "en": "This is Min.",
+   "ko": "이쪽은 민이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0135",
+   "en": "This is Anna.",
+   "ko": "이쪽은 애나예요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0136",
+   "en": "She is my cat.",
+   "ko": "그녀는 제 고양이예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0137",
+   "en": "This is a shop.",
+   "ko": "여기는 가게예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0138",
+   "en": "This cup is hot.",
+   "ko": "이 컵은 뜨거워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0139",
+   "en": "That bus is red.",
+   "ko": "저 버스는 빨개요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0140",
+   "en": "This is my home.",
+   "ko": "여기는 제 집이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0141",
+   "en": "That is my chair.",
+   "ko": "저건 제 의자예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0142",
+   "en": "Welcome home.",
+   "ko": "집에 온 걸 환영해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0143",
+   "en": "Hello, welcome home.",
+   "ko": "안녕하세요, 집에 온 걸 환영해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0144",
+   "en": "Thank you.",
+   "ko": "감사해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0145",
+   "en": "Thank you, Anna.",
+   "ko": "감사해요, 애나.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0146",
+   "en": "No, thank you.",
+   "ko": "아니요, 괜찮아요. 감사해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0147",
+   "en": "Cake, please.",
+   "ko": "케이크 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0148",
+   "en": "It's a good cake.",
+   "ko": "맛있는 케이크예요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0149",
+   "en": "She is a good cat.",
+   "ko": "그녀는 착한 고양이예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0150",
+   "en": "It's a very big home.",
+   "ko": "아주 큰 집이에요.",
+   "say": "",
+   "pat": "p_its",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0003",
+   "title_ko": "집에 온 손님",
+   "scene": "sounds_numbers",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hello, Min. Welcome home.",
+     "ko": "안녕하세요, 민. 집에 온 걸 환영해요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Thank you, Anna. It's a big home.",
+     "ko": "감사해요, 애나. 집이 정말 커요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Sit, please. Cake?",
+     "ko": "앉으세요. 케이크 드실래요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Yes, please. Thank you.",
+     "ko": "네, 부탁해요. 감사해요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": [
+  {
+   "id": "n0301",
+   "kind": "sound",
+   "text_ko": "13 과 30 을 구별하세요: thirteen 은 뒤쪽 teen 을 세게, thirty 는 앞쪽 thir 를 세게 말해요. 끝소리 n 과 ty 도 들어 보세요."
+  },
+  {
+   "id": "n0302",
+   "kind": "vocab",
+   "text_ko": "21 부터 99 까지는 하이픈으로 이어서 써요: twenty-one, thirty-five. 십의 자리를 먼저, 일의 자리를 나중에 말해요."
+  },
+  {
+   "id": "n0303",
+   "kind": "sound",
+   "en": "sh",
+   "text_ko": "sh: 입술을 앞으로 내밀고 이 사이로 바람을 내요. 목은 울리지 않아요. (she, shop, fish)",
+   "_sound": "snd_dig_sh"
+  },
+  {
+   "id": "n0304",
+   "kind": "sound",
+   "en": "ch",
+   "text_ko": "ch: 혀를 입천장에 붙였다 떼며 숨을 터뜨려요. (chair)",
+   "_sound": "snd_dig_ch"
+  },
+  {
+   "id": "n0305",
+   "kind": "sound",
+   "en": "th",
+   "text_ko": "th: 혀끝을 이 사이에 둬요. this, that 은 목이 울리고, thank, three 는 바람만 나요. (this, that, thank, three)",
+   "_sound": "snd_dig_th"
+  },
+  {
+   "id": "n0306",
+   "kind": "sound",
+   "en": "ng",
+   "text_ko": "ng: 혀 뒤쪽을 올리고 코로 소리를 내요. 끝에 g 소리를 따로 내지 않아요. (long, morning)",
+   "_sound": "snd_dig_ng"
+  },
+  {
+   "id": "n0307",
+   "kind": "sound",
+   "en": "ck",
+   "text_ko": "ck: k 와 같은 소리예요. 짧은 모음 뒤에서 자주 써요. (Jack)",
+   "_sound": "snd_dig_ck"
+  },
+  {
+   "id": "n0308",
+   "kind": "sound",
+   "en": "magic e",
+   "text_ko": "낱말 끝의 e 는 소리가 나지 않고, 앞 모음이 자기 이름 소리로 길게 바뀌어요. cake, home, name, five, nine.",
+   "_sound": "snd_magic_e"
+  }
+ ]
+}

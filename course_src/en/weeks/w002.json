@@ -1,0 +1,1401 @@
+{
+ "v": 1,
+ "w": 2,
+ "title_ko": "자음·약한 소리(f v th r l z)·숫자 0~10",
+ "can_do": [
+  "f, v, th, r, l, z 소리를 우리말과 구별해 낼 수 있다",
+  "0부터 10까지 숫자를 말하고 알아들을 수 있다",
+  "My name is ~ 로 이름을 말하고 묻는 말에 답할 수 있다"
+ ],
+ "scene": {
+  "id": "sounds_name",
+  "title_ko": "이름 말하기와 숫자",
+  "canada": []
+ },
+ "words": [
+  {
+   "id": "w0025",
+   "en": "my",
+   "pos": "det",
+   "ko": "나의",
+   "ipa": "maɪ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0026",
+   "en": "name",
+   "pos": "n",
+   "ko": "이름",
+   "ipa": "neɪm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0027",
+   "en": "is",
+   "pos": "v",
+   "ko": "이에요(그나 그것)",
+   "ipa": "ɪz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0028",
+   "en": "zero",
+   "pos": "num",
+   "ko": "영(0)",
+   "ipa": "ˈziːroʊ",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0029",
+   "en": "one",
+   "pos": "num",
+   "ko": "일(1)",
+   "ipa": "wʌn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0030",
+   "en": "two",
+   "pos": "num",
+   "ko": "이(2)",
+   "ipa": "tuː",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0031",
+   "en": "three",
+   "pos": "num",
+   "ko": "삼(3)",
+   "ipa": "θriː",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0032",
+   "en": "what's",
+   "pos": "contr",
+   "ko": "뭐예요",
+   "ipa": "wʌts",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0033",
+   "en": "your",
+   "pos": "det",
+   "ko": "당신의",
+   "ipa": "jɔːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0034",
+   "en": "four",
+   "pos": "num",
+   "ko": "사(4)",
+   "ipa": "fɔːr",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0035",
+   "en": "five",
+   "pos": "num",
+   "ko": "오(5)",
+   "ipa": "faɪv",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0036",
+   "en": "six",
+   "pos": "num",
+   "ko": "육(6)",
+   "ipa": "sɪks",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0037",
+   "en": "seven",
+   "pos": "num",
+   "ko": "칠(7)",
+   "ipa": "ˈsɛvən",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0038",
+   "en": "eight",
+   "pos": "num",
+   "ko": "팔(8)",
+   "ipa": "eɪt",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0039",
+   "en": "nine",
+   "pos": "num",
+   "ko": "구(9)",
+   "ipa": "naɪn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0040",
+   "en": "ten",
+   "pos": "num",
+   "ko": "십(10)",
+   "ipa": "tɛn",
+   "say": "",
+   "tags": [
+    "number"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0041",
+   "en": "rice",
+   "pos": "n",
+   "ko": "밥",
+   "ko2": "쌀",
+   "ipa": "raɪs",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0042",
+   "en": "right",
+   "pos": "adj",
+   "ko": "맞아요",
+   "ko2": "오른쪽",
+   "ipa": "raɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0043",
+   "en": "light",
+   "pos": "n",
+   "ko": "빛",
+   "ko2": "등불",
+   "ipa": "laɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0044",
+   "en": "fish",
+   "pos": "n",
+   "ko": "생선",
+   "ko2": "물고기",
+   "ipa": "fɪʃ",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0045",
+   "en": "zoo",
+   "pos": "n",
+   "ko": "동물원",
+   "ipa": "zuː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0046",
+   "en": "love",
+   "pos": "v",
+   "ko": "사랑해요",
+   "ipa": "lʌv",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0047",
+   "en": "very",
+   "pos": "adv",
+   "ko": "아주",
+   "ipa": "ˈvɛri",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0048",
+   "en": "free",
+   "pos": "adj",
+   "ko": "무료인",
+   "ko2": "한가한",
+   "ipa": "friː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0049",
+   "en": "you",
+   "pos": "pron",
+   "ko": "당신",
+   "ipa": "juː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0050",
+   "en": "long",
+   "pos": "adj",
+   "ko": "긴",
+   "ipa": "lɔːŋ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0514",
+   "en": "Lisa",
+   "pos": "propn",
+   "ko": "리사",
+   "ipa": "ˈliːsə",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0515",
+   "en": "Tom",
+   "pos": "propn",
+   "ko": "톰",
+   "ipa": "tɑːm",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_my_x_is",
+   "tpl": "My ___ is ___.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    },
+    {
+     "name": "value",
+     "pos": [
+      "propn",
+      "adj"
+     ]
+    }
+   ],
+   "title_ko": "My name is ~ (제 이름은 ~이에요)",
+   "grammar_ko": [
+    "'내 이름은'을 My name is 로 말해요. 한국어의 '은/는' 같은 조사가 영어에는 없어요.",
+    "영어 이름은 이름을 먼저, 성을 나중에 말해요: Min Kim.",
+    "is 는 '~이다'에 해당해요. 영어는 이 말을 빼먹지 않아요: My cat is red."
+   ],
+   "d": 1,
+   "examples": [
+    "s0050",
+    "s0051",
+    "s0052",
+    "s0053",
+    "s0054",
+    "s0055"
+   ]
+  },
+  {
+   "id": "p_whats_your_x",
+   "tpl": "What's your ___?",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "What's your ~? (당신의 ~은 뭐예요?)",
+   "grammar_ko": [
+    "What's 는 What is 를 줄인 말이에요. 묻는 말이 문장 맨 앞에 와요.",
+    "your 는 '당신의'예요. 명사 바로 앞에 붙여요: your name.",
+    "What's 로 묻는 질문은 보통 끝을 내려서 말해요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0062",
+    "s0063",
+    "s0064",
+    "s0065",
+    "s0066",
+    "s0067"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0050",
+   "en": "My name is Min.",
+   "ko": "제 이름은 민이에요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0051",
+   "en": "My name is Sam.",
+   "ko": "제 이름은 샘이에요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0052",
+   "en": "My name is Anna.",
+   "ko": "제 이름은 애나예요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0053",
+   "en": "My name is Ben.",
+   "ko": "제 이름은 벤이에요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0054",
+   "en": "Hello, my name is Anna.",
+   "ko": "안녕하세요, 제 이름은 애나예요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0055",
+   "en": "My cat is red.",
+   "ko": "제 고양이는 빨개요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0056",
+   "en": "My dog is big.",
+   "ko": "제 개는 커요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0057",
+   "en": "Zero, one, two.",
+   "ko": "영, 일, 이.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0058",
+   "en": "One, two, three.",
+   "ko": "일, 이, 삼.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0059",
+   "en": "0, 1, 2.",
+   "ko": "공, 일, 이.",
+   "say": "zero, one, two.",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0060",
+   "en": "1, 2, 3.",
+   "ko": "하나, 둘, 셋.",
+   "say": "one, two, three.",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0061",
+   "en": "One, please.",
+   "ko": "하나 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0062",
+   "en": "What's your name?",
+   "ko": "이름이 뭐예요?",
+   "say": "",
+   "pat": "p_whats_your_x",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0063",
+   "en": "Hello. What's your name?",
+   "ko": "안녕하세요. 이름이 뭐예요?",
+   "say": "",
+   "pat": "p_whats_your_x",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0064",
+   "en": "Good morning. What's your name?",
+   "ko": "좋은 아침이에요. 이름이 뭐예요?",
+   "say": "",
+   "pat": "p_whats_your_x",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0065",
+   "en": "Sorry, what's your name?",
+   "ko": "미안해요, 이름이 뭐예요?",
+   "say": "",
+   "pat": "p_whats_your_x",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0066",
+   "en": "Hi. What's your name?",
+   "ko": "안녕. 이름이 뭐예요?",
+   "say": "",
+   "pat": "p_whats_your_x",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0067",
+   "en": "What's your name, please?",
+   "ko": "성함이 어떻게 되세요?",
+   "say": "",
+   "pat": "p_whats_your_x",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0068",
+   "en": "Is your name Min?",
+   "ko": "이름이 민이에요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0069",
+   "en": "Is your name Lisa?",
+   "ko": "이름이 리사예요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0070",
+   "en": "Yes, my name is Min.",
+   "ko": "네, 제 이름은 민이에요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0071",
+   "en": "No, my name is Tom.",
+   "ko": "아니요, 제 이름은 톰이에요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0072",
+   "en": "My name is Lisa.",
+   "ko": "제 이름은 리사예요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0073",
+   "en": "Four, five, six.",
+   "ko": "사, 오, 육.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0074",
+   "en": "Five, six, seven.",
+   "ko": "오, 육, 칠.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0075",
+   "en": "4, 5, 6, 7.",
+   "ko": "넷, 다섯, 여섯, 일곱.",
+   "say": "four, five, six, seven.",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0076",
+   "en": "Eight, nine, ten.",
+   "ko": "팔, 구, 십.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0077",
+   "en": "8, 9, 10.",
+   "ko": "여덟, 아홉, 열.",
+   "say": "eight, nine, ten.",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0078",
+   "en": "Rice, please.",
+   "ko": "밥 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0079",
+   "en": "Fish, please.",
+   "ko": "생선 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0080",
+   "en": "My rice is hot.",
+   "ko": "제 밥은 뜨거워요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0081",
+   "en": "My fish is hot.",
+   "ko": "제 생선은 뜨거워요.",
+   "say": "",
+   "pat": "p_my_x_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0082",
+   "en": "Red light.",
+   "ko": "빨간 불이요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0083",
+   "en": "Yes, red light.",
+   "ko": "네, 빨간 불이요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0084",
+   "en": "Right?",
+   "ko": "맞죠?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0085",
+   "en": "Yes, right.",
+   "ko": "네, 맞아요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0086",
+   "en": "Love you.",
+   "ko": "사랑해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0087",
+   "en": "Love you, Tom.",
+   "ko": "사랑해요, 톰.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0088",
+   "en": "Love your hat.",
+   "ko": "모자 정말 마음에 들어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0089",
+   "en": "You love fish.",
+   "ko": "생선을 정말 좋아하시네요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0090",
+   "en": "Very good.",
+   "ko": "아주 좋아요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0091",
+   "en": "Very big.",
+   "ko": "아주 커요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0092",
+   "en": "Very long.",
+   "ko": "아주 길어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0093",
+   "en": "Very good, thanks.",
+   "ko": "아주 좋아요, 고마워요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0094",
+   "en": "Long night.",
+   "ko": "긴 밤이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0095",
+   "en": "Big zoo.",
+   "ko": "큰 동물원이요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0096",
+   "en": "Zoo, please.",
+   "ko": "동물원으로 가 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0097",
+   "en": "Free cup.",
+   "ko": "무료 컵이요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0098",
+   "en": "Free?",
+   "ko": "무료예요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0099",
+   "en": "Yes, free.",
+   "ko": "네, 무료예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0100",
+   "en": "Your dog is very big.",
+   "ko": "당신 개는 아주 커요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0002",
+   "title_ko": "이름 묻기",
+   "scene": "sounds_name",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hello. What's your name?",
+     "ko": "안녕하세요. 이름이 뭐예요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "My name is Min.",
+     "ko": "제 이름은 민이에요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Hi, Min. My name is Anna.",
+     "ko": "안녕, 민. 제 이름은 애나예요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Hi, Anna.",
+     "ko": "안녕, 애나.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": [
+  {
+   "id": "n0201",
+   "kind": "vocab",
+   "text_ko": "숫자 0 은 zero 라고 해요. 전화번호나 방 번호를 읽을 때는 oh 라고도 해요(4주차에 배워요)."
+  },
+  {
+   "id": "n0202",
+   "kind": "sound",
+   "en": "b",
+   "text_ko": "b 소리: 입술을 붙였다 떼면서 목을 울려 내요. (bed, bus)",
+   "_sound": "snd_cons_b"
+  },
+  {
+   "id": "n0203",
+   "kind": "sound",
+   "en": "c",
+   "text_ko": "c 소리: 보통 k 소리가 나요. (cat, cup)",
+   "_sound": "snd_cons_c"
+  },
+  {
+   "id": "n0204",
+   "kind": "sound",
+   "en": "d",
+   "text_ko": "d 소리: 혀끝을 윗잇몸에 대고 목을 울려 내요. (dog)",
+   "_sound": "snd_cons_d"
+  },
+  {
+   "id": "n0205",
+   "kind": "sound",
+   "en": "f",
+   "text_ko": "f 소리: 아랫입술을 윗니에 살짝 대고 바람을 내요. 목은 울리지 않아요. (fish, five, four)",
+   "_sound": "snd_cons_f"
+  },
+  {
+   "id": "n0206",
+   "kind": "sound",
+   "en": "g",
+   "text_ko": "g 소리: 혀 뒤쪽으로 목 안쪽을 막았다 열며 목을 울려 내요. (good)",
+   "_sound": "snd_cons_g"
+  },
+  {
+   "id": "n0207",
+   "kind": "sound",
+   "en": "h",
+   "text_ko": "h 소리: 숨을 가볍게 내쉬며 내요. (hat, hello)",
+   "_sound": "snd_cons_h"
+  },
+  {
+   "id": "n0208",
+   "kind": "sound",
+   "en": "j",
+   "text_ko": "j 소리: 혀를 입천장에 붙였다 떼며 목을 울려 내요. (Jack)",
+   "_sound": "snd_cons_j"
+  },
+  {
+   "id": "n0209",
+   "kind": "sound",
+   "en": "k",
+   "text_ko": "k 소리: 혀 뒤쪽으로 목 안쪽을 막았다 열며 숨을 세게 내요. (Kate)",
+   "_sound": "snd_cons_k"
+  },
+  {
+   "id": "n0210",
+   "kind": "sound",
+   "en": "l",
+   "text_ko": "l 소리: 혀끝을 윗잇몸에 대고 소리를 내요. (love, light, long)",
+   "_sound": "snd_cons_l"
+  },
+  {
+   "id": "n0211",
+   "kind": "sound",
+   "en": "m",
+   "text_ko": "m 소리: 입술을 닫고 코로 소리를 내요. (my, morning)",
+   "_sound": "snd_cons_m"
+  },
+  {
+   "id": "n0212",
+   "kind": "sound",
+   "en": "n",
+   "text_ko": "n 소리: 혀끝을 윗잇몸에 대고 코로 소리를 내요. (name, nine)",
+   "_sound": "snd_cons_n"
+  },
+  {
+   "id": "n0213",
+   "kind": "sound",
+   "en": "p",
+   "text_ko": "p 소리: 입술을 붙였다 떼면서 숨을 세게 내요. 목은 울리지 않아요. (pen)",
+   "_sound": "snd_cons_p"
+  },
+  {
+   "id": "n0214",
+   "kind": "sound",
+   "en": "q",
+   "text_ko": "q 소리: 보통 qu 로 쓰고 kw 처럼 소리 나요. (Quinn)",
+   "_sound": "snd_cons_q"
+  },
+  {
+   "id": "n0215",
+   "kind": "sound",
+   "en": "r",
+   "text_ko": "r 소리: 혀끝이 입천장에 닿지 않게 뒤로 말아서 내요. (red, rice, right)",
+   "_sound": "snd_cons_r"
+  },
+  {
+   "id": "n0216",
+   "kind": "sound",
+   "en": "s",
+   "text_ko": "s 소리: 이 사이로 바람을 내요. 목은 울리지 않아요. (six, seven)",
+   "_sound": "snd_cons_s"
+  },
+  {
+   "id": "n0217",
+   "kind": "sound",
+   "en": "t",
+   "text_ko": "t 소리: 혀끝을 윗잇몸에 대고 숨을 세게 내요. (ten, two)",
+   "_sound": "snd_cons_t"
+  },
+  {
+   "id": "n0218",
+   "kind": "sound",
+   "en": "v",
+   "text_ko": "v 소리: 아랫입술을 윗니에 살짝 대고 목을 울려 내요. (very, seven)",
+   "_sound": "snd_cons_v"
+  },
+  {
+   "id": "n0219",
+   "kind": "sound",
+   "en": "w",
+   "text_ko": "w 소리: 입술을 동그랗게 모았다가 펴며 내요. (what's, welcome)",
+   "_sound": "snd_cons_w"
+  },
+  {
+   "id": "n0220",
+   "kind": "sound",
+   "en": "x",
+   "text_ko": "x 소리: 보통 ks 소리가 나요. (six)",
+   "_sound": "snd_cons_x"
+  },
+  {
+   "id": "n0221",
+   "kind": "sound",
+   "en": "y",
+   "text_ko": "y 소리: 낱말 첫머리에서는 혀를 입천장 가까이 올려 y 소리를 내요. (yes)",
+   "_sound": "snd_cons_y"
+  },
+  {
+   "id": "n0222",
+   "kind": "sound",
+   "en": "z",
+   "text_ko": "z 소리: s 와 같은 입 모양에서 목을 울려 내요. (zero, zoo)",
+   "_sound": "snd_cons_z"
+  },
+  {
+   "id": "n0223",
+   "kind": "sound",
+   "en": "f",
+   "text_ko": "아랫입술과 윗니: fish, five, four, free 에서 입술이 윗니에 닿는지 거울로 확인해요.",
+   "_sound": "snd_focus_f"
+  },
+  {
+   "id": "n0224",
+   "kind": "sound",
+   "en": "v",
+   "text_ko": "b 와 다른 소리: very, seven, five 에서 아랫입술을 윗니에 대고 목을 울려요. 입술을 붙이면 b 가 돼요.",
+   "_sound": "snd_focus_v"
+  },
+  {
+   "id": "n0225",
+   "kind": "sound",
+   "en": "th",
+   "text_ko": "혀끝을 윗니와 아랫니 사이에 살짝 내밀고 바람만 내요: three. 혀를 이 사이에 둔 채 시작해요.",
+   "_sound": "snd_focus_th"
+  },
+  {
+   "id": "n0226",
+   "kind": "sound",
+   "en": "r / l",
+   "text_ko": "r 은 혀끝이 닿지 않게 뒤로 말고(red, rice, right), l 은 혀끝을 윗잇몸에 대요(love, light, long).",
+   "_sound": "snd_focus_rl"
+  },
+  {
+   "id": "n0227",
+   "kind": "sound",
+   "en": "z",
+   "text_ko": "s 와 같은 입 모양에서 목을 울려요: zero, zoo. 손을 목에 대고 떨림을 확인해요.",
+   "_sound": "snd_focus_z"
+  }
+ ]
+}
