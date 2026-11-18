@@ -61,6 +61,9 @@ func _build() -> void:
 
 	_header = PageHeader.build("로드맵")
 	c.add_child(_header)
+	if lang == "en" and CourseStore.mode() == CourseStore.MODE_COURSE and bool(CourseHome.availability()["ok"]):
+		c.add_child(_course_card())
+		c.add_child(UI.label("예전 12개월 로드맵", "H3", false))
 	var top := UI.adaptive(12)
 	top.add_child(UI.lang_segmented(lang, func(v: String) -> void:
 		lang = v
@@ -105,6 +108,22 @@ func _build() -> void:
 	c.add_child(months)
 	UI.fix_cjk(c)
 	bar_changed.emit() # the big title block was rebuilt
+
+
+## "새 코스 진행" card (English course mode, v2.0 E5): where the learner is on the 72-week road. The old 12 months below it stay as they were.
+func _course_card() -> Control:
+	var avail: int = CourseData.available_weeks()
+	var p: Dictionary = CourseStore.pos()
+	var road: Dictionary = CourseModel.states(CourseStore.path_flags(), p["w"], avail)
+	var w: int = int(road["current"]) + 1 if int(road["current"]) >= 0 else 1
+	var card := UI.card("Card", 8)
+	card.name = "CourseProgressCard"
+	card.body.add_child(UI.label("새 코스 진행", "Eyebrow", false))
+	card.body.add_child(UI.label("%d주 %d일" % [w, CourseHome.start_day(w)], "H3", false))
+	card.body.add_child(UI.label("완료 %s · 전체 %s" % [CourseModel.progress_label("weeks", int(road["done_count"]), avail), CourseModel.progress_label("weeks", w, CourseModel.WEEKS)], "Muted"))
+	card.body.add_child(UI.progress_bar(float(int(road["done_count"])) / maxf(1.0, float(avail)), Pal.accent("en"), 8.0))
+	card.body.add_child(UI.label("이어서 하려면 [레슨] 탭을 열어요.", "Small"))
+	return card
 
 
 func _month_card(m: Dictionary, current: bool) -> Control:

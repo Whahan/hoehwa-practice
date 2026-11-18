@@ -13,13 +13,18 @@ const NAME_KO := {"en": "영어", "ja": "일본어"}
 const PASS_SCORE := 70
 
 var lang: String = "en"
-var status: String = "idle" # idle | loading | run | done
+var status: String = "idle" # idle | loading | run | done | course (a CoursePlayer unit is open)
 var err: String = ""
 var sel_n: int = 1
 var sel_w: int = 1
 var _run_n: int = -1 ## cell (month / week) the running lesson was started for; the log counts it there even if sel_* changes
 var _run_w: int = -1
 var _boards: Array = [] ## PathBoard of every month on the lesson home (see path_boards)
+var _root: VBoxContainer = null ## page + footer (hidden while the course player is open)
+var _course: CourseHome = null ## the 72-week road, only in English course mode (v2.0 E5)
+var _player: CoursePlayer = null ## the open course unit (status "course")
+var _skip_week: int = 0 ## > 0: the open unit is the weekly check of that week opened by [점검으로 건너뛰기]
+var _player_scroll: int = 0 ## page scroll position to come back to when the unit ends
 var _render_serial: int = 0
 var _keep_scroll: int = -1 ## >= 0: the next lesson-home render restores this scroll position instead of centring the current node
 var title: String = ""
@@ -73,6 +78,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_theme_constant_override("separation", 0)
 	add_child(root)
+	_root = root
 	root.add_child(_page)
 	_footer_holder = PanelContainer.new()
 	footer = _footer_holder
@@ -123,7 +129,7 @@ func open_target(args: Dictionary) -> bool:
 	var w_v: Variant = args.get("w", sel_w)
 	if has_cell and (not _whole(n_v) or not _whole(w_v) or PathModel.index_of(int(n_v), int(w_v)) < 0):
 		return false
-	if status == "run":
+	if status == "run" or status == "course":
 		return false
 	if status != "idle":
 		quit_lesson()
@@ -444,6 +450,8 @@ func on_hide() -> void:
 	if _record_widget != null and is_instance_valid(_record_widget):
 		_record_widget.stop_if_recording()
 	Tts.stop()
+	if status == "course":
+		return # the course player pauses and stops its own sounds
 	if status == "loading":
 		quit_lesson() ## the lesson request is cancelled; the lesson home is shown when the tab comes back
 		return
@@ -466,6 +474,11 @@ func on_hide() -> void:
 ## 2 s goes back to the lesson home. Returns false on the lesson home (main.gd then goes to 오늘).
 func go_back() -> bool:
 	match status:
+		"course":
+			if _player != null and is_instance_valid(_player) and _player.go_back():
+				return true
+			_close_player()
+			return true
 		"loading", "done":
 			quit_lesson()
 			return true
@@ -488,6 +501,7 @@ func _render() -> void:
 	_render_serial += 1
 	var had_header: bool = _header != null
 	_boards = []
+	_course = null
 	_record_widget = null
 	_prosody_panel = null
 	_prosody_tips = null
@@ -562,6 +576,8 @@ func _render_home(c: VBoxContainer) -> void:
 		c.add_child(top_pc)
 	if err != "":
 		c.add_child(_error_box(err))
+	if lang == "en" and _course_gate(c):
+		return
 
 	var res: Dictionary = _path_result()
 	var states: Array = res["states"]
@@ -620,6 +636,98 @@ func _render_home(c: VBoxContainer) -> void:
 	var keep: int = _keep_scroll
 	_keep_scroll = -1
 	_settle_scroll(keep, _render_serial)
+
+
+## English only (v2.0 E5): above the old path comes the [새 코스로 시작] card (nothing chosen yet), the [새 코스 | 예전 길] switch
+## (chosen) or a one-line notice (the course data cannot be read). Returns true when the 72-week road was drawn instead of the old path.
+func _course_gate(c: VBoxContainer) -> bool:
+	var info: Dictionary = CourseHome.availability()
+	if not bool(info["ok"]):
+		var note := UI.label(str(info["text"]), "Muted")
+		note.name = "CourseNotice"
+		c.add_child(note)
+		return false
+	if not CourseHome.mode_chosen():
+		c.add_child(CourseHome.start_card(func() -> void: CourseHome.ask_start(self, _on_course_started)))
+		return false
+	var on: bool = CourseStore.mode() == CourseStore.MODE_COURSE
+	c.add_child(CourseHome.mode_selector(CourseStore.MODE_COURSE if on else CourseStore.MODE_LEGACY, _on_course_mode))
+	if not on:
+		return false
+	_course = CourseHome.new()
+	_course.unit_requested.connect(_open_unit)
+	c.add_child(_course)
+	_course.build()
+	_boards = _course.boards
+	var keep: int = _keep_scroll
+	_keep_scroll = -1
+	_settle_scroll(keep, _render_serial)
+	return true
+
+
+func _on_course_started(started: bool) -> void:
+	if started and status == "idle":
+		err = ""
+		_render()
+
+
+func _on_course_mode(m: String) -> void:
+	if status != "idle":
+		return
+	CourseStore.set_mode(m)
+	err = ""
+	_render()
+
+
+## The course home asks for a unit (a week's [이 주 시작] / [이어서 하기] / [점검으로 건너뛰기]): the player covers the page.
+func _open_unit(spec: Dictionary, skip_week: int = 0) -> void:
+	if status != "idle" or _player != null:
+		return
+	_player_scroll = _page.scroll_vertical if _page != null else 0
+	_skip_week = skip_week
+	status = "course"
+	if _root != null:
+		_root.visible = false
+	_player = CoursePlayer.open(self, spec)
+	_player.finished.connect(_on_unit_finished)
+	_player.left.connect(_close_player)
+
+
+func course_player() -> CoursePlayer:
+	return _player if _player != null and is_instance_valid(_player) else null
+
+
+func _on_unit_finished(result: Dictionary) -> void:
+	var skip_w: int = _skip_week
+	var msg: String = ""
+	if skip_w > 0 and str(result.get("kind", "")) == "check":
+		# placing out of a week (docs §6.2 U5): the same check, counted by CourseStore's skip path (90 % or more marks the week done)
+		var r: Dictionary = CourseStore.check_done(skip_w, {"ok": int(result.get("auto_ok", 0)), "total": int(result.get("auto_total", 0)), "skip": true})
+		var pct: int = int(r.get("pct", 0))
+		if bool(r.get("pass", false)):
+			msg = "%d주를 건너뛰었어요. 점검 %s" % [skip_w, CourseModel.progress_label("percent", pct, 0)]
+		else:
+			msg = "점검이 %s 아래라 건너뛰지 않았어요. 지금 점수 %s" % [CourseModel.progress_label("percent", CourseStore.SKIP_PASS, 0), CourseModel.progress_label("percent", pct, 0)]
+	_close_player.call_deferred()
+	if msg != "":
+		Toast.info(msg)
+
+
+## The unit ended (finished or left): take the player off and draw the lesson home again where it was.
+func _close_player() -> void:
+	if _player != null and is_instance_valid(_player):
+		if _player.get_parent() == self:
+			remove_child(_player)
+		_player.queue_free()
+	_player = null
+	_skip_week = 0
+	if status != "course":
+		return
+	status = "idle"
+	if _root != null:
+		_root.visible = true
+	_keep_scroll = _player_scroll
+	_render()
 
 
 ## States of the 48 cells of `lang` (PathModel.states from the log, the weekly checks and the calendar).
