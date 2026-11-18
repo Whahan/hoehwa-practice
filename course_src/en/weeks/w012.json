@@ -54,6 +54,7 @@
    "en": "understand",
    "pos": "v",
    "ko": "이해해요",
+   "ko2": "알아들어요",
    "ipa": "ˌʌndərˈstænd",
    "say": "",
    "tags": [],
@@ -926,7 +927,7 @@
   {
    "id": "s0685",
    "en": "I understand a little.",
-   "ko": "조금 이해해요.",
+   "ko": "조금 알아들어요.",
    "say": "",
    "pat": "p_dont_understand",
    "d": 4,

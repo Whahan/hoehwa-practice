@@ -141,7 +141,7 @@
    "en": "nice",
    "pos": "adj",
    "ko": "멋진",
-   "ko2": "친절한, 반가운",
+   "ko2": "친절한, 반가운, 좋은",
    "ipa": "naɪs",
    "say": "",
    "tags": [],
@@ -761,7 +761,7 @@
    ],
    "title_ko": "He is ~ / They are ~ (그는 ~예요 / 그들은 ~예요)",
    "grammar_ko": [
-    "한 사람(he, she)에는 is, 여럿(we, they)에는 are 를 써요.",
+    "한 사람(he, she)이나 사물 하나(it)에는 is, 여럿(we, they)에는 are 를 써요.",
     "한국어는 '그, 그녀, 우리'를 자주 생략하지만 영어는 항상 말해요.",
     "he 는 남자 한 명, she 는 여자 한 명이에요. 친구가 여럿이면 friends 처럼 -s 를 붙여요."
    ],
@@ -837,7 +837,8 @@
    "grammar_ko": [
     "have 는 '가지고 있다'예요. 가족·반려동물이 있다고 말할 때 써요: I have a sister.",
     "한국어 '여자 형제가 있어요'의 '있어요'를 영어에서는 have 로 말하고, 주어는 사람이에요.",
-    "he/she 에는 has 를 써요: She has a brother. 둘 이상이면 two sisters 처럼 -s 를 붙여요."
+    "he, she, 이름(Tom)처럼 한 사람에는 has 를 써요: She has a brother.",
+    "둘 이상이면 two sisters 처럼 -s 를 붙여요."
    ],
    "d": 3,
    "examples": [

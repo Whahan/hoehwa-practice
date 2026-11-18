@@ -828,7 +828,7 @@
    "title_ko": "Do/Does 질문과 부정 (~해요? / ~ 안 해요)",
    "grammar_ko": [
     "질문은 Do/Does 를 앞에 놓고 동사는 원래 모양이에요: Does she work?",
-    "he/she 에는 Does, 나머지에는 Do 를 써요.",
+    "he, she, it 이나 한 사람 이름(Tom)처럼 단수 주어에는 Does, I/you/we/they 에는 Do 를 써요.",
     "부정도 같아요: She doesn't work. (works 가 아니에요)"
    ],
    "d": 3,
@@ -1647,7 +1647,7 @@
     {
      "s": "B",
      "en": "Yes, I usually cook dinner. Do you cook?",
-     "ko": "네, 보통 저녁을 요리해요. 요리해요?",
+     "ko": "네, 보통 저녁을 요리해요. 요리는 해요?",
      "say": ""
     },
     {
