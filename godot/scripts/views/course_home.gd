@@ -89,7 +89,11 @@ static func start_day(w: int) -> int:
 ## [이 주 시작]이 CoursePlayer.open 에 넘기는 spec. kind 는 그 날의 종류(새 내용 new / 말하기 speak / 점검 check), 자유 날(D7)은
 ## 플레이어에 "free" 단위가 없어서 듣기(listen)로 연다. block 은 항상 "new"(그 칸을 끝내는 단위, CourseStore 계약).
 static func unit_spec(w: int) -> Dictionary:
-	var d: int = start_day(w)
+	return spec_for(w, start_day(w))
+
+
+## The spec of the cell (w, d) as [이 주 시작] opens it (see unit_spec).
+static func spec_for(w: int, d: int) -> Dictionary:
 	var kind: String = CourseModel.day_kind(w, d)
 	if kind == "free" or kind == "":
 		kind = "listen"

@@ -89,6 +89,7 @@ func _ready() -> void:
 	await _sec_lock_soon()
 	await _sec_skip()
 	await _sec_unit_spec()
+	await _sec_all_cells()
 	await _sec_wrong_input()
 	await _sec_layout()
 	await _sec_pathboard()
@@ -96,7 +97,7 @@ func _ready() -> void:
 	await _sec_numbers()
 	_sec_source()
 	_teardown()
-	for s in ["selfcheck", "gate", "main_flow", "states", "lock_soon", "skip", "unit_spec", "wrong_input", "layout", "pathboard", "roadmap", "numbers", "source"]:
+	for s in ["selfcheck", "gate", "main_flow", "states", "lock_soon", "skip", "unit_spec", "all_cells", "wrong_input", "layout", "pathboard", "roadmap", "numbers", "source"]:
 		ok(_reached.has(s), "section '%s' ran to its end" % s)
 	ok(_before == _user_listing(), "user:// listing unchanged by this test")
 	print("== course_home: %d passed, %d failed (presses: %d) ==" % [passed, failed, presses])
@@ -1089,6 +1090,40 @@ func _sec_unit_spec() -> void:
 	first.left.emit()
 	await _frames(3)
 	_reached.append("unit_spec")
+
+
+# ---------------------------------------------------------------- 7. 실데이터 전 칸이 플레이어 오류로 가지 않는다
+
+func _sec_all_cells() -> void:
+	print("[every cell of weeks 1..available x days 1..7 opens in the player without an error screen]")
+	_world()
+	_start_course_mode()
+	var holder := Control.new()
+	holder.size = _screen
+	add_child(holder)
+	var bad: Array = []
+	var opened: int = 0
+	var kinds: Dictionary = {}
+	for w in range(1, _avail + 1):
+		for d in range(1, 8):
+			var spec: Dictionary = CourseHome.spec_for(w, d)
+			kinds[str(spec["kind"])] = true
+			var p: CoursePlayer = CoursePlayer.open(holder, spec)
+			opened += 1
+			if p.state != "run" or p.view == null:
+				bad.append("w%d d%d %s: state=%s %s" % [w, d, str(spec["kind"]), p.state, p.error_text])
+			p.queue_free()
+			await get_tree().process_frame
+	eq(opened, _avail * 7, "opened %d cells (weeks 1..%d x 7 days)" % [opened, _avail])
+	eq(bad, [], "no cell of the real data ends on the player's error screen")
+	ok(kinds.has("new") and kinds.has("speak") and kinds.has("check") and kinds.has("listen") and not kinds.has("free"), "the cells cover new, speak, check and listen units (never 'free'): %s" % str(kinds.keys()))
+	# the checker can fail: a unit kind the player does not know is an error screen
+	var fake: CoursePlayer = CoursePlayer.open(holder, {"kind": "free", "w": 1, "d": 7, "block": "new"})
+	fails(fake.state != "run", "a 'free' unit (the old mapping of day 7) is an error screen, so the scan would catch it")
+	fake.queue_free()
+	holder.queue_free()
+	await get_tree().process_frame
+	_reached.append("all_cells")
 
 
 # ---------------------------------------------------------------- 7. 일부러 틀린 입력 (E5-6)
