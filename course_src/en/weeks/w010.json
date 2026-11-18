@@ -791,7 +791,7 @@
    "title_ko": "Is there ~ near here? (이 근처에 ~이 있어요?)",
    "grammar_ko": [
     "물을 때는 Is 를 앞으로 보내요: There is → Is there ~?",
-    "대답은 Yes, there is. 라고 해요. 없을 때는 There is no ~ 라고 말해요.",
+    "대답은 Yes, there is. 라고 해요. 없을 때는 No, there isn't. 또는 There is no ~ 라고 말해요.",
     "near here 는 '이 근처에'예요."
    ],
    "d": 3,

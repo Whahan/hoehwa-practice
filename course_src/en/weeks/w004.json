@@ -225,9 +225,10 @@
   },
   {
    "id": "w0090",
-   "en": "i'm",
+   "en": "I'm",
    "pos": "contr",
    "ko": "저는 ~예요",
+   "ko2": "저는 ~하고 있어요",
    "ipa": "aɪm",
    "say": "",
    "tags": [],
@@ -373,7 +374,7 @@
    "id": "w0098",
    "en": "speak",
    "pos": "v",
-   "ko": "말할 줄 알아요",
+   "ko": "(언어를) 말해요",
    "ko2": "말씀해요",
    "ipa": "spiːk",
    "say": "",
@@ -591,7 +592,7 @@
    "grammar_ko": [
     "from 은 '~에서(출신)'예요. 한국어는 '에서'가 뒤에 오지만 영어는 from 이 앞에 와요: I'm from Korea.",
     "나이는 I'm 뒤에 숫자만 말해요: I'm twenty-five. 영어는 보통 만 나이로 말해요.",
-    "Where, How 로 묻는 질문은 의문사 + are + you 순서예요. 나라 이름은 대문자로 시작해요."
+    "Where, How 로 묻는 be동사 질문은 의문사(구) + are + you 순서예요. 나라 이름은 대문자로 시작해요."
    ],
    "d": 2,
    "examples": [
@@ -743,7 +744,7 @@
    "ko": "제 전화번호는 555-0142예요.",
    "say": "My phone number is five five five, oh one four two.",
    "pat": "",
-   "d": 1,
+   "d": 2,
    "scope": "all",
    "accept": [],
    "src": "own",
@@ -755,7 +756,7 @@
    "ko": "제 전화번호는 555-0187이에요.",
    "say": "My phone number is five five five, oh one eight seven.",
    "pat": "",
-   "d": 1,
+   "d": 2,
    "scope": "all",
    "accept": [],
    "src": "own",

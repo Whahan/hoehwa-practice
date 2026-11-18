@@ -1552,6 +1552,54 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0228",
+   "en": "The bus is an hour late.",
+   "ko": "버스가 한 시간 늦었어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0229",
+   "en": "My birthday is this month.",
+   "ko": "제 생일은 이번 달이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0230",
+   "en": "The party is soon.",
+   "ko": "파티가 곧 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0231",
+   "en": "Dinner is soon.",
+   "ko": "곧 저녁이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [
@@ -1600,7 +1648,7 @@
     {
      "s": "A",
      "en": "Nice. I get up at ten.",
-     "ko": "멋지네요. 저는 열 시에 일어나요.",
+     "ko": "좋네요. 저는 열 시에 일어나요.",
      "say": ""
     }
    ]

@@ -18,8 +18,8 @@
    "id": "w0484",
    "en": "see",
    "pos": "v",
-   "ko": "보여요",
-   "ko2": "만나요",
+   "ko": "봐요",
+   "ko2": "보여요, 만나요",
    "ipa": "siː",
    "say": "",
    "tags": [],
@@ -260,7 +260,8 @@
    "id": "w0498",
    "en": "maybe",
    "pos": "adv",
-   "ko": "어쩌면",
+   "ko": "아마",
+   "ko2": "어쩌면",
    "ipa": "ˈmeɪbi",
    "say": "",
    "tags": [],
@@ -446,7 +447,7 @@
   {
    "id": "s0936",
    "en": "These are my teachers.",
-   "ko": "이분들은 제 선생님들이에요.",
+   "ko": "이분들은 제 선생님이에요.",
    "say": "",
    "pat": "p_these_those",
    "d": 2,
@@ -458,7 +459,7 @@
   {
    "id": "s0937",
    "en": "Those are my customers.",
-   "ko": "저분들은 제 손님들이에요.",
+   "ko": "저분들은 제 손님이에요.",
    "say": "",
    "pat": "p_these_those",
    "d": 2,
@@ -470,7 +471,7 @@
   {
    "id": "s0938",
    "en": "These are good cafes.",
-   "ko": "이곳들은 좋은 카페들이에요.",
+   "ko": "여기 있는 곳들은 좋은 카페예요.",
    "say": "",
    "pat": "p_these_those",
    "d": 2,
@@ -482,7 +483,7 @@
   {
    "id": "s0939",
    "en": "Those are big hotels.",
-   "ko": "저곳들은 큰 호텔들이에요.",
+   "ko": "저기 있는 곳들은 큰 호텔이에요.",
    "say": "",
    "pat": "p_these_those",
    "d": 2,
@@ -494,7 +495,7 @@
   {
    "id": "s0940",
    "en": "These are our new managers.",
-   "ko": "이분들은 우리 새 매니저들이에요.",
+   "ko": "이분들은 우리 새 매니저예요.",
    "say": "",
    "pat": "p_these_those",
    "d": 2,
@@ -698,7 +699,7 @@
   {
    "id": "s0957",
    "en": "Anything else?",
-   "ko": "또 필요한 거 있어요?",
+   "ko": "또 필요한 거 있으세요?",
    "say": "",
    "pat": "p_some_any",
    "d": 4,
@@ -710,7 +711,7 @@
   {
    "id": "s0958",
    "en": "Do you need anything else?",
-   "ko": "더 필요한 게 있어요?",
+   "ko": "더 필요한 게 있으세요?",
    "say": "",
    "pat": "p_some_any",
    "d": 4,
@@ -890,7 +891,7 @@
   {
    "id": "s0973",
    "en": "Is that okay?",
-   "ko": "괜찮아요?",
+   "ko": "그거 괜찮아요?",
    "say": "",
    "pat": "",
    "d": 1,
@@ -902,7 +903,7 @@
   {
    "id": "s0974",
    "en": "That's okay.",
-   "ko": "그건 괜찮아요.",
+   "ko": "괜찮아요.",
    "say": "",
    "pat": "",
    "d": 1,
@@ -1166,7 +1167,7 @@
   {
    "id": "s0996",
    "en": "Maybe tomorrow.",
-   "ko": "어쩌면 내일이요.",
+   "ko": "아마 내일이요.",
    "say": "",
    "pat": "",
    "d": 1,
@@ -1198,6 +1199,66 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0245",
+   "en": "There is nothing here.",
+   "ko": "여기에는 아무것도 없어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0246",
+   "en": "It's probably open.",
+   "ko": "아마 열려 있을 거예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0247",
+   "en": "Can I have another coffee, please?",
+   "ko": "커피 한 잔 더 주실 수 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0248",
+   "en": "The other door is open.",
+   "ko": "다른 문이 열려 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0249",
+   "en": "These are the same, but those are different.",
+   "ko": "이것들은 같지만 저것들은 서로 달라요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [
@@ -1222,7 +1283,7 @@
     {
      "s": "A",
      "en": "Sure. Anything else?",
-     "ko": "그럼요. 또 필요한 거 있어요?",
+     "ko": "그럼요. 또 필요한 거 있으세요?",
      "say": ""
     },
     {
@@ -1234,7 +1295,7 @@
     {
      "s": "A",
      "en": "Yes, we have some cake. Which cake do you like?",
-     "ko": "네, 케이크가 있어요. 어느 케이크를 좋아해요?",
+     "ko": "네, 케이크가 있어요. 어떤 케이크로 하시겠어요?",
      "say": ""
     },
     {
