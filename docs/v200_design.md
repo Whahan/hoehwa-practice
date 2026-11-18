@@ -707,6 +707,9 @@ E3 new godot/tests/day_plan_test.gd
 E3 new godot/tests/day_plan_test.tscn
 E3 new godot/tests/course_cards_test.gd
 E3 new godot/tests/course_cards_test.tscn
+E3 new godot/scripts/core/course_feed.gd
+E3 new godot/tests/course_feed_test.gd
+E3 new godot/tests/course_feed_test.tscn
 E4a new godot/scripts/practice/course_exercise_view.gd
 E4a new godot/tests/course_exercise_view_test.gd
 E4a new godot/tests/course_exercise_view_test.tscn
