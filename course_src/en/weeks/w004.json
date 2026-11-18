@@ -42,7 +42,12 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "doing",
+     "pat": "p_what_are_you_doing"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -58,7 +63,16 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "spells",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "spelling",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -75,7 +89,12 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "letters",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -92,7 +111,12 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "numbers",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -108,7 +132,12 @@
    "tags": [],
    "role": "active",
    "d": 1,
-   "forms": [],
+   "forms": [
+    {
+     "f": "phones",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -236,7 +265,12 @@
    "tags": [],
    "role": "active",
    "d": 2,
-   "forms": [],
+   "forms": [
+    {
+     "f": "emails",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -264,6 +298,7 @@
    "en": "excuse",
    "pos": "v",
    "ko": "실례해요",
+   "ko2": "저기요",
    "ipa": "ɪkˈskjuːz",
    "say": "",
    "tags": [],
@@ -317,7 +352,16 @@
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "says",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "saying",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [
     "w0098"
@@ -329,13 +373,23 @@
    "id": "w0098",
    "en": "speak",
    "pos": "v",
-   "ko": "이야기해요",
+   "ko": "말할 줄 알아요",
+   "ko2": "말씀해요",
    "ipa": "spiːk",
    "say": "",
    "tags": [],
    "role": "active",
    "d": 3,
-   "forms": [],
+   "forms": [
+    {
+     "f": "speaks",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "speaking",
+     "pat": "p_im_ving"
+    }
+   ],
    "alt": [],
    "syn": [
     "w0097"
@@ -390,7 +444,12 @@
    "tags": [],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "countries",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -406,7 +465,12 @@
    "tags": [],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "cities",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -1072,7 +1136,7 @@
   {
    "id": "s0195",
    "en": "Again, please.",
-   "ko": "한 번 더요.",
+   "ko": "한 번 더 부탁해요.",
    "say": "",
    "pat": "",
    "d": 3,
@@ -1144,7 +1208,7 @@
   {
    "id": "s0201",
    "en": "Excuse me. Do you speak English?",
-   "ko": "실례합니다. 영어 하세요?",
+   "ko": "저기요. 영어 할 줄 아세요?",
    "say": "",
    "pat": "",
    "d": 3,

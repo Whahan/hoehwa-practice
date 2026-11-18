@@ -973,6 +973,28 @@ def _lt_dir_candidates(lt_dir):
     return out
 
 
+def _lt_is_ignored_spelling(m, text, ignore):
+    """A LanguageTool match that is a spelling match (rule MORFOLOGIK/HUNSPELL/SPELL or category TYPOS) for exactly one word
+    of policy.json `lt_ignore_words`. Every other match (grammar, another misspelling) stays."""
+    rule = m.get("rule") or {}
+    rid = str(rule.get("id", ""))
+    cat = str((rule.get("category") or {}).get("id", ""))
+    if not (rid.startswith(("MORFOLOGIK", "HUNSPELL")) or "SPELL" in rid or cat == "TYPOS"):
+        return False
+    off, ln = m.get("offset", 0), m.get("length", 0)
+    return text[off:off + ln].lower().replace("’", "'") in ignore
+
+
+def _lt_ignoring(check_fn, ignore):
+    """backend/grammar.py `check` with the allowed words filtered out of its matches (the module's own correct() uses it)."""
+    def wrapped(lang, text, *args, **kwargs):
+        res = check_fn(lang, text, *args, **kwargs)
+        if res is None:
+            return None
+        return [m for m in res if not _lt_is_ignored_spelling(m, text, ignore)]
+    return wrapped
+
+
 def check_grammar(ctx, grammar_module, grammar_path=None, lt_dir=None):
     """LanguageTool through backend/grammar.py. The module starts the Java server on a free port of its own and is
     stopped here by PID (grammar.stop). Any problem (no module, no jar, no Java, server does not start) = GRAMMAR_SKIPPED."""
@@ -1007,6 +1029,11 @@ def check_grammar(ctx, grammar_module, grammar_path=None, lt_dir=None):
         ctx.notes.append("GRAMMAR_SKIPPED reason=LanguageTool_or_Java_not_found (not verified)")
         return
     n, info = 0, ""
+    ignore = {w.lower().replace("’", "'") for w in ctx.pol_list("lt_ignore_words")}
+    real_check = getattr(mod, "check", None)
+    patched = bool(ignore) and callable(real_check)
+    if patched:                       # Canadian words the dictionary does not know (loonie, toonie): spelling matches only
+        mod.check = _lt_ignoring(real_check, ignore)
     try:
         if hasattr(mod, "start") and not mod.start():
             ctx.notes.append("GRAMMAR_SKIPPED reason=server_did_not_start (not verified)")
@@ -1022,6 +1049,8 @@ def check_grammar(ctx, grammar_module, grammar_path=None, lt_dir=None):
             if res:
                 ctx.add("GRAMMAR", _where(it["w"], it["id"]), "languagetool_suggests_a_change")
     finally:
+        if patched:
+            mod.check = real_check
         try:
             mod.stop()
         except Exception:  # noqa: BLE001

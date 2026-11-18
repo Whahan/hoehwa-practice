@@ -1,0 +1,1673 @@
+{
+ "v": 1,
+ "w": 5,
+ "title_ko": "가족·나 소개",
+ "can_do": [
+  "나와 가족을 소개할 수 있다",
+  "I am / You are / He is 로 말할 수 있다",
+  "Nice to meet you. 로 첫 인사를 할 수 있다"
+ ],
+ "scene": {
+  "id": "intro_family",
+  "title_ko": "새 친구에게 가족 소개",
+  "canada": []
+ },
+ "words": [
+  {
+   "id": "w0105",
+   "en": "I",
+   "pos": "pron",
+   "ko": "저",
+   "ko2": "나",
+   "ipa": "aɪ",
+   "say": "",
+   "tags": [
+    "pronoun"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0106",
+   "en": "am",
+   "pos": "v",
+   "ko": "이에요(저는 ~)",
+   "ipa": "æm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0107",
+   "en": "he",
+   "pos": "pron",
+   "ko": "그",
+   "ipa": "hiː",
+   "say": "",
+   "tags": [
+    "pronoun"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0108",
+   "en": "we",
+   "pos": "pron",
+   "ko": "우리",
+   "ipa": "wiː",
+   "say": "",
+   "tags": [
+    "pronoun"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0109",
+   "en": "they",
+   "pos": "pron",
+   "ko": "그 사람들",
+   "ipa": "ðeɪ",
+   "say": "",
+   "tags": [
+    "pronoun"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0110",
+   "en": "and",
+   "pos": "conj",
+   "ko": "그리고",
+   "ko2": "~와",
+   "ipa": "ænd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0111",
+   "en": "to",
+   "pos": "prep",
+   "ko": "~에",
+   "ko2": "~에게",
+   "ipa": "tuː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0112",
+   "en": "nice",
+   "pos": "adj",
+   "ko": "멋진",
+   "ko2": "친절한, 반가운",
+   "ipa": "naɪs",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0204"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0113",
+   "en": "meet",
+   "pos": "v",
+   "ko": "만나요",
+   "ipa": "miːt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "meets",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "meeting",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0114",
+   "en": "have",
+   "pos": "v",
+   "ko": "가지고 있어요",
+   "ko2": "있어요, 먹어요",
+   "ipa": "hæv",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "has",
+     "pat": "p_i_have"
+    },
+    {
+     "f": "having",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0115",
+   "en": "fine",
+   "pos": "adj",
+   "ko": "잘 지내는",
+   "ko2": "괜찮은",
+   "ipa": "faɪn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0116",
+   "en": "mother",
+   "pos": "n",
+   "ko": "어머니",
+   "ipa": "ˈmʌðər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0117",
+   "en": "father",
+   "pos": "n",
+   "ko": "아버지",
+   "ipa": "ˈfɑːðər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0118",
+   "en": "sister",
+   "pos": "n",
+   "ko": "여자 형제",
+   "ko2": "언니, 누나, 여동생",
+   "ipa": "ˈsɪstər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "sisters",
+     "pat": "p_i_have"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0119",
+   "en": "brother",
+   "pos": "n",
+   "ko": "남자 형제",
+   "ko2": "형, 오빠, 남동생",
+   "ipa": "ˈbrʌðər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "brothers",
+     "pat": "p_i_have"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0120",
+   "en": "friend",
+   "pos": "n",
+   "ko": "친구",
+   "ipa": "frɛnd",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "friends",
+     "pat": "p_he_she_they"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0121",
+   "en": "family",
+   "pos": "n",
+   "ko": "가족",
+   "ipa": "ˈfæməli",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "families",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0122",
+   "en": "his",
+   "pos": "det",
+   "ko": "그의",
+   "ipa": "hɪz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0123",
+   "en": "her",
+   "pos": "det",
+   "ko": "그녀의",
+   "ipa": "hɜːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0124",
+   "en": "our",
+   "pos": "det",
+   "ko": "우리의",
+   "ipa": "ˈaʊər",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0125",
+   "en": "their",
+   "pos": "det",
+   "ko": "그 사람들의",
+   "ipa": "ðɛr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0126",
+   "en": "man",
+   "pos": "n",
+   "ko": "남자",
+   "ipa": "mæn",
+   "say": "",
+   "tags": [
+    "people"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "men",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0127",
+   "en": "woman",
+   "pos": "n",
+   "ko": "여자",
+   "ipa": "ˈwʊmən",
+   "say": "",
+   "tags": [
+    "people"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "women",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0128",
+   "en": "girl",
+   "pos": "n",
+   "ko": "여자아이",
+   "ipa": "ɡɜːrl",
+   "say": "",
+   "tags": [
+    "people"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "girls",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0129",
+   "en": "husband",
+   "pos": "n",
+   "ko": "남편",
+   "ipa": "ˈhʌzbənd",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "husbands",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0130",
+   "en": "wife",
+   "pos": "n",
+   "ko": "아내",
+   "ipa": "waɪf",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "wives",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0131",
+   "en": "parents",
+   "pos": "n",
+   "ko": "부모님",
+   "ipa": "ˈpɛrənts",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0132",
+   "en": "son",
+   "pos": "n",
+   "ko": "아들",
+   "ipa": "sʌn",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0133",
+   "en": "daughter",
+   "pos": "n",
+   "ko": "딸",
+   "ipa": "ˈdɔːtər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0134",
+   "en": "grandmother",
+   "pos": "n",
+   "ko": "할머니",
+   "ipa": "ˈɡrænˌmʌðər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0135",
+   "en": "grandfather",
+   "pos": "n",
+   "ko": "할아버지",
+   "ipa": "ˈɡrænˌfɑːðər",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0136",
+   "en": "uncle",
+   "pos": "n",
+   "ko": "삼촌",
+   "ko2": "외삼촌",
+   "ipa": "ˈʌŋkəl",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0137",
+   "en": "aunt",
+   "pos": "n",
+   "ko": "이모",
+   "ko2": "고모",
+   "ipa": "ænt",
+   "say": "",
+   "tags": [
+    "family"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0138",
+   "en": "child",
+   "pos": "n",
+   "ko": "아이",
+   "ipa": "tʃaɪld",
+   "say": "",
+   "tags": [
+    "people"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0139",
+   "en": "boy",
+   "pos": "n",
+   "ko": "남자아이",
+   "ipa": "bɔɪ",
+   "say": "",
+   "tags": [
+    "people"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0140",
+   "en": "baby",
+   "pos": "n",
+   "ko": "아기",
+   "ipa": "ˈbeɪbi",
+   "say": "",
+   "tags": [
+    "people"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_i_am_you_are",
+   "tpl": "I am ___. / You are ___.",
+   "slots": [
+    {
+     "name": "who_or_how",
+     "pos": [
+      "propn",
+      "adj",
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I am ~ / You are ~ (저는 ~예요 / 상대방은 ~예요)",
+   "grammar_ko": [
+    "영어는 주어와 동사가 꼭 있어야 해요. 한국어처럼 주어를 생략하지 않아요.",
+    "I 는 am, you 는 are 와 짝이에요. 짝이 맞지 않으면 틀려요.",
+    "묻는 문장은 are 를 앞으로 보내요: You are Anna. → Are you Anna?",
+    "I 는 문장 어디에 있어도 항상 대문자예요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0250",
+    "s0251",
+    "s0252",
+    "s0253",
+    "s0254",
+    "s0255"
+   ]
+  },
+  {
+   "id": "p_he_she_they",
+   "tpl": "He is ___. / She is ___. / We are ___. / They are ___.",
+   "slots": [
+    {
+     "name": "who_or_how",
+     "pos": [
+      "propn",
+      "adj",
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "He is ~ / They are ~ (그는 ~예요 / 그들은 ~예요)",
+   "grammar_ko": [
+    "한 사람(he, she)에는 is, 여럿(we, they)에는 are 를 써요.",
+    "한국어는 '그, 그녀, 우리'를 자주 생략하지만 영어는 항상 말해요.",
+    "he 는 남자 한 명, she 는 여자 한 명이에요. 친구가 여럿이면 friends 처럼 -s 를 붙여요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0258",
+    "s0259",
+    "s0260",
+    "s0261",
+    "s0262",
+    "s0263"
+   ]
+  },
+  {
+   "id": "p_nice_to_meet_you",
+   "tpl": "Nice to meet you. / How are you? - I'm fine, thanks.",
+   "slots": [],
+   "title_ko": "첫 인사 (만나서 반가워요 / 잘 지내세요?)",
+   "grammar_ko": [
+    "Nice to meet you. 는 처음 만났을 때 하는 고정 표현이에요. 통째로 외워서 바로 말해요.",
+    "How are you? 는 '잘 지내요?'라는 인사예요. 길게 설명하지 않고 I'm fine, thanks. 라고 짧게 답해요.",
+    "대답 뒤에 상대에게 되묻고 싶으면 And you? 라고 해요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0266",
+    "s0267",
+    "s0268",
+    "s0269",
+    "s0270",
+    "s0271"
+   ]
+  },
+  {
+   "id": "p_this_is_my",
+   "tpl": "This is my ___. / His name is ___. / Her name is ___.",
+   "slots": [
+    {
+     "name": "person",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "This is my ~ (이쪽은 제 ~예요)",
+   "grammar_ko": [
+    "사람을 소개할 때 This is my ... 라고 해요. this 는 가까이 있는 사람이나 물건이에요.",
+    "my(나의), his(그의), her(그녀의)는 명사 앞에 와요: my mother, her name.",
+    "영어는 가족 앞에도 my 를 꼭 붙여요: This is my mother."
+   ],
+   "d": 3,
+   "examples": [
+    "s0273",
+    "s0274",
+    "s0275",
+    "s0276",
+    "s0277",
+    "s0278"
+   ]
+  },
+  {
+   "id": "p_i_have",
+   "tpl": "I have a sister. / I have two sisters.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I have ~ (저는 ~이 있어요)",
+   "grammar_ko": [
+    "have 는 '가지고 있다'예요. 가족·반려동물이 있다고 말할 때 써요: I have a sister.",
+    "한국어 '여자 형제가 있어요'의 '있어요'를 영어에서는 have 로 말하고, 주어는 사람이에요.",
+    "he/she 에는 has 를 써요: She has a brother. 둘 이상이면 two sisters 처럼 -s 를 붙여요."
+   ],
+   "d": 3,
+   "examples": [
+    "s0281",
+    "s0282",
+    "s0283",
+    "s0284",
+    "s0285",
+    "s0286"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0250",
+   "en": "Hello, I am Min.",
+   "ko": "안녕하세요, 저는 민이에요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0251",
+   "en": "I am Anna.",
+   "ko": "저는 애나예요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0252",
+   "en": "I am Korean.",
+   "ko": "저는 한국 사람이에요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0253",
+   "en": "I am from Korea.",
+   "ko": "저는 한국에서 왔어요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0254",
+   "en": "You are right.",
+   "ko": "맞아요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0255",
+   "en": "Are you Anna?",
+   "ko": "애나 씨예요?",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0256",
+   "en": "Yes, I am.",
+   "ko": "네, 저예요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0257",
+   "en": "No, I am Lisa.",
+   "ko": "아니요, 저는 리사예요.",
+   "say": "",
+   "pat": "p_i_am_you_are",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0258",
+   "en": "He is Ben.",
+   "ko": "그는 벤이에요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0259",
+   "en": "He is Korean.",
+   "ko": "그는 한국 사람이에요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0260",
+   "en": "She is very nice.",
+   "ko": "그녀는 아주 친절해요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0261",
+   "en": "We are Korean.",
+   "ko": "우리는 한국 사람이에요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0262",
+   "en": "We are from Canada.",
+   "ko": "우리는 캐나다에서 왔어요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0263",
+   "en": "They are from Korea.",
+   "ko": "그 사람들은 한국에서 왔어요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0264",
+   "en": "They are Ben and Anna.",
+   "ko": "그 사람들은 벤과 애나예요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0265",
+   "en": "We are friends.",
+   "ko": "우리는 친구예요.",
+   "say": "",
+   "pat": "p_he_she_they",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0266",
+   "en": "Nice to meet you.",
+   "ko": "만나서 반가워요.",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0267",
+   "en": "Hello, Anna. Nice to meet you.",
+   "ko": "안녕하세요, 애나. 만나서 반가워요.",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0268",
+   "en": "How are you?",
+   "ko": "잘 지내세요?",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0269",
+   "en": "How are you, Anna?",
+   "ko": "애나, 잘 지내세요?",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0270",
+   "en": "I'm fine, thanks.",
+   "ko": "잘 지내요, 고마워요.",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0271",
+   "en": "I'm fine.",
+   "ko": "잘 지내요.",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0272",
+   "en": "And you?",
+   "ko": "어떠세요?",
+   "say": "",
+   "pat": "p_nice_to_meet_you",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0273",
+   "en": "This is my mother.",
+   "ko": "이쪽은 제 어머니예요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0274",
+   "en": "This is my father.",
+   "ko": "이쪽은 제 아버지예요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0275",
+   "en": "This is my sister.",
+   "ko": "이쪽은 제 여자 형제예요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0276",
+   "en": "This is my friend Min.",
+   "ko": "이쪽은 제 친구 민이에요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0277",
+   "en": "This is my husband.",
+   "ko": "이쪽은 제 남편이에요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0278",
+   "en": "This is my wife.",
+   "ko": "이쪽은 제 아내예요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0279",
+   "en": "His name is Tom.",
+   "ko": "그의 이름은 톰이에요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0280",
+   "en": "Her name is Lisa.",
+   "ko": "그녀의 이름은 리사예요.",
+   "say": "",
+   "pat": "p_this_is_my",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0281",
+   "en": "I have a sister.",
+   "ko": "저는 여자 형제가 한 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0282",
+   "en": "I have a brother.",
+   "ko": "저는 남자 형제가 한 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0283",
+   "en": "I have two sisters.",
+   "ko": "저는 여자 형제가 두 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0284",
+   "en": "I have two brothers.",
+   "ko": "저는 남자 형제가 두 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0285",
+   "en": "He has a sister.",
+   "ko": "그는 여자 형제가 한 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0286",
+   "en": "She has a brother.",
+   "ko": "그녀는 남자 형제가 한 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0287",
+   "en": "Do you have a brother?",
+   "ko": "남자 형제가 있으세요?",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0288",
+   "en": "Yes, I have a brother.",
+   "ko": "네, 남자 형제가 한 명 있어요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0289",
+   "en": "My mother is very nice.",
+   "ko": "제 어머니는 아주 친절해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0290",
+   "en": "My mother and father are from Korea.",
+   "ko": "제 어머니와 아버지는 한국에서 왔어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0291",
+   "en": "That man is my father.",
+   "ko": "저 남자는 제 아버지예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0292",
+   "en": "That woman is my mother.",
+   "ko": "저 여자는 제 어머니예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0293",
+   "en": "That girl is Lisa.",
+   "ko": "저 여자아이는 리사예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0294",
+   "en": "He is a nice man.",
+   "ko": "그는 친절한 남자예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0295",
+   "en": "Our family is very big.",
+   "ko": "우리 가족은 아주 커요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0296",
+   "en": "Their family is from Canada.",
+   "ko": "그 사람들 가족은 캐나다에서 왔어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0297",
+   "en": "Her husband is Ben.",
+   "ko": "그녀의 남편은 벤이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0298",
+   "en": "His wife is Anna.",
+   "ko": "그의 아내는 애나예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0299",
+   "en": "We meet here.",
+   "ko": "우리는 여기서 만나요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0300",
+   "en": "Their home is big.",
+   "ko": "그 사람들 집은 커요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0301",
+   "en": "She is a nice woman.",
+   "ko": "그녀는 친절한 여자예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0302",
+   "en": "Welcome to Canada.",
+   "ko": "캐나다에 오신 걸 환영해요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0303",
+   "en": "Welcome to our home.",
+   "ko": "우리 집에 오신 걸 환영해요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0304",
+   "en": "I have a big family.",
+   "ko": "저는 가족이 많아요.",
+   "say": "",
+   "pat": "p_i_have",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0305",
+   "en": "My parents are from Korea.",
+   "ko": "제 부모님은 한국에서 오셨어요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0306",
+   "en": "I have a son.",
+   "ko": "저는 아들이 한 명 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0307",
+   "en": "My grandmother is very nice.",
+   "ko": "제 할머니는 아주 친절해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0308",
+   "en": "That boy is my son.",
+   "ko": "저 남자아이는 제 아들이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0309",
+   "en": "That girl is my daughter.",
+   "ko": "저 여자아이는 제 딸이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0310",
+   "en": "This is my uncle.",
+   "ko": "이쪽은 제 삼촌이에요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0311",
+   "en": "This is my aunt.",
+   "ko": "이쪽은 제 이모예요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0312",
+   "en": "This is my baby.",
+   "ko": "이쪽은 제 아기예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0005",
+   "title_ko": "처음 만난 인사",
+   "scene": "intro_family",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hi, I'm Anna. Nice to meet you.",
+     "ko": "안녕하세요, 저는 애나예요. 만나서 반가워요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Nice to meet you, Anna. I'm Min.",
+     "ko": "만나서 반가워요, 애나. 저는 민이에요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "How are you, Min?",
+     "ko": "민, 잘 지내세요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "I'm fine, thanks. And you?",
+     "ko": "잘 지내요, 고마워요. 어떠세요?",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": [
+  {
+   "id": "n0501",
+   "kind": "culture",
+   "text_ko": "캐나다에서는 처음 만난 사람과 악수하며 Nice to meet you. 라고 인사하는 일이 많아요. 친구끼리는 Hi 로 가볍게 시작해요."
+  },
+  {
+   "id": "n0502",
+   "kind": "culture",
+   "text_ko": "How are you? 는 실제 건강을 묻는 말이라기보다 인사예요. I'm fine, thanks. And you? 처럼 짧게 답하고 되물으면 돼요."
+  },
+  {
+   "id": "n0503",
+   "kind": "vocab",
+   "text_ko": "영어의 brother, sister 는 형·오빠·남동생, 언니·누나·여동생을 나누지 않아요. 나이 순서를 말하고 싶을 때는 older brother(형·오빠)처럼 앞에 말을 덧붙여요."
+  },
+  {
+   "id": "n0504",
+   "kind": "vocab",
+   "text_ko": "he 는 남자 한 명, she 는 여자 한 명이에요. his 와 her 는 '그의, 그녀의'로, 사람 이름 앞에서도 써요: his name, her name."
+  },
+  {
+   "id": "n0505",
+   "kind": "vocab",
+   "text_ko": "영어의 I(나)는 문장 어디에 있어도 항상 대문자로 써요. 나머지 낱말은 문장 처음과 이름에만 대문자를 써요."
+  }
+ ]
+}

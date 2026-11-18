@@ -1,0 +1,1630 @@
+{
+ "v": 1,
+ "w": 14,
+ "title_ko": "직업·일터",
+ "can_do": [
+  "What do you do? 에 대답할 수 있다",
+  "일하는 곳과 직업을 말할 수 있다",
+  "워홀 직종 이름(server, cashier, cleaner, worker, warehouse)을 알아듣는다"
+ ],
+ "scene": {
+  "id": "jobs",
+  "title_ko": "직업과 일터 말하기",
+  "canada": [
+   "cn_job_titles"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0414",
+   "en": "job",
+   "pos": "n",
+   "ko": "직업",
+   "ko2": "일자리",
+   "ipa": "dʒɑːb",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "jobs",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0415",
+   "en": "student",
+   "pos": "n",
+   "ko": "학생",
+   "ipa": "ˈstuːdənt",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "students",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0416",
+   "en": "teacher",
+   "pos": "n",
+   "ko": "선생님",
+   "ipa": "ˈtiːtʃər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "teachers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0417",
+   "en": "nurse",
+   "pos": "n",
+   "ko": "간호사",
+   "ipa": "nɜːrs",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "nurses",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0418",
+   "en": "doctor",
+   "pos": "n",
+   "ko": "의사",
+   "ipa": "ˈdɑːktər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "doctors",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0419",
+   "en": "engineer",
+   "pos": "n",
+   "ko": "엔지니어",
+   "ipa": "ˌɛndʒɪˈnɪr",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "engineers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0420",
+   "en": "chef",
+   "pos": "n",
+   "ko": "요리사",
+   "ipa": "ʃɛf",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "chefs",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0421",
+   "en": "cafe",
+   "pos": "n",
+   "ko": "카페",
+   "ipa": "kæˈfeɪ",
+   "say": "",
+   "tags": [
+    "workplace"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "cafes",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0422",
+   "en": "hotel",
+   "pos": "n",
+   "ko": "호텔",
+   "ipa": "hoʊˈtɛl",
+   "say": "",
+   "tags": [
+    "workplace"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "hotels",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0423",
+   "en": "farm",
+   "pos": "n",
+   "ko": "농장",
+   "ipa": "fɑːrm",
+   "say": "",
+   "tags": [
+    "workplace"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "farms",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0424",
+   "en": "factory",
+   "pos": "n",
+   "ko": "공장",
+   "ipa": "ˈfæktəri",
+   "say": "",
+   "tags": [
+    "workplace"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "factories",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0425",
+   "en": "warehouse",
+   "pos": "n",
+   "ko": "창고",
+   "ipa": "ˈwɛrhaʊs",
+   "say": "",
+   "tags": [
+    "workplace"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "warehouses",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0426",
+   "en": "company",
+   "pos": "n",
+   "ko": "회사",
+   "ipa": "ˈkʌmpəni",
+   "say": "",
+   "tags": [
+    "workplace"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "companies",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0427",
+   "en": "server",
+   "pos": "n",
+   "ko": "종업원",
+   "ko2": "(컴퓨터) 서버",
+   "ipa": "ˈsɜːrvər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "servers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0428",
+   "en": "cashier",
+   "pos": "n",
+   "ko": "계산원",
+   "ipa": "kæˈʃɪr",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "cashiers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0429",
+   "en": "cleaner",
+   "pos": "n",
+   "ko": "청소원",
+   "ipa": "ˈkliːnər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "cleaners",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0430",
+   "en": "driver",
+   "pos": "n",
+   "ko": "운전기사",
+   "ipa": "ˈdraɪvər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "drivers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0431",
+   "en": "manager",
+   "pos": "n",
+   "ko": "매니저",
+   "ipa": "ˈmænɪdʒər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "managers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [
+    "w0434"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0432",
+   "en": "as",
+   "pos": "prep",
+   "ko": "~로서",
+   "ipa": "æz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0433",
+   "en": "worker",
+   "pos": "n",
+   "ko": "근로자",
+   "ipa": "ˈwɜːrkər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "workers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0434",
+   "en": "boss",
+   "pos": "n",
+   "ko": "상사",
+   "ko2": "사장님",
+   "ipa": "bɔːs",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "bosses",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [
+    "w0431"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0435",
+   "en": "customer",
+   "pos": "n",
+   "ko": "손님",
+   "ipa": "ˈkʌstəmər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "customers",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0436",
+   "en": "staff",
+   "pos": "n",
+   "ko": "직원",
+   "ko2": "직원들",
+   "ipa": "stæf",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0437",
+   "en": "team",
+   "pos": "n",
+   "ko": "팀",
+   "ipa": "tiːm",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "teams",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0438",
+   "en": "farmer",
+   "pos": "n",
+   "ko": "농부",
+   "ipa": "ˈfɑːrmər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0439",
+   "en": "barista",
+   "pos": "n",
+   "ko": "바리스타",
+   "ipa": "bəˈriːstə",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0440",
+   "en": "bartender",
+   "pos": "n",
+   "ko": "바텐더",
+   "ipa": "ˈbɑːrtɛndər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0441",
+   "en": "painter",
+   "pos": "n",
+   "ko": "페인트공",
+   "ko2": "화가",
+   "ipa": "ˈpeɪntər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0442",
+   "en": "electrician",
+   "pos": "n",
+   "ko": "전기 기사",
+   "ipa": "ɪˌlɛkˈtrɪʃən",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0443",
+   "en": "plumber",
+   "pos": "n",
+   "ko": "배관공",
+   "ipa": "ˈplʌmər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0444",
+   "en": "receptionist",
+   "pos": "n",
+   "ko": "접수원",
+   "ipa": "rɪˈsɛpʃənɪst",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0445",
+   "en": "mechanic",
+   "pos": "n",
+   "ko": "정비사",
+   "ipa": "mɪˈkænɪk",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0446",
+   "en": "picker",
+   "pos": "n",
+   "ko": "수확 일꾼",
+   "ipa": "ˈpɪkər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0447",
+   "en": "dishwasher",
+   "pos": "n",
+   "ko": "설거지 직원",
+   "ko2": "식기세척기",
+   "ipa": "ˈdɪʃwɑːʃər",
+   "say": "",
+   "tags": [
+    "job"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_what_do_you_do",
+   "tpl": "What do you do? - I'm a ___.",
+   "slots": [
+    {
+     "name": "job",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "What do you do? (무슨 일을 하세요?)",
+   "grammar_ko": [
+    "What do you do? 는 '무슨 일을 하세요?'라는 직업 질문이에요.",
+    "직업 앞에는 a/an 을 붙여요: I'm a cook. I'm an engineer.",
+    "한국어는 '요리사예요'처럼 a/an 이 없어서 빼먹기 쉬워요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0812",
+    "s0813",
+    "s0814",
+    "s0815",
+    "s0816",
+    "s0817"
+   ]
+  },
+  {
+   "id": "p_works_at",
+   "tpl": "He works at ___. / I work at ___.",
+   "slots": [
+    {
+     "name": "workplace",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "He works at ~ (그는 ~에서 일해요)",
+   "grammar_ko": [
+    "일하는 곳에는 at 을 써요: at a cafe, at a hotel.",
+    "he/she 가 주어이면 work 에 -s 가 붙어요: He works.",
+    "큰 도시나 나라 앞에는 in 을 써요: in Toronto."
+   ],
+   "d": 2,
+   "examples": [
+    "s0827",
+    "s0828",
+    "s0829",
+    "s0830",
+    "s0831",
+    "s0832"
+   ]
+  },
+  {
+   "id": "p_work_as",
+   "tpl": "I work as a ___ at ___.",
+   "slots": [
+    {
+     "name": "job",
+     "pos": [
+      "n"
+     ]
+    },
+    {
+     "name": "workplace",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I work as a ~ (저는 ~로 일해요)",
+   "grammar_ko": [
+    "as 는 '~로서'예요. 직업을 말할 때 work as a ~ 라고 해요.",
+    "as a cleaner 는 청소원으로, as a server 는 식당 종업원으로 일한다는 뜻이에요(컴퓨터 서버가 아니에요).",
+    "일하는 곳은 at 으로 이어요: I work as a server at a cafe."
+   ],
+   "d": 3,
+   "examples": [
+    "s0838",
+    "s0839",
+    "s0840",
+    "s0841",
+    "s0842",
+    "s0843"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0812",
+   "en": "What do you do?",
+   "ko": "무슨 일을 해요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0813",
+   "en": "What does he do?",
+   "ko": "그는 무슨 일을 해요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0814",
+   "en": "What does she do?",
+   "ko": "그녀는 무슨 일을 해요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0815",
+   "en": "What does your father do?",
+   "ko": "아버지는 무슨 일을 하세요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0816",
+   "en": "I'm a student.",
+   "ko": "저는 학생이에요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0817",
+   "en": "I'm a teacher.",
+   "ko": "저는 선생님이에요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0818",
+   "en": "I'm a nurse.",
+   "ko": "저는 간호사예요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0819",
+   "en": "I'm a doctor.",
+   "ko": "저는 의사예요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0820",
+   "en": "I'm an engineer.",
+   "ko": "저는 엔지니어예요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0821",
+   "en": "I'm a chef.",
+   "ko": "저는 요리사예요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0822",
+   "en": "Are you a student?",
+   "ko": "학생이에요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0823",
+   "en": "Is he a doctor?",
+   "ko": "그는 의사예요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0824",
+   "en": "Is she a nurse?",
+   "ko": "그녀는 간호사예요?",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0825",
+   "en": "My mother is a teacher.",
+   "ko": "어머니는 선생님이에요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0826",
+   "en": "My father is an engineer.",
+   "ko": "아버지는 엔지니어예요.",
+   "say": "",
+   "pat": "p_what_do_you_do",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0827",
+   "en": "I work at a cafe.",
+   "ko": "저는 카페에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0828",
+   "en": "I work at a hotel.",
+   "ko": "저는 호텔에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0829",
+   "en": "I work at a farm.",
+   "ko": "저는 농장에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0830",
+   "en": "He works at a factory.",
+   "ko": "그는 공장에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0831",
+   "en": "She works at a warehouse.",
+   "ko": "그녀는 창고에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0832",
+   "en": "Tom works at a company.",
+   "ko": "톰은 회사에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0833",
+   "en": "My mother works at a factory.",
+   "ko": "어머니는 공장에서 일해요.",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0834",
+   "en": "Do you work at a cafe?",
+   "ko": "카페에서 일해요?",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0835",
+   "en": "Where do you work?",
+   "ko": "어디에서 일해요?",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0836",
+   "en": "Where does he work?",
+   "ko": "그는 어디에서 일해요?",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0837",
+   "en": "Who works at the warehouse?",
+   "ko": "누가 창고에서 일해요?",
+   "say": "",
+   "pat": "p_works_at",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0838",
+   "en": "I work as a server at a cafe.",
+   "ko": "저는 카페에서 종업원으로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0839",
+   "en": "She works as a cleaner at a hotel.",
+   "ko": "그녀는 호텔에서 청소원으로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0840",
+   "en": "He works as a driver at a company.",
+   "ko": "그는 회사에서 운전기사로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0841",
+   "en": "Ben works as a cashier at a store.",
+   "ko": "벤은 가게에서 계산원으로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0842",
+   "en": "My mother works as a nurse at a hospital.",
+   "ko": "어머니는 병원에서 간호사로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0843",
+   "en": "I work as a chef at a restaurant.",
+   "ko": "저는 식당에서 요리사로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0844",
+   "en": "Lisa works as a teacher at a school.",
+   "ko": "리사는 학교에서 선생님으로 일해요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0845",
+   "en": "I don't work as a cleaner.",
+   "ko": "저는 청소원으로 일하지 않아요.",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0846",
+   "en": "Do you work as a server?",
+   "ko": "종업원으로 일해요?",
+   "say": "",
+   "pat": "p_work_as",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0847",
+   "en": "I'm a good worker.",
+   "ko": "저는 좋은 근로자예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0848",
+   "en": "He is a good worker.",
+   "ko": "그는 좋은 근로자예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0849",
+   "en": "My boss is very nice.",
+   "ko": "제 상사는 아주 친절해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0850",
+   "en": "The boss works in the office.",
+   "ko": "상사는 사무실에서 일해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0851",
+   "en": "The customer is always right.",
+   "ko": "손님은 항상 옳아요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0852",
+   "en": "A customer is at the door.",
+   "ko": "손님이 문 앞에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0853",
+   "en": "I help the customers.",
+   "ko": "저는 손님들을 도와요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0854",
+   "en": "The cashier is very nice.",
+   "ko": "계산원은 아주 친절해요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0855",
+   "en": "The staff is very nice.",
+   "ko": "직원들은 아주 친절해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0856",
+   "en": "The staff works at night.",
+   "ko": "직원들은 밤에 일해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0857",
+   "en": "I work with the staff.",
+   "ko": "저는 직원들과 일해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0858",
+   "en": "We are a good team.",
+   "ko": "우리는 좋은 팀이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0859",
+   "en": "Our team is very good.",
+   "ko": "우리 팀은 아주 좋아요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0860",
+   "en": "The manager is in the kitchen.",
+   "ko": "매니저는 부엌에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0861",
+   "en": "Is the manager here?",
+   "ko": "매니저는 여기 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0862",
+   "en": "The driver is at the station.",
+   "ko": "운전기사는 역에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0863",
+   "en": "I have a good job.",
+   "ko": "저는 좋은 직업이 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0864",
+   "en": "I want a job in Canada.",
+   "ko": "저는 캐나다에서 일자리를 원해요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0865",
+   "en": "He is a farmer.",
+   "ko": "그는 농부예요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0866",
+   "en": "She is a barista at a cafe.",
+   "ko": "그녀는 카페에서 바리스타예요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0867",
+   "en": "The plumber is at the door.",
+   "ko": "배관공이 문 앞에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0868",
+   "en": "The receptionist is in the office.",
+   "ko": "접수원은 사무실에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0869",
+   "en": "I work as a dishwasher at a restaurant.",
+   "ko": "저는 식당에서 설거지 직원으로 일해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0870",
+   "en": "He works as a picker on a farm.",
+   "ko": "그는 농장에서 수확 일꾼으로 일해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0014",
+   "title_ko": "무슨 일을 해요?",
+   "scene": "jobs",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hi, I'm Tom. What do you do?",
+     "ko": "안녕하세요, 저는 톰이에요. 무슨 일을 해요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "I'm a student. I study English. What do you do?",
+     "ko": "저는 학생이에요. 영어를 공부해요. 무슨 일을 해요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "I'm a chef. I work at a hotel.",
+     "ko": "저는 요리사예요. 호텔에서 일해요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Do you like your job?",
+     "ko": "직업이 마음에 들어요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Yes, I love it! The team is great.",
+     "ko": "네, 정말 좋아해요! 팀이 아주 좋아요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Is your boss nice?",
+     "ko": "상사는 친절해요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Yes, my boss is very nice.",
+     "ko": "네, 제 상사는 아주 친절해요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Great! I want a job in Canada.",
+     "ko": "좋네요! 저는 캐나다에서 일자리를 원해요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n1401",
+   "kind": "vocab",
+   "text_ko": "식당 종업원은 보통 server 라고 해요. waiter, waitress 도 알아들으면 좋지만, 직업 이름은 성별과 상관없는 말이 많아요.",
+   "_cn": "cn_job_titles"
+  },
+  {
+   "id": "n1402",
+   "kind": "vocab",
+   "text_ko": "I'm a server. 는 직업을 말하고, I work as a server. 는 그 일을 맡아서 한다는 뜻이에요. 둘 다 자주 써요."
+  },
+  {
+   "id": "n1403",
+   "kind": "culture",
+   "text_ko": "캐나다에서 What do you do? 는 처음 만났을 때 흔한 질문이에요. 워킹홀리데이로 왔다면 I'm here on a working holiday. 라고 말해도 돼요."
+  },
+  {
+   "id": "n1404",
+   "kind": "sound",
+   "en": "er ending",
+   "text_ko": "teacher, server, driver, manager, worker, customer 처럼 -er 로 끝나는 낱말은 끝을 '얼'이라고 크게 읽지 않고 혀를 살짝 말아 짧게 끝내요. (teacher, worker)"
+  }
+ ]
+}

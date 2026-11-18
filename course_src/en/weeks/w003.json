@@ -443,9 +443,16 @@
    "tags": [],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "shops",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0279"
+   ],
    "ca": false,
    "src": "own"
   },
@@ -459,7 +466,12 @@
    "tags": [],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "chairs",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -477,7 +489,12 @@
    ],
    "role": "active",
    "d": 4,
-   "forms": [],
+   "forms": [
+    {
+     "f": "cakes",
+     "pat": "p_plural_s"
+    }
+   ],
    "alt": [],
    "syn": [],
    "ca": false,
@@ -495,7 +512,9 @@
    "d": 4,
    "forms": [],
    "alt": [],
-   "syn": [],
+   "syn": [
+    "w0287"
+   ],
    "ca": false,
    "src": "own"
   }
@@ -871,7 +890,7 @@
   {
    "id": "s0129",
    "en": "It's very hot.",
-   "ko": "정말 더워요.",
+   "ko": "아주 더워요.",
    "say": "",
    "pat": "p_its",
    "d": 3,
@@ -883,7 +902,7 @@
   {
    "id": "s0130",
    "en": "It's very good.",
-   "ko": "정말 좋아요.",
+   "ko": "그건 아주 좋아요.",
    "say": "",
    "pat": "p_its",
    "d": 3,
@@ -895,7 +914,7 @@
   {
    "id": "s0131",
    "en": "It's free.",
-   "ko": "공짜예요.",
+   "ko": "무료예요.",
    "say": "",
    "pat": "p_its",
    "d": 3,
@@ -1155,7 +1174,7 @@
     {
      "s": "A",
      "en": "Sit, please. Cake?",
-     "ko": "앉으세요. 케이크 드실래요?",
+     "ko": "앉아 주세요. 케이크 드실래요?",
      "say": ""
     },
     {

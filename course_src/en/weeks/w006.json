@@ -1,0 +1,1576 @@
+{
+ "v": 1,
+ "w": 6,
+ "title_ko": "사물·색·크기",
+ "can_do": [
+  "가까이 있는 물건을 What's this? 로 묻고 답할 수 있다",
+  "색과 크기를 말할 수 있다",
+  "물건이 하나일 때와 여럿일 때를 구별해 말할 수 있다"
+ ],
+ "scene": {
+  "id": "things_colours",
+  "title_ko": "집 안 물건과 색 묻기",
+  "canada": [
+   "cn_colour",
+   "cn_grey"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0141",
+   "en": "what",
+   "pos": "pron",
+   "ko": "무엇",
+   "ipa": "wʌt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0142",
+   "en": "the",
+   "pos": "det",
+   "ko": "그(해석 안 해요)",
+   "ipa": "ðə",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0143",
+   "en": "an",
+   "pos": "det",
+   "ko": "한(해석 안 해요)",
+   "ipa": "æn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0144",
+   "en": "that's",
+   "pos": "contr",
+   "ko": "그건 ~예요",
+   "ipa": "ðæts",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0145",
+   "en": "book",
+   "pos": "n",
+   "ko": "책",
+   "ipa": "bʊk",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "books",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0146",
+   "en": "small",
+   "pos": "adj",
+   "ko": "작은",
+   "ipa": "smɔːl",
+   "say": "",
+   "tags": [
+    "size"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0147",
+   "en": "new",
+   "pos": "adj",
+   "ko": "새",
+   "ko2": "새로운",
+   "ipa": "nuː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0148",
+   "en": "table",
+   "pos": "n",
+   "ko": "테이블",
+   "ko2": "탁자",
+   "ipa": "ˈteɪbəl",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "tables",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0149",
+   "en": "door",
+   "pos": "n",
+   "ko": "문",
+   "ipa": "dɔːr",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "doors",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0150",
+   "en": "key",
+   "pos": "n",
+   "ko": "열쇠",
+   "ipa": "kiː",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "keys",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0151",
+   "en": "car",
+   "pos": "n",
+   "ko": "자동차",
+   "ipa": "kɑːr",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "cars",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0152",
+   "en": "it",
+   "pos": "pron",
+   "ko": "그것",
+   "ipa": "ɪt",
+   "say": "",
+   "tags": [
+    "pronoun"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0153",
+   "en": "window",
+   "pos": "n",
+   "ko": "창문",
+   "ipa": "ˈwɪndoʊ",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "windows",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0154",
+   "en": "colour",
+   "pos": "n",
+   "ko": "색",
+   "ipa": "ˈkʌlər",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "colours",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [
+    "color"
+   ],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0155",
+   "en": "blue",
+   "pos": "adj",
+   "ko": "파란",
+   "ipa": "bluː",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0156",
+   "en": "green",
+   "pos": "adj",
+   "ko": "초록의",
+   "ipa": "ɡriːn",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0157",
+   "en": "black",
+   "pos": "adj",
+   "ko": "검은",
+   "ipa": "blæk",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0158",
+   "en": "white",
+   "pos": "adj",
+   "ko": "흰",
+   "ipa": "waɪt",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0159",
+   "en": "yellow",
+   "pos": "adj",
+   "ko": "노란",
+   "ipa": "ˈjɛloʊ",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0160",
+   "en": "orange",
+   "pos": "adj",
+   "ko": "주황색의",
+   "ko2": "오렌지",
+   "ipa": "ˈɔːrɪndʒ",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0161",
+   "en": "pink",
+   "pos": "adj",
+   "ko": "분홍색의",
+   "ipa": "pɪŋk",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0162",
+   "en": "brown",
+   "pos": "adj",
+   "ko": "갈색의",
+   "ipa": "braʊn",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0163",
+   "en": "grey",
+   "pos": "adj",
+   "ko": "회색의",
+   "ipa": "ɡreɪ",
+   "say": "",
+   "tags": [
+    "colour"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [
+    "gray"
+   ],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0164",
+   "en": "not",
+   "pos": "adv",
+   "ko": "~이 아니에요",
+   "ko2": "~않아요",
+   "ipa": "nɑːt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0165",
+   "en": "apple",
+   "pos": "n",
+   "ko": "사과",
+   "ipa": "ˈæpəl",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0166",
+   "en": "paper",
+   "pos": "n",
+   "ko": "종이",
+   "ipa": "ˈpeɪpər",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0167",
+   "en": "picture",
+   "pos": "n",
+   "ko": "그림",
+   "ko2": "사진",
+   "ipa": "ˈpɪktʃər",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0168",
+   "en": "clock",
+   "pos": "n",
+   "ko": "시계",
+   "ipa": "klɑːk",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0169",
+   "en": "lamp",
+   "pos": "n",
+   "ko": "램프",
+   "ipa": "læmp",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0170",
+   "en": "bottle",
+   "pos": "n",
+   "ko": "병",
+   "ipa": "ˈbɑːtəl",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0171",
+   "en": "box",
+   "pos": "n",
+   "ko": "상자",
+   "ipa": "bɑːks",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0172",
+   "en": "computer",
+   "pos": "n",
+   "ko": "컴퓨터",
+   "ipa": "kəmˈpjuːtər",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0173",
+   "en": "umbrella",
+   "pos": "n",
+   "ko": "우산",
+   "ipa": "ʌmˈbrɛlə",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0174",
+   "en": "radio",
+   "pos": "n",
+   "ko": "라디오",
+   "ipa": "ˈreɪdioʊ",
+   "say": "",
+   "tags": [
+    "thing"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_whats_this",
+   "tpl": "What's this? / What's that? - It's a ___.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "What's this? (이게 뭐예요?)",
+   "grammar_ko": [
+    "this 는 가까운 것, that 은 먼 것이에요. 가리키며 말해요.",
+    "하나인 사물 앞에 a 를 붙여요: a book. 모음 소리로 시작하면 an 이에요: an old book.",
+    "a/an 은 한국어에 없어서 빼먹기 쉬워요. 셀 수 있는 하나에는 꼭 붙여요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0313",
+    "s0314",
+    "s0315",
+    "s0316",
+    "s0317",
+    "s0318"
+   ]
+  },
+  {
+   "id": "p_what_colour",
+   "tpl": "What colour is it? - It's ___.",
+   "slots": [
+    {
+     "name": "colour",
+     "pos": [
+      "adj"
+     ]
+    }
+   ],
+   "title_ko": "What colour is it? (무슨 색이에요?)",
+   "grammar_ko": [
+    "colour 는 캐나다 철자예요. 미국에서는 color 라고 써요.",
+    "색 이름만 말해도 되고 It's 를 붙여도 돼요: Blue. / It's blue.",
+    "영어는 색이 명사 앞에 와요: a blue book (한국어 '파란 책'과 같은 순서)."
+   ],
+   "d": 3,
+   "examples": [
+    "s0322",
+    "s0323",
+    "s0324",
+    "s0325",
+    "s0326",
+    "s0327"
+   ]
+  },
+  {
+   "id": "p_is_this_a",
+   "tpl": "Is this a ___? - Yes, it is. / No, it's not.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "Is this ~? (이건 ~예요?)",
+   "grammar_ko": [
+    "묻는 문장은 is 를 맨 앞으로 보내요: This is → Is this ~?",
+    "Yes, it is. 처럼 짧게 대답해요. 대답에서는 it is 를 줄이지 않아요.",
+    "아니면 No, it's not. 이라고 하고 맞는 것을 말해 줘요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0335",
+    "s0336",
+    "s0337",
+    "s0338",
+    "s0339",
+    "s0340"
+   ]
+  },
+  {
+   "id": "p_plural_s",
+   "tpl": "one book, two books.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "복수 -s (책 한 권, 두 권)",
+   "grammar_ko": [
+    "영어는 둘 이상이면 명사 끝에 -s 를 붙여요: one book, two books.",
+    "한국어는 '책 두 권'처럼 명사 모양이 안 바뀌지만 영어는 바뀌어요.",
+    "-s 소리는 [s], [z], [iz] 세 가지예요. 소리는 듣고 따라 해요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0342",
+    "s0343",
+    "s0344",
+    "s0345",
+    "s0346",
+    "s0347"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0313",
+   "en": "What's this?",
+   "ko": "이게 뭐예요?",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0314",
+   "en": "What's that?",
+   "ko": "저게 뭐예요?",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0315",
+   "en": "It's a book.",
+   "ko": "책이에요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0316",
+   "en": "It's a new pen.",
+   "ko": "새 펜이에요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0317",
+   "en": "It's a small cat.",
+   "ko": "작은 고양이예요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0318",
+   "en": "It's an old book.",
+   "ko": "오래된 책이에요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0319",
+   "en": "It's a small table.",
+   "ko": "작은 테이블이에요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0320",
+   "en": "That's a dog.",
+   "ko": "저건 개예요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0321",
+   "en": "It's an email.",
+   "ko": "이메일이에요.",
+   "say": "",
+   "pat": "p_whats_this",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0322",
+   "en": "What colour is it?",
+   "ko": "무슨 색이에요?",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0323",
+   "en": "What colour is this?",
+   "ko": "이건 무슨 색이에요?",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0324",
+   "en": "What colour is your bag?",
+   "ko": "가방은 무슨 색이에요?",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0325",
+   "en": "What colour is the door?",
+   "ko": "문은 무슨 색이에요?",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0326",
+   "en": "What colour is your car?",
+   "ko": "자동차는 무슨 색이에요?",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0327",
+   "en": "It's blue.",
+   "ko": "파란색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0328",
+   "en": "It's green.",
+   "ko": "초록색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0329",
+   "en": "It's black and white.",
+   "ko": "검은색과 흰색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0330",
+   "en": "It's yellow.",
+   "ko": "노란색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0331",
+   "en": "It's pink.",
+   "ko": "분홍색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0332",
+   "en": "It's brown.",
+   "ko": "갈색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0333",
+   "en": "It's orange.",
+   "ko": "주황색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0334",
+   "en": "It's grey.",
+   "ko": "회색이에요.",
+   "say": "",
+   "pat": "p_what_colour",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0335",
+   "en": "Is this a key?",
+   "ko": "이거 열쇠예요?",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0336",
+   "en": "Is that a car?",
+   "ko": "저거 자동차예요?",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0337",
+   "en": "Is that a window?",
+   "ko": "저거 창문이에요?",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0338",
+   "en": "Yes, it is.",
+   "ko": "네, 그래요.",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0339",
+   "en": "No, it's not.",
+   "ko": "아니요, 아니에요.",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0340",
+   "en": "It's not a dog. It's a cat.",
+   "ko": "개가 아니에요. 고양이예요.",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0341",
+   "en": "This is not a bus.",
+   "ko": "이건 버스가 아니에요.",
+   "say": "",
+   "pat": "p_is_this_a",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0342",
+   "en": "One key, two keys.",
+   "ko": "열쇠 한 개, 열쇠 두 개.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0343",
+   "en": "I have two cars.",
+   "ko": "저는 자동차가 두 대 있어요.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0344",
+   "en": "I have three keys.",
+   "ko": "저는 열쇠가 세 개 있어요.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0345",
+   "en": "Two doors and three windows.",
+   "ko": "문 두 개와 창문 세 개예요.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0346",
+   "en": "I have two keys and a book.",
+   "ko": "저는 열쇠 두 개와 책 한 권이 있어요.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0347",
+   "en": "They are books.",
+   "ko": "그것들은 책이에요.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0348",
+   "en": "What colour are the cars?",
+   "ko": "자동차들은 무슨 색이에요?",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0349",
+   "en": "They are red.",
+   "ko": "그것들은 빨간색이에요.",
+   "say": "",
+   "pat": "p_plural_s",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0350",
+   "en": "My car is blue.",
+   "ko": "제 자동차는 파란색이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0351",
+   "en": "The door is black.",
+   "ko": "문은 검은색이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0352",
+   "en": "The table is brown.",
+   "ko": "테이블은 갈색이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0353",
+   "en": "I have a new car.",
+   "ko": "저는 새 자동차가 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0354",
+   "en": "The key is yellow.",
+   "ko": "열쇠는 노란색이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0355",
+   "en": "I have a pink bag.",
+   "ko": "저는 분홍색 가방이 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0356",
+   "en": "I have an orange hat.",
+   "ko": "저는 주황색 모자가 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0357",
+   "en": "My cat is grey.",
+   "ko": "제 고양이는 회색이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0358",
+   "en": "The key is here.",
+   "ko": "열쇠는 여기 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0359",
+   "en": "It's not here.",
+   "ko": "여기 없어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0360",
+   "en": "Your bag is very nice.",
+   "ko": "가방이 아주 멋져요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0361",
+   "en": "I love your new bag.",
+   "ko": "새 가방이 마음에 들어요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0362",
+   "en": "What colour is your hat?",
+   "ko": "모자는 무슨 색이에요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0363",
+   "en": "It's an apple.",
+   "ko": "사과예요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0364",
+   "en": "It's a green apple.",
+   "ko": "초록색 사과예요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0365",
+   "en": "That's a clock.",
+   "ko": "저건 시계예요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0366",
+   "en": "It's a picture.",
+   "ko": "그림이에요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0367",
+   "en": "It's a paper bag.",
+   "ko": "종이 가방이에요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0368",
+   "en": "My computer is new.",
+   "ko": "제 컴퓨터는 새 거예요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0369",
+   "en": "The lamp is white.",
+   "ko": "램프는 흰색이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0370",
+   "en": "That's an umbrella.",
+   "ko": "저건 우산이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0371",
+   "en": "It's a red box.",
+   "ko": "빨간 상자예요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0372",
+   "en": "It's a small radio.",
+   "ko": "작은 라디오예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0373",
+   "en": "The bottle is big.",
+   "ko": "병이 커요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0006",
+   "title_ko": "새 전화기",
+   "scene": "things_colours",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Oh, what's that?",
+     "ko": "아, 그게 뭐예요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "It's my new phone.",
+     "ko": "제 새 전화기예요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Nice! What colour is it?",
+     "ko": "멋지네요! 무슨 색이에요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "It's blue.",
+     "ko": "파란색이에요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": [
+  {
+   "id": "n0601",
+   "kind": "spelling",
+   "ca": "colour",
+   "us": "color",
+   "text_ko": "캐나다에서는 영국식으로 colour 라고 써요. 미국은 color 예요. 이 코스는 colour 를 기본으로 하고 color 도 정답으로 인정해요.",
+   "_cn": "cn_colour"
+  },
+  {
+   "id": "n0602",
+   "kind": "spelling",
+   "ca": "grey",
+   "us": "gray",
+   "text_ko": "캐나다에서는 grey 를 흔히 써요. 미국은 gray 가 많아요. 둘 다 틀린 것은 아니에요.",
+   "_cn": "cn_grey"
+  },
+  {
+   "id": "n0603",
+   "kind": "vocab",
+   "text_ko": "a 와 an 은 철자가 아니라 소리로 정해요. 모음 소리로 시작하면 an 이에요: an old book, an email. 자음 소리로 시작하면 a 예요: a new book."
+  },
+  {
+   "id": "n0604",
+   "kind": "vocab",
+   "text_ko": "복수 -s 는 낱말 끝소리에 따라 [s](books), [z](keys), [iz](boxes)로 달라져요. 한 가지씩 듣고 따라 해 보세요."
+  },
+  {
+   "id": "n0605",
+   "kind": "culture",
+   "text_ko": "캐나다 국기는 빨간색과 흰색이고 가운데에 붉은 단풍잎이 있어요. 단풍잎(maple leaf)은 캐나다의 대표적인 상징이에요."
+  }
+ ]
+}

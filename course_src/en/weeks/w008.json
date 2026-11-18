@@ -1,0 +1,1623 @@
+{
+ "v": 1,
+ "w": 8,
+ "title_ko": "음식·음료 주문",
+ "can_do": [
+  "카페에서 I'd like a ~, please. 로 주문할 수 있다",
+  "Can I have ~? 로 부탁할 수 있다",
+  "For here or to go? 에 대답할 수 있다"
+ ],
+ "scene": {
+  "id": "cafe_order",
+  "title_ko": "카페 주문",
+  "canada": [
+   "cn_double_double",
+   "cn_pop",
+   "cn_eat_in"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0209",
+   "en": "I'd",
+   "pos": "contr",
+   "ko": "~하고 싶어요",
+   "ko2": "~ 주세요",
+   "ipa": "aɪd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0210",
+   "en": "coffee",
+   "pos": "n",
+   "ko": "커피",
+   "ipa": "ˈkɔːfi",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0211",
+   "en": "tea",
+   "pos": "n",
+   "ko": "차",
+   "ipa": "tiː",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0212",
+   "en": "water",
+   "pos": "n",
+   "ko": "물",
+   "ipa": "ˈwɔːtər",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0213",
+   "en": "milk",
+   "pos": "n",
+   "ko": "우유",
+   "ipa": "mɪlk",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0214",
+   "en": "juice",
+   "pos": "n",
+   "ko": "주스",
+   "ipa": "dʒuːs",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0215",
+   "en": "sugar",
+   "pos": "n",
+   "ko": "설탕",
+   "ipa": "ˈʃʊɡər",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0216",
+   "en": "can",
+   "pos": "aux",
+   "ko": "~할 수 있어요",
+   "ipa": "kæn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0217",
+   "en": "want",
+   "pos": "v",
+   "ko": "원해요",
+   "ko2": "~고 싶어요",
+   "ipa": "wɑːnt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "wants",
+     "pat": "p_he_she_verbs"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0218",
+   "en": "sandwich",
+   "pos": "n",
+   "ko": "샌드위치",
+   "ipa": "ˈsænwɪtʃ",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "sandwiches",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0219",
+   "en": "soup",
+   "pos": "n",
+   "ko": "수프",
+   "ipa": "suːp",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "soups",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0220",
+   "en": "salad",
+   "pos": "n",
+   "ko": "샐러드",
+   "ipa": "ˈsæləd",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "salads",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0221",
+   "en": "pizza",
+   "pos": "n",
+   "ko": "피자",
+   "ipa": "ˈpiːtsə",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "pizzas",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0222",
+   "en": "or",
+   "pos": "conj",
+   "ko": "또는",
+   "ko2": "~거나",
+   "ipa": "ɔːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0223",
+   "en": "with",
+   "pos": "prep",
+   "ko": "~와 함께",
+   "ko2": "~을 넣은",
+   "ipa": "wɪð",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0224",
+   "en": "of",
+   "pos": "prep",
+   "ko": "~의",
+   "ipa": "ʌv",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0225",
+   "en": "bread",
+   "pos": "n",
+   "ko": "빵",
+   "ipa": "brɛd",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0226",
+   "en": "chicken",
+   "pos": "n",
+   "ko": "닭고기",
+   "ko2": "치킨",
+   "ipa": "ˈtʃɪkɪn",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0227",
+   "en": "for",
+   "pos": "prep",
+   "ko": "~를 위해",
+   "ko2": "~용",
+   "ipa": "fɔːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0228",
+   "en": "go",
+   "pos": "v",
+   "ko": "가요",
+   "ipa": "ɡoʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "goes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "going",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0229",
+   "en": "size",
+   "pos": "n",
+   "ko": "사이즈",
+   "ko2": "크기",
+   "ipa": "saɪz",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "sizes",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0230",
+   "en": "medium",
+   "pos": "adj",
+   "ko": "중간의",
+   "ipa": "ˈmiːdiəm",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0231",
+   "en": "large",
+   "pos": "adj",
+   "ko": "큰",
+   "ko2": "대형의",
+   "ipa": "lɑːrdʒ",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0014"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0232",
+   "en": "pop",
+   "pos": "n",
+   "ko": "탄산음료",
+   "ipa": "pɑːp",
+   "say": "",
+   "tags": [
+    "cafe",
+    "canada"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0233",
+   "en": "cheese",
+   "pos": "n",
+   "ko": "치즈",
+   "ipa": "tʃiːz",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0234",
+   "en": "egg",
+   "pos": "n",
+   "ko": "달걀",
+   "ipa": "ɛɡ",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0235",
+   "en": "fruit",
+   "pos": "n",
+   "ko": "과일",
+   "ipa": "fruːt",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0236",
+   "en": "vegetable",
+   "pos": "n",
+   "ko": "채소",
+   "ipa": "ˈvɛdʒtəbəl",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0237",
+   "en": "banana",
+   "pos": "n",
+   "ko": "바나나",
+   "ipa": "bəˈnænə",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0238",
+   "en": "beef",
+   "pos": "n",
+   "ko": "소고기",
+   "ipa": "biːf",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0239",
+   "en": "order",
+   "pos": "n",
+   "ko": "주문",
+   "ipa": "ˈɔːrdər",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0240",
+   "en": "burger",
+   "pos": "n",
+   "ko": "햄버거",
+   "ipa": "ˈbɜːrɡər",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0241",
+   "en": "cream",
+   "pos": "n",
+   "ko": "크림",
+   "ipa": "kriːm",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0242",
+   "en": "ice",
+   "pos": "n",
+   "ko": "얼음",
+   "ipa": "aɪs",
+   "say": "",
+   "tags": [
+    "cafe"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_id_like",
+   "tpl": "I'd like a ___, please.",
+   "slots": [
+    {
+     "name": "food_or_drink",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I'd like ~, please (~ 주세요)",
+   "grammar_ko": [
+    "I'd like 는 I would like 의 줄임말로, 정중하게 주문할 때 써요.",
+    "I want ~ 보다 부드럽고 공손해서 가게·식당에서 먼저 익혀야 해요(want 는 이어서 배워요).",
+    "끝에 please 를 붙이면 더 공손해요. 한국어 '~ 주세요'에 해당해요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0437",
+    "s0438",
+    "s0439",
+    "s0440",
+    "s0441",
+    "s0442"
+   ]
+  },
+  {
+   "id": "p_can_i_have",
+   "tpl": "Can I have ___, please?",
+   "slots": [
+    {
+     "name": "food_or_drink",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "Can I have ~? (~ 주실 수 있어요?)",
+   "grammar_ko": [
+    "Can I have ~? 는 '~ 주실 수 있어요?'라는 가벼운 부탁이에요.",
+    "can 은 가능을 묻는 말이고, 뒤에는 동사 원래 모양이 와요.",
+    "카페에서는 I'd like 와 Can I have 둘 다 자연스러워요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0448",
+    "s0449",
+    "s0450",
+    "s0451",
+    "s0452",
+    "s0453"
+   ]
+  },
+  {
+   "id": "p_x_or_y",
+   "tpl": "___ or ___?",
+   "slots": [
+    {
+     "name": "choice",
+     "pos": [
+      "n",
+      "adj"
+     ]
+    }
+   ],
+   "title_ko": "A or B? (A예요, B예요?)",
+   "grammar_ko": [
+    "or 는 '또는'이에요. 둘 중 하나를 고르게 할 때 두 낱말 사이에 놓아요: Tea or coffee?",
+    "고르는 질문은 앞 낱말은 끝을 올리고 마지막 낱말은 끝을 내려요.",
+    "대답은 하나만 골라 말해요: Tea, please."
+   ],
+   "d": 3,
+   "examples": [
+    "s0455",
+    "s0456",
+    "s0457",
+    "s0458",
+    "s0459",
+    "s0460"
+   ]
+  },
+  {
+   "id": "p_for_here_to_go",
+   "tpl": "For here or to go? / Is that for here?",
+   "slots": [],
+   "title_ko": "For here or to go? (드시고 가세요, 가져가세요?)",
+   "grammar_ko": [
+    "카페·식당에서 점원이 자주 묻는 고정 표현이에요.",
+    "여기서 먹으면 For here, 가져가면 To go 라고 대답해요. Is that for here? 라고도 물어요.",
+    "To go, please. 처럼 please 를 붙여 대답하면 공손해요. 캐나다에서는 Eat in or take out? 도 들려요(알아듣기용)."
+   ],
+   "d": 4,
+   "examples": [
+    "s0465",
+    "s0466",
+    "s0467",
+    "s0468",
+    "s0469",
+    "s0470"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0437",
+   "en": "I'd like a coffee, please.",
+   "ko": "커피 한 잔 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0438",
+   "en": "I'd like a tea, please.",
+   "ko": "차 하나 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0439",
+   "en": "I'd like water, please.",
+   "ko": "물 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0440",
+   "en": "I'd like milk, please.",
+   "ko": "우유 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0441",
+   "en": "I'd like a juice, please.",
+   "ko": "주스 하나 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0442",
+   "en": "I'd like a sandwich, please.",
+   "ko": "샌드위치 하나 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0443",
+   "en": "I'd like a large coffee, please.",
+   "ko": "큰 사이즈 커피 한 잔 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0444",
+   "en": "I'd like a tea with milk, please.",
+   "ko": "우유를 넣은 차 하나 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0445",
+   "en": "I'd like a chicken sandwich, please.",
+   "ko": "치킨 샌드위치 하나 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0446",
+   "en": "I'd like a soup and a salad, please.",
+   "ko": "수프와 샐러드 하나씩 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0447",
+   "en": "I'd like a pop, please.",
+   "ko": "탄산음료 하나 주세요.",
+   "say": "",
+   "pat": "p_id_like",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0448",
+   "en": "Can I have a coffee, please?",
+   "ko": "커피 한 잔 주실 수 있어요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0449",
+   "en": "Can I have a sandwich, please?",
+   "ko": "샌드위치 하나 주실 수 있어요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0450",
+   "en": "Can I have milk, please?",
+   "ko": "우유 주실 수 있어요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0451",
+   "en": "Can I have the soup, please?",
+   "ko": "수프로 주실 수 있어요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0452",
+   "en": "Can I have your name, please?",
+   "ko": "성함 좀 알려 주실 수 있어요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0453",
+   "en": "Can I sit here, please?",
+   "ko": "여기 앉아도 될까요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0454",
+   "en": "Can you say that again, please?",
+   "ko": "다시 한번 말씀해 주실래요?",
+   "say": "",
+   "pat": "p_can_i_have",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0455",
+   "en": "Tea or coffee?",
+   "ko": "차요, 커피요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0456",
+   "en": "Milk or water?",
+   "ko": "우유요, 물이요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0457",
+   "en": "Soup or salad?",
+   "ko": "수프요, 샐러드요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0458",
+   "en": "Chicken or fish?",
+   "ko": "닭고기요, 생선이요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0459",
+   "en": "Bread or rice?",
+   "ko": "빵이요, 밥이요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0460",
+   "en": "Medium or large?",
+   "ko": "중간 사이즈요, 큰 사이즈요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0461",
+   "en": "Do you like tea or coffee?",
+   "ko": "차 좋아하세요, 커피 좋아하세요?",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0462",
+   "en": "Tea, please.",
+   "ko": "차 주세요.",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0463",
+   "en": "Coffee, please.",
+   "ko": "커피 주세요.",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0464",
+   "en": "Medium, please.",
+   "ko": "중간 사이즈로 주세요.",
+   "say": "",
+   "pat": "p_x_or_y",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0465",
+   "en": "For here or to go?",
+   "ko": "드시고 가세요, 가져가세요?",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0466",
+   "en": "Is that for here?",
+   "ko": "여기서 드실 거예요?",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0467",
+   "en": "For here, please.",
+   "ko": "여기서 먹을게요.",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0468",
+   "en": "To go, please.",
+   "ko": "포장해 주세요.",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0469",
+   "en": "A coffee to go, please.",
+   "ko": "커피 한 잔 포장해 주세요.",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0470",
+   "en": "A large tea to go, please.",
+   "ko": "큰 사이즈 차 한 잔 포장해 주세요.",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0471",
+   "en": "No, to go.",
+   "ko": "아니요, 포장이에요.",
+   "say": "",
+   "pat": "p_for_here_to_go",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0472",
+   "en": "I want a coffee.",
+   "ko": "커피가 마시고 싶어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0473",
+   "en": "I want to go home.",
+   "ko": "집에 가고 싶어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0474",
+   "en": "I don't want milk.",
+   "ko": "우유는 마시고 싶지 않아요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0475",
+   "en": "Do you want a coffee?",
+   "ko": "커피 드실래요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0476",
+   "en": "Pop, please.",
+   "ko": "탄산음료 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0477",
+   "en": "I like bread.",
+   "ko": "저는 빵을 좋아해요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0478",
+   "en": "What size is it?",
+   "ko": "사이즈가 어떻게 돼요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0479",
+   "en": "What size?",
+   "ko": "어떤 사이즈요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0480",
+   "en": "Small, medium or large?",
+   "ko": "작은 사이즈요, 중간 사이즈요, 큰 사이즈요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0481",
+   "en": "No sugar, please.",
+   "ko": "설탕은 빼 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0482",
+   "en": "A cup of tea, please.",
+   "ko": "차 한 잔 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0483",
+   "en": "A cup of coffee, please.",
+   "ko": "커피 한 잔이요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0484",
+   "en": "Coffee with milk and sugar, please.",
+   "ko": "우유와 설탕을 넣은 커피 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0485",
+   "en": "The pizza is very good.",
+   "ko": "피자가 아주 맛있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0486",
+   "en": "This tea is for Anna.",
+   "ko": "이 차는 애나 거예요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0487",
+   "en": "I like pizza, but I don't like salad.",
+   "ko": "저는 피자는 좋아하지만 샐러드는 안 좋아해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0488",
+   "en": "Juice, please.",
+   "ko": "주스 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0489",
+   "en": "I'd like a burger, please.",
+   "ko": "햄버거 하나 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0490",
+   "en": "Cheese or egg?",
+   "ko": "치즈요, 달걀이요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0491",
+   "en": "I don't like beef.",
+   "ko": "저는 소고기를 안 좋아해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0492",
+   "en": "Coffee with cream, please.",
+   "ko": "크림을 넣은 커피 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0493",
+   "en": "Water with ice, please.",
+   "ko": "얼음을 넣은 물 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0494",
+   "en": "Is this your order?",
+   "ko": "이거 본인 주문이에요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0495",
+   "en": "The vegetable soup is very good.",
+   "ko": "채소 수프가 아주 맛있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0008",
+   "title_ko": "카페에서 주문",
+   "scene": "cafe_order",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hi. Welcome.",
+     "ko": "안녕하세요. 어서 오세요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Hi. Can I have a coffee, please?",
+     "ko": "안녕하세요. 커피 한 잔 주실 수 있어요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Medium or large?",
+     "ko": "중간 사이즈요, 큰 사이즈요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Medium, please.",
+     "ko": "중간 사이즈로 주세요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "With milk and sugar?",
+     "ko": "우유와 설탕을 넣을까요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Milk, no sugar, please.",
+     "ko": "우유만 넣고 설탕은 빼 주세요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "For here or to go?",
+     "ko": "드시고 가세요, 가져가세요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "To go, please.",
+     "ko": "포장해 주세요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Can I have your name, please?",
+     "ko": "성함 좀 알려 주실 수 있어요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "It's Min. Thank you.",
+     "ko": "민이에요. 감사해요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [
+  {
+   "id": "sp0801",
+   "kind": "read",
+   "en": "Hello. I'd like a coffee, please. Medium, with milk.",
+   "ko": "안녕하세요. 커피 한 잔 주세요. 중간 사이즈로, 우유 넣어서요.",
+   "say": "",
+   "expect_any": [
+    "hello",
+    "coffee",
+    "please",
+    "medium",
+    "milk"
+   ]
+  },
+  {
+   "id": "sp0802",
+   "kind": "answer",
+   "en": "For here or to go?",
+   "ko": "드시고 가세요, 가져가세요? 영어로 대답해 보세요.",
+   "say": "",
+   "expect_any": [
+    "here",
+    "go",
+    "please"
+   ]
+  },
+  {
+   "id": "sp0803",
+   "kind": "intro",
+   "en": "Hi. What's your name? Where are you from? What do you like?",
+   "ko": "이름, 출신, 좋아하는 것을 영어로 소개해 보세요.",
+   "say": "",
+   "expect_any": [
+    "i'm",
+    "my",
+    "name",
+    "from",
+    "like"
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n0801",
+   "kind": "vocab",
+   "text_ko": "double-double 은 크림 둘, 설탕 둘을 넣은 커피를 부르는 캐나다식 주문 말이에요. 알아듣는 용도예요.",
+   "_cn": "cn_double_double"
+  },
+  {
+   "id": "n0802",
+   "kind": "vocab",
+   "text_ko": "캐나다에서는 탄산음료를 pop 이라고 많이 불러요. 미국 일부 지역에서는 soda 라고도 해요.",
+   "_cn": "cn_pop"
+  },
+  {
+   "id": "n0803",
+   "kind": "culture",
+   "text_ko": "캐나다의 카페·패스트푸드점에서는 For here or to go? 대신 Eat in or take out? 이라고도 물어요. 알아듣는 용도예요(이번 주에는 for here or to go 만 말해요).",
+   "_cn": "cn_eat_in"
+  },
+  {
+   "id": "n0804",
+   "kind": "culture",
+   "text_ko": "많은 카페에서는 주문할 때 이름을 물어보고 컵에 적어 줘요. 그래서 Can I have your name, please? 를 자주 듣게 돼요. 이름 철자를 말하는 연습이 도움이 돼요."
+  },
+  {
+   "id": "n0805",
+   "kind": "vocab",
+   "text_ko": "주문할 때 I want ~ 는 너무 직접적으로 들릴 수 있어요. I'd like ~, please. 나 Can I have ~, please? 로 말하면 공손해요. want 는 친구와 편하게 이야기할 때 쓰면 좋아요."
+  }
+ ]
+}

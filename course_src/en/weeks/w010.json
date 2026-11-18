@@ -1,0 +1,1628 @@
+{
+ "v": 1,
+ "w": 10,
+ "title_ko": "장소·위치",
+ "can_do": [
+  "가게와 건물의 위치를 Where is ~? 로 물을 수 있다",
+  "There is ~ 로 있는 것을 말할 수 있다",
+  "next to, behind, under 로 위치를 설명할 수 있다"
+ ],
+ "scene": {
+  "id": "where_is",
+  "title_ko": "화장실과 가게 위치 묻기",
+  "canada": [
+   "cn_washroom",
+   "cn_centre"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0277",
+   "en": "washroom",
+   "pos": "n",
+   "ko": "화장실",
+   "ipa": "ˈwɑːʃruːm",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "washrooms",
+     "pat": "p_there_is"
+    }
+   ],
+   "alt": [],
+   "syn": [
+    "w0301"
+   ],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0278",
+   "en": "kitchen",
+   "pos": "n",
+   "ko": "부엌",
+   "ipa": "ˈkɪtʃən",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "kitchens",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0279",
+   "en": "store",
+   "pos": "n",
+   "ko": "가게",
+   "ipa": "stɔːr",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "stores",
+     "pat": "p_there_is"
+    }
+   ],
+   "alt": [],
+   "syn": [
+    "w0075"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0280",
+   "en": "bank",
+   "pos": "n",
+   "ko": "은행",
+   "ipa": "bæŋk",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "banks",
+     "pat": "p_there_is"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0281",
+   "en": "station",
+   "pos": "n",
+   "ko": "역",
+   "ko2": "터미널",
+   "ipa": "ˈsteɪʃən",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "stations",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0282",
+   "en": "hospital",
+   "pos": "n",
+   "ko": "병원",
+   "ipa": "ˈhɑːspɪtəl",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "hospitals",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0283",
+   "en": "park",
+   "pos": "n",
+   "ko": "공원",
+   "ipa": "pɑːrk",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "parks",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0301",
+   "en": "bathroom",
+   "pos": "n",
+   "ko": "화장실",
+   "ipa": "ˈbæθruːm",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0277"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0302",
+   "en": "elevator",
+   "pos": "n",
+   "ko": "엘리베이터",
+   "ipa": "ˈɛlɪveɪtər",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0303",
+   "en": "stairs",
+   "pos": "n",
+   "ko": "계단",
+   "ipa": "stɛrz",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0284",
+   "en": "there",
+   "pos": "adv",
+   "ko": "거기에",
+   "ko2": "있어요 (There is ~)",
+   "ipa": "ðɛr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "there's",
+     "pat": "p_there_is"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0285",
+   "en": "floor",
+   "pos": "n",
+   "ko": "층",
+   "ko2": "바닥",
+   "ipa": "flɔːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "floors",
+     "pat": "p_there_is"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0286",
+   "en": "street",
+   "pos": "n",
+   "ko": "거리",
+   "ko2": "길",
+   "ipa": "striːt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "streets",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0287",
+   "en": "house",
+   "pos": "n",
+   "ko": "집",
+   "ko2": "주택",
+   "ipa": "haʊs",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "houses",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [
+    "w0078"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0288",
+   "en": "office",
+   "pos": "n",
+   "ko": "사무실",
+   "ipa": "ˈɔːfɪs",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "offices",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0289",
+   "en": "school",
+   "pos": "n",
+   "ko": "학교",
+   "ipa": "skuːl",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "schools",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0304",
+   "en": "entrance",
+   "pos": "n",
+   "ko": "입구",
+   "ipa": "ˈɛntrəns",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0305",
+   "en": "exit",
+   "pos": "n",
+   "ko": "출구",
+   "ipa": "ˈɛɡzɪt",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0306",
+   "en": "corner",
+   "pos": "n",
+   "ko": "모퉁이",
+   "ipa": "ˈkɔːrnər",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0290",
+   "en": "library",
+   "pos": "n",
+   "ko": "도서관",
+   "ipa": "ˈlaɪbrɛri",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "libraries",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0291",
+   "en": "restaurant",
+   "pos": "n",
+   "ko": "식당",
+   "ipa": "ˈrɛstərɑːnt",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "restaurants",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0292",
+   "en": "centre",
+   "pos": "n",
+   "ko": "중심",
+   "ko2": "센터",
+   "ipa": "ˈsɛntər",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "centres",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [
+    "center"
+   ],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0293",
+   "en": "downtown",
+   "pos": "adv",
+   "ko": "시내",
+   "ipa": "ˌdaʊnˈtaʊn",
+   "say": "",
+   "tags": [
+    "place"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0294",
+   "en": "near",
+   "pos": "prep",
+   "ko": "~ 근처에",
+   "ipa": "nɪr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0295",
+   "en": "far",
+   "pos": "adj",
+   "ko": "먼",
+   "ipa": "fɑːr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0307",
+   "en": "building",
+   "pos": "n",
+   "ko": "건물",
+   "ipa": "ˈbɪldɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0308",
+   "en": "parking",
+   "pos": "n",
+   "ko": "주차",
+   "ipa": "ˈpɑːrkɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0296",
+   "en": "next",
+   "pos": "adj",
+   "ko": "다음의",
+   "ko2": "옆의 (next to)",
+   "ipa": "nɛkst",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0297",
+   "en": "behind",
+   "pos": "prep",
+   "ko": "~ 뒤에",
+   "ipa": "bɪˈhaɪnd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0298",
+   "en": "under",
+   "pos": "prep",
+   "ko": "~ 아래에",
+   "ipa": "ˈʌndər",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0299",
+   "en": "left",
+   "pos": "adj",
+   "ko": "왼쪽의",
+   "ipa": "lɛft",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0300",
+   "en": "front",
+   "pos": "n",
+   "ko": "앞",
+   "ipa": "frʌnt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0309",
+   "en": "neighbour",
+   "pos": "n",
+   "ko": "이웃",
+   "ipa": "ˈneɪbər",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [
+    "neighbor"
+   ],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0310",
+   "en": "address",
+   "pos": "n",
+   "ko": "주소",
+   "ipa": "ˈædrɛs",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0610",
+   "en": "Main Street",
+   "pos": "propn",
+   "ko": "메인 스트리트",
+   "ipa": "meɪn striːt",
+   "say": "",
+   "tags": [
+    "street"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_where_is",
+   "tpl": "Where is the ___? - It's ___.",
+   "slots": [
+    {
+     "name": "place",
+     "pos": [
+      "n"
+     ]
+    },
+    {
+     "name": "where",
+     "pos": [
+      "adv",
+      "prep"
+     ]
+    }
+   ],
+   "title_ko": "Where is the ~? (~은 어디예요?)",
+   "grammar_ko": [
+    "물건·장소를 물을 때는 Where is the ~? 라고 해요. 서로 아는 것 앞에는 the 를 써요.",
+    "the 는 '그'처럼 서로 아는 것 앞에 붙어요: the washroom 은 '그 화장실'이에요.",
+    "대답은 It's 뒤에 장소를 말해요: It's near the bank."
+   ],
+   "d": 1,
+   "examples": [
+    "s0558",
+    "s0559",
+    "s0560",
+    "s0561",
+    "s0562",
+    "s0563"
+   ]
+  },
+  {
+   "id": "p_there_is",
+   "tpl": "There is a ___ in ___. / There are ___.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    },
+    {
+     "name": "place",
+     "pos": [
+      "n",
+      "propn"
+     ]
+    }
+   ],
+   "title_ko": "There is ~ (~이 있어요)",
+   "grammar_ko": [
+    "There is 는 '~이 있어요'예요. 있는 것은 뒤에 와요: There is a bank.",
+    "하나면 There is, 여럿이면 There are 를 써요. 줄여서 There's 라고도 해요.",
+    "한국어 '있어요'와 달리 영어는 There 를 빼면 틀려요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0570",
+    "s0571",
+    "s0572",
+    "s0573",
+    "s0574",
+    "s0575"
+   ]
+  },
+  {
+   "id": "p_is_there",
+   "tpl": "Is there a ___ near here?",
+   "slots": [
+    {
+     "name": "place",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "Is there ~ near here? (이 근처에 ~이 있어요?)",
+   "grammar_ko": [
+    "물을 때는 Is 를 앞으로 보내요: There is → Is there ~?",
+    "대답은 Yes, there is. 라고 해요. 없을 때는 There is no ~ 라고 말해요.",
+    "near here 는 '이 근처에'예요."
+   ],
+   "d": 3,
+   "examples": [
+    "s0579",
+    "s0580",
+    "s0581",
+    "s0582",
+    "s0583",
+    "s0584"
+   ]
+  },
+  {
+   "id": "p_next_to",
+   "tpl": "It's next to / behind / under / in front of the ___.",
+   "slots": [
+    {
+     "name": "place",
+     "pos": [
+      "prep"
+     ]
+    },
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "위치 말 (~ 옆에, ~ 뒤에)",
+   "grammar_ko": [
+    "위치 말은 명사 앞에 와요: next to the bank 는 '은행 옆에'예요. 한국어는 명사 뒤에 와요.",
+    "in front of 는 '~ 앞에'로, 세 낱말이 한 덩어리예요.",
+    "left 와 right 는 방향이에요: on the left 는 '왼쪽에'예요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0591",
+    "s0592",
+    "s0593",
+    "s0594",
+    "s0595",
+    "s0596"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0558",
+   "en": "Where is the washroom?",
+   "ko": "화장실이 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0559",
+   "en": "Where is the bank?",
+   "ko": "은행이 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0560",
+   "en": "Where is the store?",
+   "ko": "가게가 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0561",
+   "en": "Where is the hospital?",
+   "ko": "병원이 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0562",
+   "en": "Where is the bus station?",
+   "ko": "버스 터미널이 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0563",
+   "en": "Where is the park?",
+   "ko": "공원이 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0564",
+   "en": "Excuse me, where is the washroom?",
+   "ko": "저기요, 화장실이 어디예요?",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0565",
+   "en": "It's there.",
+   "ko": "저기 있어요.",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0566",
+   "en": "It's near the bank.",
+   "ko": "은행 근처에 있어요.",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0567",
+   "en": "It's downtown.",
+   "ko": "시내에 있어요.",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0568",
+   "en": "It's on Main Street.",
+   "ko": "메인 스트리트에 있어요.",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0569",
+   "en": "It's in the kitchen.",
+   "ko": "부엌에 있어요.",
+   "say": "",
+   "pat": "p_where_is",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0570",
+   "en": "There is a bank on Main Street.",
+   "ko": "메인 스트리트에 은행이 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0571",
+   "en": "There is a washroom on the first floor.",
+   "ko": "1층에 화장실이 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0572",
+   "en": "There is a park near my house.",
+   "ko": "우리 집 근처에 공원이 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0573",
+   "en": "There is a school near here.",
+   "ko": "이 근처에 학교가 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0574",
+   "en": "There are two banks on Main Street.",
+   "ko": "메인 스트리트에 은행이 두 곳 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0575",
+   "en": "There are two washrooms on the first floor.",
+   "ko": "1층에 화장실이 두 개 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0576",
+   "en": "There's a store near my house.",
+   "ko": "우리 집 근처에 가게가 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0577",
+   "en": "There's a washroom in the library.",
+   "ko": "도서관에 화장실이 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0578",
+   "en": "There's a kitchen in my office.",
+   "ko": "제 사무실에는 부엌이 있어요.",
+   "say": "",
+   "pat": "p_there_is",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0579",
+   "en": "Is there a bank near here?",
+   "ko": "이 근처에 은행이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0580",
+   "en": "Is there a washroom near here?",
+   "ko": "이 근처에 화장실이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0581",
+   "en": "Is there a park near here?",
+   "ko": "이 근처에 공원이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0582",
+   "en": "Is there a library near here?",
+   "ko": "이 근처에 도서관이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0583",
+   "en": "Is there a restaurant near here?",
+   "ko": "이 근처에 식당이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0584",
+   "en": "Is there a hospital near here?",
+   "ko": "이 근처에 병원이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0585",
+   "en": "Yes, there is.",
+   "ko": "네, 있어요.",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0586",
+   "en": "Sorry, there is no washroom here.",
+   "ko": "죄송해요, 여기에는 화장실이 없어요.",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0587",
+   "en": "Is there a restaurant in the city centre?",
+   "ko": "도시 중심에 식당이 있어요?",
+   "say": "",
+   "pat": "p_is_there",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0588",
+   "en": "Is the library far from here?",
+   "ko": "도서관은 여기서 멀어요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0589",
+   "en": "Is it far?",
+   "ko": "멀어요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0590",
+   "en": "No, it's near.",
+   "ko": "아니요, 가까워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0591",
+   "en": "It's next to the bank.",
+   "ko": "은행 옆에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0592",
+   "en": "It's behind the library.",
+   "ko": "도서관 뒤에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0593",
+   "en": "It's under the table.",
+   "ko": "테이블 아래에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0594",
+   "en": "It's in front of the school.",
+   "ko": "학교 앞에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0595",
+   "en": "It's on the left.",
+   "ko": "왼쪽에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0596",
+   "en": "The park is next to the school.",
+   "ko": "공원은 학교 옆에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0597",
+   "en": "The key is under the bag.",
+   "ko": "열쇠는 가방 아래에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0598",
+   "en": "The cat is behind the door.",
+   "ko": "고양이는 문 뒤에 있어요.",
+   "say": "",
+   "pat": "p_next_to",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0599",
+   "en": "Is it in front of the bank?",
+   "ko": "은행 앞에 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0600",
+   "en": "The library is near the city centre.",
+   "ko": "도서관은 도시 중심 근처에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0601",
+   "en": "My office is downtown.",
+   "ko": "제 사무실은 시내에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0602",
+   "en": "The kitchen is big.",
+   "ko": "부엌이 커요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0603",
+   "en": "Main Street is near here.",
+   "ko": "메인 스트리트는 이 근처에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0604",
+   "en": "The restaurant is on Main Street.",
+   "ko": "식당은 메인 스트리트에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0605",
+   "en": "The hospital is behind the station.",
+   "ko": "병원은 역 뒤에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0606",
+   "en": "Where is the bathroom?",
+   "ko": "화장실은 어디예요?",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0607",
+   "en": "The elevator is on the left.",
+   "ko": "엘리베이터는 왼쪽에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0608",
+   "en": "The stairs are next to the elevator.",
+   "ko": "계단은 엘리베이터 옆에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0609",
+   "en": "The entrance is on Main Street.",
+   "ko": "입구는 메인 스트리트 쪽에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0610",
+   "en": "The exit is behind the store.",
+   "ko": "출구는 가게 뒤에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0611",
+   "en": "It's on the corner.",
+   "ko": "모퉁이에 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0612",
+   "en": "It's a big building.",
+   "ko": "큰 건물이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0613",
+   "en": "There is parking behind the building.",
+   "ko": "건물 뒤에 주차장이 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0614",
+   "en": "My neighbour is a nice man.",
+   "ko": "우리 이웃은 친절한 남자예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0615",
+   "en": "What's your address?",
+   "ko": "주소가 뭐예요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0010",
+   "title_ko": "화장실이 어디예요?",
+   "scene": "where_is",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Excuse me. Is there a washroom near here?",
+     "ko": "저기요. 이 근처에 화장실이 있어요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Yes, there is. It's in the library.",
+     "ko": "네, 있어요. 도서관 안에 있어요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Where is the library?",
+     "ko": "도서관이 어디예요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "It's on Main Street, next to the bank.",
+     "ko": "메인 스트리트에, 은행 옆에 있어요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Is it far?",
+     "ko": "멀어요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "No, it's near. It's on the left.",
+     "ko": "아니요, 가까워요. 왼쪽에 있어요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Thank you.",
+     "ko": "감사해요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Bye.",
+     "ko": "잘 가요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n1001",
+   "kind": "vocab",
+   "text_ko": "캐나다에서 공공장소(식당·가게·공항)의 화장실은 washroom 이라고 해요. 집 안의 화장실은 bathroom 이라고도 해요. 미국에서 많이 쓰는 restroom 도 알아들으면 돼요.",
+   "_cn": "cn_washroom"
+  },
+  {
+   "id": "n1002",
+   "kind": "spelling",
+   "text_ko": "centre 는 캐나다 철자예요. 미국에서는 center 라고 써요. 정답 입력은 center 도 인정해요.",
+   "ca": "centre",
+   "us": "center",
+   "_cn": "cn_centre"
+  },
+  {
+   "id": "n1003",
+   "kind": "vocab",
+   "text_ko": "캐나다·미국에서 1층은 first floor 라고 해요. 큰 건물에서는 main floor 라고도 불러요."
+  },
+  {
+   "id": "n1004",
+   "kind": "culture",
+   "text_ko": "캐나다 주소는 번지 숫자가 거리 이름 앞에 와요. 거리 이름은 Street, Avenue, Road 로 끝나는 경우가 많아요. 길을 물을 때는 거리 이름과 가게 이름을 같이 말하면 좋아요."
+  },
+  {
+   "id": "n1005",
+   "kind": "vocab",
+   "text_ko": "downtown 은 도시의 중심가를 말해요. 은행·가게·식당이 모여 있는 곳이 많아서 길을 물을 때 자주 나와요."
+  }
+ ]
+}

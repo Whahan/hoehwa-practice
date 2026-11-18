@@ -1,0 +1,1680 @@
+{
+ "v": 1,
+ "w": 11,
+ "title_ko": "돈·가격",
+ "can_do": [
+  "How much is ~? 로 값을 물을 수 있다",
+  "가격과 숫자를 알아듣고 말할 수 있다",
+  "Can I pay with ~? 로 계산 방법을 말할 수 있다"
+ ],
+ "scene": {
+  "id": "how_much",
+  "title_ko": "가격 묻고 계산하기",
+  "canada": [
+   "cn_loonie_toonie",
+   "cn_debit_credit",
+   "cn_tax_tip"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0311",
+   "en": "much",
+   "pos": "adv",
+   "ko": "많이",
+   "ko2": "많은 (양)",
+   "ipa": "mʌtʃ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0312",
+   "en": "many",
+   "pos": "det",
+   "ko": "많은",
+   "ko2": "(개수가) 많은",
+   "ipa": "ˈmɛni",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0313",
+   "en": "dollar",
+   "pos": "n",
+   "ko": "달러",
+   "ipa": "ˈdɑːlər",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "dollars",
+     "pat": "p_price_say"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0314",
+   "en": "cent",
+   "pos": "n",
+   "ko": "센트",
+   "ipa": "sɛnt",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "cents",
+     "pat": "p_price_say"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0315",
+   "en": "price",
+   "pos": "n",
+   "ko": "가격",
+   "ko2": "값",
+   "ipa": "praɪs",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "prices",
+     "pat": "p_how_much"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0316",
+   "en": "cheap",
+   "pos": "adj",
+   "ko": "싼",
+   "ipa": "tʃiːp",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0317",
+   "en": "expensive",
+   "pos": "adj",
+   "ko": "비싼",
+   "ipa": "ɪkˈspɛnsɪv",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0336",
+   "en": "cost",
+   "pos": "v",
+   "ko": "(값이) 들어요",
+   "ipa": "kɔːst",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [
+    {
+     "f": "costs",
+     "pat": "p_price_say"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0337",
+   "en": "coin",
+   "pos": "n",
+   "ko": "동전",
+   "ipa": "kɔɪn",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [
+    {
+     "f": "coins",
+     "pat": "p_how_much"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0338",
+   "en": "wallet",
+   "pos": "n",
+   "ko": "지갑",
+   "ipa": "ˈwɑːlət",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0318",
+   "en": "pay",
+   "pos": "v",
+   "ko": "돈을 내요",
+   "ipa": "peɪ",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "pays",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "paying",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0319",
+   "en": "cash",
+   "pos": "n",
+   "ko": "현금",
+   "ipa": "kæʃ",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0320",
+   "en": "card",
+   "pos": "n",
+   "ko": "카드",
+   "ipa": "kɑːrd",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "cards",
+     "pat": "p_pay_with"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0321",
+   "en": "debit",
+   "pos": "n",
+   "ko": "체크카드",
+   "ipa": "ˈdɛbɪt",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0322",
+   "en": "credit",
+   "pos": "n",
+   "ko": "신용카드",
+   "ipa": "ˈkrɛdɪt",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0323",
+   "en": "change",
+   "pos": "n",
+   "ko": "거스름돈",
+   "ko2": "잔돈",
+   "ipa": "tʃeɪndʒ",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0339",
+   "en": "discount",
+   "pos": "n",
+   "ko": "할인",
+   "ipa": "ˈdɪskaʊnt",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0340",
+   "en": "coupon",
+   "pos": "n",
+   "ko": "쿠폰",
+   "ipa": "ˈkuːpɑːn",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0341",
+   "en": "spend",
+   "pos": "v",
+   "ko": "돈을 써요",
+   "ipa": "spɛnd",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0324",
+   "en": "buy",
+   "pos": "v",
+   "ko": "사요",
+   "ipa": "baɪ",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "buys",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "buying",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0325",
+   "en": "total",
+   "pos": "n",
+   "ko": "합계",
+   "ipa": "ˈtoʊtəl",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0326",
+   "en": "receipt",
+   "pos": "n",
+   "ko": "영수증",
+   "ipa": "rɪˈsiːt",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "receipts",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0327",
+   "en": "too",
+   "pos": "adv",
+   "ko": "너무",
+   "ipa": "tuː",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0328",
+   "en": "tax",
+   "pos": "n",
+   "ko": "세금",
+   "ipa": "tæks",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "taxes",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0329",
+   "en": "tip",
+   "pos": "n",
+   "ko": "팁",
+   "ipa": "tɪp",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "tips",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0342",
+   "en": "save",
+   "pos": "v",
+   "ko": "모아요",
+   "ko2": "아껴요",
+   "ipa": "seɪv",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0343",
+   "en": "rich",
+   "pos": "adj",
+   "ko": "부자인",
+   "ipa": "rɪtʃ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0330",
+   "en": "loonie",
+   "pos": "n",
+   "ko": "1달러 동전",
+   "ko2": "루니",
+   "ipa": "ˈluːni",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "loonies",
+     "pat": "p_pay_with"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0331",
+   "en": "toonie",
+   "pos": "n",
+   "ko": "2달러 동전",
+   "ko2": "투니",
+   "ipa": "ˈtuːni",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "toonies",
+     "pat": "p_pay_with"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0332",
+   "en": "only",
+   "pos": "adv",
+   "ko": "~밖에",
+   "ko2": "단지",
+   "ipa": "ˈoʊnli",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0333",
+   "en": "money",
+   "pos": "n",
+   "ko": "돈",
+   "ipa": "ˈmʌni",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0334",
+   "en": "each",
+   "pos": "det",
+   "ko": "하나에",
+   "ko2": "각각",
+   "ipa": "iːtʃ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0335",
+   "en": "ticket",
+   "pos": "n",
+   "ko": "표",
+   "ipa": "ˈtɪkɪt",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "tickets",
+     "pat": "p_pay_with"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0344",
+   "en": "ATM",
+   "pos": "n",
+   "ko": "현금인출기",
+   "ipa": "ˌeɪtiːˈɛm",
+   "say": "ay tee em",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0345",
+   "en": "sale",
+   "pos": "n",
+   "ko": "세일",
+   "ko2": "판매",
+   "ipa": "seɪl",
+   "say": "",
+   "tags": [
+    "money"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_how_much",
+   "tpl": "How much is ___? / How many ___?",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n",
+      "pron"
+     ]
+    }
+   ],
+   "title_ko": "How much / How many (얼마예요? / 몇 개예요?)",
+   "grammar_ko": [
+    "값은 How much is ~? 로 물어요. 여러 개일 때는 How much are ~? 라고 해요.",
+    "How many 는 셀 수 있는 것의 수를 물어요: How many tickets?",
+    "much 는 셀 수 없는 양(돈, 물), many 는 셀 수 있는 개수에 써요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0616",
+    "s0617",
+    "s0618",
+    "s0619",
+    "s0620",
+    "s0621"
+   ]
+  },
+  {
+   "id": "p_price_say",
+   "tpl": "It's ___ dollars. / It's five ninety-nine.",
+   "slots": [
+    {
+     "name": "price",
+     "pos": [
+      "num"
+     ]
+    }
+   ],
+   "title_ko": "It's ~ dollars (~ 달러예요)",
+   "grammar_ko": [
+    "값은 숫자 뒤에 dollar 를 붙여요. 둘 이상이면 dollars 예요: It's ten dollars.",
+    "5달러 99센트는 It's five ninety-nine. 처럼 dollars 를 빼고 숫자를 두 번에 나눠 읽기도 해요.",
+    "한국어 '오천 원'처럼 단위가 숫자 뒤에 오는 점은 같아요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0625",
+    "s0626",
+    "s0627",
+    "s0628",
+    "s0629",
+    "s0630"
+   ]
+  },
+  {
+   "id": "p_too_adj",
+   "tpl": "It's too ___.",
+   "slots": [
+    {
+     "name": "adj",
+     "pos": [
+      "adj"
+     ]
+    }
+   ],
+   "title_ko": "It's too ~ (너무 ~해요)",
+   "grammar_ko": [
+    "too 는 '너무 ~해서 문제'라는 뜻이에요: too expensive 는 '너무 비싸요'.",
+    "좋은 뜻의 '아주'는 very 예요: very good. 둘을 구별해요.",
+    "too 뒤에는 형용사가 와요: too big, too small."
+   ],
+   "d": 3,
+   "examples": [
+    "s0634",
+    "s0635",
+    "s0636",
+    "s0637",
+    "s0638",
+    "s0639"
+   ]
+  },
+  {
+   "id": "p_pay_with",
+   "tpl": "Can I pay with ___? / Debit or credit?",
+   "slots": [
+    {
+     "name": "method",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "Can I pay with ~? (~로 계산해도 돼요?)",
+   "grammar_ko": [
+    "pay with 뒤에 방법을 넣어요: Can I pay with cash? / with a card?",
+    "with 는 '~으로(수단)'예요. 한국어 '카드로'의 '로'에 해당해요.",
+    "Debit or credit? 는 계산대에서 카드 종류를 묻는 말이에요. 가게마다 받는 방법이 달라서 먼저 물어보면 좋아요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0643",
+    "s0644",
+    "s0645",
+    "s0646",
+    "s0647",
+    "s0648"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0616",
+   "en": "How much is this?",
+   "ko": "이건 얼마예요?",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0617",
+   "en": "How much is it?",
+   "ko": "얼마예요?",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0618",
+   "en": "How much is the coffee?",
+   "ko": "커피는 얼마예요?",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0619",
+   "en": "How much is the sandwich?",
+   "ko": "샌드위치는 얼마예요?",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0620",
+   "en": "How many dollars do you have?",
+   "ko": "몇 달러 있어요?",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0621",
+   "en": "What's the price?",
+   "ko": "가격이 어떻게 돼요?",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0622",
+   "en": "It's cheap.",
+   "ko": "싸요.",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0623",
+   "en": "It's expensive.",
+   "ko": "비싸요.",
+   "say": "",
+   "pat": "p_how_much",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0624",
+   "en": "It's 50 cents.",
+   "ko": "50센트예요.",
+   "say": "It's fifty cents.",
+   "pat": "p_how_much",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0625",
+   "en": "It's $5.",
+   "ko": "5달러예요.",
+   "say": "It's five dollars.",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0626",
+   "en": "It's $1.",
+   "ko": "1달러예요.",
+   "say": "It's one dollar.",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0627",
+   "en": "It's $5.99.",
+   "ko": "5달러 99센트예요.",
+   "say": "It's five ninety-nine.",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0628",
+   "en": "It's $12.",
+   "ko": "12달러예요.",
+   "say": "It's twelve dollars.",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0629",
+   "en": "It's ten dollars.",
+   "ko": "10달러예요.",
+   "say": "",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0630",
+   "en": "It's six forty-nine.",
+   "ko": "6달러 49센트예요.",
+   "say": "",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0631",
+   "en": "The coffee is $3.",
+   "ko": "커피는 3달러예요.",
+   "say": "The coffee is three dollars.",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0632",
+   "en": "The sandwich is $7.50.",
+   "ko": "샌드위치는 7달러 50센트예요.",
+   "say": "The sandwich is seven fifty.",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0633",
+   "en": "It costs ten dollars.",
+   "ko": "10달러가 들어요.",
+   "say": "",
+   "pat": "p_price_say",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0634",
+   "en": "It's too expensive.",
+   "ko": "너무 비싸요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0635",
+   "en": "It's too big.",
+   "ko": "너무 커요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0636",
+   "en": "It's too small.",
+   "ko": "너무 작아요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0637",
+   "en": "It's too hot.",
+   "ko": "너무 뜨거워요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0638",
+   "en": "It's too far.",
+   "ko": "너무 멀어요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0639",
+   "en": "That's too much.",
+   "ko": "그건 너무 많아요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0640",
+   "en": "It's too hard.",
+   "ko": "너무 어려워요.",
+   "say": "",
+   "pat": "p_too_adj",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0641",
+   "en": "I want to buy a ticket.",
+   "ko": "저는 표를 사고 싶어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0642",
+   "en": "Where can I buy a bus ticket?",
+   "ko": "버스표는 어디서 살 수 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0643",
+   "en": "Can I pay with cash?",
+   "ko": "현금으로 계산해도 될까요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0644",
+   "en": "Can I pay with a card?",
+   "ko": "카드로 계산해도 될까요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0645",
+   "en": "Can I pay with debit?",
+   "ko": "체크카드로 계산해도 될까요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0646",
+   "en": "Can I pay with credit?",
+   "ko": "신용카드로 계산해도 될까요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0647",
+   "en": "Debit or credit?",
+   "ko": "체크카드예요, 신용카드예요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0648",
+   "en": "Debit, please.",
+   "ko": "체크카드로 부탁해요.",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0649",
+   "en": "Cash or card?",
+   "ko": "현금이에요, 카드예요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0650",
+   "en": "I want to pay with cash.",
+   "ko": "저는 현금으로 내고 싶어요.",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0651",
+   "en": "Where do I pay?",
+   "ko": "어디서 계산해요?",
+   "say": "",
+   "pat": "p_pay_with",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0652",
+   "en": "How many tickets?",
+   "ko": "표는 몇 장이에요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0653",
+   "en": "That's cheap.",
+   "ko": "그건 싸요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0654",
+   "en": "What's the total?",
+   "ko": "합계가 얼마예요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0655",
+   "en": "The tip is $3.",
+   "ko": "팁은 3달러예요.",
+   "say": "The tip is three dollars.",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0656",
+   "en": "Is the tip in the total?",
+   "ko": "팁이 합계에 포함돼요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0657",
+   "en": "It's only 50 cents.",
+   "ko": "50센트밖에 안 해요.",
+   "say": "It's only fifty cents.",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0658",
+   "en": "It's $1.50 each.",
+   "ko": "하나에 1달러 50센트예요.",
+   "say": "It's one fifty each.",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0659",
+   "en": "A loonie is one dollar.",
+   "ko": "루니는 1달러예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0660",
+   "en": "A toonie is two dollars.",
+   "ko": "투니는 2달러예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0661",
+   "en": "I have a loonie.",
+   "ko": "저는 1달러 동전이 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0662",
+   "en": "I have two toonies.",
+   "ko": "저는 2달러 동전이 두 개 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0663",
+   "en": "Do you have change for a toonie?",
+   "ko": "2달러 동전을 바꿀 잔돈이 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0664",
+   "en": "Here is your change.",
+   "ko": "거스름돈 여기 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0665",
+   "en": "It's only $5.",
+   "ko": "5달러밖에 안 해요.",
+   "say": "It's only five dollars.",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0666",
+   "en": "It's $2 each.",
+   "ko": "하나에 2달러예요.",
+   "say": "It's two dollars each.",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0667",
+   "en": "A bus ticket is $3.50.",
+   "ko": "버스표는 3달러 50센트예요.",
+   "say": "A bus ticket is three fifty.",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0668",
+   "en": "That's $11.30.",
+   "ko": "11달러 30센트예요.",
+   "say": "That's eleven thirty.",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0669",
+   "en": "Do you want a receipt?",
+   "ko": "영수증 드릴까요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0670",
+   "en": "Receipt, please.",
+   "ko": "영수증 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0671",
+   "en": "The tax is $1.30.",
+   "ko": "세금은 1달러 30센트예요.",
+   "say": "The tax is one thirty.",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0672",
+   "en": "Is the tax in the price?",
+   "ko": "가격에 세금이 포함돼요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0673",
+   "en": "I don't have much money.",
+   "ko": "저는 돈이 많지 않아요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0674",
+   "en": "Is there an ATM near here?",
+   "ko": "이 근처에 현금인출기가 있어요?",
+   "say": "Is there an ay tee em near here?",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0675",
+   "en": "The bag is on sale.",
+   "ko": "가방이 세일 중이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0676",
+   "en": "I have a coupon.",
+   "ko": "저는 쿠폰이 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0677",
+   "en": "Is there a discount?",
+   "ko": "할인이 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0678",
+   "en": "I save money.",
+   "ko": "저는 돈을 모아요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0011",
+   "title_ko": "계산대에서",
+   "scene": "how_much",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hello. That's $11.30.",
+     "ko": "안녕하세요. 11달러 30센트예요.",
+     "say": "Hello. That's eleven thirty."
+    },
+    {
+     "s": "B",
+     "en": "Can I pay with debit?",
+     "ko": "체크카드로 계산해도 될까요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Yes. Debit or credit?",
+     "ko": "네. 체크카드예요, 신용카드예요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Debit, please.",
+     "ko": "체크카드로 부탁해요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Do you want a receipt?",
+     "ko": "영수증 드릴까요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Yes, please.",
+     "ko": "네, 부탁해요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Here is your receipt. Thank you.",
+     "ko": "영수증 여기 있어요. 감사해요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Thanks.",
+     "ko": "고마워요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n1101",
+   "kind": "vocab",
+   "text_ko": "캐나다의 1달러 동전은 loonie(루니), 2달러 동전은 toonie(투니)라고 불러요. 1달러 동전에 loon 이라는 새가 그려져 있어서 loonie 라는 이름이 붙었어요. Loonie, Toonie 처럼 대문자로 쓰기도 해요. 현금으로 낼 때 알아들으면 돼요.",
+   "_cn": "cn_loonie_toonie"
+  },
+  {
+   "id": "n1102",
+   "kind": "vocab",
+   "text_ko": "캐나다 계산대에서는 카드로 낼 때 Debit or credit? 이라고 자주 물어요. debit 은 계좌에서 바로 빠지는 체크카드, credit 은 신용카드예요. 단말기에 카드를 대서(탭) 계산하는 가게가 많아요.",
+   "_cn": "cn_debit_credit"
+  },
+  {
+   "id": "n1103",
+   "kind": "culture",
+   "text_ko": "가격표의 금액에는 세금(tax)이 빠져 있는 경우가 많아서, 계산할 때 세금이 더해져요. 식당에서는 팁(tip)도 따로 계산해요. 보통 음식값의 15~20% 정도를 줘요.",
+   "_cn": "cn_tax_tip"
+  },
+  {
+   "id": "n1104",
+   "kind": "fact",
+   "text_ko": "캐나다는 2013년부터 1센트 동전을 더 이상 유통하지 않아요. 현금으로 낼 때는 합계를 5센트 단위로 반올림하고, 카드로 낼 때는 그대로 계산해요.",
+   "fact_date": "2026-11-18"
+  }
+ ]
+}

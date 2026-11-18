@@ -1,0 +1,1799 @@
+{
+ "v": 1,
+ "w": 12,
+ "title_ko": "할 수 있는 일·부탁·되묻기",
+ "can_do": [
+  "Could you say that again? 로 되물을 수 있다",
+  "I don't understand. 로 못 알아들었다고 말할 수 있다",
+  "Can you ~, please? 로 부탁할 수 있다",
+  "I can ~ / I can't ~ 로 할 수 있는 일을 말할 수 있다"
+ ],
+ "scene": {
+  "id": "ask_again",
+  "title_ko": "못 알아들었을 때",
+  "canada": [
+   "cn_sorry_pardon"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0346",
+   "en": "can't",
+   "pos": "contr",
+   "ko": "~할 수 없어요",
+   "ipa": "kænt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0347",
+   "en": "could",
+   "pos": "aux",
+   "ko": "~해 주시겠어요",
+   "ko2": "~할 수 있었어요",
+   "ipa": "kʊd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0348",
+   "en": "understand",
+   "pos": "v",
+   "ko": "이해해요",
+   "ipa": "ˌʌndərˈstænd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "understands",
+     "pat": "p_he_she_verbs"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0349",
+   "en": "know",
+   "pos": "v",
+   "ko": "알아요",
+   "ipa": "noʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "knows",
+     "pat": "p_he_she_verbs"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0350",
+   "en": "repeat",
+   "pos": "v",
+   "ko": "다시 말해요",
+   "ko2": "반복해요",
+   "ipa": "rɪˈpiːt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "repeats",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "repeating",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0351",
+   "en": "pardon",
+   "pos": "interj",
+   "ko": "뭐라고요?",
+   "ipa": "ˈpɑːrdn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0370",
+   "en": "question",
+   "pos": "n",
+   "ko": "질문",
+   "ipa": "ˈkwɛstʃən",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0371",
+   "en": "answer",
+   "pos": "n",
+   "ko": "대답",
+   "ko2": "정답",
+   "ipa": "ˈænsər",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0372",
+   "en": "word",
+   "pos": "n",
+   "ko": "낱말",
+   "ipa": "wɜːrd",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0352",
+   "en": "help",
+   "pos": "v",
+   "ko": "도와줘요",
+   "ko2": "도움",
+   "ipa": "hɛlp",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "helps",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "helping",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0353",
+   "en": "wait",
+   "pos": "v",
+   "ko": "기다려요",
+   "ipa": "weɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "waits",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "waiting",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0354",
+   "en": "open",
+   "pos": "v",
+   "ko": "열어요",
+   "ko2": "열려 있는",
+   "ipa": "ˈoʊpən",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "opens",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "opening",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0355",
+   "en": "close",
+   "pos": "v",
+   "ko": "닫아요",
+   "ipa": "kloʊz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "closed",
+     "pat": "p_can_you_please"
+    },
+    {
+     "f": "closes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "closing",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0356",
+   "en": "write",
+   "pos": "v",
+   "ko": "써요",
+   "ipa": "raɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "writes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "writing",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0357",
+   "en": "read",
+   "pos": "v",
+   "ko": "읽어요",
+   "ipa": "riːd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "reads",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "reading",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0358",
+   "en": "need",
+   "pos": "v",
+   "ko": "필요해요",
+   "ipa": "niːd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "needs",
+     "pat": "p_he_she_verbs"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0373",
+   "en": "sentence",
+   "pos": "n",
+   "ko": "문장",
+   "ipa": "ˈsɛntəns",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0374",
+   "en": "language",
+   "pos": "n",
+   "ko": "언어",
+   "ipa": "ˈlæŋɡwɪdʒ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [
+    {
+     "f": "languages",
+     "pat": "p_i_can"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0375",
+   "en": "explain",
+   "pos": "v",
+   "ko": "설명해요",
+   "ipa": "ɪkˈspleɪn",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0359",
+   "en": "listen",
+   "pos": "v",
+   "ko": "들어요",
+   "ipa": "ˈlɪsən",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "listens",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "listening",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0360",
+   "en": "look",
+   "pos": "v",
+   "ko": "봐요",
+   "ipa": "lʊk",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "looks",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "looking",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [
+    "w0393"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0361",
+   "en": "come",
+   "pos": "v",
+   "ko": "와요",
+   "ipa": "kʌm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "comes",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "coming",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0362",
+   "en": "use",
+   "pos": "v",
+   "ko": "사용해요",
+   "ipa": "juːz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "uses",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "using",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0363",
+   "en": "show",
+   "pos": "v",
+   "ko": "보여 줘요",
+   "ipa": "ʃoʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "shows",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "showing",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0364",
+   "en": "ask",
+   "pos": "v",
+   "ko": "물어봐요",
+   "ipa": "æsk",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [
+    {
+     "f": "asks",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "asking",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0376",
+   "en": "translate",
+   "pos": "v",
+   "ko": "번역해요",
+   "ipa": "trænsˈleɪt",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0377",
+   "en": "dictionary",
+   "pos": "n",
+   "ko": "사전",
+   "ipa": "ˈdɪkʃəˌnɛri",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0365",
+   "en": "tell",
+   "pos": "v",
+   "ko": "알려 줘요",
+   "ipa": "tɛl",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "tells",
+     "pat": "p_he_she_verbs"
+    },
+    {
+     "f": "telling",
+     "pat": "p_im_ving"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0366",
+   "en": "slowly",
+   "pos": "adv",
+   "ko": "천천히",
+   "ipa": "ˈsloʊli",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0367",
+   "en": "sure",
+   "pos": "adj",
+   "ko": "확실한",
+   "ko2": "그럼요",
+   "ipa": "ʃʊr",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0368",
+   "en": "problem",
+   "pos": "n",
+   "ko": "문제",
+   "ipa": "ˈprɑːbləm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "problems",
+     "pat": "p_i_can"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0369",
+   "en": "little",
+   "pos": "adj",
+   "ko": "조금",
+   "ko2": "작은",
+   "ipa": "ˈlɪtəl",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0378",
+   "en": "message",
+   "pos": "n",
+   "ko": "메시지",
+   "ipa": "ˈmɛsɪdʒ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0379",
+   "en": "mean",
+   "pos": "v",
+   "ko": "뜻해요",
+   "ko2": "의미해요",
+   "ipa": "miːn",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_dont_understand",
+   "tpl": "I don't understand. / I don't know.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "pron",
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I don't understand (이해 못 했어요)",
+   "grammar_ko": [
+    "못 알아들었을 때는 I don't understand. 라고 솔직히 말해요.",
+    "don't 뒤에는 동사 원래 모양이 와요: I don't know.",
+    "Sorry 를 앞에 붙이면 더 공손해요: Sorry, I don't understand."
+   ],
+   "d": 1,
+   "examples": [
+    "s0679",
+    "s0680",
+    "s0681",
+    "s0682",
+    "s0683",
+    "s0684"
+   ]
+  },
+  {
+   "id": "p_could_you_say_again",
+   "tpl": "Could you say that again?",
+   "slots": [
+    {
+     "name": "adverb",
+     "pos": [
+      "adv"
+     ]
+    }
+   ],
+   "title_ko": "Could you say that again? (다시 말씀해 주시겠어요?)",
+   "grammar_ko": [
+    "Could you ~? 는 Can you ~? 보다 공손한 부탁이에요.",
+    "Could you say that again? 은 다시 말해 달라는 생존 표현이에요. 통째로 외워요.",
+    "캐나다에서는 Sorry? 또는 Pardon? 으로도 되물어요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0687",
+    "s0688",
+    "s0689",
+    "s0691",
+    "s0692",
+    "s0693"
+   ]
+  },
+  {
+   "id": "p_can_you_please",
+   "tpl": "Can you ___, please? / Can you help me?",
+   "slots": [
+    {
+     "name": "verb",
+     "pos": [
+      "v"
+     ]
+    },
+    {
+     "name": "thing",
+     "pos": [
+      "n",
+      "pron"
+     ]
+    }
+   ],
+   "title_ko": "Can you ~, please? (~해 주실래요?)",
+   "grammar_ko": [
+    "Can you 뒤에 동사 원래 모양을 넣어 부탁해요: Can you open the door?",
+    "끝에 please 를 붙이면 더 공손해요.",
+    "me 는 '나를·나에게'예요: help me, show me."
+   ],
+   "d": 3,
+   "examples": [
+    "s0694",
+    "s0695",
+    "s0696",
+    "s0697",
+    "s0698",
+    "s0699"
+   ]
+  },
+  {
+   "id": "p_i_can",
+   "tpl": "I can ___. / I can't ___. / I speak a little ___.",
+   "slots": [
+    {
+     "name": "verb",
+     "pos": [
+      "v"
+     ]
+    },
+    {
+     "name": "language",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I can ~ (저는 ~할 수 있어요)",
+   "grammar_ko": [
+    "can 은 '~할 수 있다'예요. can 뒤의 동사는 원래 모양이에요: I can write.",
+    "can't 는 can 의 부정이고 '~할 수 없다'예요.",
+    "a little 은 '조금'이에요. I speak a little English. 는 '영어를 조금 해요'예요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0704",
+    "s0705",
+    "s0706",
+    "s0707",
+    "s0708",
+    "s0709"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0679",
+   "en": "I don't understand.",
+   "ko": "이해하지 못했어요.",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0680",
+   "en": "Sorry, I don't understand.",
+   "ko": "죄송해요, 이해하지 못했어요.",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0681",
+   "en": "I don't know.",
+   "ko": "몰라요.",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0682",
+   "en": "I don't know where it is.",
+   "ko": "어디 있는지 몰라요.",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0683",
+   "en": "Do you understand?",
+   "ko": "이해했어요?",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0684",
+   "en": "Yes, I understand.",
+   "ko": "네, 이해했어요.",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0685",
+   "en": "I understand a little.",
+   "ko": "조금 이해해요.",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0686",
+   "en": "Do you know this song?",
+   "ko": "이 노래 알아요?",
+   "say": "",
+   "pat": "p_dont_understand",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0687",
+   "en": "Could you say that again?",
+   "ko": "다시 말씀해 주시겠어요?",
+   "say": "",
+   "pat": "p_could_you_say_again",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0688",
+   "en": "Could you say that again, please?",
+   "ko": "다시 한번 말씀해 주시겠어요?",
+   "say": "",
+   "pat": "p_could_you_say_again",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0689",
+   "en": "Could you repeat that?",
+   "ko": "그걸 다시 말씀해 주시겠어요?",
+   "say": "",
+   "pat": "p_could_you_say_again",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0690",
+   "en": "Pardon?",
+   "ko": "뭐라고요?",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0691",
+   "en": "Could you speak slowly, please?",
+   "ko": "천천히 말씀해 주시겠어요?",
+   "say": "",
+   "pat": "p_could_you_say_again",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0692",
+   "en": "Could you help me?",
+   "ko": "도와주시겠어요?",
+   "say": "",
+   "pat": "p_could_you_say_again",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0693",
+   "en": "Could you wait here, please?",
+   "ko": "여기서 기다려 주시겠어요?",
+   "say": "",
+   "pat": "p_could_you_say_again",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0694",
+   "en": "Can you help me?",
+   "ko": "도와주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0695",
+   "en": "Can you open the door, please?",
+   "ko": "문 좀 열어 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0696",
+   "en": "Can you close the window, please?",
+   "ko": "창문 좀 닫아 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0697",
+   "en": "Can you wait here, please?",
+   "ko": "여기서 기다려 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0698",
+   "en": "Can you write your name, please?",
+   "ko": "이름을 써 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0699",
+   "en": "Can you read this, please?",
+   "ko": "이걸 읽어 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0700",
+   "en": "Can you come here, please?",
+   "ko": "이쪽으로 와 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0701",
+   "en": "Can you tell me your name?",
+   "ko": "이름을 알려 주실래요?",
+   "say": "",
+   "pat": "p_can_you_please",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0702",
+   "en": "Can I use your phone?",
+   "ko": "전화 좀 써도 될까요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0703",
+   "en": "Can I use the washroom?",
+   "ko": "화장실 좀 써도 될까요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0704",
+   "en": "I can speak English.",
+   "ko": "저는 영어를 할 수 있어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0705",
+   "en": "I can speak a little English.",
+   "ko": "저는 영어를 조금 할 수 있어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0706",
+   "en": "I speak a little English.",
+   "ko": "저는 영어를 조금 해요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0707",
+   "en": "I can write my name.",
+   "ko": "저는 제 이름을 쓸 수 있어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0708",
+   "en": "I can help you.",
+   "ko": "제가 도와드릴 수 있어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0709",
+   "en": "I can't help you.",
+   "ko": "도와드릴 수 없어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0710",
+   "en": "I can't read this.",
+   "ko": "이걸 읽을 수 없어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0711",
+   "en": "I can't come on Monday.",
+   "ko": "월요일에는 갈 수 없어요.",
+   "say": "",
+   "pat": "p_i_can",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0712",
+   "en": "Can you come on Friday?",
+   "ko": "금요일에 올 수 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0713",
+   "en": "Pardon me?",
+   "ko": "뭐라고 하셨어요?",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0714",
+   "en": "Please repeat that.",
+   "ko": "그걸 다시 말해 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0715",
+   "en": "Look here.",
+   "ko": "여기를 보세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0716",
+   "en": "Can you show me, please?",
+   "ko": "보여 주실래요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0717",
+   "en": "Ask me.",
+   "ko": "저에게 물어보세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0718",
+   "en": "Tell me again, please.",
+   "ko": "다시 알려 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0719",
+   "en": "Please listen.",
+   "ko": "들어 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0720",
+   "en": "Listen to me.",
+   "ko": "제 말을 들어 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0721",
+   "en": "Look at this.",
+   "ko": "이걸 보세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0722",
+   "en": "Come in, please.",
+   "ko": "들어오세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0723",
+   "en": "Show me your ticket, please.",
+   "ko": "표를 보여 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0724",
+   "en": "Are you sure?",
+   "ko": "확실한가요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0725",
+   "en": "Sure, no problem.",
+   "ko": "그럼요, 문제없어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0726",
+   "en": "No problem.",
+   "ko": "문제없어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0727",
+   "en": "What's the problem?",
+   "ko": "무슨 문제예요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0728",
+   "en": "Speak slowly, please.",
+   "ko": "천천히 말해 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0729",
+   "en": "I need help.",
+   "ko": "도움이 필요해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0730",
+   "en": "Do you need help?",
+   "ko": "도움이 필요하세요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0731",
+   "en": "I need your phone number.",
+   "ko": "전화번호가 필요해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0732",
+   "en": "Thanks for your help.",
+   "ko": "도와줘서 고마워요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0733",
+   "en": "The bank is open.",
+   "ko": "은행이 열려 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0734",
+   "en": "Is the bank open?",
+   "ko": "은행 문 열었어요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0735",
+   "en": "Sorry, we are closed.",
+   "ko": "죄송해요, 영업이 끝났어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0736",
+   "en": "I have a question.",
+   "ko": "질문이 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0737",
+   "en": "Can I ask you a question?",
+   "ko": "질문 하나 해도 될까요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0738",
+   "en": "What is the answer?",
+   "ko": "정답이 뭐예요?",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0739",
+   "en": "What do you mean?",
+   "ko": "무슨 뜻이에요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0740",
+   "en": "I don't know this word.",
+   "ko": "이 낱말을 몰라요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0741",
+   "en": "It's a long sentence.",
+   "ko": "긴 문장이에요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0742",
+   "en": "Can you explain that, please?",
+   "ko": "그걸 설명해 주실래요?",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0743",
+   "en": "Can you translate this, please?",
+   "ko": "이걸 번역해 주실래요?",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0744",
+   "en": "I use a dictionary.",
+   "ko": "저는 사전을 써요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0745",
+   "en": "I have a message.",
+   "ko": "메시지가 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0746",
+   "en": "I speak two languages.",
+   "ko": "저는 두 가지 언어를 해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0012",
+   "title_ko": "못 알아들었을 때",
+   "scene": "ask_again",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hi. Do you need help?",
+     "ko": "안녕하세요. 도움이 필요하세요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Sorry? Could you say that again, please?",
+     "ko": "네? 다시 한번 말씀해 주시겠어요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Do you need help?",
+     "ko": "도움이 필요하세요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Oh, yes. I need a bag. I speak a little English.",
+     "ko": "아, 네. 가방이 필요해요. 저는 영어를 조금 해요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "No problem. I can help you. What colour?",
+     "ko": "문제없어요. 제가 도와드릴 수 있어요. 무슨 색이요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Blue, please. Could you speak slowly?",
+     "ko": "파란색으로 부탁해요. 천천히 말씀해 주시겠어요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Sure. Here is a blue bag.",
+     "ko": "그럼요. 파란 가방 여기 있어요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Thank you. How much is it?",
+     "ko": "감사해요. 얼마예요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "It's $10.",
+     "ko": "10달러예요.",
+     "say": "It's ten dollars."
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [
+  {
+   "id": "sp1201",
+   "kind": "read",
+   "en": "Sorry, I don't understand. Could you say that again, please?",
+   "ko": "죄송해요, 이해하지 못했어요. 다시 한번 말씀해 주시겠어요?",
+   "say": "",
+   "expect_any": [
+    "sorry",
+    "understand",
+    "again"
+   ]
+  },
+  {
+   "id": "sp1202",
+   "kind": "answer",
+   "en": "What time do you get up?",
+   "ko": "몇 시에 일어나요? 영어로 대답해 보세요.",
+   "say": "",
+   "expect_any": [
+    "get",
+    "up",
+    "at"
+   ]
+  },
+  {
+   "id": "sp1203",
+   "kind": "intro",
+   "en": "Hi. What's your name? Where are you from? Do you speak English?",
+   "ko": "이름, 출신, 영어를 할 수 있는지 영어로 말해 보세요.",
+   "say": "",
+   "expect_any": [
+    "name",
+    "i'm",
+    "from",
+    "speak",
+    "english",
+    "little"
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n1201",
+   "kind": "culture",
+   "text_ko": "캐나다 사람은 되물을 때 Sorry? 나 Pardon? 을 자주 써요. 다시 말해 달라는 가벼운 말이에요. 못 알아들었을 때 가만히 있기보다 이렇게 되물으면 돼요.",
+   "_cn": "cn_sorry_pardon"
+  },
+  {
+   "id": "n1202",
+   "kind": "vocab",
+   "text_ko": "Could you ~? 는 Can you ~? 보다 조금 더 공손해요. 가게·은행처럼 모르는 사람에게 부탁할 때는 Could you 가 좋아요."
+  },
+  {
+   "id": "n1203",
+   "kind": "vocab",
+   "text_ko": "Excuse me. 는 말을 걸 때, Sorry. 는 부딪히거나 잘못했을 때 써요. 캐나다에서는 Sorry 를 아주 자주 쓰는 편이라 되물을 때도 들려요."
+  },
+  {
+   "id": "n1204",
+   "kind": "vocab",
+   "text_ko": "I speak a little English. 라고 먼저 말하면 상대가 천천히 말해 줘요. Slowly, please. 를 같이 쓰면 더 좋아요."
+  }
+ ]
+}
