@@ -138,7 +138,8 @@ class WordSay(Base):
         lex.add("w1", "3D", "adj", "active", 11, say="banana")
         self.assertIsNone(lex.min_o("banana"))
         lex.add("w2", "SIN", "n", "active", 11, say="sin")
-        self.assertEqual(lex.min_o("sin"), 11)
+        self.assertEqual(lex.min_o("SIN"), 11)                      # the acronym itself is registered, not the word sin (round 3)
+        self.assertIsNone(lex.min_o("sin"))
         self.assertEqual(lex.acronym_map(), {"SIN": [["sin"]]})
         self.assertFalse(lex.is_word("sin"))
 
@@ -411,7 +412,7 @@ class SoftCanon(Base):
             d["weeks/w004.json"]["words"].append(ts.mf.W("w0398", "gray", "adj", "회색", "x", 4))
             d["weeks/w004.json"]["sentences"] += [ts.mf.S("s0990", "Good gray.", "좋은 회색이에요.", 4), ts.mf.S("s0991", "Good gray, Min.", "좋은 회색이에요, 민.", 4)]
         ts.write_course(self.root, mut)
-        code, lines = ts.check("--in", self.root, "--strict")
+        code, lines = ts.check("--in", self.root, "--strict", "--lexicon-from", "files")      # the extra word is not in the skeleton table
         self.assertEqual(code, 0, lines)
         self.assertTrue(any(ln.startswith("WARN CANON") for ln in lines))
         self.assertRegex(lines[-1], r"^CHECK_OK .*violations=0$")

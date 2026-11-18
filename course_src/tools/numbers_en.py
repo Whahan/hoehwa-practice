@@ -239,14 +239,16 @@ def time_say(text):
 #  * a plain integer is read as a number (25 = "twenty-five"); never digit by digit ("two five" is rejected), 911 = "nine one one" only
 #  * digit by digit ("three oh five"), two digits at a time ("twelve oh five", "nineteen twenty") and the plain number are all
 #    accepted for codes: a number with 3+ digits when an identifier word (room, apartment, apt, unit, suite, flight, gate, bus,
-#    route, platform, code, pin, number, no ...) is among the 4 words before it in the same sentence; 4+ digit numbers that are
+#    route, platform, code, pin, number, # / No. ...) is among the 4 words before it in the same sentence with nothing but one
+#    be-verb between (room is 305; "the bus has 100 seats" and "No, 305 people" are no code); 4+ digit numbers that are
 #    no year (1000-2099); a leading zero is always read digit by digit
 #  * years 1000-2099 also read as "nineteen ninety-nine", "twenty twenty-four", "twenty oh five", "two thousand and five";
 #    "twenty five" for 2005 and "nineteen five" for 1905 are wrong
 #  * -5 = "minus five" / "negative five", 5 deg C = "five degrees Celsius" or "five degrees", 5-10 = "five to ten" / "five through ten"
 #  * 5 pm = "five p m" / "five pm"
 #  * an all-capital word is an ordinary word first (STOP = stop); an acronym registered in the lexicon (en in capitals) is read
-#    as that entry's `say`; an unregistered one only letter by letter (A B C, or ay bee see)
+#    as that entry's `say` (its letters a t m / ay tee em are letter words, any other reading is the acronym's own word); an
+#    unregistered one only letter by letter (A B C, or ay bee see)
 _TOKEN_RE = re.compile(
     r"""(?P<price>\$\s?\d[\d,]*(?:\.\d{2})?)
       | (?P<time>\b\d{1,2}:\d{2}(?:\s?[AaPp]\.?[Mm]\.?)?)
@@ -268,8 +270,13 @@ _NUMERIC_KINDS = ("price", "time", "hourap", "phone", "percent", "ordinal", "dec
 
 SYMBOL_READ = {"&": ["and"], "+": ["plus"], "@": ["at"], "=": ["equals", "equal"], "#": ["number", "hash", "pound"]}
 ID_WORDS = {"room", "rm", "apartment", "apt", "unit", "suite", "flight", "gate", "bus", "route", "code", "pin", "extension", "ext",
-            "number", "no", "id", "zip", "postal", "line", "platform", "locker", "seat", "table", "bay", "box", "channel", "highway", "hwy"}
+            "number", "id", "zip", "postal", "line", "platform", "locker", "seat", "table", "bay", "box", "channel", "highway", "hwy"}
 NEG = ("minus ", "negative ")
+# between an identifier word and its number only a be-verb (once), "not" and further identifier words may stand: "room is 305",
+# "room number is 305"; "bus has 100 seats" / "the 305 people" are no identifier context
+BE_VERBS = {"is", "are", "am", "was", "were", "be", "isn't", "aren't", "wasn't", "weren't", "ain't"}
+# a pronunciation hint of a word's `say` that is the same word in another spelling (OK -> okay)
+HINT_ALIASES = {"ok": ["okay"]}
 LETTER_NAMES = {
     "a": [["a"], ["ay"]], "b": [["b"], ["bee"]], "c": [["c"], ["see"], ["cee"]], "d": [["d"], ["dee"]], "e": [["e"], ["ee"]],
     "f": [["f"], ["eff"]], "g": [["g"], ["gee"]], "h": [["h"], ["aitch"], ["haitch"]], "i": [["i"], ["eye"]], "j": [["j"], ["jay"]],
@@ -423,20 +430,58 @@ def readings(token, prev=""):
     return _int_readings(t, prev)
 
 
+def _head_sentence(head):
+    """the part of `head` after the last sentence end ("No." in "Room No. 305" is an abbreviation, no sentence end)."""
+    start = 0
+    for m in re.finditer(r"[.?!]\s", head):
+        if re.search(r"(?<![A-Za-z])[Nn]o$", head[:m.start()]):
+            continue
+        start = m.end()
+    return head[start:]
+
+
 def _id_context(text, pos):
-    """The identifier word standing in the 4 words before `pos` in the same sentence ("" when there is none)."""
-    head = re.split(r"[.?!]\s", text[:pos])[-1]
-    toks = re.findall(r"[A-Za-z]+|#", head)[-4:]
-    for t in reversed(toks):
-        if t == "#":
+    """The identifier word standing in the 4 words before `pos` in the same sentence ("" when there is none). Only "#" and
+    "No." count for the word no ("No, 305 people" is no identifier); between the identifier word and the number only one
+    be-verb, "not" and other identifier words may stand (room is 305, room number is 305; "bus has 100 seats" is none)."""
+    toks = re.findall(r"(?<![A-Za-z])[Nn]o\.|[A-Za-z][A-Za-z']*|#", _head_sentence(text[:pos]))[-4:]
+    for i in range(len(toks) - 1, -1, -1):
+        t = toks[i]
+        low = t.lower()
+        if t == "#" or low == "no.":
             return "number"
-        if t.lower() in ID_WORDS:
-            return t.lower()
+        if low in ID_WORDS:
+            be = 0
+            for b in toks[i + 1:]:
+                bl = b.lower()
+                if bl in BE_VERBS:
+                    be += 1
+                    if be > 1:
+                        return ""
+                elif bl != "not" and bl not in ID_WORDS and b != "#":
+                    return ""
+            return low
     return ""
 
 
 def _norm_text(text):
     return unicodedata.normalize("NFKC", text or "").replace("’", "'").replace("‘", "'").replace("−", "-")
+
+
+def is_letter_reading(token, words):
+    """True when the words spell `token` letter by letter (a t m / ay tee em / a tee m): every letter by one of its names."""
+    letters = [c for c in token.lower() if c.isalpha()]
+    words = list(words)
+
+    def spell(k, p):
+        if k == len(letters):
+            return p == len(words)
+        for opt in LETTER_NAMES.get(letters[k], ()):
+            if words[p:p + len(opt)] == opt and spell(k + 1, p + len(opt)):
+                return True
+        return False
+
+    return bool(letters) and spell(0, 0)
 
 
 def _segments(text, acronyms=None, is_word=None):
@@ -457,8 +502,10 @@ def _segments(text, acronyms=None, is_word=None):
         elif kind == "acronym":
             if tok in ACRONYM_EXEMPT:
                 segs.append(("lit", norm_say(tok), "lit"))
-            elif acronyms and tok in acronyms:
-                segs.append(("alt", acronyms[tok], "acr"))
+            elif acronyms and acronyms.get(tok):
+                # a registered acronym: the entry's say; its letters (a t m / ay tee em) are letter words like those of an
+                # unregistered acronym, any other reading (SIN -> sin) is the acronym's own word
+                segs.append(("alt", acronyms[tok], ["letters" if is_letter_reading(tok, alt) else "acr" for alt in acronyms[tok]]))
             elif is_word is not None and is_word(tok.lower()):
                 segs.append(("lit", norm_say(tok), "lit"))              # STOP is the word stop
             else:
@@ -510,12 +557,12 @@ def align(text, say, acronyms=None, is_word=None):
                     t = go(i + 1, j + n)
                     res = None if t is None else [label] * n + t
             elif kind == "alt":
-                for alt in data:
+                for k, alt in enumerate(data):
                     n = len(alt)
                     if target[j:j + n] == alt:
                         t = go(i + 1, j + n)
                         if t is not None:
-                            res = [label] * n + t
+                            res = [label[k] if isinstance(label, list) else label] * n + t
                             break
             elif kind == "letters":
                 def spell(k, p):

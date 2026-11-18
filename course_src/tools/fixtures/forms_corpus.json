@@ -1,6 +1,6 @@
 {
  "v": 1,
- "note": "beginner sentences with the word forms they use; lemma/pos are weeks 1-16 active words of the K0 skeleton; 'wrong' are misspelled or invented forms that must be rejected",
+ "note": "beginner sentences with the word forms they use; lemma/pos are weeks 1-16 active words of the K0 skeleton; 'wrong' are misspelled or invented forms that must be rejected; 'acronym_sentences' read a registered acronym (en in capitals) letter by letter or as its own word and must pass, 'acronym_wrong' must fail",
  "sentences": [
   {
    "en": "I like cats.",
@@ -2359,5 +2359,75 @@
    "interj",
    "thankses"
   ]
+ ],
+ "acronym_sentences": [
+  {
+   "en": "Hello, ATM.",
+   "say": "Hello, ay tee em.",
+   "acronym": "ATM",
+   "acronym_say": "ay tee em"
+  },
+  {
+   "en": "Use the ATM.",
+   "say": "Use the a t m.",
+   "acronym": "ATM",
+   "acronym_say": "a t m"
+  },
+  {
+   "en": "Hi, ATM.",
+   "say": "Hi, ay tee em.",
+   "acronym": "ATM",
+   "acronym_say": "ay tee em"
+  },
+  {
+   "en": "My SIN is here.",
+   "say": "My ess eye en is here.",
+   "acronym": "SIN",
+   "acronym_say": "ess eye en"
+  },
+  {
+   "en": "Hello, SIN.",
+   "say": "Hello, s i n.",
+   "acronym": "SIN",
+   "acronym_say": "s i n"
+  },
+  {
+   "en": "Use the SIN.",
+   "say": "Use the ess eye en.",
+   "acronym": "SIN",
+   "acronym_say": "ess eye en"
+  },
+  {
+   "en": "My SIN is here.",
+   "say": "My sin is here.",
+   "acronym": "SIN",
+   "acronym_say": "sin"
+  }
+ ],
+ "acronym_wrong": [
+  {
+   "en": "Hello, ATM.",
+   "say": "Hello, ay tee eye.",
+   "acronym": "ATM",
+   "acronym_say": "ay tee em"
+  },
+  {
+   "en": "Hello, ATM.",
+   "say": "Hello, a t m.",
+   "acronym": "ATM",
+   "acronym_say": "ay tee em"
+  },
+  {
+   "en": "My SIN is here.",
+   "say": "My ess eye em is here.",
+   "acronym": "SIN",
+   "acronym_say": "ess eye en"
+  },
+  {
+   "en": "Hello, SIN.",
+   "say": "Hello, sin sin.",
+   "acronym": "SIN",
+   "acronym_say": "sin"
+  }
  ]
 }

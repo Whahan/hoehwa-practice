@@ -194,4 +194,6 @@ def is_derived(lemma_text, form_text, pos=None):
     a, b = diff[0]
     if b in IRREGULAR.get(a, ()) or b in CONTR.get(a, ()):
         return True
+    if len(lt) == 1 and pos in ("chunk", "phr"):
+        return False                      # chunk / phr belong to headwords of several words; a one-word headword gets no regular form
     return b in regular_forms(a, pos if len(lt) == 1 else None)

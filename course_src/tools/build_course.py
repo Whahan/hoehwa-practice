@@ -2,7 +2,7 @@
 """Manuscript -> app data. Offline, standard library only.
 
   python -X utf8 course_src\\tools\\build_course.py --in course_src\\en --out godot\\data\\course [--weeks 1-16]
-         [--check] [--lexicon-from files|skeleton] [--tatoeba-db <path>] [--no-strict]
+         [--check] [--lexicon-from skeleton|files] [--tatoeba-db <path>] [--no-strict]
 
 The linter (check_course.py, strict) always runs first; when it finds anything nothing is written and the exit code is 1.
 `--check` only runs the linter (nothing is written). Output files (design section 10.1), compact one-line UTF-8 JSON:
@@ -166,7 +166,8 @@ def main(argv=None):
     ap.add_argument("--out", default=None)
     ap.add_argument("--weeks", default=None)
     ap.add_argument("--check", action="store_true")
-    ap.add_argument("--lexicon-from", dest="lexicon_from", choices=["files", "skeleton"], default="files")
+    ap.add_argument("--lexicon-from", dest="lexicon_from", choices=cc.LEXICON_FROM_CHOICES, default=None,
+                    help="where the words come from (default: skeleton, or files when the folder has no skeleton.json)")
     ap.add_argument("--tatoeba-db", dest="tatoeba_db", default=None)
     ap.add_argument("--no-strict", dest="no_strict", action="store_true")
     a = ap.parse_args(argv)
@@ -178,9 +179,12 @@ def main(argv=None):
     if not a.check and not a.out:
         print("BUILD_FAIL --out is required (or use --check)")
         return 1
-    ok, blobs, lines = build_files(a.in_dir, weeks_arg, a.lexicon_from, a.tatoeba_db, strict=not a.no_strict)
+    lexicon_from, lex_note = cc.resolve_lexicon_from(a.lexicon_from, a.in_dir)
+    ok, blobs, lines = build_files(a.in_dir, weeks_arg, lexicon_from, a.tatoeba_db, strict=not a.no_strict)
     for ln in lines:
         print(ln)
+    if lex_note:
+        print(lex_note)
     if not ok:
         print("BUILD_FAIL check_failed (nothing written)")
         return 1

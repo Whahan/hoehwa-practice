@@ -2,7 +2,7 @@
 """Course manuscript linter (design docs\\v200_design.md section 9.2). Offline, standard library only.
 
   python -X utf8 course_src\\tools\\check_course.py --in course_src\\en [--weeks 1-4] [--strict]
-         [--skeleton] [--lexicon-from files|skeleton] [--grammar] [--tatoeba-db <path>]
+         [--skeleton] [--lexicon-from skeleton|files] [--grammar] [--tatoeba-db <path>]
          [--count-items] [--review <tsv>]
 
 Exit code 0 = pass, 1 = fail. First line of a failure: `CHECK_FAIL <CODE>`; last line `CHECK_FAIL ... violations=N`
@@ -34,6 +34,7 @@ CODES = ["SCHEMA", "ORDER", "UNKNOWN_TOKEN", "NUM_SAY", "KO_HANGUL", "KO_HANJA",
          "BLOCKED", "PERSONAL", "COUNT", "CANON", "FORM_SUSPECT", "TATOEBA", "GRAMMAR"]
 POS = {"n", "v", "adj", "adv", "prep", "pron", "det", "art", "conj", "interj", "intj", "num", "aux", "modal", "propn",
        "chunk", "phr", "part", "exclam", "contr"}
+MULTI_POS = {"chunk", "phr"}        # only for headwords of two or more words (a one-word headword would get every form)
 NOTE_KINDS = {"spelling", "vocab", "culture", "fact", "sound"}
 PROMPT_KINDS = {"read", "answer", "intro", "question"}
 SECRET_FREE_DEFAULT_PAIRS = [("colour", "color"), ("favourite", "favorite"), ("centre", "center"), ("neighbour", "neighbor"),
@@ -140,6 +141,8 @@ def validate_week(w, wk, fname, lim, out):
                 out.append(Problem("SCHEMA", wh, "en_too_long"))
         if x.get("pos") not in POS:
             out.append(Problem("SCHEMA", wh, "bad_pos"))
+        elif x.get("pos") in MULTI_POS and is_str(x.get("en")) and len(cc.tokenize(x["en"])) <= 1:
+            out.append(Problem("SCHEMA", wh, "pos_%s_needs_a_multi_word_headword" % x["pos"]))
         if need_str(x, "ko", wh) and len(x["ko"].strip()) > 12:
             out.append(Problem("SCHEMA", wh, "ko_longer_than_12"))
         if "ko2" in x and not is_str(x["ko2"]):
@@ -317,7 +320,8 @@ def check_order(ctx):
         d = it["d"] if is_int(it["d"]) else None
         w = it["w"]
         base = w * 10 + (d if d else 1)
-        toks = cc.item_tokens(it["en"], it["say"], ctx.acr, ctx.is_word)      # words of `en` + every word of `say`
+        soft = []
+        toks = cc.item_tokens(it["en"], it["say"], ctx.acr, ctx.is_word, soft)      # words of `en` + every word of `say`
         extra_texts = []
         if it["kind"] == "sentence" or it["kind"] == "line":
             extra_texts = [a for a in (raw.get("accept") or []) if is_str(a)]
@@ -334,10 +338,14 @@ def check_order(ctx):
             bad = [t for t in toks if (lex.min_o(t) or 0) > w * 10 + cc.DAY_MAX]
             for t in bad[:3]:
                 ctx.add("ORDER", _where(w, it["id"]), "token=%s need_o=%d item_o=%d" % (t, lex.min_o(t), w * 10 + cc.DAY_MAX))
+        for t in soft:        # the reading of a registered acronym: unknown is fine, a word of that spelling must be learned
+            mo = lex.min_o(t)
+            if mo is not None and mo > w * 10 + (d if d else cc.DAY_MAX):
+                ctx.add("ORDER", _where(w, it["id"]), "acronym_reading_token=%s need_o=%d item_o=%d" % (t, mo, w * 10 + (d if d else cc.DAY_MAX)))
         for t in sorted(unknown):
             ctx.add("UNKNOWN_TOKEN", _where(w, it["id"]), "token=" + t)
         for a in extra_texts:
-            for t in cc.tokenize(ne.plain_text(a)):
+            for t in cc.lookup_tokens(a, ctx.acr):
                 mo = lex.min_o(t)
                 if mo is None:
                     ctx.add("UNKNOWN_TOKEN", _where(w, it["id"]), "accept_token=" + t)
@@ -367,7 +375,7 @@ def check_order(ctx):
         wk = ctx.course.weeks.get(w, {})
         for i, p in enumerate(wk.get("patterns", []) or []):
             po = w * 10 + cc.week_pattern_day(i, p)
-            for t in cc.tokenize(str(p.get("tpl", "")).replace("___", " ")):
+            for t in cc.lookup_tokens(str(p.get("tpl", "")).replace("___", " "), ctx.acr, plain=False):
                 mo = ctx.lex.min_o(t)
                 if mo is None:
                     ctx.add("UNKNOWN_TOKEN", _where(w, p.get("id")), "tpl_token=" + t)
@@ -377,12 +385,23 @@ def check_order(ctx):
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("speak_prompts", []) or []:
             for e in x.get("expect_any", []) or []:
-                for t in cc.tokenize(ne.plain_text(e)):
+                for t in cc.lookup_tokens(e, ctx.acr):
                     mo = ctx.lex.min_o(t)
                     if mo is None:
                         ctx.add("UNKNOWN_TOKEN", _where(w, x.get("id")), "expect_token=" + t)
                     elif mo > w * 10 + cc.SPEAK_PROMPT_DAY:
                         ctx.add("ORDER", _where(w, x.get("id")), "expect_token=%s need_o=%d" % (t, mo))
+    # a registered acronym whose reading is one word: when the lexicon has an ordinary word of that spelling it must be learned
+    # already (en FRIEND, say friend: the acronym entry may not bring the word friend in early)
+    for w in ctx.weeks:
+        for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
+            info = lex.words.get(x.get("id"))
+            if info and info["acronym"]:
+                sw = ne.norm_say(info["say"])
+                if len(sw) == 1 and not ne.is_letter_reading(info["en"], sw):
+                    mo = lex.min_o(sw[0])
+                    if mo is not None and mo > info["o"]:
+                        ctx.add("ORDER", _where(w, x.get("id")), "acronym_reading_token=%s need_o=%d item_o=%d" % (sw[0], mo, info["o"]))
     # forms must point at an existing pattern
     for w in ctx.weeks:
         for x in ctx.course.weeks.get(w, {}).get("words", []) or []:
@@ -435,10 +454,21 @@ def check_num_say(ctx):
                 elif not ne.say_matches(en, say):
                     ctx.add("NUM_SAY", where, "say_differs_from_numbers_en")
             elif sw:
-                # a plain word may carry a say only to spell a letter ("A" -> ay) or to repeat itself; no other word can ride along
+                # a plain word may carry a say only as a pronunciation hint: a letter name ("A" -> ay), its letters ("pm" -> p m),
+                # itself (or its other spelling: OK -> okay) or words that have been learned by then ("read" -> "red" once red is
+                # a lexicon word). No word the lexicon does not have yet can ride along.
                 letter = len(en.strip()) == 1 and en.strip().isalpha() and sw in ne.LETTER_NAMES[en.strip().lower()]
-                if not letter and sw != cc.tokenize(en):
-                    ctx.add("NUM_SAY", where, "say_differs_from_en")
+                own = cc.tokenize(en)
+                if not letter and sw != own:
+                    info = ctx.lex.words.get(x.get("id"), {})
+                    o = info.get("o", w * 10 + cc.DAY_MAX)
+                    spelled = bool(re.fullmatch(r"[A-Za-z]{2,6}", en.strip())) and ne.is_letter_reading(en.strip(), sw)
+                    allowed = set(own)
+                    for t in own:
+                        allowed.update(ne.HINT_ALIASES.get(t, ()))
+                    known = all(t in allowed or (ctx.lex.min_o(t) is not None and ctx.lex.min_o(t) <= o) for t in sw)
+                    if not (spelled or known):
+                        ctx.add("NUM_SAY", where, "say_differs_from_en")
 
 
 def check_ko(ctx):
@@ -730,6 +760,14 @@ def check_forms(ctx):
     must be a spelling variant (case, hyphen, space, Canadian/US pair) of its headword and not the headword, form or alt
     of another word."""
     pairs = _canon_pairs(ctx)
+    def changed_tokens(lemma, form):
+        """tokens of a form that are new: a multi-word headword keeps its other words (good morning -> good mornings: only
+        `mornings` is checked, `good` is the constituent). A form that cannot be matched token by token counts as a whole."""
+        lt, ft = cc.tokenize(lemma), cc.tokenize(form)
+        if len(lt) > 1 and len(lt) == len(ft):
+            return [b for a, b in zip(lt, ft) if a != b]
+        return ft
+
     heads, forms_of, alts_of = {}, {}, {}
     for wid, info in ctx.lex.words.items():
         if len(info["tokens"]) == 1:
@@ -738,7 +776,7 @@ def check_forms(ctx):
         for x in ctx.course.weeks[w].get("words", []) or []:
             wid = x.get("id")
             for f in x.get("forms", []) or []:
-                for t in cc.tokenize(f.get("f", "")):
+                for t in changed_tokens(x.get("en", ""), f.get("f", "")):
                     forms_of.setdefault(t, set()).add(wid)
             for a in x.get("alt", []) or []:
                 for t in cc.tokenize(a if is_str(a) else ""):
@@ -758,7 +796,7 @@ def check_forms(ctx):
                 where = _where(w, wid)
                 if not forms_en.is_derived(lemma, ft, x.get("pos")):
                     ctx.add("FORM_SUSPECT", where, "form_not_derived_from_headword=" + "_".join(cc.tokenize(ft)))
-                for t in cc.tokenize(ft):
+                for t in changed_tokens(lemma, ft):
                     if heads.get(t, set()) - {wid}:
                         ctx.add("FORM_SUSPECT", where, "form_is_another_headword=" + t)
                     elif alts_of.get(t, set()) - {wid}:
@@ -1113,6 +1151,8 @@ def check_skeleton(course, lim):
             lemmas[key1] = a["id"]
         if a.get("pos") not in POS:
             out.append(Problem("SCHEMA", wh, "bad_pos"))
+        elif a.get("pos") in MULTI_POS and len(cc.tokenize(lem)) <= 1:
+            out.append(Problem("SCHEMA", wh, "pos_%s_needs_a_multi_word_headword" % a["pos"]))
         if a.get("role") not in ("active", "passive"):
             out.append(Problem("SCHEMA", wh, "bad_role"))
         if not (is_int(a.get("w")) and 1 <= a["w"] <= cc.WEEKS):
@@ -1569,7 +1609,8 @@ def main(argv=None):
     ap.add_argument("--grammar", action="store_true")
     ap.add_argument("--grammar-backend", dest="grammar_path", default=None, help="path of backend/grammar.py (default: this repo's)")
     ap.add_argument("--lt-dir", dest="lt_dir", default=None, help="LanguageTool folder (default: backend/tools/languagetool of this repo or of the main checkout)")
-    ap.add_argument("--lexicon-from", dest="lexicon_from", choices=["files", "skeleton"], default="files")
+    ap.add_argument("--lexicon-from", dest="lexicon_from", choices=cc.LEXICON_FROM_CHOICES, default=None,
+                    help="where the words come from (default: skeleton, or files when the folder has no skeleton.json)")
     ap.add_argument("--tatoeba-db", dest="tatoeba_db", default=None)
     ap.add_argument("--count-items", dest="count_items", action="store_true")
     ap.add_argument("--review", default=None)
@@ -1602,7 +1643,10 @@ def main(argv=None):
         for ln in lines:
             print(ln)
         return 0 if ok else 1
-    res = run_check(a.in_dir, weeks_arg, a.strict, a.skeleton, a.lexicon_from, a.grammar, a.tatoeba_db, None, a.grammar_path, a.lt_dir)
+    lexicon_from, lex_note = cc.resolve_lexicon_from(a.lexicon_from, a.in_dir)
+    res = run_check(a.in_dir, weeks_arg, a.strict, a.skeleton, lexicon_from, a.grammar, a.tatoeba_db, None, a.grammar_path, a.lt_dir)
+    if lex_note:
+        res.notes.insert(0, lex_note)
     for ln in format_result(res):
         print(ln)
     return 1 if res.violations else 0

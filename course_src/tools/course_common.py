@@ -79,14 +79,24 @@ NUMBER_GLUE = {"oh", "point", "percent", "and", "a", "m", "p", "am", "pm", "o'cl
                "fahrenheit", "degrees", "dollars", "dollar", "cents", "cent", "plus", "at", "equals", "equal", "number", "hash", "pound"}
 
 
-def item_tokens(en, say="", acronyms=None, is_word=None):
+def lookup_tokens(text, acronyms=None, plain=True):
+    """Lexicon tokens of an English text: like tokenize(plain_text(text)) (numbers / symbols / abbreviations are cut out), but a
+    capital acronym the lexicon has an entry for (`acronyms` = Lexicon.acronym_map()) keeps its capitals ("ATM"): it is looked
+    up as the acronym, never as the lower-case word of the same spelling."""
+    t = nfkc(_ne.plain_text(text) if plain else text)
+    return [w if acronyms and w in acronyms else w.lower() for w in re.findall(r"[^\W_]+(?:'[^\W_]+)*", t)]
+
+
+def item_tokens(en, say="", acronyms=None, is_word=None, soft=None):
     """Tokens that must be lexicon words for an item: the words of `en` (numbers, symbols and abbreviations are read through
-    `say`; capital words are looked up in lower case like any other word) plus every word of `say`, except the glue words of
-    an actual number reading ("minus", "oh", "percent" ...) and the letters of a letter-by-letter acronym reading.
-    `acronyms` / `is_word` come from the lexicon (Lexicon.acronym_map(), Lexicon.is_word)."""
+    `say`; capital words are looked up in lower case like any other word, a registered acronym as itself) plus every word of
+    `say`, except the glue words of an actual number reading ("minus", "oh", "percent" ...) and the letters of a letter-by-letter
+    acronym reading. The words of a registered acronym's own reading (SIN -> sin) are no lexicon words of their own: they are
+    appended to the list `soft` (when given) - they may be unknown, but when the lexicon has a word of that spelling it must
+    have been learned already. `acronyms` / `is_word` come from the lexicon (Lexicon.acronym_map(), Lexicon.is_word)."""
     en = en if isinstance(en, str) else ""
     say = say if isinstance(say, str) else ""
-    toks = tokenize(_ne.plain_text(en))
+    toks = lookup_tokens(en, acronyms)
     if say.strip():
         say_t = tokenize(say)
         labels = _ne.align(en, say, acronyms, is_word)
@@ -94,6 +104,10 @@ def item_tokens(en, say="", acronyms=None, is_word=None):
             labels = [None] * len(say_t)
         for t, lab in zip(say_t, labels):
             if lab == "letters" or (lab in ("number", "symbol", "abbrev") and t in NUMBER_GLUE):
+                continue
+            if lab == "acr":
+                if soft is not None and t not in soft:
+                    soft.append(t)
                 continue
             if t not in toks:
                 toks.append(t)
@@ -164,6 +178,19 @@ def limits_of(policy):
             if k in lim:
                 lim[k] = v
     return lim
+
+
+LEXICON_FROM_CHOICES = ["files", "skeleton"]
+
+
+def resolve_lexicon_from(arg, in_dir):
+    """CLI default of --lexicon-from: `skeleton`. A folder without skeleton.json (test fixtures) falls back to `files`.
+    -> (mode, note line or ""). An explicit choice is kept as it is."""
+    if arg:
+        return arg, ""
+    if (Path(in_dir) / "skeleton.json").is_file():
+        return "skeleton", ""
+    return "files", "LEXICON_FROM files (no skeleton.json in the input folder: the words come from the week files)"
 
 
 def read_json(path):
@@ -308,8 +335,11 @@ class Lexicon:
         self.words[wid] = {"id": wid, "en": en, "pos": pos, "role": role, "o": o, "tokens": toks, "w": week, "say": say or "",
                            "acronym": acronym}
         kind = "word" if len(toks) <= 1 else "chunk"
-        for t in toks:
-            self._reg(t, o, wid, kind)
+        if acronym:
+            self._reg(en.strip(), o, wid, "word")     # an acronym entry registers the acronym itself only: not its lower-case
+        else:                                         # spelling (FRIEND -> friend) and not its `say` words as ordinary words
+            for t in toks:
+                self._reg(t, o, wid, kind)
         if len(toks) > 1:
             self.chunks.append((tuple(toks), wid, o))
         for f in forms or ():
@@ -324,11 +354,14 @@ class Lexicon:
                     self._reg(t, o, wid, "alt")
 
     def acronym_map(self):
-        """{"SIN": [["sin"]]}: registered acronyms (en in capitals) and how their `say` reads them."""
+        """{"SIN": [["sin"]]}: registered acronyms (en in capitals) and how their `say` reads them (an entry without a say
+        maps to an empty list: the acronym is known, its reading is not)."""
         out = {}
         for info in self.words.values():
-            if info["acronym"] and info["say"].strip():
-                out.setdefault(info["en"].strip(), []).append(_ne.norm_say(info["say"]))
+            if info["acronym"]:
+                lst = out.setdefault(info["en"].strip(), [])
+                if info["say"].strip():
+                    lst.append(_ne.norm_say(info["say"]))
         return out
 
     def is_word(self, token):
