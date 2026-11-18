@@ -1567,8 +1567,8 @@
   },
   {
    "id": "s0229",
-   "en": "It's a long month.",
-   "ko": "긴 한 달이에요.",
+   "en": "My birthday is this month.",
+   "ko": "제 생일은 이번 달이에요.",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1591,8 +1591,8 @@
   },
   {
    "id": "s0231",
-   "en": "We have dinner soon.",
-   "ko": "우리는 곧 저녁을 먹어요.",
+   "en": "Dinner is soon.",
+   "ko": "곧 저녁이에요.",
    "say": "",
    "pat": "",
    "d": 4,
