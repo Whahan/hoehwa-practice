@@ -205,7 +205,9 @@ func _build() -> void:
 	_wide = is_wide()
 	var lang: String = Store.lang()
 	_snap = _take_snapshot(lang)
-	if HomeParts.course_apply(_snap): # 코스: 쉬었다 돌아온 날의 reopen · 복습 블록 완료 기록 -> 바뀐 저장소로 다시 읽는다
+	for _i in 2: # 코스: 쉬었다 돌아온 날의 reopen · 오늘 칸 저장 · 복습 블록 완료 기록 -> 바뀐 저장소로 다시 읽고 한 번 더 맞춘다
+		if not HomeParts.course_apply(_snap):
+			break
 		_snap = _take_snapshot(lang)
 	_built_day = StudyLog.today()
 	_song_due_shown = int(_snap.get("song_due", 0))

@@ -14,6 +14,9 @@ const PROG := "user://test_e6_progress.json"
 const PREFS := "user://test_e6_prefs.json"
 const LOG := "user://test_e6_studylog.json"
 const CS := "user://test_e6_course.json"
+const READING := "user://test_e6_reading"
+const DIARY := "user://test_e6_diary.json"
+const SONGS := "user://test_e6_songs"
 const SRC_FILES := ["res://scripts/core/home_model.gd", "res://scripts/ui/home_parts.gd", "res://scripts/views/today_view.gd", "res://tests/course_today_test.gd"]
 const FAKE_REC := {"b64": "AAAA", "duration": 1.2, "ok": true, "silent": false}
 
@@ -72,7 +75,7 @@ func _ready() -> void:
 		elif a == "--dark":
 			_dark = true
 	print("== course_today start (%s, scale %s%s) ==" % ["phone" if phone else "pc", str(_scale), ", dark" if _dark else ""])
-	_before = _user_listing()
+	_before = _user_tree()
 	_setup()
 	var want := Vector2i(412, 915) if phone else Vector2i(1280, 800)
 	get_window().min_size = Vector2i.ZERO
@@ -94,6 +97,7 @@ func _ready() -> void:
 	await _test_view_structure()
 	await _test_first_screen()
 	await _test_flow_buttons()
+	await _test_cell_persist()
 	await _test_block_specs()
 	await _test_reopen_once()
 	await _test_rp_once()
@@ -103,24 +107,58 @@ func _ready() -> void:
 	_test_source()
 	await _test_main_wiring()
 	_teardown()
-	ok(_before == _user_listing(), "user:// listing unchanged by this test")
+	var after: Array = _user_tree()
+	ok(_before == after, "user:// tree unchanged by this test (every file and folder, recursively; %d entries)" % after.size())
+	for e in after:
+		if not _before.has(e):
+			print("    new in user://: ", e)
+	for e in _before:
+		if not after.has(e):
+			print("    gone from user://: ", e)
 	print("== course_today: %d passed, %d failed (presses: %d) ==" % [passed, failed, presses])
 	get_tree().quit(1 if failed > 0 else 0)
 
 
 # ---------------------------------------------------------------- setup
 
-func _user_listing() -> Array:
+## user:// 전체(하위 폴더 포함)의 파일·폴더 이름과 파일 크기. 엔진 로그 폴더(logs)만 뺀다(시험과 상관없이 계속 자란다).
+func _user_tree() -> Array:
 	var out: Array = []
-	var d := DirAccess.open("user://")
-	if d == null:
-		return out
-	for n in d.get_files():
-		out.append("f:%s:%d" % [n, FileAccess.get_file_as_bytes("user://" + n).size()])
-	for n in d.get_directories():
-		out.append("d:" + n)
+	_walk("", out)
 	out.sort()
 	return out
+
+
+func _walk(rel: String, out: Array) -> void:
+	var d := DirAccess.open("user://" + rel)
+	if d == null:
+		return
+	for n in d.get_files():
+		var r: String = n if rel == "" else rel + "/" + n
+		out.append("f:%s:%d" % [r, FileAccess.get_file_as_bytes("user://" + r).size()])
+	for n in d.get_directories():
+		if rel == "" and n == "logs":
+			continue
+		var r2: String = n if rel == "" else rel + "/" + n
+		out.append("d:" + r2)
+		_walk(r2, out)
+
+
+func _rm_tree(user_path: String) -> void:
+	var g: String = ProjectSettings.globalize_path(user_path)
+	if not DirAccess.dir_exists_absolute(g):
+		return
+	for sub in DirAccess.get_directories_at(g):
+		_rm_tree(user_path.path_join(sub))
+	for f in DirAccess.get_files_at(g):
+		DirAccess.remove_absolute(g.path_join(f))
+	DirAccess.remove_absolute(g)
+
+
+## main.tscn 이 ReadingView 를 만들 때(그 _ready 가 user://reading 폴더를 만든다) 저장 경로를 시험 경로로 돌린다.
+func _on_node_added(n: Node) -> void:
+	if n is ReadingView:
+		(n as ReadingView).storage_dir = READING
 
 
 func _setup() -> void:
@@ -128,9 +166,11 @@ func _setup() -> void:
 		"prefs_path": Store.prefs_path, "log_path": StudyLog.path, "cs": CourseStore.path, "base": CourseData.base_dir,
 		"api": Api.base_url, "anim": Sheet.animate, "override": StudyLog.today_override, "unix": StudyLog.unix_override,
 		"provider": HomeAi.provider, "hour": HomeParts.hour_override, "cache": SongDue.cache.duplicate(true), "starting": Backend._starting,
-		"status": Backend.status, "route": Route.mode, "phone_hook": Route.phone_hook, "song_root": SongStore.root}
+		"status": Backend.status, "route": Route.mode, "phone_hook": Route.phone_hook, "song_root": SongStore.root, "songs_root": SongPlayer.songs_root, "diary": DiaryStore.path}
 	Store.progress_path = PROG
-	SongStore.root = "user://test_e6_songs"
+	SongStore.root = SONGS
+	SongPlayer.songs_root = SONGS
+	DiaryStore.path = DIARY
 	Store.prefs_path = PREFS
 	StudyLog.path = LOG
 	CourseStore.path = CS
@@ -180,10 +220,14 @@ func _teardown() -> void:
 	Route.mode = _saved["route"]
 	Route.phone_hook = _saved["phone_hook"]
 	SongStore.root = _saved["song_root"]
+	SongPlayer.songs_root = _saved["songs_root"]
+	DiaryStore.path = _saved["diary"]
+	for tree_dir in [READING, SONGS]:
+		_rm_tree(tree_dir)
 
 
 func _rm_all() -> void:
-	for base in [PROG, PREFS, LOG, CS]:
+	for base in [PROG, PREFS, LOG, CS, DIARY]:
 		for suffix in ["", ".tmp", ".bad", ".bad.1", ".bad.2"]:
 			if FileAccess.file_exists(base + suffix):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(base + suffix))
@@ -521,7 +565,9 @@ func _test_plan_rows() -> void:
 	eq((ts[1] as Dictionary)["target"], {"view": "review", "args": {"lang": "en"}}, "the review row goes to the review tab")
 	eq((ts[2] as Dictionary)["target"], {"view": "course", "args": {"lang": "en", "kind": "listen", "w": 5, "d": 2, "block": "listen", "half": false}}, "the listen row opens a listen unit with block listen")
 	eq((ts[3] as Dictionary)["target"], {"view": "course", "args": {"lang": "en", "kind": "speak", "w": 5, "d": 2, "block": "speak", "half": false}}, "the speak row opens a speak unit with block speak")
-	eq(HomeParts.summary_text(ts), "새 내용 · 복습 12 · 듣기 · 말하기", "summary line of the four todo rows")
+	eq(HomeParts.summary_text(ts), "새 내용 · 복습 12개 · 듣기 · 말하기", "summary line of the four todo rows (the course line says 개)")
+	var old_rows: Array = [{"id": "lesson", "state": "todo", "title": "오늘의 레슨"}, {"id": "review", "state": "todo", "title": "복습 12개"}, {"id": "song", "state": "todo", "title": "노래 외우기 4줄"}]
+	eq(HomeParts.summary_text(old_rows), "레슨 1 · 복습 12 · 노래 4줄", "the old home summary keeps its old text")
 	var plan: Dictionary = HomeModel.course_plan(s)
 	eq(plan["total_min"], 45, "the plan is 45 minutes")
 	# 단계별 분 배분이 줄에 그대로: S0 (1주) 18/5/12/10, S3 (40주) 12/12/8/13
@@ -1037,6 +1083,53 @@ func _open_and_leave(tv: TodayView, btn: Button, label: String) -> Dictionary:
 	return res
 
 
+func _test_cell_persist() -> void:
+	print("[today's cell is saved with its date: a restart keeps it, the next day changes it]")
+	_world(true, 12)
+	var tv := await _make()
+	var iso: String = CourseStore.today_iso()
+	eq(Store.prefs.get("course_today_cell", null), {"date": iso, "w": 1, "d": 1}, "cell: the first draw saved today's cell (1주 1일) with the date")
+	eq(HomeParts.saved_cell(), {"w": 1, "d": 1}, "cell: saved_cell() reads it back")
+	press(tv.hero_button(), "[오늘 45분 시작] (cell test)")
+	await _frames(4)
+	await _play_and_finish(tv.player(), "cell new")
+	eq(CourseStore.pos(), {"w": 1, "d": 2}, "cell: the new block moved pos to 1주 2일")
+	eq(HomeParts.saved_cell(), {"w": 1, "d": 1}, "cell: the saved cell is still 1주 1일 after the block (not overwritten once done)")
+	var disk: Variant = JSON.parse_string(FileAccess.get_file_as_string(PREFS))
+	ok(disk is Dictionary and same((disk as Dictionary).get("course_today_cell", null), JSON.parse_string(JSON.stringify({"date": iso, "w": 1, "d": 1}))), "cell: the prefs FILE holds it (numbers come back from JSON as 1.0, saved_cell() accepts that)")
+	await _drop(tv)
+	# 앱을 다시 켠 것처럼: 메모리를 비우고 파일에서 다시 읽는다
+	HomeParts.reset_course_memory()
+	CourseStore.reset_memory()
+	Store.load_prefs()
+	var tv2 := await _make()
+	ok(_has_text(tv2, "새 내용 · 1주 1일"), "cell: after a restart the done row still says 1주 1일, not tomorrow's cell")
+	eq(_row_state(tv2, "new"), "done", "cell: after a restart the new row is done")
+	eq(CourseStore.pos(), {"w": 1, "d": 2}, "cell: pos is 1주 2일 after the restart")
+	var r: Dictionary = await _open_and_leave(tv2, _row_btn(tv2, "listen"), "listen after restart")
+	eq([r["kind"], r["w"], r["d"]], ["listen", 1, 1], "cell: after a restart the listen unit is for 1주 1일 (the cell that was learned)")
+	var r2: Dictionary = await _open_and_leave(tv2, _row_btn(tv2, "speak"), "speak after restart")
+	eq([r2["kind"], r2["w"], r2["d"]], ["speak", 1, 1], "cell: after a restart the speak unit is for 1주 1일")
+	# 다음 날: 새 칸
+	CourseStore.today_override = Plan.today_days() + 1
+	StudyLog.today_override = Plan.today_days() + 1
+	eq(HomeParts.saved_cell(), {}, "cell: the next day yesterday's saved cell is not used")
+	await _refresh(tv2, 5)
+	ok(_has_text(tv2, "새 내용 · 1주 2일") and _row_state(tv2, "new") == "todo", "cell: the next day the home shows the new cell (1주 2일), todo")
+	eq(Store.prefs.get("course_today_cell", null), {"date": CourseStore.today_iso(), "w": 1, "d": 2}, "cell: the next day's first draw saved the new cell with the new date")
+	CourseStore.today_override = -1
+	StudyLog.today_override = Plan.today_days()
+	await _drop(tv2)
+	# 이상한 저장값은 무시한다
+	var iso2: String = CourseStore.today_iso()
+	for bad in ["x", 5, null, [], {}, {"date": iso2}, {"date": iso2, "w": "1", "d": 1}, {"date": iso2, "w": 1.5, "d": 1}, {"date": iso2, "w": 0, "d": 1}, {"date": iso2, "w": 73, "d": 1},
+			{"date": iso2, "w": 1, "d": 8}, {"date": "2000-01-01", "w": 1, "d": 1}, {"date": 20261118, "w": 1, "d": 1}]:
+		Store.prefs["course_today_cell"] = bad
+		eq(HomeParts.saved_cell(), {}, "cell: a bad saved value %s is ignored" % JSON.stringify(bad))
+	Store.prefs["course_today_cell"] = {"date": iso2, "w": 3, "d": 4}
+	eq(HomeParts.saved_cell(), {"w": 3, "d": 4}, "cell: selfcheck: a good saved value is read")
+
+
 func _test_block_specs() -> void:
 	print("[contract 1: block ids reach the player]")
 	# D5: 새 내용 블록 = kind speak, block new
@@ -1320,6 +1413,7 @@ func _test_main_wiring() -> void:
 	m.free()
 	# 실제 앱: 홈의 [새 코스로 시작] -> 레슨 탭으로 바뀐다
 	_world(false, 12)
+	get_tree().node_added.connect(_on_node_added) # main 이 만드는 ReadingView 의 저장 경로를 시험 경로로
 	get_tree().current_scene = null
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 	for i in 30:
@@ -1327,7 +1421,11 @@ func _test_main_wiring() -> void:
 		if get_tree().current_scene != null:
 			break
 	_main = get_tree().current_scene
+	if _main != null:
+		await _frames(8) # (모든 화면이 만들어질 때까지 훅을 둔다)
+	get_tree().node_added.disconnect(_on_node_added)
 	ok(_main != null and _main.has_method("show_view"), "main: main.tscn is running")
+	ok(_main != null and (_main.views["reading"] as ReadingView).storage_dir == READING and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("user://reading")), "main: the reading screen stores under the test folder, user://reading was not made")
 	if _main == null:
 		return
 	_main.quit_on_exit = false

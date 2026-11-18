@@ -12,9 +12,12 @@ const SHORTCUTS := [["대화", "talk"], ["연습", "practice"], ["읽기", "read
 ## 시험 전용: 0..23 이면 그 값을 현지 시각(hour)으로 쓴다. -1 = 시스템 시계.
 static var hour_override: int = -1
 
-## 코스 모드: 오늘 처음 그릴 때의 칸(새 내용을 끝내면 진도 칸이 다음으로 넘어가도 오늘 줄은 오늘 칸으로 남는다)과, 복습 우선 기록을 한 날.
-static var _cell_cache: Dictionary = {}
+## 코스 모드: 복습 우선 기록을 한 날(메모리, 앱을 다시 켜면 그날 첫 그림에서 한 번 더 쓴다).
 static var _rp_day: int = -1
+
+## 오늘 칸 기록(Store.prefs 키, 이 기기 전용·동기화 밖): {"date": "2026-11-18", "w": 1, "d": 1}. 새 내용을 끝내면 진도(pos)가 다음 칸으로
+## 넘어가도 그날 홈 줄(제목·듣기·말하기 단위)은 오늘 칸으로 남아야 하므로, 새 내용을 끝내기 전에 칸을 저장해 두고 앱을 다시 켜도 쓴다.
+const CELL_PREF := "course_today_cell"
 
 
 # ---------------------------------------------------------------- snapshot (HomeModel.snapshot 의 본문)
@@ -83,14 +86,13 @@ static func course_snapshot() -> Dictionary:
 		if fb == "":
 			fb = "file"
 	var done: Dictionary = CourseStore.blocks_today()
-	var day: int = CourseStore.today()
 	var w: int = int(pos["w"])
 	var d: int = int(pos["d"])
-	if not bool(done.get("new", false)):
-		_cell_cache = {"day": day, "w": w, "d": d}
-	elif int(_cell_cache.get("day", -1)) == day:
-		w = int(_cell_cache["w"])
-		d = int(_cell_cache["d"])
+	if bool(done.get("new", false)):
+		var saved: Dictionary = saved_cell()
+		if not saved.is_empty():
+			w = int(saved["w"])
+			d = int(saved["d"])
 	var rs: Dictionary = CourseStore.review_state()
 	var cp: Dictionary = CourseStore.check_pending()
 	var c := {"mode": "course", "w": w, "d": d, "blocks_done": done, "away_days": CourseStore.away_days(), "due": Store.due_count("en"),
@@ -101,15 +103,45 @@ static func course_snapshot() -> Dictionary:
 	return c
 
 
+## 저장된 오늘 칸: 오늘 날짜(CourseStore.today_iso)이고 w 1..72, d 1..7 인 정수일 때만 {"w","d"}, 아니면 {}.
+static func saved_cell() -> Dictionary:
+	var v: Variant = Store.prefs.get(CELL_PREF, null)
+	if not (v is Dictionary):
+		return {}
+	var c: Dictionary = v
+	var wi: int = _whole(c.get("w", null))
+	var di: int = _whole(c.get("d", null))
+	if not (c.get("date", null) is String) or str(c["date"]) != CourseStore.today_iso():
+		return {}
+	if wi < 1 or wi > CourseModel.WEEKS or di < 1 or di > CourseModel.DAYS:
+		return {}
+	return {"w": wi, "d": di}
+
+
+## 정수(prefs 파일에서 읽으면 JSON 이라 1.0 으로 올 수 있다) -> int, 아니면 -1.
+static func _whole(v: Variant) -> int:
+	if v is int:
+		return v
+	if v is float and is_finite(v) and v == floorf(v) and absf(v) < 1.0e6:
+		return int(v)
+	return -1
+
+
 ## 홈을 그릴 때마다 부른다. 코스 모드면 저장소에 반영할 것을 반영한다(true = 저장소가 바뀌었으니 스냅샷을 다시 만들 것).
 ##  - 계획에 reopen 이 있으면 CourseStore.reopen_weeks 를 부른다(같은 쉼에는 저장소가 0 을 돌려주므로 다시 불러도 진도가 한 번만 움직인다).
 ##  - note_review_priority 는 그날 처음 한 번만 부른다(하루 안에 밀린 수가 줄어도 그날 기록은 처음 값).
+##  - 새 내용을 아직 안 끝냈으면 오늘 칸(진도 칸)을 날짜와 함께 prefs 에 저장한다(바뀔 때만 쓴다).
 ##  - 복습 블록이 끝났으면(HomeModel 계산) CourseStore.mark_block("review") 를 부른다. 나머지 블록은 CoursePlayer 가 기록한다.
 static func course_apply(snap: Dictionary) -> bool:
 	var plan: Dictionary = HomeModel.course_plan(snap)
 	if plan.is_empty():
 		return false
 	var changed := false
+	var c: Dictionary = (HomeModel._norm(snap) as Dictionary)["course"]
+	if not bool((c["blocks_done"] as Dictionary)["new"]):
+		var cell: Dictionary = {"date": CourseStore.today_iso(), "w": int(c["w"]), "d": int(c["d"])}
+		if JSON.stringify(Store.prefs.get(CELL_PREF, null), "", true) != JSON.stringify(cell, "", true):
+			Store.set_pref(CELL_PREF, cell)
 	if not (plan["reopen"] as Array).is_empty() and CourseStore.reopen_weeks(plan["reopen"]) > 0:
 		changed = true
 	var day: int = CourseStore.today()
@@ -126,9 +158,8 @@ static func course_apply(snap: Dictionary) -> bool:
 	return changed
 
 
-## 시험용: 코스 모드의 "오늘 한 번" 기억을 지운다.
+## 시험용: 코스 모드의 "오늘 한 번" 메모리를 지운다(앱을 다시 켠 것처럼).
 static func reset_course_memory() -> void:
-	_cell_cache = {}
 	_rp_day = -1
 
 
@@ -261,6 +292,10 @@ static func kind_mark(kind: String, d: float = 22.0) -> Control:
 ## "레슨 1 · 복습 12 · 노래 4줄": 남은(todo) 일의 짧은 요약. 하나도 없으면 "오늘 할 일을 다 했어요".
 static func summary_text(tasks: Array) -> String:
 	var parts: Array = []
+	var course := false # 코스 모드 줄(id "new")이면 복습 개수에 단위 "개"를 붙인다(예전 홈 글은 그대로)
+	for t in tasks:
+		if str((t as Dictionary).get("id", "")) == "new":
+			course = true
 	for t in tasks:
 		if str((t as Dictionary).get("state", "")) != "todo":
 			continue
@@ -268,7 +303,7 @@ static func summary_text(tasks: Array) -> String:
 			"lesson":
 				parts.append("레슨 1")
 			"review":
-				parts.append("복습 " + _digits(str(t.get("title", ""))))
+				parts.append("복습 " + _digits(str(t.get("title", ""))) + ("개" if course else ""))
 			"song":
 				parts.append("노래 " + _digits(str(t.get("title", ""))) + "줄")
 			"new":
