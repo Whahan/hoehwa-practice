@@ -57,6 +57,7 @@ func _ready() -> void:
 	_selfcheck(data)
 	_sweep(data)
 	_determinism(data)
+	_passive_coverage(data)
 	ok(_before == _user_listing(), "user:// listing unchanged by this test")
 	print("== course_guard_all_test: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
@@ -438,3 +439,113 @@ func _determinism(data: Dictionary) -> void:
 		if JSON.stringify(a2["exercises"]) != JSON.stringify(b2["exercises"]):
 			diff += 1
 	ok(diff >= 1, "different seeds give a different listen set in %d of 3 spot checks" % diff)
+
+
+# ------------------------------------------------------------------ passive words and named sentences
+
+const COVER_SEEDS := 20
+const WATCH := ["s0162", "s0163", "s0674"]
+
+
+## Does every passive word (role passive, listen-only sentences) show up in some exercise? 20 seeds x 16 weeks x 7 days x 6 kinds.
+## Two measures: (a) the word ids declared by the sentence / dialogue line an exercise plays (`sent`, `example.sent`, dialogue lines),
+## (b) the spelling of the word (headword, alt, form) among the tokens of the exercise texts. Also: which exercises carry the
+## sentences in WATCH (s0162 / s0163 phone numbers, s0674 ATM) and from which cur o on.
+func _passive_coverage(data: Dictionary) -> void:
+	var idx: Dictionary = data["_idx"]
+	var passive: Dictionary = {}
+	for w in CourseData.lexicon().values():
+		if str(w.get("role", "")) == "passive":
+			passive[w["id"]] = w
+	var by_spelling: Dictionary = {} # token -> [word ids]
+	for w in CourseData.lexicon().values():
+		var texts: Array = [str(w.get("en", ""))]
+		for a in w.get("alt", []):
+			texts.append(str(a))
+		for f in w.get("forms", []):
+			texts.append(str(f.get("f", "")))
+		for t0 in texts:
+			for t in _tokens(t0):
+				if not by_spelling.has(t):
+					by_spelling[t] = []
+				if not (by_spelling[t] as Array).has(w["id"]):
+					by_spelling[t].append(w["id"])
+	var hit_decl: Dictionary = {}
+	var hit_text: Dictionary = {}
+	var hit_kind: Dictionary = {} # kind -> {id: true} (declared ids)
+	var watch: Dictionary = {} # sentence id -> {"count": n, "min_cur": o, "kinds": {kind: n}}
+	for k in KINDS:
+		hit_kind[k] = {}
+	var units: int = 0
+	for sd in range(1, COVER_SEEDS + 1):
+		for w in range(1, WEEKS + 1):
+			for d in range(1, 8):
+				for kind in KINDS:
+					var r: Dictionary = LessonBuilder.build({"kind": kind, "w": w, "d": d, "seen": []}, data, 100 + sd)
+					units += 1
+					if not bool(r["ok"]):
+						continue
+					for ex in r["exercises"]:
+						var sids: Array = []
+						for key in ["sent"]:
+							if ex.get(key, null) is String:
+								sids.append(ex[key])
+						if ex.get("example", null) is Dictionary:
+							sids.append(str(ex["example"].get("sent", "")))
+						for e in ex.get("examples", []):
+							if e is Dictionary:
+								sids.append(str(e.get("sent", "")))
+						var wids: Array = []
+						for sid in sids:
+							var sent: Variant = idx["sents"].get(sid)
+							if sent != null:
+								wids.append_array(sent.get("words", []))
+						if ex.get("dialogue", null) is String:
+							var dl: Variant = idx["dialogues"].get(ex["dialogue"]) if idx.has("dialogues") else null
+							if dl == null:
+								dl = CourseData.dialogue(str(ex["dialogue"]))
+							if dl is Dictionary:
+								for ln in dl.get("lines", []):
+									wids.append_array(ln.get("words", []))
+						for wid in wids:
+							if passive.has(wid):
+								hit_decl[wid] = true
+								hit_kind[kind][wid] = true
+						for txt in _english_of(ex):
+							for t in _tokens(txt):
+								for wid in by_spelling.get(t, []):
+									if passive.has(wid):
+										hit_text[wid] = true
+						for sid in sids:
+							if sid in WATCH:
+								var rec: Dictionary = watch.get(sid, {"count": 0, "min_cur": 1 << 30, "kinds": {}})
+								rec["count"] += 1
+								rec["min_cur"] = mini(int(rec["min_cur"]), w * 10 + d)
+								rec["kinds"][kind] = int(rec["kinds"].get(kind, 0)) + 1
+								watch[sid] = rec
+						if str(ex.get("type", "")) == "dialogue_script":
+							pass
+	var miss_decl: Array = []
+	var miss_text: Array = []
+	for id in passive.keys():
+		if not hit_decl.has(id):
+			miss_decl.append("%s(%s,o=%d)" % [id, str(passive[id]["en"]), int(passive[id]["o"])])
+		if not hit_text.has(id):
+			miss_text.append("%s(%s,o=%d)" % [id, str(passive[id]["en"]), int(passive[id]["o"])])
+	miss_decl.sort()
+	miss_text.sort()
+	print("  COVER passive words %d, units built %d (%d seeds): shown by declared id %d, by spelling in text %d" % [
+		passive.size(), units, COVER_SEEDS, hit_decl.size(), hit_text.size()])
+	for k in KINDS:
+		print("  COVER   passive words (declared ids) in %s exercises: %d" % [k, (hit_kind[k] as Dictionary).size()])
+	print("  COVER not shown by declared id: %d %s" % [miss_decl.size(), str(miss_decl.slice(0, 30))])
+	print("  COVER not shown by spelling:    %d %s" % [miss_text.size(), str(miss_text.slice(0, 30))])
+	for sid in WATCH:
+		var sent: Variant = idx["sents"].get(sid)
+		print("  COVER %s o=%s scope=%s: %s" % [sid, str(sent.get("o", "?")) if sent != null else "absent", str(sent.get("scope", "?")) if sent != null else "-", str(watch.get(sid, "never shown"))])
+		ok(watch.has(sid), "%s is played in some exercise (not dropped by the guard)" % sid)
+		if watch.has(sid) and sent != null:
+			ok(int(watch[sid]["min_cur"]) >= int(sent["o"]), "%s never appears before its own o (first at %d, o=%d)" % [sid, int(watch[sid]["min_cur"]), int(sent["o"])])
+	ok(passive.size() > 0, "passive words exist")
+	eq(miss_decl.size(), 0, "every passive word is played by some exercise (declared ids, %d seeds)" % COVER_SEEDS)
+	eq(miss_text.size(), 0, "every passive word is heard / read in some exercise (spelling, %d seeds)" % COVER_SEEDS)
