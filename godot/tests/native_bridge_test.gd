@@ -13,6 +13,7 @@ var model_path: String = ""
 var tiny_path: String = ""
 var wav_dir: String = ""
 var expected: Dictionary = {}
+var fail_names: PackedStringArray = PackedStringArray()   ## names of the failed checks (the probe copies them into its result text)
 var trace_path: String = ""          ## --trace=<file>: every item is written here BEFORE it runs (survives a crash); last line "done" = finished
 var trace_lines: PackedStringArray = PackedStringArray()
 var trace_mutex := Mutex.new()
@@ -24,6 +25,7 @@ func ok(cond: bool, name: String) -> void:
 		print("  PASS  ", name)
 	else:
 		failed += 1
+		fail_names.append(name.left(120))
 		print("  FAIL  ", name)
 
 
@@ -424,6 +426,10 @@ func _test_concurrent() -> void:
 	_trace("section two threads at once")
 	var b: Object = _bridge()
 	_load(b, model_path)
+	# time of one transcription alone (the "ms" of a call that had to wait includes the waiting, so it cannot be summed)
+	var solo: Dictionary = {}
+	for f in ["coffee.wav", "s1.wav"]:
+		solo[f] = int(_transcribe(b, f)["ms"])
 	for round_no in range(2):
 		var fa: String = "coffee.wav" if round_no == 0 else "s1.wav"
 		var fb: String = "s1.wav" if round_no == 0 else "coffee.wav"
@@ -453,7 +459,9 @@ func _test_concurrent() -> void:
 		var a1: int = int(oa.get("done_at", 0))
 		var b0: int = int(ob.get("started_at", 0))
 		var b1: int = int(ob.get("done_at", 0))
-		ok(maxi(a1, b1) - mini(a0, b0) >= (int(ra["ms"]) + int(rb["ms"])) * 8 / 10 - 50, "round %d: transcriptions were serialized (wall %d ms vs sum %d ms)" % [round_no, maxi(a1, b1) - mini(a0, b0), int(ra["ms"]) + int(rb["ms"])])
+		var wall: int = maxi(a1, b1) - mini(a0, b0)
+		var solo_sum: int = int(solo[fa]) + int(solo[fb])
+		ok(wall * 100 >= solo_sum * 75, "round %d: transcriptions were serialized (wall %d ms >= 75 percent of the two solo times %d ms)" % [round_no, wall, solo_sum])
 	_trace("unload")
 	b.unload()
 
