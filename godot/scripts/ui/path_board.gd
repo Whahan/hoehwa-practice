@@ -19,6 +19,7 @@ const TAG_PAD_V := 1.0
 const PAD_TOP := 6.0
 const GAP_CHIP := 4.0
 const GAP_ROW := 14.0
+const MAX_BLOCKS := 18 ## most boards a road can have: 12 months of the old path, 18 blocks of the 72-week course
 
 static var _tag_styles: Dictionary = {}
 
@@ -39,7 +40,12 @@ func _init() -> void:
 
 ## `states`: the 4 states of this month ("done|current|open|past|locked", missing = locked); `names`: the 4 week topics
 ## ("" = none: the tag is just "2주"); `current_global_idx`: cell index of the current cell of the whole path.
-func build(lang_: String, month_n_: int, states_: Array, names_: Array, current_global_idx: int) -> void:
+## `opts` is for the 72-week course road (v2.0 E5; the old path passes none and looks exactly as before):
+##   "first_w" (int > 0)  the tags and the node numbers count weeks from it (1..72) instead of 1..4 in the month
+##   "soon" (4 bools)     the week has no content yet: its tag says "준비 중" (its node stays locked)
+##   "label" (String)     name of the block for the accessibility names ("0단계 입문", "2개월차")
+## node_pressed always sends the week of the month (1..4), whatever the tags show.
+func build(lang_: String, month_n_: int, states_: Array, names_: Array, current_global_idx: int, opts: Dictionary = {}) -> void:
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -48,22 +54,31 @@ func build(lang_: String, month_n_: int, states_: Array, names_: Array, current_
 	_chip = null
 	_chip_week = 0
 	lang = lang_
-	month_n = clampi(month_n_, 1, PathModel.MONTHS)
+	month_n = clampi(month_n_, 1, MAX_BLOCKS)
 	current_idx = current_global_idx
 	states = []
 	var phone: bool = Platform.is_phone()
+	var first_w: int = int(opts.get("first_w", 0)) if opts.get("first_w", 0) is int else 0
+	var soon: Array = opts.get("soon", []) if opts.get("soon", []) is Array else []
+	var block_label: String = str(opts.get("label", "")) if opts.get("label", "") is String else ""
 	for k in PathModel.WEEKS:
 		var w: int = k + 1
+		var shown_w: int = first_w + k if first_w > 0 else w
+		var is_soon: bool = k < soon.size() and soon[k] is bool and bool(soon[k])
 		var st: String = str(states_[k]) if k < states_.size() else "locked"
-		if not PathNode.STATES.has(st):
+		if not PathNode.STATES.has(st) or is_soon:
 			st = "locked"
 		states.append(st)
-		var node := PathNode.new(month_n, w, st)
+		var node := PathNode.new(month_n, shown_w, st)
+		if first_w > 0:
+			node.accessibility_name = "%s %d주, %s" % [block_label if block_label != "" else "%d번째 묶음" % month_n, shown_w, "준비 중" if is_soon else node.state_word()]
 		node.pressed.connect(func() -> void: node_pressed.emit(month_n, w, st))
 		add_child(node)
 		_nodes.append(node)
 		var topic: String = UI.plain(names_[k]) if k < names_.size() else ""
-		var txt: String = "%d주" % w if topic == "" else "%d주 · %s" % [w, topic]
+		if is_soon:
+			topic = "준비 중"
+		var txt: String = "%d주" % shown_w if topic == "" else "%d주 · %s" % [shown_w, topic]
 		var lab := UI.label(txt, "Small")
 		lab.max_lines_visible = 2
 		lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -285,10 +300,13 @@ static func _month(l: String, n: int) -> Dictionary:
 
 ## Month heading row: "3개월차 · title" on the left, a star and "완료 k/4주" on the right (the star is filled when all
 ## weeks are done, an outline otherwise).
-static func month_header(n: int, title: String, done_k: int, total: int = PathModel.WEEKS) -> Control:
+## `heading` is for the course road: the block name ("0단계 입문") instead of "N개월차" ("" = the old text). The count text
+## "완료 k/4주" comes from CourseModel.progress_label (the one place that builds value/target texts).
+static func month_header(n: int, title: String, done_k: int, total: int = PathModel.WEEKS, heading: String = "") -> Control:
 	var row := UI.hbox(8)
 	row.name = "MonthHeader%d" % n
-	var txt: String = "%d개월차" % n if title == "" else "%d개월차 · %s" % [n, title]
+	var head: String = heading if heading != "" else "%d개월차" % n
+	var txt: String = head if title == "" else "%s · %s" % [head, title]
 	var l := UI.label(txt, "H3")
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -299,7 +317,7 @@ static func month_header(n: int, title: String, done_k: int, total: int = PathMo
 	var star := _Star.new(22.0, all_done)
 	star.accessibility_name = "별 채움" if all_done else "별 비어 있음"
 	right.add_child(star)
-	var cnt := UI.label("완료 %d/%d주" % [done_k, total], "Small", false)
+	var cnt := UI.label("완료 " + CourseModel.progress_label("weeks", done_k, total), "Small", false)
 	cnt.add_theme_color_override("font_color", Pal.REWARD_ON if all_done else Pal.MUTED)
 	right.add_child(cnt)
 	row.add_child(right)
