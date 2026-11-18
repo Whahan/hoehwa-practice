@@ -100,10 +100,8 @@ func _reset() -> void:
 # ---------------------------------------------------------------- loading
 
 func sentences_query() -> String:
-	var pos: Dictionary = Store.position()
-	var month: int = int(pos.get("n", 1))
-	var week: int = int(pos.get("w", 1))
-	var q := "lang=%s&mode=dictation&stage=%d&month=%d&week=%d&n=%d&seed=%d" % [lang, Plan.stage_of(month), month, week, session_n(), randi() % 100000]
+	var pos: Dictionary = CourseModel.pos_for(lang) ## 코스 모드 영어는 legacy_stage / legacy_cell 값, 그 밖은 달력(Store.position())
+	var q := "lang=%s&mode=dictation&stage=%d&month=%d&week=%d&n=%d&seed=%d" % [lang, int(pos["stage"]), int(pos["n"]), int(pos["w"]), session_n(), randi() % 100000]
 	var ex: Array = (seen_ids_ja if lang == "ja" else seen_ids).slice(-100)
 	if not ex.is_empty():
 		q += "&exclude=" + ",".join(PackedStringArray(ex.map(func(v: Variant) -> String: return str(v))))
@@ -345,6 +343,7 @@ static func score_ink(score: float) -> Color:
 func _render() -> void:
 	var c: VBoxContainer = (_shell["page"] as PageScroll).content
 	UI.clear(c)
+	_add_course_notice(c)
 	_edit = null
 	_check_btn = null
 	_listen_label = null
@@ -393,9 +392,17 @@ func _render_run() -> void:
 	_render_footer()
 
 
+## 코스 모드 영어에서만: 문장이 코스 밖(Tatoeba)이라는 안내 한 줄을 화면 맨 위에 둔다.
+func _add_course_notice(c: VBoxContainer) -> void:
+	var cnote: Control = MissionScreen.course_notice(lang)
+	if cnote != null:
+		c.add_child(cnote)
+
+
 func _render_page() -> void:
 	var c: VBoxContainer = (_shell["page"] as PageScroll).content
 	UI.clear(c)
+	_add_course_notice(c)
 	_listen_label = null
 	_hint_label = null
 	var s: Dictionary = current()
