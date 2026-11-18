@@ -1,0 +1,1568 @@
+{
+ "v": 1,
+ "w": 9,
+ "title_ko": "시간·요일·하루",
+ "can_do": [
+  "몇 시인지 묻고 답할 수 있다",
+  "요일을 말하고 하루 일과의 시각을 말할 수 있다",
+  "on / in / at 로 때를 말할 수 있다"
+ ],
+ "scene": {
+  "id": "daily_time",
+  "title_ko": "하루 시간표 이야기",
+  "canada": [
+   "cn_12h"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0243",
+   "en": "time",
+   "pos": "n",
+   "ko": "시간",
+   "ko2": "시각",
+   "ipa": "taɪm",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0244",
+   "en": "o'clock",
+   "pos": "adv",
+   "ko": "~시 정각",
+   "ipa": "əˈklɑːk",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0245",
+   "en": "Monday",
+   "pos": "n",
+   "ko": "월요일",
+   "ipa": "ˈmʌndeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "Mondays",
+     "pat": "p_on_in_at"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0246",
+   "en": "Tuesday",
+   "pos": "n",
+   "ko": "화요일",
+   "ipa": "ˈtuːzdeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0247",
+   "en": "Wednesday",
+   "pos": "n",
+   "ko": "수요일",
+   "ipa": "ˈwɛnzdeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0248",
+   "en": "Thursday",
+   "pos": "n",
+   "ko": "목요일",
+   "ipa": "ˈθɜːrzdeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0249",
+   "en": "Friday",
+   "pos": "n",
+   "ko": "금요일",
+   "ipa": "ˈfraɪdeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 1,
+   "forms": [
+    {
+     "f": "Fridays",
+     "pat": "p_on_in_at"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0267",
+   "en": "minute",
+   "pos": "n",
+   "ko": "분",
+   "ipa": "ˈmɪnət",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [
+    {
+     "f": "minutes",
+     "pat": "p_what_time"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0268",
+   "en": "hour",
+   "pos": "n",
+   "ko": "한 시간",
+   "ipa": "aʊr",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [
+    {
+     "f": "hours",
+     "pat": "p_what_time"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0269",
+   "en": "month",
+   "pos": "n",
+   "ko": "달",
+   "ko2": "월",
+   "ipa": "mʌnθ",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0250",
+   "en": "Saturday",
+   "pos": "n",
+   "ko": "토요일",
+   "ipa": "ˈsætərdeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0251",
+   "en": "Sunday",
+   "pos": "n",
+   "ko": "일요일",
+   "ipa": "ˈsʌndeɪ",
+   "say": "",
+   "tags": [
+    "calendar"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0252",
+   "en": "day",
+   "pos": "n",
+   "ko": "하루",
+   "ko2": "요일",
+   "ipa": "deɪ",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "days",
+     "pat": "p_what_day"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0253",
+   "en": "today",
+   "pos": "adv",
+   "ko": "오늘",
+   "ipa": "təˈdeɪ",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0254",
+   "en": "tomorrow",
+   "pos": "adv",
+   "ko": "내일",
+   "ipa": "təˈmɑːroʊ",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0255",
+   "en": "week",
+   "pos": "n",
+   "ko": "주",
+   "ko2": "일주일",
+   "ipa": "wiːk",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "weeks",
+     "pat": "p_what_day"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0270",
+   "en": "year",
+   "pos": "n",
+   "ko": "해",
+   "ko2": "년",
+   "ipa": "jɪr",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0271",
+   "en": "early",
+   "pos": "adj",
+   "ko": "이른",
+   "ko2": "일찍",
+   "ipa": "ˈɜːrli",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0272",
+   "en": "late",
+   "pos": "adj",
+   "ko": "늦은",
+   "ko2": "늦게",
+   "ipa": "leɪt",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0256",
+   "en": "weekend",
+   "pos": "n",
+   "ko": "주말",
+   "ipa": "ˈwiːkɛnd",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0257",
+   "en": "every",
+   "pos": "det",
+   "ko": "매~",
+   "ko2": "모든",
+   "ipa": "ˈɛvri",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0258",
+   "en": "get",
+   "pos": "v",
+   "ko": "얻어요",
+   "ko2": "받아요 (get up 은 일어나요)",
+   "ipa": "ɡɛt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0259",
+   "en": "up",
+   "pos": "adv",
+   "ko": "위로",
+   "ko2": "일어나서",
+   "ipa": "ʌp",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0260",
+   "en": "breakfast",
+   "pos": "n",
+   "ko": "아침 식사",
+   "ipa": "ˈbrɛkfəst",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0261",
+   "en": "lunch",
+   "pos": "n",
+   "ko": "점심",
+   "ipa": "lʌntʃ",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0273",
+   "en": "birthday",
+   "pos": "n",
+   "ko": "생일",
+   "ipa": "ˈbɜːrθdeɪ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0274",
+   "en": "holiday",
+   "pos": "n",
+   "ko": "휴일",
+   "ipa": "ˈhɑːlədeɪ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0262",
+   "en": "dinner",
+   "pos": "n",
+   "ko": "저녁 식사",
+   "ipa": "ˈdɪnər",
+   "say": "",
+   "tags": [
+    "food"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0263",
+   "en": "afternoon",
+   "pos": "n",
+   "ko": "오후",
+   "ipa": "ˌæftərˈnuːn",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0264",
+   "en": "evening",
+   "pos": "n",
+   "ko": "저녁",
+   "ipa": "ˈiːvnɪŋ",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0265",
+   "en": "on",
+   "pos": "prep",
+   "ko": "~에(요일)",
+   "ko2": "~ 위에",
+   "ipa": "ɑːn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0266"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0266",
+   "en": "in",
+   "pos": "prep",
+   "ko": "~에(때)",
+   "ko2": "~ 안에",
+   "ipa": "ɪn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0265"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0275",
+   "en": "tonight",
+   "pos": "adv",
+   "ko": "오늘 밤",
+   "ipa": "təˈnaɪt",
+   "say": "",
+   "tags": [
+    "time"
+   ],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0276",
+   "en": "soon",
+   "pos": "adv",
+   "ko": "곧",
+   "ipa": "suːn",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_what_time",
+   "tpl": "What time is it? - It's ___ o'clock.",
+   "slots": [
+    {
+     "name": "hour",
+     "pos": [
+      "num"
+     ]
+    }
+   ],
+   "title_ko": "What time is it? (몇 시예요?)",
+   "grammar_ko": [
+    "시간을 물을 때는 What time is it? 라고 해요.",
+    "정각은 숫자 뒤에 o'clock 을 붙여요: It's three o'clock.",
+    "분이 있으면 o'clock 없이 숫자를 이어 말해요: 세 시 삼십 분은 It's three thirty.",
+    "영어는 보통 12시간제로 말해요. 오전·오후는 아침·저녁 같은 말로 구분해요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0500",
+    "s0501",
+    "s0502",
+    "s0503",
+    "s0504",
+    "s0505"
+   ]
+  },
+  {
+   "id": "p_what_day",
+   "tpl": "What day is it today? - It's ___.",
+   "slots": [
+    {
+     "name": "day",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "What day is it today? (오늘 무슨 요일이에요?)",
+   "grammar_ko": [
+    "요일 이름은 항상 대문자로 시작해요: Monday, Friday.",
+    "요일·시간을 말할 때 주어는 it 이에요: It's Monday.",
+    "today 는 '오늘', tomorrow 는 '내일'이에요: Today is Saturday. Tomorrow is Sunday."
+   ],
+   "d": 2,
+   "examples": [
+    "s0508",
+    "s0509",
+    "s0510",
+    "s0511",
+    "s0512",
+    "s0513"
+   ]
+  },
+  {
+   "id": "p_get_up_at",
+   "tpl": "I get up at ___.",
+   "slots": [
+    {
+     "name": "time",
+     "pos": [
+      "num"
+     ]
+    }
+   ],
+   "title_ko": "I get up at ~ (저는 ~시에 일어나요)",
+   "grammar_ko": [
+    "시각 앞에는 전치사 at 을 써요: at seven 은 '일곱 시에'예요.",
+    "get up 은 '일어나다'예요. 두 낱말이 한 덩어리라 같이 외워요.",
+    "하루 일과는 I 로 시작해 이어 말해요: I get up at seven. I have breakfast at eight."
+   ],
+   "d": 3,
+   "examples": [
+    "s0517",
+    "s0518",
+    "s0519",
+    "s0520",
+    "s0521",
+    "s0522"
+   ]
+  },
+  {
+   "id": "p_what_time_do_you",
+   "tpl": "What time do you ___?",
+   "slots": [
+    {
+     "name": "verb",
+     "pos": [
+      "v"
+     ]
+    }
+   ],
+   "title_ko": "What time do you ~? (몇 시에 ~해요?)",
+   "grammar_ko": [
+    "몇 시에 하는지 물을 때는 What time do you 뒤에 동사를 넣어요: What time do you get up?",
+    "대답에는 at 을 써요: I have lunch at twelve.",
+    "have breakfast / lunch / dinner 는 '식사를 하다'예요. 한국어 '먹다' 대신 have 를 써요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0524",
+    "s0525",
+    "s0526",
+    "s0527",
+    "s0528",
+    "s0529"
+   ]
+  },
+  {
+   "id": "p_on_in_at",
+   "tpl": "on Monday / in the morning / at night",
+   "slots": [
+    {
+     "name": "time",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "시간 전치사 on / in / at",
+   "grammar_ko": [
+    "요일 앞에는 on, 아침·오후·저녁 앞에는 in the, 시각 앞에는 at 을 써요.",
+    "night 만은 예외로 at night 라고 해요.",
+    "한국어는 모두 '에'지만 영어는 때에 따라 on / in / at 로 달라요."
+   ],
+   "d": 4,
+   "examples": [
+    "s0534",
+    "s0535",
+    "s0536",
+    "s0537",
+    "s0538",
+    "s0539"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0500",
+   "en": "What time is it?",
+   "ko": "몇 시예요?",
+   "say": "",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0501",
+   "en": "It's one o'clock.",
+   "ko": "한 시예요.",
+   "say": "",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0502",
+   "en": "It's three o'clock.",
+   "ko": "세 시예요.",
+   "say": "",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0503",
+   "en": "It's seven o'clock.",
+   "ko": "일곱 시예요.",
+   "say": "",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0504",
+   "en": "It's twelve o'clock.",
+   "ko": "열두 시 정각이에요.",
+   "say": "",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0505",
+   "en": "Excuse me, what time is it?",
+   "ko": "저기요, 몇 시예요?",
+   "say": "",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0506",
+   "en": "It's 9:30.",
+   "ko": "아홉 시 삼십 분이에요.",
+   "say": "It's nine thirty.",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0507",
+   "en": "It's 6:45.",
+   "ko": "여섯 시 사십오 분이에요.",
+   "say": "It's six forty-five.",
+   "pat": "p_what_time",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0508",
+   "en": "What day is it today?",
+   "ko": "오늘은 무슨 요일이에요?",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0509",
+   "en": "It's Monday.",
+   "ko": "월요일이에요.",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0510",
+   "en": "It's Friday.",
+   "ko": "금요일이에요.",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0511",
+   "en": "Tomorrow is Sunday.",
+   "ko": "내일은 일요일이에요.",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0512",
+   "en": "What day is it tomorrow?",
+   "ko": "내일은 무슨 요일이에요?",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0513",
+   "en": "Is it Tuesday today?",
+   "ko": "오늘 화요일이에요?",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0514",
+   "en": "Yes, it's Tuesday.",
+   "ko": "네, 화요일이에요.",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0515",
+   "en": "No, it's Wednesday.",
+   "ko": "아니요, 수요일이에요.",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0516",
+   "en": "Today is Thursday.",
+   "ko": "오늘은 목요일이에요.",
+   "say": "",
+   "pat": "p_what_day",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0517",
+   "en": "I get up at six.",
+   "ko": "저는 여섯 시에 일어나요.",
+   "say": "",
+   "pat": "p_get_up_at",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0518",
+   "en": "I get up at seven.",
+   "ko": "저는 일곱 시에 일어나요.",
+   "say": "",
+   "pat": "p_get_up_at",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0519",
+   "en": "I get up at 6:30.",
+   "ko": "저는 여섯 시 삼십 분에 일어나요.",
+   "say": "I get up at six thirty.",
+   "pat": "p_get_up_at",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0520",
+   "en": "Do you get up at five?",
+   "ko": "다섯 시에 일어나요?",
+   "say": "",
+   "pat": "p_get_up_at",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0521",
+   "en": "We get up at eight.",
+   "ko": "우리는 여덟 시에 일어나요.",
+   "say": "",
+   "pat": "p_get_up_at",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0522",
+   "en": "I get up at seven every day.",
+   "ko": "저는 매일 일곱 시에 일어나요.",
+   "say": "",
+   "pat": "p_get_up_at",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0523",
+   "en": "I get up at nine on Sunday.",
+   "ko": "저는 일요일에 아홉 시에 일어나요.",
+   "say": "",
+   "pat": "p_get_up_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0524",
+   "en": "What time do you get up?",
+   "ko": "몇 시에 일어나요?",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0525",
+   "en": "What time do you have breakfast?",
+   "ko": "몇 시에 아침을 먹어요?",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0526",
+   "en": "What time do you have lunch?",
+   "ko": "몇 시에 점심을 먹어요?",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0527",
+   "en": "What time do you have dinner?",
+   "ko": "몇 시에 저녁을 먹어요?",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0528",
+   "en": "What time do you go home?",
+   "ko": "몇 시에 집에 가요?",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0529",
+   "en": "What time do you go to bed?",
+   "ko": "몇 시에 자요?",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0530",
+   "en": "I have breakfast at eight.",
+   "ko": "저는 여덟 시에 아침을 먹어요.",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0531",
+   "en": "I have lunch at twelve.",
+   "ko": "저는 열두 시에 점심을 먹어요.",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0532",
+   "en": "I have dinner at six.",
+   "ko": "저는 여섯 시에 저녁을 먹어요.",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0533",
+   "en": "I go to bed at eleven.",
+   "ko": "저는 열한 시에 자요.",
+   "say": "",
+   "pat": "p_what_time_do_you",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0534",
+   "en": "I have coffee in the morning.",
+   "ko": "저는 아침에 커피를 마셔요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0535",
+   "en": "I have tea in the afternoon.",
+   "ko": "저는 오후에 차를 마셔요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0536",
+   "en": "I go home in the evening.",
+   "ko": "저는 저녁에 집에 가요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0537",
+   "en": "I have milk at night.",
+   "ko": "저는 밤에 우유를 마셔요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0538",
+   "en": "I have hockey on Monday.",
+   "ko": "저는 월요일에 하키가 있어요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0539",
+   "en": "I have hockey on Mondays.",
+   "ko": "저는 월요일마다 하키가 있어요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0540",
+   "en": "We have a party on Saturday.",
+   "ko": "우리는 토요일에 파티가 있어요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0541",
+   "en": "We have a game on Sunday.",
+   "ko": "우리는 일요일에 경기가 있어요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0542",
+   "en": "I go to the shop on Friday.",
+   "ko": "저는 금요일에 가게에 가요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0543",
+   "en": "I have soccer on Wednesday and Thursday.",
+   "ko": "저는 수요일과 목요일에 축구가 있어요.",
+   "say": "",
+   "pat": "p_on_in_at",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0544",
+   "en": "Have a good week.",
+   "ko": "좋은 한 주 보내세요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0545",
+   "en": "Good afternoon.",
+   "ko": "좋은 오후예요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0546",
+   "en": "Good evening.",
+   "ko": "좋은 저녁이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0547",
+   "en": "Have a good weekend.",
+   "ko": "좋은 주말 보내세요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0548",
+   "en": "Saturday and Sunday are the weekend.",
+   "ko": "토요일과 일요일은 주말이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0549",
+   "en": "I go to the shop every week.",
+   "ko": "저는 매주 가게에 가요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0550",
+   "en": "I have lunch with my friend every Friday.",
+   "ko": "저는 금요일마다 친구와 점심을 먹어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0551",
+   "en": "It's late.",
+   "ko": "늦었어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0552",
+   "en": "I get up early on Monday.",
+   "ko": "저는 월요일에는 일찍 일어나요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0553",
+   "en": "My birthday is on Friday.",
+   "ko": "제 생일은 금요일이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0554",
+   "en": "Monday is a holiday.",
+   "ko": "월요일은 휴일이에요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0555",
+   "en": "We have a party tonight.",
+   "ko": "우리는 오늘 밤에 파티가 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0556",
+   "en": "It's five minutes.",
+   "ko": "5분이에요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0557",
+   "en": "I'm here for a year.",
+   "ko": "저는 1년 동안 여기 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0009",
+   "title_ko": "하루 일과 이야기",
+   "scene": "daily_time",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hi, Min. What time do you get up on Monday?",
+     "ko": "안녕, 민. 월요일에는 몇 시에 일어나요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "I get up at six. What time do you get up?",
+     "ko": "저는 여섯 시에 일어나요. 몇 시에 일어나요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "I get up at seven. What time do you have breakfast?",
+     "ko": "저는 일곱 시에 일어나요. 몇 시에 아침을 먹어요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "I have breakfast at seven. Do you have breakfast every day?",
+     "ko": "저는 일곱 시에 아침을 먹어요. 매일 아침을 먹어요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Yes, I do. What time do you get up on Saturday?",
+     "ko": "네, 먹어요. 토요일에는 몇 시에 일어나요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "I get up at nine on Saturday.",
+     "ko": "저는 토요일에는 아홉 시에 일어나요.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Nice. I get up at ten.",
+     "ko": "좋겠네요. 저는 열 시에 일어나요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "id": "n0901",
+   "kind": "culture",
+   "text_ko": "캐나다에서는 말할 때 보통 12시간제를 써요. 오전·오후는 in the morning, in the evening 처럼 말해서 구분해요. 기차·버스 시간표에는 24시간제를 쓰기도 해요.",
+   "_cn": "cn_12h"
+  },
+  {
+   "id": "n0902",
+   "kind": "vocab",
+   "text_ko": "요일 이름은 문장 안에서도 항상 대문자로 써요: on Monday. 캐나다 달력은 일요일(Sunday)부터 시작하는 것이 많아서, 약속을 잡을 때 한 번 확인하면 좋아요."
+  },
+  {
+   "id": "n0903",
+   "kind": "vocab",
+   "text_ko": "Have a good weekend. 는 금요일에 헤어질 때 하는 인사예요. 대답은 You too. 예요(You too 는 나중에 배워요). 지금은 Thanks. 라고 해도 돼요."
+  },
+  {
+   "id": "n0904",
+   "kind": "vocab",
+   "text_ko": "캐나다·미국에서는 주말에 일어나는 일을 on the weekend 라고 해요. 영국에서는 at the weekend 라고 해서 전치사가 달라요."
+  }
+ ]
+}
