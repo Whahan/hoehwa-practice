@@ -41,7 +41,16 @@ add_library(whisper_bridge SHARED
     src/register_types.h
     src/whisper_bridge.cpp
     src/whisper_bridge.h
+    src/model_check.cpp
+    src/model_check.h
+    src/wb_guard.cpp
+    src/wb_guard.h
 )
+# godot-cpp compiles with -fno-exceptions; the guard file catches exceptions thrown inside whisper.cpp, so it needs them (not on MSVC,
+# where godot-cpp sets _HAS_EXCEPTIONS=0: there the guard compiles to a plain call)
+if(NOT MSVC)
+    set_source_files_properties(src/wb_guard.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions")
+endif()
 target_link_libraries(whisper_bridge PRIVATE godot-cpp whisper)
 target_include_directories(whisper_bridge PRIVATE
     src

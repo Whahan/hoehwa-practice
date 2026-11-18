@@ -8,8 +8,8 @@
     "artifacts":  {
                       "android-arm64":  {
                                             "file":  "godot/bin/libwhisper_bridge.android.arm64.so",
-                                            "bytes":  1903480,
-                                            "sha256":  "dfa0044c805eebaa3bfa4b52ffdeb87396ffcd43dffce7e183673773ccbaf565"
+                                            "bytes":  1917232,
+                                            "sha256":  "d478b3e6deee2a8a39ef15148e5c67f2c4fcd7e85dac5730ed67c31f904e1fcb"
                                         }
                   }
 }

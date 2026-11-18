@@ -13,6 +13,9 @@ var model_path: String = ""
 var tiny_path: String = ""
 var wav_dir: String = ""
 var expected: Dictionary = {}
+var trace_path: String = ""          ## --trace=<file>: every item is written here BEFORE it runs (survives a crash); last line "done" = finished
+var trace_lines: PackedStringArray = PackedStringArray()
+var trace_mutex := Mutex.new()
 
 
 func ok(cond: bool, name: String) -> void:
@@ -31,8 +34,27 @@ func _arg(prefix: String) -> String:
 	return ""
 
 
+## Breadcrumb: write the item that is about to run, flush and close, so a native crash leaves the last item in the file.
+func _trace(item: String) -> void:
+	print("TRACE ", item)
+	if trace_path == "":
+		return
+	trace_mutex.lock()
+	trace_lines.append(item)
+	var f: FileAccess = FileAccess.open(trace_path, FileAccess.WRITE)
+	if f != null:
+		f.store_string("
+".join(trace_lines) + "
+")
+		f.flush()
+		f.close()
+	trace_mutex.unlock()
+
+
 func _ready() -> void:
 	print("== native_bridge start ==")
+	trace_path = _arg("--trace=")
+	_trace("start")
 	model_path = _arg("--model=")
 	tiny_path = _arg("--tiny=")
 	wav_dir = _arg("--wav-dir=")
@@ -65,6 +87,7 @@ func _ready() -> void:
 
 
 func _finish() -> void:
+	_trace("done")
 	print("== native_bridge: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -144,16 +167,24 @@ func _selfcheck() -> void:
 
 
 func _transcribe(b: Object, file: String, lang: String = "en", opts: Dictionary = {}) -> Dictionary:
+	_trace("transcribe %s lang='%s' opts=%s" % [file, lang, str(opts)])
 	return b.transcribe(_wav(file), lang, opts)
 
 
+func _raw(b: Object, label: String, wav: PackedByteArray, lang: String = "en") -> Dictionary:
+	_trace("transcribe %s (%d bytes)" % [label, wav.size()])
+	return b.transcribe(wav, lang, {})
+
+
 func _load(b: Object, path: String) -> int:
+	_trace("load_model " + path.get_file())
 	return int(b.load_model(path))
 
 
 # ---------------------------------------------------------------- tests
 func _test_no_model() -> void:
 	print("[no model loaded]")
+	_trace("section no model loaded")
 	var b: Object = _bridge()
 	var v: String = str(b.call("version"))
 	ok(v != "" and v.begins_with("bridge ") and v.contains("whisper.cpp"), "version() is '%s'" % v)
@@ -171,33 +202,65 @@ func _test_no_model() -> void:
 
 func _test_bad_model_files() -> void:
 	print("[broken model files]")
+	_trace("section broken model files")
 	var b: Object = _bridge()
 	var full: PackedByteArray = FileAccess.get_file_as_bytes(model_path)
 	ok(full.size() > 1000000, "model file read (%d bytes)" % full.size())
 	var folder: String = "user://test_native_bridge"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(folder))
+	# name -> [what check_model must say]; every damaged file must be refused before whisper.cpp sees it
 	var cases: Dictionary = {
-		"half.bin": full.slice(0, full.size() / 2),
-		"tail_cut.bin": full.slice(0, full.size() - 1000),
-		"header_only.bin": full.slice(0, 64),
-		"empty.bin": PackedByteArray(),
-		"garbage.bin": Crypto.new().generate_random_bytes(200000),
+		"half.bin": "truncated",
+		"tail_cut.bin": "truncated",
+		"header_only.bin": "truncated",
+		"empty.bin": "too_small",
+		"garbage.bin": "bad_magic",
+		"wrong_magic.bin": "bad_magic",
+		"extra_tail.bin": "truncated",
 	}
 	for fname in cases.keys():
+		var data: PackedByteArray
+		match fname:
+			"half.bin": data = full.slice(0, full.size() / 2)
+			"tail_cut.bin": data = full.slice(0, full.size() - 1000)
+			"header_only.bin": data = full.slice(0, 64)
+			"empty.bin": data = PackedByteArray()
+			"garbage.bin": data = Crypto.new().generate_random_bytes(200000)
+			"wrong_magic.bin":
+				data = full.duplicate()
+				data[0] = 0
+				data[1] = 0
+				data[2] = 0
+				data[3] = 0
+			_:
+				data = full.duplicate()
+				data.append_array(PackedByteArray([1, 2, 3]))
+		_trace("write model case " + fname)
 		var p: String = folder.path_join(fname)
 		var f: FileAccess = FileAccess.open(p, FileAccess.WRITE)
-		f.store_buffer(cases[fname])
+		f.store_buffer(data)
 		f.close()
-		var err: int = _load(b, p)
+		data = PackedByteArray()
+		var gp: String = ProjectSettings.globalize_path(p)
+		_trace("check_model " + fname)
+		var why: String = str(b.call("check_model", gp))
+		ok(why == str(cases[fname]), "check_model(%s) = '%s' (expected '%s')" % [fname, why, str(cases[fname])])
+		var err: int = _load(b, gp)
 		ok(err != OK and not b.is_loaded(), "load_model(%s) fails without crashing (err %d)" % [fname, err])
 		var r: Dictionary = _transcribe(b, "coffee.wav")
 		ok(not r["ok"] and r["error"] == "no_model", "transcribe after the failed load -> no_model (%s)" % fname)
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+		DirAccess.remove_absolute(gp)
+	_trace("check_model of the good model")
+	ok(str(b.call("check_model", model_path)) == "ok", "check_model(good model) = ok")
+	ok(str(b.call("check_model", wav_dir.path_join("nope.bin"))) == "cant_open", "check_model(missing file) = cant_open")
+	full = PackedByteArray()
 	ok(_load(b, model_path) == OK and b.is_loaded(), "a good model loads after the failed ones")
+	b.unload()
 
 
 func _test_normal() -> void:
 	print("[normal transcription]")
+	_trace("section normal transcription")
 	var b: Object = _bridge()
 	var t0: int = Time.get_ticks_msec()
 	ok(_load(b, model_path) == OK, "load_model(base.en-q5_1) OK (%d ms)" % (Time.get_ticks_msec() - t0))
@@ -240,22 +303,25 @@ func _test_normal() -> void:
 	for f in ["silence.wav", "tiny_noise.wav", "short.wav"]:
 		var rz: Dictionary = _transcribe(b, f)
 		ok(rz["ok"] and rz["text"] == "" and rz["words"].is_empty() and rz["error"] == "", "%s -> ok:true, no text, no words" % f)
+	_trace("unload")
+	b.unload()
 
 
 func _test_bad_input() -> void:
 	print("[bad input]")
+	_trace("section bad input")
 	var b: Object = _bridge()
 	_load(b, model_path)
 	for f in ["empty.wav", "garbage.wav", "truncated.wav"]:
 		var r: Dictionary = _transcribe(b, f)
 		ok(not r["ok"] and r["error"] == "bad_wav", "%s -> bad_wav (got '%s')" % [f, str(r.get("error"))])
 		ok(contract_problems(r).is_empty() and r["words"].is_empty(), "%s: result keeps its shape" % f)
-	var r0: Dictionary = b.transcribe(PackedByteArray(), "en", {})
+	var r0: Dictionary = _raw(b, "0 bytes", PackedByteArray())
 	ok(not r0["ok"] and r0["error"] == "bad_wav", "0-byte array -> bad_wav")
-	var r3: Dictionary = b.transcribe(PackedByteArray([1, 2, 3]), "en", {})
+	var r3: Dictionary = _raw(b, "3 bytes", PackedByteArray([1, 2, 3]))
 	ok(not r3["ok"] and r3["error"] == "bad_wav", "3 bytes -> bad_wav")
 	var hdr: PackedByteArray = _wav("coffee.wav").slice(0, 44)
-	var rh: Dictionary = b.transcribe(hdr, "en", {})
+	var rh: Dictionary = _raw(b, "header only", hdr)
 	ok(not rh["ok"] and rh["error"] == "bad_wav", "header only (data size lies) -> bad_wav")
 	for lang in ["ja", "", "fr", "EN"]:
 		var rl: Dictionary = _transcribe(b, "coffee.wav", lang)
@@ -272,12 +338,15 @@ func _test_bad_input() -> void:
 		var streamed: PackedByteArray = raw.duplicate()
 		for k in range(4):
 			streamed[idx + 4 + k] = 0xFF
-		var rs: Dictionary = b.transcribe(streamed, "en", {})
+		var rs: Dictionary = _raw(b, "streamed wav", streamed)
 		ok(rs["ok"] and hits("I would like a cup of coffee, please.", str(rs["text"])) >= 5, "streamed WAV (size 0xFFFFFFFF) is accepted")
+	_trace("unload")
+	b.unload()
 
 
 func _test_options() -> void:
 	print("[options]")
+	_trace("section options")
 	var b: Object = _bridge()
 	_load(b, model_path)
 	var sentence: String = "I would like a cup of coffee, please."
@@ -292,10 +361,13 @@ func _test_options() -> void:
 	var rtr: Dictionary = _transcribe(b, "coffee.wav", "en", {"trim": true})
 	var first_start: float = float(rtr["words"][0]["start"]) if rtr["words"].size() > 0 else -1.0
 	ok(first_start >= 0.0 and first_start < 1.5, "trimmed audio keeps times relative to the original file (first word at %f s)" % first_start)
+	_trace("unload")
+	b.unload()
 
 
 func _test_lifecycle() -> void:
 	print("[load / unload]")
+	_trace("section load / unload")
 	var b: Object = _bridge()
 	ok(_load(b, model_path) == OK and _load(b, model_path) == OK, "loading twice replaces the model")
 	b.unload()
@@ -311,6 +383,7 @@ func _test_lifecycle() -> void:
 
 
 func _thread_transcribe(b: Object, file: String, out: Dictionary) -> void:
+	_trace("thread: transcribe " + file)
 	var t0: int = Time.get_ticks_msec()
 	out["result"] = b.transcribe(_wav(file), "en", {})
 	out["done_at"] = Time.get_ticks_msec()
@@ -319,13 +392,16 @@ func _thread_transcribe(b: Object, file: String, out: Dictionary) -> void:
 
 func _test_abort() -> void:
 	print("[abort]")
+	_trace("section abort")
 	var b: Object = _bridge()
 	_load(b, model_path)
 	var out: Dictionary = {}
 	var th := Thread.new()
+	_trace("start thread for long27.wav")
 	th.start(_thread_transcribe.bind(b, "long27.wav", out))
 	await get_tree().create_timer(0.3).timeout
 	var t_abort: int = Time.get_ticks_msec()
+	_trace("abort() while the thread transcribes long27.wav")
 	b.abort()
 	var waited: int = 0
 	while not out.has("result") and waited < 6000:
@@ -339,10 +415,13 @@ func _test_abort() -> void:
 	ok(contract_problems(res).is_empty(), "aborted result keeps its shape")
 	var r2: Dictionary = _transcribe(b, "coffee.wav")
 	ok(r2["ok"] and hits("I would like a cup of coffee, please.", str(r2["text"])) >= 5, "a normal transcription works right after an abort")
+	_trace("unload")
+	b.unload()
 
 
 func _test_concurrent() -> void:
 	print("[two threads at once]")
+	_trace("section two threads at once")
 	var b: Object = _bridge()
 	_load(b, model_path)
 	for round_no in range(2):
@@ -352,6 +431,7 @@ func _test_concurrent() -> void:
 		var ob: Dictionary = {}
 		var ta := Thread.new()
 		var tb := Thread.new()
+		_trace("start two threads %s + %s (round %d)" % [fa, fb, round_no])
 		ta.start(_thread_transcribe.bind(b, fa, oa))
 		tb.start(_thread_transcribe.bind(b, fb, ob))
 		var waited: int = 0
@@ -374,10 +454,13 @@ func _test_concurrent() -> void:
 		var b0: int = int(ob.get("started_at", 0))
 		var b1: int = int(ob.get("done_at", 0))
 		ok(maxi(a1, b1) - mini(a0, b0) >= (int(ra["ms"]) + int(rb["ms"])) * 8 / 10 - 50, "round %d: transcriptions were serialized (wall %d ms vs sum %d ms)" % [round_no, maxi(a1, b1) - mini(a0, b0), int(ra["ms"]) + int(rb["ms"])])
+	_trace("unload")
+	b.unload()
 
 
 func _bench() -> void:
 	print("[bench: reference times on this PC, not asserted]")
+	_trace("section bench: reference times on this PC, not asserted")
 	var models: Array = [model_path]
 	if tiny_path != "" and FileAccess.file_exists(tiny_path):
 		models.append(tiny_path)

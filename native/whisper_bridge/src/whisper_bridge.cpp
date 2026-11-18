@@ -24,7 +24,18 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include "ggml.h"
+#include "model_check.h"
+#include "wb_guard.h"
 #include "whisper.h"
+
+#if defined(__ANDROID__)
+#include <sys/auxv.h>
+#endif
+#if !defined(_WIN32)
+#include <sys/resource.h>
+#include <unistd.h>
+#include <cstdio>
+#endif
 
 #ifndef WB_WHISPER_COMMIT
 #define WB_WHISPER_COMMIT "unknown"
@@ -299,6 +310,9 @@ void WhisperBridge::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("unload"), &WhisperBridge::unload);
 	ClassDB::bind_method(D_METHOD("transcribe", "wav", "lang", "options"), &WhisperBridge::transcribe, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("abort"), &WhisperBridge::abort);
+	ClassDB::bind_static_method("WhisperBridge", D_METHOD("check_model", "path"), &WhisperBridge::check_model);
+	ClassDB::bind_static_method("WhisperBridge", D_METHOD("cpu_features"), &WhisperBridge::cpu_features);
+	ClassDB::bind_static_method("WhisperBridge", D_METHOD("memory_info"), &WhisperBridge::memory_info);
 }
 
 WhisperBridge::WhisperBridge() {
@@ -326,7 +340,7 @@ int WhisperBridge::load_model(const String &p_path, int p_threads) {
 		whisper_free(ctx_);
 		ctx_ = nullptr;
 		loaded_.store(false);
-		model_file_ = String();
+		set_model_file(String());
 	}
 	if (p_path.is_empty()) {
 		return (int)ERR_INVALID_PARAMETER;
@@ -339,10 +353,16 @@ int WhisperBridge::load_model(const String &p_path, int p_threads) {
 		real = ProjectSettings::get_singleton()->globalize_path(real);
 	}
 	CharString u8 = real.utf8();
-	// whisper_init prints through the (dropped) log callback; a missing/short/garbled file returns nullptr.
+	// The loader of whisper.cpp does not notice a cut-off or damaged file (short reads are ignored, "no tensors" counts as
+	// loaded), which can crash later. Walk the whole file first and refuse anything that is not exactly a complete model.
+	wb::ModelCheck chk = wb::check_model_file(std::string(u8.get_data()));
+	if (chk != wb::ModelCheck::Ok) {
+		return (int)(chk == wb::ModelCheck::CantOpen ? ERR_FILE_CANT_OPEN : ERR_FILE_CORRUPT);
+	}
+	// whisper_init prints through the (dropped) log callback; a garbled file returns nullptr.
 	whisper_context_params cp = whisper_context_default_params();
 	cp.use_gpu = false;
-	whisper_context *c = whisper_init_from_file_with_params(u8.get_data(), cp);
+	whisper_context *c = wb_guard_init(u8.get_data(), cp);
 	if (!c) {
 		return (int)ERR_FILE_CORRUPT;
 	}
@@ -353,9 +373,69 @@ int WhisperBridge::load_model(const String &p_path, int p_threads) {
 	} else {
 		threads_ = std::max(2, std::min(4, cores - 2));
 	}
-	model_file_ = real.get_file();
+	threads_ = std::max(1, std::min(threads_, 16));
+	set_model_file(real.get_file());
 	loaded_.store(true);
 	return (int)OK;
+}
+
+String WhisperBridge::check_model(const String &p_path) {
+	String real = p_path;
+	if (real.begins_with("res://") || real.begins_with("user://")) {
+		real = ProjectSettings::get_singleton()->globalize_path(real);
+	}
+	CharString u8 = real.utf8();
+	return String(wb::model_check_name(wb::check_model_file(std::string(u8.get_data()))));
+}
+
+void WhisperBridge::set_model_file(const String &p_name) {
+	std::lock_guard<std::mutex> lk(name_mutex_);
+	model_file_ = p_name;
+}
+
+String WhisperBridge::cpu_features() {
+	String out;
+#if defined(__aarch64__) && defined(__ANDROID__)
+	// getauxval needs no file access (the app may not read /proc/cpuinfo)
+	unsigned long h1 = getauxval(AT_HWCAP);
+	unsigned long h2 = getauxval(AT_HWCAP2);
+	auto add = [&](bool on, const char *n) {
+		if (on) {
+			out += String(n) + String(" ");
+		}
+	};
+	add(h1 & (1UL << 1), "asimd");
+	add(h1 & (1UL << 9), "fphp");
+	add(h1 & (1UL << 10), "asimdhp");
+	add(h1 & (1UL << 20), "asimddp");
+	add(h1 & (1UL << 22), "sve");
+	add(h2 & (1UL << 1), "sve2");
+	add(h2 & (1UL << 13), "i8mm");
+	add(h2 & (1UL << 14), "bf16");
+	out = out.strip_edges();
+#endif
+	return out;
+}
+
+Dictionary WhisperBridge::memory_info() {
+	Dictionary d;
+	d["peak_kb"] = (int64_t)0;
+	d["rss_kb"] = (int64_t)0;
+#if !defined(_WIN32)
+	struct rusage ru;
+	if (getrusage(RUSAGE_SELF, &ru) == 0) {
+		d["peak_kb"] = (int64_t)ru.ru_maxrss; // kilobytes on Linux/Android
+	}
+	FILE *f = fopen("/proc/self/statm", "r");
+	if (f) {
+		long total = 0, resident = 0;
+		if (fscanf(f, "%ld %ld", &total, &resident) == 2) {
+			d["rss_kb"] = (int64_t)resident * (sysconf(_SC_PAGESIZE) / 1024);
+		}
+		fclose(f);
+	}
+#endif
+	return d;
 }
 
 bool WhisperBridge::is_loaded() const {
@@ -363,6 +443,7 @@ bool WhisperBridge::is_loaded() const {
 }
 
 String WhisperBridge::model_file() const {
+	std::lock_guard<std::mutex> lk(name_mutex_);
 	return model_file_;
 }
 
@@ -374,7 +455,7 @@ void WhisperBridge::unload() {
 		ctx_ = nullptr;
 	}
 	loaded_.store(false);
-	model_file_ = String();
+	set_model_file(String());
 }
 
 void WhisperBridge::abort() {
@@ -421,7 +502,7 @@ Dictionary WhisperBridge::transcribe(const PackedByteArray &p_wav, const String 
 	if (!ctx_) {
 		return fail("no_model", duration, elapsed_ms());
 	}
-	String model = model_file_;
+	String model = model_file();
 
 	if ((int)pcm.size() < kMinSamples || peak_of(pcm) < kSilencePeak) {
 		Dictionary d;
@@ -468,7 +549,7 @@ Dictionary WhisperBridge::transcribe(const PackedByteArray &p_wav, const String 
 	fp.encoder_begin_callback = encoder_begin_cb;
 	fp.encoder_begin_callback_user_data = &abort_;
 
-	int rc = whisper_full(ctx_, fp, pcm.data(), (int)pcm.size());
+	int rc = wb_guard_full(ctx_, fp, pcm.data(), (int)pcm.size());
 	if (abort_.load()) {
 		return fail("aborted", duration, elapsed_ms(), model);
 	}

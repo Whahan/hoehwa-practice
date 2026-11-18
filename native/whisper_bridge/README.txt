@@ -6,7 +6,8 @@ What is here
   whisper_bridge.gdextension.in  template; build.ps1 writes godot\whisper_bridge.gdextension from it (generated, NOT tracked)
   BUILD_INFO.json                pinned commits, NDK version, size and sha256 of each built library (written by build.ps1)
   THIRD_PARTY.txt                licenses
-  src\                           register_types.*, whisper_bridge.*  (class WhisperBridge : RefCounted, contract in design 1.4)
+  src\                           register_types.*, whisper_bridge.*  (class WhisperBridge : RefCounted, contract in design 1.4),
+                                 model_check.* (model file check, no Godot code), wb_guard.* (catches C++ exceptions of whisper.cpp)
 Tracked: only the files above. NOT tracked (see .gitignore): native\_deps\, build folders, godot\bin\ (the .so/.dll),
 godot\whisper_bridge.gdextension, models, WAV files.
 
@@ -31,6 +32,16 @@ Library facts (checked on the arm64 build)
 
 How it ends up in the APK (no Gradle build): Godot's normal Android export (gradle_build/use_gradle_build=false, arm64 only) copies
   the .so named in the .gdextension to lib/arm64-v8a/ uncompressed. export_presets.cfg is not changed.
+
+Safety (why a damaged file cannot crash the app)
+  - load_model() first walks the whole model file (model_check.cpp): magic, hyper-parameters, mel filters, vocabulary, every tensor
+    header; each described byte must lie inside the file and the file must end exactly after the last tensor. Cut-off files,
+    wrong magic, extra bytes, tiny/empty files are refused (load_model returns an error, is_loaded() stays false). Reason text:
+    WhisperBridge.check_model(path) = ok | cant_open | too_small | bad_magic | bad_hparams | bad_filters | bad_vocab | bad_tensor |
+    truncated | no_tensors. (whisper.cpp alone ignores short reads and even accepts a file with no tensors.)
+  - whisper_init/whisper_full run through wb_guard.cpp (compiled with exceptions): a thrown C++ exception becomes an error.
+  - The model name string has its own mutex; the thread count is always 1..16.
+  - Static helpers: cpu_features() (from getauxval, no /proc access needed), memory_info() ({peak_kb, rss_kb}).
 
 Behaviour notes (details: design 1.4)
   - WhisperBridge.transcribe() blocks: call it from a Thread. One model, one transcription at a time; a second call waits.
