@@ -354,6 +354,17 @@ func _accepted(arg_list: Array) -> int:
 	return n
 
 
+## Text of the Label named `n` inside the player ("" when there is none).
+func _label_text(p: Node, n: String) -> String:
+	var l: Node = p.find_child(n, true, false)
+	return String(l.text) if l is Label else ""
+
+
+func _btn(p: Node, n: String) -> Button:
+	var b: Node = p.find_child(n, true, false)
+	return b as Button if b is Button else null
+
+
 func _in_band(frac: float) -> bool:
 	return frac >= 0.2 and frac <= 0.55
 
@@ -546,6 +557,7 @@ func _sec_main_flow() -> void:
 	ok(sh != null and sh.title_label != null and sh.title_label.text.begins_with("1주"), "the node opens the week sheet with a title '1주 ...'")
 	ok(sh != null and sh.buttons.has("start") and sh.buttons.has("skip") and sh.buttons.has("close"), "week sheet: [이 주 시작] [점검으로 건너뛰기] [닫기]")
 	ok(sh != null and sh.buttons.has("start") and (sh.buttons["start"] as Button).text == "이 주 시작", "the start button says '이 주 시작'")
+	ok(sh != null and _named(sh, "AheadNote") == null, "the sheet of the current week has no preview note")
 	ok(sh != null and _has_text(sh, "할 수 있게 되는 말") and _has_text(sh, "이번 주 공부량") and _has_text(sh, "요일 칸"), "week sheet: can-do, amount and day slots")
 	ok(sh != null and _has_text(sh, "단어") and _has_text(sh, "문형"), "week sheet: word and pattern counts in words")
 	var day_n: int = 0
@@ -800,6 +812,7 @@ func _sec_lock_soon() -> void:
 	await _frames(3)
 	sh = _find_sheet()
 	ok(sh != null and sh.title_label != null and sh.title_label.text.begins_with("6주") and sh.buttons.has("start"), "[미리 해 보기]: the week sheet of week 6 opens")
+	ok(sh != null and _named(sh, "AheadNote") != null, "[미리 해 보기]: the sheet says the cells are a preview")
 	ok(lv.course_player() == null, "...and the player is still not open (a second press is needed)")
 	_close_sheets()
 	await _frames(2)
@@ -836,7 +849,7 @@ func _sec_lock_soon() -> void:
 # ---------------------------------------------------------------- 5. 점검으로 건너뛰기
 
 func _sec_skip() -> void:
-	print("[skip by check]")
+	print("[skip by check: real buttons, one skip record, a low score changes nothing]")
 	_world()
 	_start_course_mode()
 	await _new_view()
@@ -844,12 +857,13 @@ func _sec_skip() -> void:
 	await _frames(2)
 	var sh: Sheet = _find_sheet()
 	ok(sh != null and sh.buttons.has("skip") and (sh.buttons["skip"] as Button).text == "점검으로 건너뛰기", "the sheet of an open week has [점검으로 건너뛰기]")
+	ok(sh != null and _named(sh, "AheadNote") != null and _has_text(_named(sh, "AheadNote"), "진도는 지금 칸을 끝내야 넘어가요"), "an open week ahead says its cells are a preview (progress needs the current cell)")
 	if sh != null:
 		press(sh.buttons["skip"], "점검으로 건너뛰기")
 	await _frames(4)
 	var pl: CoursePlayer = lv.course_player()
 	ok(pl != null and pl.kind == "check" and pl.w == 3 and pl.d == 6, "[점검으로 건너뛰기] opens the weekly check of week 3 (day 6)")
-	eq(lv._skip_week, 3, "the lesson view remembers which week is being skipped")
+	ok(pl != null and pl.skip_mode and bool(pl.spec.get("skip", false)), "the lesson tab opened it with skip:true (the player is in skip mode)")
 	ok(pl != null and pl.state == "run", "the check unit was built from the real data")
 	# 나가면 아무 기록도 없다
 	if pl != null:
@@ -859,48 +873,162 @@ func _sec_skip() -> void:
 		press(pl.leave_sheet().buttons["quit"], "점검 그만하기")
 	await _frames(5)
 	ok(lv.course_player() == null and not bool(CourseStore.week_state(3)["done"]), "leaving the check skips nothing (week 3 is not done)")
-	eq(lv._skip_week, 0, "the skip memory is cleared")
-	# 90 % 미만: 건너뛰지 않는다(플레이어의 결과 카드를 흉내 낸 finished 신호)
-	_open_skip_player(3)
+	ok(not bool(CourseStore.week_state(3)["has_check"]), "leaving the check records nothing")
+	# 0 % 두 번: weak 가 붙으면 안 된다
+	for i in 2:
+		var p0: CoursePlayer = await _skip_player(3)
+		var n_auto: int = _auto_count(p0)
+		ok(n_auto >= 5, "the real check has auto-graded questions (%d)" % n_auto)
+		await _solve(p0, n_auto)
+		ok(p0.state == "result" and bool(p0.result["skip"]), "skip 0%% #%d: the result card is shown (skip)" % i)
+		eq(int(p0.result["pct"]), 0, "skip 0%% #%d: pct 0" % i)
+		_expect_week(3, {"tries": 0, "best": 0, "weak": false, "done": false, "skipped": false, "has_check": false}, "skip 0%% #%d" % i)
+		ok(_label_text(p0, "VerdictLine").contains("그대로") and _label_text(p0, "NextLine").contains("건너뛰지 않았어요"), "skip 0%% card tells the truth: %s / %s" % [_label_text(p0, "VerdictLine"), _label_text(p0, "NextLine")])
+		press(_btn(p0, "DoneBtn"), "점검 완료 (0%%, %d)" % i)
+		await _frames(4)
+		ok(lv.course_player() == null and lv.status == "idle", "skip 0%% #%d: back on the road" % i)
+	ok(lv._course.state_of(3) != "done", "0 percent twice: the road does not show week 3 done")
+	# 80 % 대: 일반 점검이었다면 통과. 건너뛰기에서는 아무것도 바꾸지 않는다
+	var p1: CoursePlayer = await _skip_player(3)
+	var a1: int = _auto_count(p1)
+	var wrong80: int = _wrong_for_band(a1, 80, 89)
+	ok(wrong80 > 0, "a wrong-answer count exists for the 80s with %d auto questions (%d)" % [a1, wrong80])
+	await _solve(p1, wrong80)
+	var pct1: int = int(p1.result["pct"])
+	ok(pct1 >= 80 and pct1 < 90 and not bool(p1.result["pass"]), "skip 80s: pct %d, not passed (the skip line is 90 percent)" % pct1)
+	_expect_week(3, {"tries": 0, "best": 0, "weak": false, "done": false, "skipped": false, "has_check": false}, "skip 80s")
+	ok(not _label_text(p1, "VerdictLine").contains("통과해서") and _label_text(p1, "NextLine").contains("건너뛰지 않았어요"), "skip 80s card does not say passed: %s" % _label_text(p1, "VerdictLine"))
+	press(_btn(p1, "DoneBtn"), "점검 완료 (80s)")
 	await _frames(4)
-	pl = lv.course_player()
-	ok(pl != null, "the check opens again")
-	if pl != null:
-		pl.finished.emit({"kind": "check", "auto_ok": 10, "auto_total": 12, "pct": 83})
+	ok(lv.course_player() == null, "skip 80s: back on the road")
+	# 100 %: 건너뜀
+	var p2: CoursePlayer = await _skip_player(3)
+	await _solve(p2, 0)
+	eq(int(p2.result["pct"]), 100, "skip 100%: pct 100")
+	ok(bool(p2.result["pass"]), "skip 100%: passed")
+	_expect_week(3, {"tries": 0, "best": 100, "weak": false, "done": true, "skipped": true, "has_check": true}, "skip 100%")
+	ok(_label_text(p2, "VerdictLine").contains("건너뛰었어요") and _label_text(p2, "NextLine").contains("3주를 건너뛰었어요"), "skip 100%% card says the week was skipped: %s / %s" % [_label_text(p2, "VerdictLine"), _label_text(p2, "NextLine")])
+	press(_btn(p2, "DoneBtn"), "점검 완료 (100%)")
 	await _frames(5)
-	ok(lv.course_player() == null and lv.status == "idle", "a finished check closes the player")
-	ok(not bool(CourseStore.week_state(3)["done"]), "83 percent: week 3 is not skipped")
-	ok(not (CourseStore.path_flags()[2] as bool), "83 percent: the road shows week 3 not done")
-	# 90 % 이상: 건너뛴다
-	_open_skip_player(3)
-	await _frames(4)
-	pl = lv.course_player()
-	if pl != null:
-		pl.finished.emit({"kind": "check", "auto_ok": 11, "auto_total": 12, "pct": 92})
-	await _frames(5)
-	ok(bool(CourseStore.week_state(3)["done"]) and bool(CourseStore.week_state(3)["skipped"]), "92 percent: week 3 is done and marked as skipped by check")
-	ok(lv._course != null and lv._course.state_of(3) == "done", "the road shows week 3 done after the skip")
-	ok(lv._course.state_of(1) != "done", "week 1 is not touched by skipping week 3")
+	ok(lv.course_player() == null and lv._course != null and lv._course.state_of(3) == "done", "after 100%: the road shows week 3 done")
+	ok(lv._course.state_of(1) != "done" and lv._course.state_of(2) != "done", "weeks 1 and 2 are not touched by skipping week 3")
 	lv._course.node_of(3).pressed.emit()
 	await _frames(2)
 	sh = _find_sheet()
 	ok(sh != null and _has_text(_named(sh, "WeekChips"), "점검으로 건너뜀"), "the sheet of a skipped week says '점검으로 건너뜀'")
 	_close_sheets()
-	# 점검 아닌 결과로는 건너뛰지 않는다
-	_open_skip_player(4)
-	await _frames(4)
-	pl = lv.course_player()
-	if pl != null:
-		pl.finished.emit({"kind": "new", "auto_ok": 12, "auto_total": 12})
-	await _frames(5)
-	ok(not bool(CourseStore.week_state(4)["done"]), "a result that is not a check never skips a week")
 	eq(StudyLog.path_last("en"), [], "the old path records stay empty")
 	_reached.append("skip")
 
 
-## 건너뛰기 플레이어를 레슨 탭을 통해 연다(주 상세 시트의 버튼과 같은 길: CourseHome 의 신호).
-func _open_skip_player(w: int) -> void:
-	lv._course.unit_requested.emit(CourseHome.skip_spec(w), w)
+## 건너뛰기 점검을 레슨 탭의 길로 연다(주 상세 시트 [점검으로 건너뛰기]와 같은 신호). 열린 플레이어를 돌려준다.
+func _skip_player(w: int) -> CoursePlayer:
+	lv._course.unit_requested.emit(CourseHome.skip_spec(w))
+	await _frames(4)
+	var p: CoursePlayer = lv.course_player()
+	ok(p != null and p.state == "run" and p.skip_mode, "a skip check is open (week %d)" % w)
+	return p
+
+
+func _expect_week(w: int, want: Dictionary, label: String) -> void:
+	var st: Dictionary = CourseStore.week_state(w)
+	var bad: Array = []
+	for k in want.keys():
+		if st.get(k) != want[k]:
+			bad.append("%s=%s (want %s)" % [k, str(st.get(k)), str(want[k])])
+	ok(bad.is_empty(), "%s: week %d record %s" % [label, w, str(bad) if not bad.is_empty() else str(want)])
+
+
+## 처음 낸 문제 중 자동 채점(말하기가 아닌) 문제 수.
+func _auto_count(p: CoursePlayer) -> int:
+	var n: int = 0
+	for e in p.queue:
+		var ex: Dictionary = e["ex"]
+		if int(e["attempt"]) == 0 and not CourseExerciseView.is_info_card(ex) and String(ex.get("type", "")) != "speak":
+			n += 1
+	return n
+
+
+## 자동 채점 문제 auto 개 중 wrong 개를 틀렸을 때 점수가 lo..hi 가 되는 가장 작은 wrong (없으면 0).
+func _wrong_for_band(auto: int, lo: int, hi: int) -> int:
+	for w in range(1, auto + 1):
+		var pct: int = clampi(roundi((auto - w) * 100.0 / float(auto)), 0, 100)
+		if pct >= lo and pct <= hi:
+			return w
+	return 0
+
+
+func _tile_press(v: CourseExerciseView, tok: String) -> bool:
+	for b in v.tile_btns:
+		if String(b.text) == tok and not b.disabled:
+			press(b, "Tile %s" % tok)
+			return true
+	return false
+
+
+## 지금 문제를 실제 버튼으로 맞게/틀리게 푼다. 말하기는 [말하기 어려워요]로 넘긴다(자동 채점에 들지 않는다).
+func _answer(p: CoursePlayer, right: bool) -> void:
+	var v: CourseExerciseView = p.view
+	var e: Dictionary = v.ex
+	match String(e["type"]):
+		"recognize", "listen", "recall":
+			if e.has("options"):
+				var n: int = (e["options"] as Array).size()
+				var pick: int = int(e["answer"]) if right else (int(e["answer"]) + 1) % n
+				press(v.option_btns[pick], "Opt%d" % pick)
+			else:
+				var txt: String = String((e["accept"] as Array)[0]) if right else "qqxx"
+				v.edit.text = txt
+				v.edit.text_changed.emit(txt)
+			press(p.find_child("ConfirmBtn", true, false), "ConfirmBtn")
+		"build":
+			var ans: Array = e["answer"]
+			var toks: Array = ans if right else ans.slice(0, maxi(0, ans.size() - 1))
+			for t in toks:
+				_tile_press(v, String(t))
+			press(p.find_child("ConfirmBtn", true, false), "ConfirmBtn")
+		"dialogue_script":
+			var g: int = 0
+			while v.state != "answered" and g < 14:
+				g += 1
+				if v.state == "turn_done":
+					press(p.find_child("ContinueBtn", true, false), "ContinueBtn")
+				elif right:
+					v.drill.recorder.recorded.emit({"b64": "AAAA", "duration": 1.2, "ok": true, "silent": false})
+					await _frames(3)
+					press(_button_with_text(v, "잘했어요"), "잘했어요")
+				else:
+					press(p.find_child("SkipBtn", true, false), "SkipBtn")
+				await _frames(2)
+		_:
+			press(p.find_child("SkipBtn", true, false), "SkipBtn")
+	for i in 40:
+		if v.state == "answered":
+			return
+		await get_tree().process_frame
+
+
+## 단위를 끝까지 푼다: 자동 채점 문제 중 처음 wrong_n 개를 틀린다.
+func _solve(p: CoursePlayer, wrong_n: int) -> void:
+	var guard: int = 0
+	var k: int = 0
+	while p.state == "run" and guard < 300:
+		guard += 1
+		var v: CourseExerciseView = p.view
+		var e: Dictionary = v.ex
+		if CourseExerciseView.is_info_card(e):
+			press(p.find_child("NextBtn", true, false), "NextBtn card")
+			await _frames(1)
+			continue
+		var right: bool = true
+		if String(e["type"]) != "speak":
+			k += 1
+			right = k > wrong_n
+		await _answer(p, right)
+		ok(v.state == "answered" and v.feedback != null and v.feedback.is_visible_in_tree(), "question %d: the feedback is visible after the answer" % k)
+		press(p.find_child("NextBtn", true, false), "NextBtn")
+		await _frames(1)
+	ok(guard < 300 and p.state == "result", "the check ended in a result card (%d screens)" % guard)
 
 
 # ---------------------------------------------------------------- 6. 시작 단위
@@ -925,10 +1053,11 @@ func _sec_unit_spec() -> void:
 	eq(int(CourseHome.unit_spec(1)["d"]), 1, "a week that is all done: day 1")
 	_advance_to(4, 3)
 	eq(int(CourseHome.unit_spec(4)["d"]), 3, "the week pos is in: its day")
-	eq(CourseHome.skip_spec(5), {"kind": "check", "w": 5, "d": 6, "block": "new"}, "skip_spec(5) is the weekly check, day 6")
+	eq(CourseHome.skip_spec(5), {"kind": "check", "w": 5, "d": 6, "block": "new", "skip": true}, "skip_spec(5) is the weekly check, day 6, with skip:true")
+	ok(not CourseHome.unit_spec(5).has("skip"), "unit_spec (a normal start) never carries skip")
 	# D5 단위는 실제로 플레이어를 연다
 	await _new_view()
-	lv._course.unit_requested.emit(CourseHome.unit_spec(4), 0)
+	lv._course.unit_requested.emit(CourseHome.unit_spec(4))
 	await _frames(3)
 	eq(lv.status, "course", "a unit of day 3 opens in the player")
 	var pl: CoursePlayer = lv.course_player()
@@ -941,7 +1070,7 @@ func _sec_unit_spec() -> void:
 	_advance_to(4, 5)
 	lv.refresh()
 	await _frames(3)
-	lv._course.unit_requested.emit(CourseHome.unit_spec(4), 0)
+	lv._course.unit_requested.emit(CourseHome.unit_spec(4))
 	await _frames(3)
 	pl = lv.course_player()
 	ok(pl != null and pl.kind == "speak" and pl.d == 5 and pl.block == "new", "day 5: a speaking unit opened with block 'new' (so the cell can finish)")
@@ -951,10 +1080,10 @@ func _sec_unit_spec() -> void:
 	await _frames(3)
 	ok(lv.course_player() == null and lv.status == "idle", "the player closes on left()")
 	# 두 번째 열기는 무시된다(이미 열려 있을 때)
-	lv._course.unit_requested.emit(CourseHome.unit_spec(4), 0)
+	lv._course.unit_requested.emit(CourseHome.unit_spec(4))
 	await _frames(2)
 	var first: CoursePlayer = lv.course_player()
-	lv._course.unit_requested.emit(CourseHome.unit_spec(4), 0)
+	lv._course.unit_requested.emit(CourseHome.unit_spec(4))
 	await _frames(2)
 	ok(first != null and lv.course_player() == first, "a second request while a unit is open is ignored")
 	first.left.emit()
@@ -1189,7 +1318,7 @@ func _sec_roadmap() -> void:
 	await _frames(5)
 	var card: Node = _named(rv, "CourseProgressCard")
 	ok(card != null and _has_text(card, "새 코스 진행") and _has_text(card, "1주 1일"), "course mode: the '새 코스 진행' card says '1주 1일'")
-	ok(card != null and _has_text(card, "완료 0/%d주" % _avail) and _has_text(card, "전체 1/72주"), "the card: progress texts from progress_label ('완료 0/%d주', '전체 1/72주')" % _avail)
+	ok(card != null and _has_text(card, "완료 0/%d주" % _avail) and _has_text(card, "지금 1주차 · 전체 72주"), "the card: progress texts from progress_label ('완료 0/%d주', '지금 1주차 · 전체 72주')" % _avail)
 	ok(_has_text(rv, "예전 12개월 로드맵"), "the old months are headed '예전 12개월 로드맵'")
 	ok(_count_nodes(rv) > cards_before, "course mode adds the card and the heading to the old roadmap")
 	ok(_has_text(rv, "전체 진행"), "the old roadmap content ('전체 진행') is still below")

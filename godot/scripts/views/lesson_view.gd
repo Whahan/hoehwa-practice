@@ -23,7 +23,6 @@ var _boards: Array = [] ## PathBoard of every month on the lesson home (see path
 var _root: VBoxContainer = null ## page + footer (hidden while the course player is open)
 var _course: CourseHome = null ## the 72-week road, only in English course mode (v2.0 E5)
 var _player: CoursePlayer = null ## the open course unit (status "course")
-var _skip_week: int = 0 ## > 0: the open unit is the weekly check of that week opened by [점검으로 건너뛰기]
 var _player_scroll: int = 0 ## page scroll position to come back to when the unit ends
 var _render_serial: int = 0
 var _keep_scroll: int = -1 ## >= 0: the next lesson-home render restores this scroll position instead of centring the current node
@@ -680,11 +679,10 @@ func _on_course_mode(m: String) -> void:
 
 
 ## The course home asks for a unit (a week's [이 주 시작] / [이어서 하기] / [점검으로 건너뛰기]): the player covers the page.
-func _open_unit(spec: Dictionary, skip_week: int = 0) -> void:
+func _open_unit(spec: Dictionary) -> void:
 	if status != "idle" or _player != null:
 		return
 	_player_scroll = _page.scroll_vertical if _page != null else 0
-	_skip_week = skip_week
 	status = "course"
 	if _root != null:
 		_root.visible = false
@@ -697,20 +695,10 @@ func course_player() -> CoursePlayer:
 	return _player if _player != null and is_instance_valid(_player) else null
 
 
-func _on_unit_finished(result: Dictionary) -> void:
-	var skip_w: int = _skip_week
-	var msg: String = ""
-	if skip_w > 0 and str(result.get("kind", "")) == "check":
-		# placing out of a week (docs §6.2 U5): the same check, counted by CourseStore's skip path (90 % or more marks the week done)
-		var r: Dictionary = CourseStore.check_done(skip_w, {"ok": int(result.get("auto_ok", 0)), "total": int(result.get("auto_total", 0)), "skip": true})
-		var pct: int = int(r.get("pct", 0))
-		if bool(r.get("pass", false)):
-			msg = "%d주를 건너뛰었어요. 점검 %s" % [skip_w, CourseModel.progress_label("percent", pct, 0)]
-		else:
-			msg = "점검이 %s 아래라 건너뛰지 않았어요. 지금 점수 %s" % [CourseModel.progress_label("percent", CourseStore.SKIP_PASS, 0), CourseModel.progress_label("percent", pct, 0)]
+## The player has already recorded everything (a skip-by-check unit goes through CourseStore.check_done(skip) inside the player,
+## once) and shown its result card: the lesson tab only takes the player off.
+func _on_unit_finished(_result: Dictionary) -> void:
 	_close_player.call_deferred()
-	if msg != "":
-		Toast.info(msg)
 
 
 ## The unit ended (finished or left): take the player off and draw the lesson home again where it was.
@@ -720,7 +708,6 @@ func _close_player() -> void:
 			remove_child(_player)
 		_player.queue_free()
 	_player = null
-	_skip_week = 0
 	if status != "course":
 		return
 	status = "idle"

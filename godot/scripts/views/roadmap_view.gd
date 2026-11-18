@@ -120,7 +120,7 @@ func _course_card() -> Control:
 	card.name = "CourseProgressCard"
 	card.body.add_child(UI.label("새 코스 진행", "Eyebrow", false))
 	card.body.add_child(UI.label("%d주 %d일" % [w, CourseHome.start_day(w)], "H3", false))
-	card.body.add_child(UI.label("완료 %s · 전체 %s" % [CourseModel.progress_label("weeks", int(road["done_count"]), avail), CourseModel.progress_label("weeks", w, CourseModel.WEEKS)], "Muted"))
+	card.body.add_child(UI.label("완료 %s · 지금 %d주차 · 전체 %s" % [CourseModel.progress_label("weeks", int(road["done_count"]), avail), w, CourseModel.progress_label("weeks", CourseModel.WEEKS, 0)], "Muted"))
 	card.body.add_child(UI.progress_bar(float(int(road["done_count"])) / maxf(1.0, float(avail)), Pal.accent("en"), 8.0))
 	card.body.add_child(UI.label("이어서 하려면 [레슨] 탭을 열어요.", "Small"))
 	return card

@@ -7,6 +7,8 @@ extends Control
 ##        seed(int: 선택, 시험용).  block 을 빼면 new->"new", recap->"new", listen->"listen", speak->"speak" 다.
 ##        D5(말하기 날)의 "새 내용" 단위는 kind "speak" 이므로 호출한 쪽이 block:"new" 를 꼭 넣어야 칸이 끝난다(CourseStore 계약).
 ##        매일 말하기 블록(12분)은 block:"speak".
+##        skip(bool: 선택, kind "check" 만): true 면 "점검으로 건너뛰기" 점검이다. 결과를 CourseStore.check_done(w, {…, skip:true}) 한 번만 기록한다
+##        (90% 이상이면 그 주를 끝낸 것으로 건너뛰고, 미만이면 코스 기록은 하나도 바뀌지 않는다: 일반 점검 기록(tries·best·weak)을 따로 쌓지 않는다).
 ## 신호:  finished(result)  결과 카드에서 [완료] 를 눌렀다(기록은 결과 카드가 뜨기 전에 이미 끝났다).
 ##        left()            [그만하기] 로 나갔거나 오류 화면에서 [돌아가기] 를 눌렀다(기록 없음).
 ## 뒤로:  go_back() -> bool  안드로이드 뒤로 가기. 푸는 중이면 확인 시트를 열고(두 번째는 시트를 닫아 "계속하기"), 결과 카드면 [완료], 오류면 [돌아가기].
@@ -69,6 +71,7 @@ var kind: String = ""
 var w: int = 1
 var d: int = 1
 var block: String = "new"
+var skip_mode: bool = false ## kind "check" + spec.skip == true: 건너뛰기 점검(위 설명)
 var cur_o: int = 11
 var seed_value: int = 0
 var queue: Array = [] ## 항목 {ex, stage, attempt, rec}. rec = recs 의 번호(소개 카드는 -1)
@@ -162,6 +165,7 @@ func start(spec_in: Variant) -> void:
 		return
 	cur_o = w * 10 + d
 	block = _block_of(spec)
+	skip_mode = kind == "check" and spec.get("skip") is bool and bool(spec["skip"])
 	var sv: Variant = spec.get("seed")
 	seed_value = int(sv) if (sv is int or (sv is float and is_finite(sv))) else int(Time.get_ticks_usec() % 2147483647)
 	var seen_in: Variant = spec.get("seen")
@@ -188,7 +192,7 @@ func start(spec_in: Variant) -> void:
 	_t_start = _now()
 	_top_holder.visible = true
 	back_btn.visible = true
-	title_label.text = "%d주 %d일  ·  %s" % [w, d, String(KIND_TITLES.get(kind, ""))]
+	title_label.text = "%d주 %d일  ·  %s" % [w, d, "건너뛰기 점검" if skip_mode else String(KIND_TITLES.get(kind, ""))]
 	_present()
 
 
@@ -654,7 +658,7 @@ func _finish_unit() -> void:
 	var passed := false
 	match kind:
 		"check":
-			store_res = CourseStore.check_done(w, {"ok": auto_ok, "total": auto_total, "speak": speak_state})
+			store_res = CourseStore.check_done(w, {"ok": auto_ok, "total": auto_total, "speak": speak_state, "skip": skip_mode})
 			passed = bool(store_res.get("pass", false))
 			pct = int(store_res.get("pct", clampi(roundi(auto_ok * 100.0 / float(auto_total)), 0, 100) if auto_total > 0 else 0))
 		"month":
@@ -687,6 +691,7 @@ func _finish_unit() -> void:
 	var pos_after: Dictionary = CourseStore.pos()
 	result = unit_res.duplicate(true)
 	result["kind"] = kind
+	result["skip"] = skip_mode
 	result["pct"] = pct
 	result["pass"] = passed
 	result["auto_ok"] = auto_ok
@@ -759,7 +764,7 @@ func _show_result() -> void:
 	box.add_child(page)
 	var card: CardBox = UI.card("BigCard", 10)
 	card.name = "ResultCard"
-	var title: Label = UI.label(String(DONE_TITLES.get(kind, "마쳤어요")), "H2")
+	var title: Label = UI.label("건너뛰기 점검을 마쳤어요" if skip_mode else String(DONE_TITLES.get(kind, "마쳤어요")), "H2")
 	title.name = "ResultTitle"
 	card.body.add_child(title)
 	if kind == "check" or kind == "month":
@@ -817,6 +822,10 @@ func _line(node_name: String, text: String) -> Label:
 
 func _verdict_text() -> String:
 	var st: Dictionary = result.get("store", {})
+	if kind == "check" and skip_mode:
+		if bool(result["pass"]):
+			return "점검을 통과해서 이 주를 건너뛰었어요"
+		return "건너뛰는 선(%s)에 못 미쳤어요. 이 주의 기록은 그대로예요" % CourseModel.progress_label("percent", CourseStore.SKIP_PASS, 100)
 	if kind == "check":
 		if bool(result["pass"]):
 			return "점검을 통과했어요"
@@ -887,6 +896,12 @@ func _next_text() -> String:
 		return "월말 말하기 점수를 기록했어요"
 	if bool(st.get("finished", false)):
 		return "72주 코스를 모두 마쳤어요"
+	if kind == "check" and skip_mode:
+		if not bool(result["pass"]):
+			return "건너뛰지 않았어요. 진도와 점검 기록은 그대로예요"
+		if bool(result.get("moved", false)):
+			return "%d주를 건너뛰었어요. 다음은 %d주 %d일이에요" % [w, int(st.get("w", w)), int(st.get("d", d))]
+		return "%d주를 건너뛰었어요. 지금 칸은 그대로예요" % w
 	if bool(result.get("moved", false)):
 		return "다음은 %d주 %d일이에요" % [int(st.get("w", w)), int(st.get("d", d))]
 	if kind == "check":

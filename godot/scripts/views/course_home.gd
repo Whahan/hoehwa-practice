@@ -8,12 +8,12 @@ extends VBoxContainer
 ## 진행 글은 CourseModel.progress_label 한 곳에서만 만든다. 이 화면은 코스 기록(CourseStore)을 읽기만 한다:
 ## 기록은 CoursePlayer 가 끝날 때 쓰고, 예전 길 기록(StudyLog 의 길 칸)과 PathModel 은 건드리지 않는다.
 ##
-## 신호 unit_requested(spec, skip_week): 플레이어를 열어 달라는 요청(레슨 탭이 연다). spec 은 CoursePlayer.open 에 그대로 넘긴다.
-##   skip_week > 0 이면 [점검으로 건너뛰기]: 점검 단위(d = 6)를 열고, 끝난 뒤 레슨 탭이 CourseStore.check_done(skip: true) 로 건너뛴다.
+## 신호 unit_requested(spec): 플레이어를 열어 달라는 요청(레슨 탭이 연다). spec 은 CoursePlayer.open 에 그대로 넘긴다.
+##   [점검으로 건너뛰기]는 점검 단위(d = 6)를 spec.skip = true 로 연다: 기록은 플레이어가 CourseStore.check_done(skip: true) 한 번만 한다.
 ## 레슨 탭이 쓰는 정적 함수: availability() mode_chosen() start_card() mode_selector() ask_start() unit_spec() skip_spec().
 ## 홈의 [새 코스로 시작] 카드(E6)는 ask_start(host, on_done) 를 부른다.
 
-signal unit_requested(spec: Dictionary, skip_week: int)
+signal unit_requested(spec: Dictionary)
 
 const GOAL_MIN := 45 ## 코스 시작 때 권하는 하루 목표(분)
 const WD := ["일", "월", "화", "수", "목", "금", "토"]
@@ -22,6 +22,7 @@ const TEXT_START_BODY := "0부터 72주 코스예요. 이미 아는 주는 [점�
 const TEXT_LOCKED := "앞 단계를 먼저 하면 길이 순서대로 열려요. 그래도 미리 해 볼까요?"
 const TEXT_SOON := "아직 준비 중인 주예요. 앱을 업데이트하면 열려요."
 const TEXT_NO_DATA := "코스 내용을 읽지 못했어요."
+const AHEAD_NOTE := "미리 해 보는 칸이에요. 진도는 지금 칸을 끝내야 넘어가요."
 const TEXT_AHEAD := "준비된 주를 모두 마쳤어요. 다음 주는 준비 중이에요. 마친 주는 다시 할 수 있어요."
 
 ## 시험용: 마지막 시작 확인 시트(ask_start)와 그 결과.
@@ -95,9 +96,9 @@ static func unit_spec(w: int) -> Dictionary:
 	return {"kind": kind, "w": w, "d": d, "block": "new"}
 
 
-## [점검으로 건너뛰기]: 그 주의 주간 점검(D6)을 연다.
+## [점검으로 건너뛰기]: 그 주의 주간 점검(D6)을 skip 점검으로 연다(플레이어가 check_done(skip: true) 한 번만 기록한다).
 static func skip_spec(w: int) -> Dictionary:
-	return {"kind": "check", "w": w, "d": 6, "block": "new"}
+	return {"kind": "check", "w": w, "d": 6, "block": "new", "skip": true}
 
 
 ## "주 5 · 가족·나 소개" 꼴 제목: "5주 · 가족·나 소개". 제목이 없으면 "5주".
@@ -228,7 +229,7 @@ func _card() -> Control:
 	card.body.add_child(UI.progress_bar(float(int(road["done_count"])) / maxf(1.0, float(avail)), Pal.accent("en"), 8.0))
 	var st: String = CourseStore.started()
 	var sd: String = date_label(st)
-	var line2: String = "전체 " + CourseModel.progress_label("weeks", w, CourseModel.WEEKS)
+	var line2: String = "지금 %d주차 · 전체 %s" % [w, CourseModel.progress_label("weeks", CourseModel.WEEKS, 0)]
 	if sd != "":
 		line2 += " · %s에 시작" % sd
 	card.body.add_child(UI.label(line2, "Small", true))
@@ -239,7 +240,7 @@ func _card() -> Control:
 		card.body.add_child(UI.label(TEXT_AHEAD, "Muted"))
 	var go := UI.button("이어서 하기", "primary", Pal.PRIMARY, Ds.HOME_CTA_H_PHONE if phone else Ds.HOME_CTA_H_PC)
 	go.name = "CourseContinueButton"
-	go.pressed.connect(func() -> void: unit_requested.emit(unit_spec(w), 0))
+	go.pressed.connect(func() -> void: unit_requested.emit(unit_spec(w)))
 	go.disabled = avail <= 0
 	card.body.add_child(go)
 	card_start_button = go
@@ -307,9 +308,9 @@ func open_week_sheet(w: int, state: String) -> Sheet:
 	week_sheet = sh
 	sh.closed.connect(func(r: Variant) -> void:
 		if str(r) == "start":
-			unit_requested.emit(unit_spec(w), 0)
+			unit_requested.emit(unit_spec(w))
 		elif str(r) == "skip":
-			unit_requested.emit(skip_spec(w), w))
+			unit_requested.emit(skip_spec(w)))
 	return sh
 
 
@@ -401,5 +402,9 @@ func week_body(w: int, state: String) -> Control:
 		if last != "":
 			chk += " · %s" % last
 		col.add_child(UI.label(chk, "Small"))
+	if state == "open":
+		var note := UI.label(AHEAD_NOTE, "Muted")
+		note.name = "AheadNote"
+		col.add_child(note)
 	UI.fix_cjk(col)
 	return col

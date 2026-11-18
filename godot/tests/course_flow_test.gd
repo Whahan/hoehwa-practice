@@ -99,6 +99,7 @@ func _ready() -> void:
 	await _test_listen_recap_blocks()
 	await _test_check_and_month()
 	await _test_check_weak_and_month8()
+	await _test_skip_check()
 	await _test_store_refuses()
 	await _test_finish_vanish()
 	await _test_dialogue_retry()
@@ -1011,6 +1012,56 @@ func _test_check_weak_and_month8() -> void:
 	eq(CourseStore.month_state(1), {}, "month_done did not write block 1")
 	eq(int(CourseStore.month_state(2).get("tries", 0)), 1, "one try for month 2")
 	press(_btn(m, "DoneBtn"), "DoneBtn (w8 month)")
+
+
+## 건너뛰기 점검(spec.skip = true): 플레이어는 CourseStore.check_done(skip: true) 를 한 번만 기록한다. 낮은 점수는 코스 기록을 하나도 바꾸지 않는다
+## (일반 점검 기록 tries·best·weak 이 쌓이면 안 된다), 90% 이상이면 그 주가 끝난 것으로 건너뛴다.
+func _test_skip_check() -> void:
+	print("[skip by check: one skip record, a low score changes nothing]")
+	_world(K1_DIR)
+	var bad_plan: Dictionary = {"lis": [99, 99, 99, 99, 99], "rct": [99, 99, 99], "bld": [99, 99], "spk": [99, 99]}
+	var pos0: Dictionary = CourseStore.pos()
+	for i in 2: # 0 % 두 번: weak 가 붙으면 안 된다
+		var p0: CoursePlayer = await _open({"kind": "check", "w": 2, "d": 6, "seed": 41 + i, "skip": true})
+		ok(p0.state == "run" and p0.skip_mode, "skip check #%d runs in skip mode" % i)
+		ok(_label_text(p0, "TitleLabel").contains("건너뛰기 점검") and _label_text(p0, "TitleLabel").contains("2주 6일"), "skip check title: %s" % _label_text(p0, "TitleLabel"))
+		await _play_unit(p0, bad_plan, "skip 0%% #%d" % i)
+		eq(int(p0.result["pct"]), 0, "skip 0%% #%d: pct 0" % i)
+		ok(not bool(p0.result["pass"]) and bool(p0.result["skip"]), "skip 0%% #%d: not passed, marked skip" % i)
+		var w0: Dictionary = CourseStore.week_state(2)
+		ok(int(w0["tries"]) == 0 and int(w0["best"]) == 0 and not bool(w0["weak"]) and not bool(w0["done"]) and not bool(w0["skipped"]) and not bool(w0["has_check"]), "skip 0%% #%d: tries 0, best 0, no weak, not done, not skipped, no check record: %s" % [i, str(w0)])
+		eq(CourseStore.pos(), pos0, "skip 0%% #%d: pos unchanged" % i)
+		ok(_label_text(p0, "VerdictLine").contains("그대로") and not _label_text(p0, "VerdictLine").contains("통과해서"), "skip 0%% card says the record stays: %s" % _label_text(p0, "VerdictLine"))
+		ok(_label_text(p0, "NextLine").contains("건너뛰지 않았어요") and _label_text(p0, "NextLine").contains("그대로"), "skip 0%% card next line: %s" % _label_text(p0, "NextLine"))
+		ok(_has_text(p0, "건너뛰기 점검을 마쳤어요"), "skip check card title")
+		press(_btn(p0, "DoneBtn"), "DoneBtn (skip 0%% #%d)" % i)
+	# 80 % 대: 일반 점검이라면 통과였을 점수. 건너뛰기에서는 아무것도 바꾸지 않는다
+	var p1: CoursePlayer = await _open({"kind": "check", "w": 2, "d": 6, "seed": 43, "skip": true})
+	await _play_unit(p1, {"lis": [99, 99]}, "skip 80%")
+	var pct1: int = int(p1.result["pct"])
+	ok(pct1 >= 80 and pct1 < 90, "skip 80s: pct %d is in 80..89" % pct1)
+	ok(not bool(p1.result["pass"]), "skip 80s: not passed (the skip line is 90%)")
+	var w1: Dictionary = CourseStore.week_state(2)
+	ok(int(w1["tries"]) == 0 and int(w1["best"]) == 0 and not bool(w1["passed"]) and not bool(w1["done"]) and not bool(w1["skipped"]), "skip 80s: nothing recorded (no tries, best 0, not passed, not done): %s" % str(w1))
+	ok(not _label_text(p1, "VerdictLine").contains("통과해서") and _label_text(p1, "VerdictLine").contains("그대로"), "skip 80s card does not say passed: %s" % _label_text(p1, "VerdictLine"))
+	press(_btn(p1, "DoneBtn"), "DoneBtn (skip 80s)")
+	# 100 %: 건너뜀
+	var p2: CoursePlayer = await _open({"kind": "check", "w": 2, "d": 6, "seed": 44, "skip": true})
+	await _play_unit(p2, {}, "skip 100%")
+	eq(int(p2.result["pct"]), 100, "skip 100%: pct 100")
+	ok(bool(p2.result["pass"]), "skip 100%: passed")
+	var w2: Dictionary = CourseStore.week_state(2)
+	ok(bool(w2["done"]) and bool(w2["skipped"]) and int(w2["best"]) == 100 and int(w2["tries"]) == 0 and not bool(w2["weak"]), "skip 100%%: done, skipped, best 100, tries 0 (one skip record), no weak: %s" % str(w2))
+	ok(CourseStore.path_flags()[1] == true and CourseStore.path_flags()[0] == false, "skip 100%: week 2 is done on the road, week 1 is not")
+	ok(_label_text(p2, "VerdictLine").contains("건너뛰었어요") and _label_text(p2, "NextLine").contains("2주를 건너뛰었어요"), "skip 100%% card says the week was skipped: %s / %s" % [_label_text(p2, "VerdictLine"), _label_text(p2, "NextLine")])
+	eq(CourseStore.pos(), pos0, "skip 100%: pos is in week 1, so it stays")
+	press(_btn(p2, "DoneBtn"), "DoneBtn (skip 100%)")
+	# 비교: skip 이 없는 점검은 예전처럼 일반 기록(tries)을 쌓는다
+	var p3: CoursePlayer = await _open({"kind": "check", "w": 3, "d": 6, "seed": 45})
+	await _play_unit(p3, bad_plan, "normal check w3")
+	ok(not bool(p3.result["skip"]) and int(CourseStore.week_state(3)["tries"]) == 1, "a check without skip still records a normal try")
+	ok(not _label_text(p3, "TitleLabel").contains("건너뛰기"), "a normal check is not titled as a skip check")
+	press(_btn(p3, "DoneBtn"), "DoneBtn (normal check w3)")
 
 
 func _test_store_refuses() -> void:
