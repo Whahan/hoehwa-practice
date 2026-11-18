@@ -1,0 +1,2294 @@
+{
+ "version": 1,
+ "file": "fix.json",
+ "cases": [
+  {
+   "case": "fix_nothing_to_fix",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I would like a cup of tea."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I would like a cup of tea.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "",
+      "fix_ko": ""
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "both fields empty: nothing to fix"
+  },
+  {
+   "case": "fix_same_after_norm",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "i would like a cup of tea"
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"i would like a cup of tea\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I would like a cup of tea.",
+      "fix_ko": "대소문자와 마침표만 달라요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "the 'fix' differs only by case / punctuation: counts as nothing to fix"
+  },
+  {
+   "case": "fix_same_exact",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "Thank you very much."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"Thank you very much.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "Thank you very much.",
+      "fix_ko": "문제 없어요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "same sentence"
+  },
+  {
+   "case": "fix_basic",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I go to school yesterday."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I go to school yesterday.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I went to school yesterday.",
+      "fix_ko": "yesterday가 있으니 과거형 went를 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I went to school yesterday.",
+     "fix_ko": "yesterday가 있으니 과거형 went를 써요."
+    },
+    "attempts": 1
+   }
+  },
+  {
+   "case": "fix_article",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "She is engineer at a big company."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"She is engineer at a big company.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "She is an engineer at a big company.",
+      "fix_ko": "engineer 앞에 an이 필요해요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "She is an engineer at a big company.",
+     "fix_ko": "engineer 앞에 an이 필요해요."
+    },
+    "attempts": 1
+   }
+  },
+  {
+   "case": "fix_agreement",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "My brother like to play the guitar."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"My brother like to play the guitar.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "My brother likes to play the guitar.",
+      "fix_ko": "주어가 3인칭 단수라 likes로 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "My brother likes to play the guitar.",
+     "fix_ko": "주어가 3인칭 단수라 likes로 써요."
+    },
+    "attempts": 1
+   }
+  },
+  {
+   "case": "fix_stage_1",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 1,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree with your idea."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR A2. Use very common words and short sentences. Speak simply and clearly.) said this in a conversation:\n\"I am agree with your idea.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree with your idea.",
+      "fix_ko": "agree는 동사라서 am이 필요 없어요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree with your idea.",
+     "fix_ko": "agree는 동사라서 am이 필요 없어요."
+    },
+    "attempts": 1
+   },
+   "note": "stage changes the level text in the prompt"
+  },
+  {
+   "case": "fix_stage_2",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree with your idea."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am agree with your idea.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree with your idea.",
+      "fix_ko": "agree는 동사라서 am이 필요 없어요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree with your idea.",
+     "fix_ko": "agree는 동사라서 am이 필요 없어요."
+    },
+    "attempts": 1
+   },
+   "note": "stage changes the level text in the prompt"
+  },
+  {
+   "case": "fix_stage_3",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 3,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree with your idea."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1+. Natural conversational English with some common phrasal verbs.) said this in a conversation:\n\"I am agree with your idea.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree with your idea.",
+      "fix_ko": "agree는 동사라서 am이 필요 없어요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree with your idea.",
+     "fix_ko": "agree는 동사라서 am이 필요 없어요."
+    },
+    "attempts": 1
+   },
+   "note": "stage changes the level text in the prompt"
+  },
+  {
+   "case": "fix_stage_4",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 4,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree with your idea."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B2. Natural native speed and expressions, occasional idioms.) said this in a conversation:\n\"I am agree with your idea.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree with your idea.",
+      "fix_ko": "agree는 동사라서 am이 필요 없어요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree with your idea.",
+     "fix_ko": "agree는 동사라서 am이 필요 없어요."
+    },
+    "attempts": 1
+   },
+   "note": "stage changes the level text in the prompt"
+  },
+  {
+   "case": "fix_stage_clamp_high",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 9,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B2. Natural native speed and expressions, occasional idioms.) said this in a conversation:\n\"I am agree.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree.",
+      "fix_ko": "agree는 동사예요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree.",
+     "fix_ko": "agree는 동사예요."
+    },
+    "attempts": 1
+   },
+   "note": "stage 9 -> 4"
+  },
+  {
+   "case": "fix_stage_clamp_low",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": -2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR A2. Use very common words and short sentences. Speak simply and clearly.) said this in a conversation:\n\"I am agree.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree.",
+      "fix_ko": "agree는 동사예요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree.",
+     "fix_ko": "agree는 동사예요."
+    },
+    "attempts": 1
+   },
+   "note": "stage -2 -> 1"
+  },
+  {
+   "case": "fix_stage_null",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": null,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am agree."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR A2. Use very common words and short sentences. Speak simply and clearly.) said this in a conversation:\n\"I am agree.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I agree.",
+      "fix_ko": "agree는 동사예요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I agree.",
+     "fix_ko": "agree는 동사예요."
+    },
+    "attempts": 1
+   },
+   "note": "stage null -> 1"
+  },
+  {
+   "case": "fix_prev_ai",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "Do you like this song?",
+    "private": false,
+    "text": "Yes I am liking it."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation (the partner had just said: \"Do you like this song?\"):\n\"Yes I am liking it.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "Yes, I like it.",
+      "fix_ko": "like는 상태 동사라 진행형을 잘 안 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "Yes, I like it.",
+     "fix_ko": "like는 상태 동사라 진행형을 잘 안 써요."
+    },
+    "attempts": 1
+   },
+   "note": "the partner's line is part of the prompt"
+  },
+  {
+   "case": "fix_prev_ai_cut_300",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? ",
+    "private": false,
+    "text": "Yes I am liking it."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation (the partner had just said: \"Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? Do you like this song? D\"):\n\"Yes I am liking it.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "Yes, I like it.",
+      "fix_ko": "like는 상태 동사예요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "Yes, I like it.",
+     "fix_ko": "like는 상태 동사예요."
+    },
+    "attempts": 1
+   },
+   "note": "prev_ai cut at 300 characters"
+  },
+  {
+   "case": "fix_text_cut_500",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. "
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home now. I am go home n\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I am going home now.",
+      "fix_ko": "go 뒤에 ing가 필요해요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I am going home now.",
+     "fix_ko": "go 뒤에 ing가 필요해요."
+    },
+    "attempts": 1
+   },
+   "note": "text cut at 500 characters"
+  },
+  {
+   "case": "fix_text_trimmed",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "   i has a dog   "
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"i has a dog\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I have a dog.",
+      "fix_ko": "I 뒤에는 have를 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I have a dog.",
+     "fix_ko": "I 뒤에는 have를 써요."
+    },
+    "attempts": 1
+   },
+   "note": "text is stripped"
+  },
+  {
+   "case": "fix_empty_text",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": ""
+   },
+   "engine": [],
+   "expect": {
+    "error": {
+     "status": 400,
+     "msg": "고칠 문장이 비어 있어요.",
+     "code": "",
+     "format_error": false
+    },
+    "attempts": 0
+   },
+   "note": "empty text: 400, no engine call"
+  },
+  {
+   "case": "fix_blank_text",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "    \n "
+   },
+   "engine": [],
+   "expect": {
+    "error": {
+     "status": 400,
+     "msg": "고칠 문장이 비어 있어요.",
+     "code": "",
+     "format_error": false
+    },
+    "attempts": 0
+   },
+   "note": "blank text: 400"
+  },
+  {
+   "case": "fix_lang_invalid",
+   "kind": "fix",
+   "req": {
+    "lang": "fr",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "hello"
+   },
+   "engine": [],
+   "expect": {
+    "error": {
+     "status": 400,
+     "msg": "lang은 'en' 또는 'ja'여야 해요.",
+     "code": "",
+     "format_error": false
+    },
+    "attempts": 0
+   },
+   "note": "bad lang: 400"
+  },
+  {
+   "case": "fix_korean_input",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "커피 한 잔 주세요"
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"커피 한 잔 주세요\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "Can I have a cup of coffee, please?",
+      "fix_ko": "영어로는 이렇게 말해요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "Can I have a cup of coffee, please?",
+     "fix_ko": "영어로는 이렇게 말해요."
+    },
+    "attempts": 1
+   },
+   "note": "learner wrote Korean: the English way is the fix"
+  },
+  {
+   "case": "fix_retry_hangul_in_fix",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am go to park."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am go to park.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "저는 공원에 가요",
+      "fix_ko": "공원에 간다는 뜻이에요."
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am go to park.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I am going to the park.",
+      "fix_ko": "go 뒤에 ing를 붙여요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I am going to the park.",
+     "fix_ko": "go 뒤에 ing를 붙여요."
+    },
+    "attempts": 2
+   },
+   "note": "Hangul in the fix: rejected, retry (temperature 0.5)"
+  },
+  {
+   "case": "fix_both_hangul",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I am go to park."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am go to park.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "공원에 가요",
+      "fix_ko": "공원"
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am go to park.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "공원에 갑니다",
+      "fix_ko": "공원"
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 2
+   },
+   "note": "Hangul twice: no fix"
+  },
+  {
+   "case": "fix_retry_ko_not_korean",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "He don't know me."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He don't know me.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "He doesn't know me.",
+      "fix_ko": "Third person needs doesn't."
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He don't know me.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "He doesn't know me.",
+      "fix_ko": "3인칭 단수에는 doesn't를 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "He doesn't know me.",
+     "fix_ko": "3인칭 단수에는 doesn't를 써요."
+    },
+    "attempts": 2
+   },
+   "note": "fix_ko without Hangul: rejected, retry"
+  },
+  {
+   "case": "fix_ko_failed_twice",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "He don't know me."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He don't know me.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "He doesn't know me.",
+      "fix_ko": ""
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He don't know me.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "He doesn't know me.",
+      "fix_ko": "Third person."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "He doesn't know me.",
+     "fix_ko": "더 자연스럽게 고친 문장이에요."
+    },
+    "attempts": 2
+   },
+   "note": "fix_ko bad twice: the default explanation"
+  },
+  {
+   "case": "fix_ko_chinese",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "She don't like it."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"She don't like it.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "She doesn't like it.",
+      "fix_ko": "doesn't를 써요什么东西"
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"She don't like it.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "She doesn't like it.",
+      "fix_ko": "doesn't를 써요"
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "She doesn't like it.",
+     "fix_ko": "doesn't를 써요"
+    },
+    "attempts": 2
+   },
+   "note": "Chinese in fix_ko: retry"
+  },
+  {
+   "case": "fix_ko_cyrillic",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "She don't like it."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"She don't like it.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "She doesn't like it.",
+      "fix_ko": "doesn't를 써요 привет"
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"She don't like it.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "She doesn't like it.",
+      "fix_ko": "doesn't를 써요"
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "She doesn't like it.",
+     "fix_ko": "doesn't를 써요"
+    },
+    "attempts": 2
+   },
+   "note": "Cyrillic in fix_ko: retry"
+  },
+  {
+   "case": "fix_second_attempt_nothing",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "He go home."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He go home.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "He goes home.",
+      "fix_ko": "Bad explanation"
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He go home.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "",
+      "fix_ko": ""
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 2
+   },
+   "note": "second answer says nothing to fix: no fix"
+  },
+  {
+   "case": "fix_second_attempt_same",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "He go home."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He go home.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "He goes home.",
+      "fix_ko": "Bad explanation"
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"He go home.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.5,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "he go home",
+      "fix_ko": ""
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 2
+   },
+   "note": "second answer equals the text: no fix"
+  },
+  {
+   "case": "fix_engine_error_limit",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "limit",
+      "msg": "사용 한도(또는 잔액)에 도달했어요. 잠시 뒤에 다시 시도해 주세요.",
+      "status": 502
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "engine error: no fix and no error (the chat still works)"
+  },
+  {
+   "case": "fix_engine_error_auth",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "auth",
+      "msg": "키를 확인해 주세요.",
+      "status": 503
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "engine error: no fix and no error (the chat still works)"
+  },
+  {
+   "case": "fix_engine_error_overload",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "overload",
+      "msg": "서버가 바빠요.",
+      "status": 502
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "engine error: no fix and no error (the chat still works)"
+  },
+  {
+   "case": "fix_engine_error_not_connected",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "not_connected",
+      "msg": "키가 없어요.",
+      "status": 503
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 1
+   },
+   "note": "engine error: no fix and no error (the chat still works)"
+  },
+  {
+   "case": "fix_format_error_once",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "format",
+      "msg": "",
+      "status": 502
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning.\n\n(Your previous answer could not be read as JSON. Answer again with ONLY one JSON object that matches the schema: it starts with { and ends with }, no code fences, no text before or after it, no comments, double quotes around every key and string.)"
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I am happy.",
+      "fix_ko": "I 뒤에는 am을 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I am happy.",
+     "fix_ko": "I 뒤에는 am을 써요."
+    },
+    "attempts": 2
+   },
+   "note": "strict JSON note"
+  },
+  {
+   "case": "fix_format_error_twice",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": false,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "format",
+      "msg": "",
+      "status": 502
+     }
+    },
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning.\n\n(Your previous answer could not be read as JSON. Answer again with ONLY one JSON object that matches the schema: it starts with { and ends with }, no code fences, no text before or after it, no comments, double quotes around every key and string.)"
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "format",
+      "msg": "",
+      "status": 502
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": ""
+    },
+    "attempts": 2
+   },
+   "note": "two format errors: no fix"
+  },
+  {
+   "case": "fix_private_basic",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": true,
+    "text": "I am go to school."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am go to school.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I am going to school.",
+      "fix_ko": "go 뒤에 ing를 붙여요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I am going to school.",
+     "fix_ko": "go 뒤에 ing를 붙여요.",
+     "reading": "",
+     "pron": ""
+    },
+    "attempts": 1
+   },
+   "note": "private: same prompt, the answer also has reading and pron (empty for English)"
+  },
+  {
+   "case": "fix_private_nothing",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": true,
+    "text": "I am going to school."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I am going to school.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "",
+      "fix_ko": ""
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": "",
+     "reading": "",
+     "pron": ""
+    },
+    "attempts": 1
+   },
+   "note": "private: nothing to fix"
+  },
+  {
+   "case": "fix_private_control_chars",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "Where\u000b are you going?",
+    "private": true,
+    "text": "I am go\u0007 to school."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation (the partner had just said: \"Where  are you going?\"):\n\"I am go  to school .\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I am going to school.",
+      "fix_ko": "go 뒤에 ing를 붙여요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I am going to school.",
+     "fix_ko": "go 뒤에 ing를 붙여요.",
+     "reading": "",
+     "pron": ""
+    },
+    "attempts": 1
+   },
+   "note": "private: control characters become spaces"
+  },
+  {
+   "case": "fix_private_empty",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": true,
+    "text": "\u0007  "
+   },
+   "engine": [],
+   "expect": {
+    "error": {
+     "status": 400,
+     "msg": "고칠 문장이 비어 있어요.",
+     "code": "",
+     "format_error": false
+    },
+    "attempts": 0
+   },
+   "note": "private: only control characters -> 400"
+  },
+  {
+   "case": "fix_private_engine_error",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": true,
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "error": {
+      "kind": "limit",
+      "msg": "한도에 도달했어요.",
+      "status": 502
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "",
+     "fix_ko": "",
+     "reading": "",
+     "pron": ""
+    },
+    "attempts": 1
+   },
+   "note": "private: engine error"
+  },
+  {
+   "case": "fix_private_string_true",
+   "kind": "fix",
+   "req": {
+    "lang": "en",
+    "stage": 2,
+    "prev_ai": "",
+    "private": "true",
+    "text": "I are happy."
+   },
+   "engine": [
+    {
+     "messages": [
+      {
+       "role": "user",
+       "content": "A Korean learner of English (level: CEFR B1. Everyday natural English, short to medium sentences, avoid rare idioms.) said this in a conversation:\n\"I are happy.\"\n\nIf the sentence has a grammar, word-choice or spelling mistake, or sounds unnatural to a native speaker, put the corrected natural version of the WHOLE sentence in English into \"fix\", and a one-line explanation written in Korean (한국어) into \"fix_ko\" saying what was wrong. If the learner wrote in Korean, put the natural English way to say it into \"fix\". If the sentence is already correct and natural (capitalization and punctuation differences do not count), set both \"fix\" and \"fix_ko\" to empty strings. Do not rewrite correct sentences just to change the style. Check carefully: verb tense against time words (yesterday/昨日 needs past tense), particles (は/が/を/に/で), articles and plurals, subject-verb agreement, word order, and words that do not fit the meaning."
+      }
+     ],
+     "schema": {
+      "type": "object",
+      "properties": {
+       "fix": {
+        "type": "string"
+       },
+       "fix_ko": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "fix",
+       "fix_ko"
+      ],
+      "additionalProperties": false
+     },
+     "temperature": 0.2,
+     "num_predict": 2500,
+     "reply": {
+      "fix": "I am happy.",
+      "fix_ko": "am을 써요."
+     }
+    }
+   ],
+   "expect": {
+    "result": {
+     "fix": "I am happy.",
+     "fix_ko": "am을 써요."
+    },
+    "attempts": 1
+   },
+   "note": "only a real JSON true is private: the string 'true' is not"
+  }
+ ]
+}

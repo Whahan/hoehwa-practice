@@ -1,0 +1,431 @@
+{
+ "version": 1,
+ "file": "extract_json.json",
+ "cases": [
+  {
+   "case": "extract_json_01",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"reply\": \"Hi\", \"ko\": \"안녕\"}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "reply": "Hi",
+     "ko": "안녕"
+    }
+   }
+  },
+  {
+   "case": "extract_json_02",
+   "kind": "extract_json",
+   "req": {
+    "text": "  \n{\"a\": 1}\n  "
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1
+    }
+   }
+  },
+  {
+   "case": "extract_json_03",
+   "kind": "extract_json",
+   "req": {
+    "text": "```json\n{\"a\": 1, \"b\": [1, 2]}\n```"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1,
+     "b": [
+      1,
+      2
+     ]
+    }
+   }
+  },
+  {
+   "case": "extract_json_04",
+   "kind": "extract_json",
+   "req": {
+    "text": "```\n{\"a\": 1}\n```"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1
+    }
+   }
+  },
+  {
+   "case": "extract_json_05",
+   "kind": "extract_json",
+   "req": {
+    "text": "Here is the answer:\n```json\n{\"a\": \"x\"}\n```\nHope it helps."
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": "x"
+    }
+   }
+  },
+  {
+   "case": "extract_json_06",
+   "kind": "extract_json",
+   "req": {
+    "text": "```json\n{\"a\": 1}\n```\nand also\n```json\n{\"a\": 1, \"b\": 2}\n```"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1,
+     "b": 2
+    }
+   }
+  },
+  {
+   "case": "extract_json_07",
+   "kind": "extract_json",
+   "req": {
+    "text": "```json\n{\"a\": 1, \"b\": \"unclosed\"}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1,
+     "b": "unclosed"
+    }
+   }
+  },
+  {
+   "case": "extract_json_08",
+   "kind": "extract_json",
+   "req": {
+    "text": "<think>let me think {\"draft\": true}</think>{\"final\": true}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "final": true
+    }
+   }
+  },
+  {
+   "case": "extract_json_09",
+   "kind": "extract_json",
+   "req": {
+    "text": "<think>still thinking {\"draft\": true}"
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_10",
+   "kind": "extract_json",
+   "req": {
+    "text": "Sure! {\"a\": 1} is what you asked."
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1
+    }
+   }
+  },
+  {
+   "case": "extract_json_11",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"a\": 1,}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1
+    }
+   }
+  },
+  {
+   "case": "extract_json_12",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"a\": [1, 2,],}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": [
+      1,
+      2
+     ]
+    }
+   }
+  },
+  {
+   "case": "extract_json_13",
+   "kind": "extract_json",
+   "req": {
+    "text": "{“a”: “b”}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": "b"
+    }
+   }
+  },
+  {
+   "case": "extract_json_14",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"a\": \"He said \\\"hi\\\" {not a brace}\"}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": "He said \"hi\" {not a brace}"
+    }
+   }
+  },
+  {
+   "case": "extract_json_15",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"outer\": {\"inner\": 1}}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "outer": {
+      "inner": 1
+     }
+    }
+   }
+  },
+  {
+   "case": "extract_json_16",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"a\": 1} {\"a\": 1, \"b\": 2, \"c\": 3}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1,
+     "b": 2,
+     "c": 3
+    }
+   }
+  },
+  {
+   "case": "extract_json_17",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"a\": 1, \"b\": "
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_18",
+   "kind": "extract_json",
+   "req": {
+    "text": "[{\"a\": 1}]"
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_19",
+   "kind": "extract_json",
+   "req": {
+    "text": "[1, 2, 3]"
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_20",
+   "kind": "extract_json",
+   "req": {
+    "text": "\"just a string\""
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_21",
+   "kind": "extract_json",
+   "req": {
+    "text": "42"
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_22",
+   "kind": "extract_json",
+   "req": {
+    "text": "no json here at all"
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_23",
+   "kind": "extract_json",
+   "req": {
+    "text": ""
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_24",
+   "kind": "extract_json",
+   "req": {
+    "text": "   "
+   },
+   "expect": {
+    "ok": false,
+    "data": {}
+   }
+  },
+  {
+   "case": "extract_json_25",
+   "kind": "extract_json",
+   "req": {
+    "text": "﻿{\"a\": 1}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1
+    }
+   }
+  },
+  {
+   "case": "extract_json_26",
+   "kind": "extract_json",
+   "req": {
+    "text": "prose {note} then {\"real\": \"yes\"}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "real": "yes"
+    }
+   }
+  },
+  {
+   "case": "extract_json_27",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"reply\": \"multi\nline\", \"ko\": \"두 줄\"}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "reply": "multi\nline",
+     "ko": "두 줄"
+    }
+   }
+  },
+  {
+   "case": "extract_json_28",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"scores\": {\"fluency\": 4}, \"summary\": \"좋아요\", \"corrections\": [], \"phrases\": []}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "scores": {
+      "fluency": 4
+     },
+     "summary": "좋아요",
+     "corrections": [],
+     "phrases": []
+    }
+   }
+  },
+  {
+   "case": "extract_json_29",
+   "kind": "extract_json",
+   "req": {
+    "text": "```json\n{\"a\": 1,\n \"b\": 2,}\n```"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1,
+     "b": 2
+    }
+   }
+  },
+  {
+   "case": "extract_json_30",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"a\": \"é안녕\"}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": "é안녕"
+    }
+   }
+  },
+  {
+   "case": "extract_json_31",
+   "kind": "extract_json",
+   "req": {
+    "text": "{ \"a\": 1 }"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "a": 1
+    }
+   }
+  },
+  {
+   "case": "extract_json_32",
+   "kind": "extract_json",
+   "req": {
+    "text": "{\"goals\": [{\"id\": \"greet\", \"done\": true, \"evidence\": \"Hi\"}]}"
+   },
+   "expect": {
+    "ok": true,
+    "data": {
+     "goals": [
+      {
+       "id": "greet",
+       "done": true,
+       "evidence": "Hi"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}
