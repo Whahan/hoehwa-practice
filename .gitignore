@@ -69,3 +69,16 @@ keystore.properties
 *.idsig
 godot/android/
 packaging/out/android/
+
+# ---- native bridge (v2.0 phone): third-party sources, build outputs, generated extension file, models ----
+/native/_deps/
+/native/**/build*/
+/godot/bin/
+/godot/whisper_bridge.gdextension
+*.gdextension.uid
+*.bin
+*.gguf
+*.onnx
+*.so
+*.dll
+*.wav

@@ -1,0 +1,15 @@
+{
+    "bridge_version":  "1",
+    "whisper_cpp_commit":  "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+    "whisper_cpp_tag":  "v1.9.5",
+    "godot_cpp_commit":  "e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77",
+    "godot_cpp_tag":  "godot-4.5-stable",
+    "ndk_version":  "28.1.13356709",
+    "artifacts":  {
+                      "android-arm64":  {
+                                            "file":  "godot/bin/libwhisper_bridge.android.arm64.so",
+                                            "bytes":  1903480,
+                                            "sha256":  "dfa0044c805eebaa3bfa4b52ffdeb87396ffcd43dffce7e183673773ccbaf565"
+                                        }
+                  }
+}
