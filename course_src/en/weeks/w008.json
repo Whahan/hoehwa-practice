@@ -1476,6 +1476,30 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0226",
+   "en": "Do you like fruit?",
+   "ko": "과일 좋아하세요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0227",
+   "en": "I'd like a banana, please.",
+   "ko": "바나나 하나 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

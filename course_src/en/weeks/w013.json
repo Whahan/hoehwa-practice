@@ -1617,6 +1617,42 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0236",
+   "en": "I wash the car and brush my dog.",
+   "ko": "저는 자동차를 씻고 개를 솔질해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0237",
+   "en": "I sing at the party.",
+   "ko": "저는 파티에서 노래해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0238",
+   "en": "I relax at home on Saturday.",
+   "ko": "저는 토요일에 집에서 편히 쉬어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

@@ -1199,6 +1199,66 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0245",
+   "en": "There is nothing here.",
+   "ko": "여기에는 아무것도 없어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0246",
+   "en": "It's probably open.",
+   "ko": "아마도 열려 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0247",
+   "en": "Can I have another coffee, please?",
+   "ko": "커피 한 잔 더 주실 수 있어요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0248",
+   "en": "The other door is open.",
+   "ko": "다른 문이 열려 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0249",
+   "en": "These are the same, but those are different.",
+   "ko": "이것들은 같지만 저것들은 서로 달라요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

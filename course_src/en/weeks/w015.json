@@ -1565,6 +1565,42 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0242",
+   "en": "Please stand here and don't move.",
+   "ko": "여기 서서 움직이지 마세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0243",
+   "en": "Hurry, please.",
+   "ko": "서둘러 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0244",
+   "en": "We return to the hotel on Friday.",
+   "ko": "우리는 금요일에 호텔로 돌아와요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

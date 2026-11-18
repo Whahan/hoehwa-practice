@@ -1552,6 +1552,54 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0228",
+   "en": "The bus is an hour late.",
+   "ko": "버스가 한 시간 늦었어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0229",
+   "en": "It's a long month.",
+   "ko": "긴 한 달이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0230",
+   "en": "The party is soon.",
+   "ko": "파티가 곧 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0231",
+   "en": "We have dinner soon.",
+   "ko": "우리는 곧 저녁을 먹어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

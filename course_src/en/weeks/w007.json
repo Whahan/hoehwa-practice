@@ -1510,6 +1510,42 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0223",
+   "en": "This movie is excellent.",
+   "ko": "이 영화는 훌륭해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0224",
+   "en": "The hockey game is exciting.",
+   "ko": "하키 경기는 신나요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0225",
+   "en": "I dislike boring movies.",
+   "ko": "저는 지루한 영화를 싫어해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

@@ -88,7 +88,7 @@ PERSONAL and BLOCKED look at every string of a week file (notes, titles, can_do,
 CANON: meter/metre and gray/grey are used in Canada too: only a WARN line (exit code and --strict unaffected).
 Day rule: new words and patterns are taught on D1..D4 (`d` 1..4); sentences/lines may use D1..D7.
 Counts per week (policy.json "limits" overrides any key; defaults = design): sentences >= 36, per pattern >= 6, per active
-  word >= 2, active 10-30 (weeks 1-4: 20-28, weeks 16/32/48/60/68: 10-16), passive 8-16 (weeks 1-4: 0-16), patterns 3-5
+  word >= 2, per passive word >= 1 (a sentence of the same week that contains it: COUNT passive_word_sentences; limit passive_word_min_sentences), active 10-30 (weeks 1-4: 20-28, weeks 16/32/48/60/68: 10-16), passive 8-16 (weeks 1-4: 0-16), patterns 3-5
   (weeks 1-4: 1-2, synthesis weeks 0-3), exactly 1 dialogue (weeks 1-7: 2-4 lines, 8+: 6-10), speak_prompts = 3 in weeks
   divisible by 4, else 0, Tatoeba share <= 25 % per week and overall.
 

@@ -1607,6 +1607,42 @@
    "accept": [],
    "src": "own",
    "tid": 0
+  },
+  {
+   "id": "s0220",
+   "en": "My grandfather is from Korea.",
+   "ko": "제 할아버지는 한국에서 오셨어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0221",
+   "en": "My sister has a child.",
+   "ko": "제 여자 형제는 아이가 한 명 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0222",
+   "en": "That child is here.",
+   "ko": "저 아이는 여기 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
   }
  ],
  "dialogues": [

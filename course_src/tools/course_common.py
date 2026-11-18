@@ -31,6 +31,7 @@ DEFAULT_LIMITS = {
     "min_sentences": 36,            # sentences per week
     "pattern_min_sentences": 6,     # sentences per pattern
     "word_min_sentences": 2,        # sentences per active word (same week)
+    "passive_word_min_sentences": 1,   # sentences per passive word (same week; listen sentences, design 3.3 R5)
     "active_range": [10, 30],
     "intro_active_range": [20, 28],     # weeks 1-4
     "synth_active_range": [10, 16],     # weeks 16, 32, 48, 60, 68
