@@ -374,6 +374,8 @@ func _fall_back(req_call: ApiCall, report: bool) -> void:
 ## too, the caller gets the phone's own error (the PC being down is not what the user needs to hear).
 const PHONE_RETRY_ERR := ["engine_error", "stt_timeout"]
 const PHONE_RETRY_PATHS := ["/stt", "/score"]
+## Upper limit (seconds) of the PC retry request. The phone engine gives up after 12 s (LocalStt), so the worst wait is about 42 s.
+const PHONE_RETRY_TIMEOUT_SEC := 30.0
 
 
 func _phone_retry_wanted(req_call: ApiCall, phone_res: Dictionary) -> bool:
@@ -393,7 +395,7 @@ func _retry_on_pc(req_call: ApiCall, phone_res: Dictionary, report: bool) -> voi
 	sub.path = req_call.path
 	sub.method = req_call.method
 	sub.payload = req_call.payload
-	sub.timeout = req_call.timeout
+	sub.timeout = minf(req_call.timeout, PHONE_RETRY_TIMEOUT_SEC)
 	sub.base = req_call.base
 	sub.use_auth = req_call.use_auth
 	sub.body = req_call.body

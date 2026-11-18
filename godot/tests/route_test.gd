@@ -119,7 +119,7 @@ class FakeCorrupt:
 class FakePc:
 	extends Node
 	var srv: TCPServer = null
-	var log: Array = [] ## {path, raw}
+	var log: Array = [] ## {path, raw, auth (a Bearer header came with the request)}
 	var reply: String = "ok"
 	var conns: Array = []
 
@@ -178,7 +178,7 @@ class FakePc:
 
 	func _answer(peer: StreamPeerTCP, head: String, body: PackedByteArray) -> void:
 		var first: PackedStringArray = head.split("\r\n")[0].split(" ")
-		log.append({"path": first[1].split("?")[0], "raw": body.get_string_from_utf8()})
+		log.append({"path": first[1].split("?")[0], "raw": body.get_string_from_utf8(), "auth": head.to_lower().contains("authorization: bearer ")})
 		if reply == "hang":
 			# Never answers, but closes after 1.5 s: Godot 4.6.3 blocks the main thread when a threaded request times out while the
 			# server keeps the connection open (see Api.ApiCall.cancel), so the test must not rely on the request timeout.
@@ -1101,6 +1101,9 @@ func _test_p0_err_codes() -> void:  # coroutine (awaits requests)
 	ok(Route.ERR_TEXT["no_ai"].begins_with("AI를 쓰려면 설정 > AI 연결에서 본인 AI 키를") and not Route.ERR_TEXT["no_ai"].contains("API 키"), "P0-5: no_ai now points at 설정 > AI 연결 (본인 AI 키)")
 	ok(Route.ERR_TEXT["model_missing"] == P0_MODEL_MISSING, "P0-5: model_missing text unchanged")
 	ok(Route.ERR_TEXT["engine_missing"] == P0_ENGINE_MISSING, "P0-5: engine_missing text unchanged")
+	for ec in ["engine_error", "stt_timeout"]:
+		var et: String = Route.ERR_TEXT[ec]
+		ok(not et.contains("PC에 연결") and et.contains("다시") and et.contains("설정 > 음성 인식에서 'PC에서 채점'"), "%s text is neutral (also true after a failed PC retry) and names the setting" % ec)
 	ok(Route.http_for("engine_error") == 500 and Route.http_for("stt_timeout") == 504 and Route.http_for("ai_url") == 400, "spot check: engine_error 500, stt_timeout 504, ai_url 400")
 	# A fake phone handler that fails with each new code: the result carries the text/code, and no code is a 401, so
 	# Api.auth_failed (a PC pairing problem) never fires. Phone mode: no retry, no PC.
@@ -1137,12 +1140,16 @@ func _test_p0_degraded() -> void:
 	print("selfcheck FAIL-as-expected: 'bogus_flag' in Route.DEGRADED -> ", "bogus_flag" in Route.DEGRADED)
 
 
-func _retry_run(pc: FakePc, path: String, body: Dictionary, fail_code: String, report: bool = false) -> Dictionary:
+func _retry_run(pc: FakePc, path: String, body: Dictionary, fail_code: String, report: bool = false, timeout: float = -1.0) -> Dictionary:
 	Engine.set_meta("a1_fail", fail_code)
 	var n0: int = LocalApi.served_count
 	var s0: int = Api.sent_count
 	var p0: int = pc.log.size()
-	var r: Dictionary = await _req("POST", path, body, report)
+	var r: Dictionary
+	if timeout > 0.0:
+		r = await Api.post_json(path, body, timeout, report).wait() # a longer limit than REQ_TIMEOUT, so a closed connection is seen first
+	else:
+		r = await _req("POST", path, body, report)
 	Engine.set_meta("a1_fail", "")
 	return {"res": r, "served": LocalApi.served_count - n0, "sent": Api.sent_count - s0, "pc": pc.log.size() - p0}
 
@@ -1178,6 +1185,7 @@ func _test_p0_retry() -> void:
 		ok(r["ok"] and r["data"] is Dictionary and int(r["data"].get("pc_marker", 0)) == 1 and not r["data"].has("via"), "P0-4: %s, PC ok -> final ok:true with the PC's answer" % tag)
 		ok(c["served"] == 1 and c["pc"] == 1 and c["sent"] == 1, "P0-4: %s -> phone handler ran once, PC got exactly 1 request (served %d, pc %d, sent %d)" % [tag, c["served"], c["pc"], c["sent"]])
 		ok(Api.active_count == a0, "active_count back to %d after the retry (%d)" % [a0, Api.active_count])
+		ok(str(pc.log.back()["path"]) == cs[0] and not bool(pc.log.back()["auth"]), "P0-4: %s -> the PC got the same path (no token, no Bearer header)" % tag)
 	ok(str(pc.log.back()["path"]) == "/stt" and str(pc.log.back()["raw"]).contains("Nice to meet you."), "the PC got the same path and body as the phone")
 	print("  step 2: mode phone")
 	# 2) mode phone -> never the PC
@@ -1230,6 +1238,10 @@ func _test_p0_retry() -> void:
 	var cf: Dictionary = await _retry_run(pc, "/score", body, "engine_error")
 	ok(cf["pc"] == 0 and cf["res"]["err_code"] == "engine_error", "P0-4: PC marked flaky -> no retry")
 	Route.clear_flaky()
+	Api.base_url = ""
+	var ce: Dictionary = await _retry_run(pc, "/score", body, "engine_error")
+	ok(ce["pc"] == 0 and ce["sent"] == 0 and ce["served"] == 1 and ce["res"]["err_code"] == "engine_error", "P0-4: no PC address -> no retry, nothing sent (sent %d)" % ce["sent"])
+	Api.base_url = pc_url
 	print("  step 6: phone and PC both fail")
 	# 6) phone fails AND the PC fails -> an error, no loop, the PC saw exactly one request
 	pc.reply = "500"
@@ -1242,6 +1254,33 @@ func _test_p0_retry() -> void:
 	ok(not cd["res"]["ok"] and cd["res"]["err_code"] == "stt_timeout" and cd["sent"] == 1 and cd["served"] == 1 and cd["pc"] == 0, "P0-4: phone fail + dead PC (transport) -> one send, one phone run, no phone loop (sent %d, served %d)" % [cd["sent"], cd["served"]])
 	ok(Api.active_count == a0 and not Route.pc_flaky(), "dead PC: nothing in flight, no flaky mark")
 	Api.base_url = pc_url
+	print("  step 6b: the connection breaks while the retry is out (is_remote) -> still exactly one PC request")
+	# On a paired phone (token set) a broken connection is retried once by Api._on_completed for idempotent requests;
+	# the P0 retry sets retries=1 so it must NOT be repeated. The fake PC closes the connection after 1.5 s without an answer.
+	Api.token = "t"
+	ok(Api.is_remote(), "selfcheck: Api.is_remote() is true with a token, so a broken connection WOULD be retried by the generic rule")
+	pc.reply = "hang"
+	for cs in [["/score", "engine_error"], ["/score", "stt_timeout"], ["/stt", "engine_error"], ["/stt", "stt_timeout"]]:
+		var ch: Dictionary = await _retry_run(pc, cs[0], body, cs[1], false, 8.0)
+		var htag: String = "%s %s" % [cs[0], cs[1]]
+		ok(not ch["res"]["ok"] and ch["res"]["err_code"] == cs[1], "P0-4: %s, PC drops the connection -> the phone error comes back" % htag)
+		ok(ch["pc"] == 1 and ch["sent"] == 1 and ch["served"] == 1, "P0-4: %s, connection broke -> PC requests exactly 1, sent 1, phone runs 1 (pc %d, sent %d, served %d)" % [htag, ch["pc"], ch["sent"], ch["served"]])
+		ok(bool(pc.log.back()["auth"]) and str(pc.log.back()["path"]) == cs[0], "P0-4: %s, the retry carries the Bearer header and the same path" % htag)
+	ok(Api.active_count == a0 and not Route.pc_flaky(), "after the broken-connection retries nothing is in flight, PC not flaky")
+	print("  step 6c: the retry has its own time limit")
+	ok(Api.PHONE_RETRY_TIMEOUT_SEC > 0.0 and Api.PHONE_RETRY_TIMEOUT_SEC <= 33.0, "P0-4: PC retry limit %.0f s, so 12 s phone + retry stays about 45 s or less" % Api.PHONE_RETRY_TIMEOUT_SEC)
+	Engine.set_meta("a1_fail", "engine_error")
+	var pt0: int = pc.log.size()
+	var ct: Object = Api.post_json("/score", body, 90.0, false) # the phone default limit
+	await _wait_until(func() -> bool: return pc.log.size() > pt0, 10.0)
+	var tmo := -1.0
+	for n in Api.get_children():
+		if n is HTTPRequest:
+			tmo = (n as HTTPRequest).timeout
+	ok(is_equal_approx(tmo, Api.PHONE_RETRY_TIMEOUT_SEC), "P0-4: the retry request of a 90 s call is limited to PC retry limit (got %.1f s)" % tmo)
+	await ct.wait()
+	Engine.set_meta("a1_fail", "")
+	Api.token = ""
 	print("  step 7: cancel during the retry")
 	# 7) cancel while the PC retry is running
 	pc.reply = "hang"
