@@ -17,7 +17,7 @@
    "id": "w0051",
    "en": "eleven",
    "pos": "num",
-   "ko": "십일(11)",
+   "ko": "열하나, 십일",
    "ipa": "ɪˈlɛvən",
    "say": "",
    "tags": [
@@ -35,7 +35,7 @@
    "id": "w0052",
    "en": "twelve",
    "pos": "num",
-   "ko": "십이(12)",
+   "ko": "열둘, 십이",
    "ipa": "twɛlv",
    "say": "",
    "tags": [
@@ -53,7 +53,7 @@
    "id": "w0053",
    "en": "thirteen",
    "pos": "num",
-   "ko": "십삼(13)",
+   "ko": "열셋, 십삼",
    "ipa": "ˌθɜːrˈtiːn",
    "say": "",
    "tags": [
@@ -71,7 +71,7 @@
    "id": "w0054",
    "en": "fourteen",
    "pos": "num",
-   "ko": "십사(14)",
+   "ko": "열넷, 십사",
    "ipa": "ˌfɔːrˈtiːn",
    "say": "",
    "tags": [
@@ -89,7 +89,7 @@
    "id": "w0055",
    "en": "fifteen",
    "pos": "num",
-   "ko": "십오(15)",
+   "ko": "열다섯, 십오",
    "ipa": "ˌfɪfˈtiːn",
    "say": "",
    "tags": [
@@ -107,7 +107,7 @@
    "id": "w0056",
    "en": "sixteen",
    "pos": "num",
-   "ko": "십육(16)",
+   "ko": "열여섯, 십육",
    "ipa": "ˌsɪkˈstiːn",
    "say": "",
    "tags": [
@@ -125,7 +125,7 @@
    "id": "w0057",
    "en": "seventeen",
    "pos": "num",
-   "ko": "십칠(17)",
+   "ko": "열일곱, 십칠",
    "ipa": "ˌsɛvənˈtiːn",
    "say": "",
    "tags": [
@@ -143,7 +143,7 @@
    "id": "w0058",
    "en": "eighteen",
    "pos": "num",
-   "ko": "십팔(18)",
+   "ko": "열여덟, 십팔",
    "ipa": "ˌeɪˈtiːn",
    "say": "",
    "tags": [
@@ -161,7 +161,7 @@
    "id": "w0059",
    "en": "nineteen",
    "pos": "num",
-   "ko": "십구(19)",
+   "ko": "열아홉, 십구",
    "ipa": "ˌnaɪnˈtiːn",
    "say": "",
    "tags": [
@@ -179,7 +179,7 @@
    "id": "w0060",
    "en": "twenty",
    "pos": "num",
-   "ko": "이십(20)",
+   "ko": "스물, 이십",
    "ipa": "ˈtwɛnti",
    "say": "",
    "tags": [
@@ -197,7 +197,7 @@
    "id": "w0061",
    "en": "thirty",
    "pos": "num",
-   "ko": "삼십(30)",
+   "ko": "서른, 삼십",
    "ipa": "ˈθɜːrti",
    "say": "",
    "tags": [
@@ -215,7 +215,7 @@
    "id": "w0062",
    "en": "forty",
    "pos": "num",
-   "ko": "사십(40)",
+   "ko": "마흔, 사십",
    "ipa": "ˈfɔːrti",
    "say": "",
    "tags": [
@@ -233,7 +233,7 @@
    "id": "w0063",
    "en": "fifty",
    "pos": "num",
-   "ko": "오십(50)",
+   "ko": "쉰, 오십",
    "ipa": "ˈfɪfti",
    "say": "",
    "tags": [
@@ -251,7 +251,7 @@
    "id": "w0064",
    "en": "sixty",
    "pos": "num",
-   "ko": "육십(60)",
+   "ko": "예순, 육십",
    "ipa": "ˈsɪksti",
    "say": "",
    "tags": [
@@ -269,7 +269,7 @@
    "id": "w0065",
    "en": "seventy",
    "pos": "num",
-   "ko": "칠십(70)",
+   "ko": "일흔, 칠십",
    "ipa": "ˈsɛvənti",
    "say": "",
    "tags": [
@@ -287,7 +287,7 @@
    "id": "w0066",
    "en": "eighty",
    "pos": "num",
-   "ko": "팔십(80)",
+   "ko": "여든, 팔십",
    "ipa": "ˈeɪti",
    "say": "",
    "tags": [
@@ -305,7 +305,7 @@
    "id": "w0067",
    "en": "ninety",
    "pos": "num",
-   "ko": "구십(90)",
+   "ko": "아흔, 구십",
    "ipa": "ˈnaɪnti",
    "say": "",
    "tags": [
@@ -323,7 +323,7 @@
    "id": "w0068",
    "en": "hundred",
    "pos": "num",
-   "ko": "백(100)",
+   "ko": "백",
    "ipa": "ˈhʌndrəd",
    "say": "",
    "tags": [
@@ -357,7 +357,7 @@
    "id": "w0070",
    "en": "a",
    "pos": "det",
-   "ko": "하나의",
+   "ko": "한(해석 안 해요)",
    "ipa": "ə",
    "say": "",
    "tags": [],
@@ -667,7 +667,7 @@
   {
    "id": "s0112",
    "en": "Ten, twenty, thirty.",
-   "ko": "십, 이십, 삼십.",
+   "ko": "열, 스물, 서른.",
    "say": "",
    "pat": "",
    "d": 2,
@@ -798,9 +798,9 @@
   },
   {
    "id": "s0123",
-   "en": "It's 12.",
-   "ko": "12시예요.",
-   "say": "It's twelve.",
+   "en": "It's 10.",
+   "ko": "열 시예요.",
+   "say": "It's ten.",
    "pat": "p_its",
    "d": 3,
    "scope": "all",
@@ -810,8 +810,8 @@
   },
   {
    "id": "s0124",
-   "en": "It's fifteen.",
-   "ko": "열다섯이에요.",
+   "en": "It's nine.",
+   "ko": "아홉 시예요.",
    "say": "",
    "pat": "p_its",
    "d": 3,
@@ -954,8 +954,8 @@
   },
   {
    "id": "s0136",
-   "en": "She is my cat.",
-   "ko": "그녀는 제 고양이예요.",
+   "en": "She is Anna.",
+   "ko": "저 사람은 애나예요.",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1110,8 +1110,8 @@
   },
   {
    "id": "s0149",
-   "en": "She is a good cat.",
-   "ko": "그녀는 착한 고양이예요.",
+   "en": "She is Lisa.",
+   "ko": "저 사람은 리사예요.",
    "say": "",
    "pat": "",
    "d": 4,
@@ -1149,7 +1149,7 @@
     {
      "s": "B",
      "en": "Thank you, Anna. It's a big home.",
-     "ko": "감사해요, 애나. 집이 정말 커요.",
+     "ko": "감사해요, 애나. 큰 집이에요.",
      "say": ""
     },
     {
