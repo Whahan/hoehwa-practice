@@ -3,13 +3,18 @@ extends RefCounted
 ## 홈 화면의 부품 (docs/home_menu_design.md §7, §8.5, §9.5). TodayView 가 조립한다. 색은 전부 Pal 토큰, 도형은 코드로 그린다
 ## (글자 도형·이모지 없음). 눌리는 것은 BaseButton 뿐이다(터치 스크롤이 버튼을 PASS 로 바꾸므로).
 ##
-## 정적 함수: snapshot, task_row, resume_card, streak_card, stones, ai_card, shortcut_tiles, kind_mark, summary_text.
+## 정적 함수: snapshot, task_row, resume_card, streak_card, stones, ai_card, shortcut_tiles, kind_mark, summary_text,
+## v2.0 코스: course_snapshot, course_apply, course_progress_text, course_offer_card, course_notes_box, reset_course_memory.
 
 const WD := ["일", "월", "화", "수", "목", "금", "토"]
 const SHORTCUTS := [["대화", "talk"], ["연습", "practice"], ["읽기", "reading"]]
 
 ## 시험 전용: 0..23 이면 그 값을 현지 시각(hour)으로 쓴다. -1 = 시스템 시계.
 static var hour_override: int = -1
+
+## 코스 모드: 오늘 처음 그릴 때의 칸(새 내용을 끝내면 진도 칸이 다음으로 넘어가도 오늘 줄은 오늘 칸으로 남는다)과, 복습 우선 기록을 한 날.
+static var _cell_cache: Dictionary = {}
+static var _rp_day: int = -1
 
 
 # ---------------------------------------------------------------- snapshot (HomeModel.snapshot 의 본문)
@@ -50,7 +55,129 @@ static func snapshot(lang: String) -> Dictionary:
 		"now": unix,
 		"resume": StudyLog.resume(),
 	}
+	if l == "en":
+		if CourseStore.mode() == CourseStore.MODE_COURSE:
+			snap["course"] = course_snapshot()
+		elif course_offered():
+			snap["course_offer"] = true
 	return snap
+
+
+# ---------------------------------------------------------------- v2.0 course mode
+
+## [새 코스로 시작] 카드를 보일 때: 코스 데이터가 읽히고 코스 모드를 아직 고르지 않았다(prefs.course_mode 없음).
+static func course_offered() -> bool:
+	if Store.prefs.has(CourseStore.PREF_KEY):
+		return false
+	return bool(CourseData.load_all().get("ok", false)) and CourseData.available_weeks() >= 1
+
+
+## HomeModel 스냅샷의 `course` 키(설계 §10.7 + DayPlan 입력). 코스 모드(영어)일 때만 부른다.
+## fallback: "data" = 코스 데이터를 못 읽음, "file" = course.json 이 깨졌거나 읽기 전용 -> HomeModel 이 예전 할 일 줄로 돌아간다.
+static func course_snapshot() -> Dictionary:
+	var fb := ""
+	if not bool(CourseData.load_all().get("ok", false)) or CourseData.available_weeks() < 1:
+		fb = "data"
+	var pos: Dictionary = CourseStore.pos()
+	if CourseStore.is_read_only() or CourseStore.last_load_status in ["bad", "empty", "unreadable", "future"]:
+		if fb == "":
+			fb = "file"
+	var done: Dictionary = CourseStore.blocks_today()
+	var day: int = CourseStore.today()
+	var w: int = int(pos["w"])
+	var d: int = int(pos["d"])
+	if not bool(done.get("new", false)):
+		_cell_cache = {"day": day, "w": w, "d": d}
+	elif int(_cell_cache.get("day", -1)) == day:
+		w = int(_cell_cache["w"])
+		d = int(_cell_cache["d"])
+	var rs: Dictionary = CourseStore.review_state()
+	var cp: Dictionary = CourseStore.check_pending()
+	var c := {"mode": "course", "w": w, "d": d, "blocks_done": done, "away_days": CourseStore.away_days(), "due": Store.due_count("en"),
+		"check_pending": bool(cp.get("pending", false)), "check_pending_days": int(cp.get("days", 0)), "rp_prev": bool(rs.get("prev", false)),
+		"rp_streak": int(rs.get("streak", 0)), "elapsed_days": CourseStore.elapsed_days(), "finished": CourseStore.finished(),
+		"reopen_done": CourseStore.reopen_applied(), "fallback": fb}
+	c["late_weeks"] = int(DayPlan.today(c).get("late_weeks", 0)) if fb == "" else 0
+	return c
+
+
+## 홈을 그릴 때마다 부른다. 코스 모드면 저장소에 반영할 것을 반영한다(true = 저장소가 바뀌었으니 스냅샷을 다시 만들 것).
+##  - 계획에 reopen 이 있으면 CourseStore.reopen_weeks 를 부른다(같은 쉼에는 저장소가 0 을 돌려주므로 다시 불러도 진도가 한 번만 움직인다).
+##  - note_review_priority 는 그날 처음 한 번만 부른다(하루 안에 밀린 수가 줄어도 그날 기록은 처음 값).
+##  - 복습 블록이 끝났으면(HomeModel 계산) CourseStore.mark_block("review") 를 부른다. 나머지 블록은 CoursePlayer 가 기록한다.
+static func course_apply(snap: Dictionary) -> bool:
+	var plan: Dictionary = HomeModel.course_plan(snap)
+	if plan.is_empty():
+		return false
+	var changed := false
+	if not (plan["reopen"] as Array).is_empty() and CourseStore.reopen_weeks(plan["reopen"]) > 0:
+		changed = true
+	var day: int = CourseStore.today()
+	if _rp_day != day:
+		_rp_day = day
+		CourseStore.note_review_priority(bool(plan["review_priority"]))
+	var review_done := false
+	for b in plan["blocks"]:
+		if str((b as Dictionary)["id"]) == "review" and str((b as Dictionary)["state"]) == "done":
+			review_done = true
+	if review_done and not bool(CourseStore.blocks_today().get("review", false)):
+		if CourseStore.mark_block("review"):
+			changed = true
+	return changed
+
+
+## 시험용: 코스 모드의 "오늘 한 번" 기억을 지운다.
+static func reset_course_memory() -> void:
+	_cell_cache = {}
+	_rp_day = -1
+
+
+## "코스 5/72주": 끝낸 주 수. 진행 글은 CourseModel.progress_label 한 함수로만 만든다.
+static func course_progress_text() -> String:
+	var n := 0
+	for f in CourseStore.path_flags():
+		if f:
+			n += 1
+	return "코스 " + CourseModel.progress_label("weeks", n, CourseModel.WEEKS)
+
+
+## 끝낸 주 수의 비율(0..1).
+static func course_progress_frac() -> float:
+	var n := 0
+	for f in CourseStore.path_flags():
+		if f:
+			n += 1
+	return float(n) / float(CourseModel.WEEKS)
+
+
+## [새 코스로 시작] 카드. 누르면 on_tap(레슨 탭으로 이동만, 시작 확인은 레슨 탭이 한다). meta "button".
+static func course_offer_card(on_tap: Callable) -> CardBox:
+	var card := UI.card("Card", Ds.S3)
+	card.body.add_child(UI.label("새 코스", "Strong"))
+	card.body.add_child(UI.label("0부터 72주, 하루 45분으로 영어를 차근차근 쌓아요.", "Small"))
+	var b := UI.button("새 코스로 시작", "soft", Pal.PRIMARY, 48.0)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.pressed.connect(func() -> void: on_tap.call())
+	card.body.add_child(b)
+	card.set_meta("button", b)
+	return card
+
+
+## 코스 안내 줄들(HomeModel.course_notes): 앞에 kind 도형(느낌표·점)이 있는 작은 글자. 경고는 WARN_ON 색.
+static func course_notes_box(notes: Array) -> Control:
+	var box := UI.vbox(4)
+	box.name = "CourseNotes"
+	for nt in notes:
+		var kind: String = str((nt as Dictionary).get("kind", "info"))
+		var row := UI.hbox(Ds.S2)
+		row.add_child(kind_mark(kind, 16.0))
+		var l := UI.label(str((nt as Dictionary).get("text", "")), "Small")
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if kind == "warn":
+			l.add_theme_color_override("font_color", Pal.WARN_ON)
+		row.add_child(l)
+		box.add_child(row)
+	return box
 
 
 # ---------------------------------------------------------------- small drawn marks
@@ -144,6 +271,12 @@ static func summary_text(tasks: Array) -> String:
 				parts.append("복습 " + _digits(str(t.get("title", ""))))
 			"song":
 				parts.append("노래 " + _digits(str(t.get("title", ""))) + "줄")
+			"new":
+				parts.append("새 내용")
+			"listen":
+				parts.append("듣기")
+			"speak":
+				parts.append("말하기")
 	if parts.is_empty():
 		return "오늘 할 일을 다 했어요"
 	return " · ".join(parts)
@@ -321,8 +454,12 @@ static func streak_card(lang: String, snap: Dictionary, on_toggle: Callable) -> 
 		if f:
 			stars += 1
 	var info := UI.label("XP %d · 별 %d/%d" % [Store.xp(lang), stars, PathModel.CELLS], "Small")
+	var bar_frac: float = float(stars) / float(PathModel.CELLS)
+	if not HomeModel.course_plan(snap).is_empty(): # v2.0 코스 모드 영어: 별 n/48 대신 코스 주 진행
+		info.text = "XP %d · %s" % [Store.xp(lang), course_progress_text()]
+		bar_frac = course_progress_frac()
 	card.body.add_child(info)
-	card.body.add_child(UI.progress_bar(float(stars) / float(PathModel.CELLS), Pal.REWARD, 8.0))
+	card.body.add_child(UI.progress_bar(bar_frac, Pal.REWARD, 8.0))
 	# the direct mark: a check row (the same control the old 오늘 screen used for its weekly check), flat, not a second filled button
 	var marked: bool = Store.did_day(StudyLog.today(), lang)
 	var row := UI.check_row("표시 취소" if marked else "오늘 공부한 걸로 표시", marked, func(_on: bool) -> void: on_toggle.call())

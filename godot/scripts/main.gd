@@ -617,6 +617,8 @@ func _menu_summary() -> String:
 	for f in PathModel.done_flags(l):
 		if f:
 			stars += 1
+	if l == "en" and CourseStore.mode() == CourseStore.MODE_COURSE: # v2.0: 코스 모드 영어는 별 n/48 대신 코스 주 진행
+		return "연속 %d일 · XP %d · %s" % [int(StudyLog.settle(l)["streak"]), Store.xp(l), HomeParts.course_progress_text()]
 	return "연속 %d일 · XP %d · 별 %d/%d" % [int(StudyLog.settle(l)["streak"]), Store.xp(l), stars, PathModel.CELLS]
 
 

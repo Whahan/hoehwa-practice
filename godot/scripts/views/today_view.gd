@@ -25,6 +25,7 @@ var _song_due_shown: int = -1
 var _song_thread: Thread = null
 var _refresh_queued: bool = false
 var _timer: Timer
+var _player: CoursePlayer = null ## v2.0: 코스 블록을 푸는 중이면 플레이어(이 화면 안에 붙는다, 홈 스크롤은 숨김)
 ## Tests only: (lang: String) -> Dictionary replaces HomeModel.snapshot(); anything that is not a Dictionary counts as {}.
 var snapshot_hook: Callable = Callable()
 
@@ -51,7 +52,7 @@ func _exit_tree() -> void:
 
 
 func refresh() -> void:
-	if _scroll == null:
+	if _scroll == null or has_player():
 		return
 	_start_song_scan(SongDue.MIN_GAP_SEC)
 	rebuild_keep_scroll(_scroll, _build)
@@ -80,6 +81,21 @@ func scroll_host() -> ScrollContainer:
 
 func header_block() -> Control:
 	return _header if _header != null and is_instance_valid(_header) else null
+
+
+## 안드로이드 뒤로 가기: 코스 플레이어가 열려 있으면 플레이어가 먼저 받는다.
+func go_back() -> bool:
+	if has_player():
+		return _player.go_back()
+	return false
+
+
+func has_player() -> bool:
+	return _player != null and is_instance_valid(_player)
+
+
+func player() -> CoursePlayer:
+	return _player if has_player() else null
 
 
 # ---------------------------------------------------------------- public composition (design §9.5)
@@ -137,7 +153,7 @@ func _check_day() -> bool:
 
 
 func _on_tick() -> void:
-	if not is_visible_in_tree() or not _built:
+	if not is_visible_in_tree() or not _built or has_player():
 		return
 	if _check_day():
 		return
@@ -189,6 +205,8 @@ func _build() -> void:
 	_wide = is_wide()
 	var lang: String = Store.lang()
 	_snap = _take_snapshot(lang)
+	if HomeParts.course_apply(_snap): # 코스: 쉬었다 돌아온 날의 reopen · 복습 블록 완료 기록 -> 바뀐 저장소로 다시 읽는다
+		_snap = _take_snapshot(lang)
 	_built_day = StudyLog.today()
 	_song_due_shown = int(_snap.get("song_due", 0))
 	var pos: Dictionary = Store.position()
@@ -220,6 +238,10 @@ func _build() -> void:
 	if not rs.is_empty():
 		resume_card = HomeParts.resume_card(rs, func() -> void: _go(rs.get("target", {})))
 		_cards["resume"] = resume_card
+	var offer_card: Control = null
+	if HomeModel.course_offer(_snap): # 영어이고 코스를 아직 고르지 않았다: 레슨 탭으로 보내기만 한다(시작 확인은 레슨 탭이 한다)
+		offer_card = HomeParts.course_offer_card(func() -> void: Store.navigate.emit("lesson", "en"))
+		_cards["course_offer"] = offer_card
 	var streak_card: Control = HomeParts.streak_card(lang, _snap, func() -> void:
 		Store.toggle_today(lang)
 		refresh())
@@ -252,6 +274,8 @@ func _build() -> void:
 		left.add_child(tasks_card)
 		if resume_card != null:
 			left.add_child(resume_card)
+		if offer_card != null:
+			left.add_child(offer_card)
 		right.add_child(streak_card)
 		right.add_child(fun_card)
 		if ai_card != null and not ai_prominent:
@@ -266,6 +290,8 @@ func _build() -> void:
 		_body.add_child(tasks_card)
 		if resume_card != null:
 			_body.add_child(resume_card)
+		if offer_card != null:
+			_body.add_child(offer_card)
 		_body.add_child(streak_card)
 		_body.add_child(fun_card)
 		if ai_card != null and not ai_prominent:
@@ -289,6 +315,9 @@ func _take_snapshot(lang: String) -> Dictionary:
 
 ## One line under the big title (PC): stage and week (nothing before the start day: the greeting says it).
 func _subtitle(pos: Dictionary) -> String:
+	var plan: Dictionary = HomeModel.course_plan(_snap)
+	if not plan.is_empty():
+		return "코스 %d주 %d일 · %s" % [plan["w"], plan["d"], CourseModel.stage_title(CourseModel.stage_of_week(plan["w"]))]
 	var phase: String = pos["phase"]
 	if phase == "before":
 		return ""
@@ -353,6 +382,11 @@ func _tasks_card() -> Control:
 		rows.add_child(row)
 		_task_btns.append(row.get_meta("button"))
 	card.body.add_child(rows)
+	var notes: Array = HomeModel.course_notes(_snap)
+	if not notes.is_empty():
+		var nb: Control = HomeParts.course_notes_box(notes)
+		card.body.add_child(nb)
+		card.set_meta("notes", nb)
 	return card
 
 
@@ -405,7 +439,39 @@ func _go(target: Variant) -> void:
 	if view == "" or not (args is Dictionary):
 		return
 	var lang: String = str((args as Dictionary).get("lang", Store.lang()))
+	if view == "course":
+		_open_player(args as Dictionary)
+		return
 	if view == "lesson":
 		Store.navigate_args.emit(view, (args as Dictionary).duplicate())
 	else:
 		Store.navigate.emit(view, lang)
+
+
+# ---------------------------------------------------------------- course player (v2.0)
+
+## 코스 블록 하나를 이 화면 안에서 푼다. spec = {kind, w, d, block, half, ...}(lang 은 뺀다). 끝나거나 나가면 홈을 다시 그린다:
+## 기록은 플레이어가 결과 카드가 뜨기 전에 CourseStore 에 남기므로(unit_done 의 block) 다시 그린 홈의 그 줄이 "done" 이 된다.
+func _open_player(args: Dictionary) -> void:
+	if has_player():
+		return
+	var spec: Dictionary = args.duplicate()
+	spec.erase("lang")
+	_scroll.visible = false
+	_player = CoursePlayer.open(self, spec)
+	_player.finished.connect(func(_res: Dictionary) -> void: _close_player())
+	_player.left.connect(func() -> void: _close_player())
+	bar_changed.emit()
+
+
+func _close_player() -> void:
+	if not has_player():
+		return
+	var p: CoursePlayer = _player
+	_player = null
+	if p.get_parent() != null:
+		p.get_parent().remove_child(p)
+	p.queue_free()
+	_scroll.visible = true
+	refresh()
+	bar_changed.emit()
