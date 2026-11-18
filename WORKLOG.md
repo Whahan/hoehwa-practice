@@ -143,3 +143,8 @@ elease_1.0.1` 준비됨). **실제 릴리스는 자동 실행 권한 분류기�
   - PA1 스파이크(v200p/pa1 d81e5da): 안드로이드 .so 1.9MB·비-Gradle APK 포함 확인, Windows SDK 없어 .dll·PC 시험(PA1-4·5·9) 미검증(사용자에게 VS Installer 로 Windows 11 SDK 설치 요청 중). G1 은 프로브 앱으로 사용자 실기 대기.
   - E3 수정 2라운드 검토 중(pos 점프·away_days). E4b 계약: 말하기 블록 `block:"speak"`, 복습 `block:"review"`, D5 맨몸 speak 는 칸 완료. E6: recap 완료 뒤 표시는 `blocks_today().new` 로 판단.
   - 진행 중: A2(5~8)·A3(9~12)·A4(13~16) 원고, E4a 문제 화면, 프로브 APK.
+- 2026-11-18 (저녁) **main 병합**: E3 b65bc3e, E4a 044fa22, 1~16주 원고(A2~A4+통합 정리) b585ea7 + X2 표(심은 오류 30/30, 실제 C0·M6 반영), E7 286c0d0, Gemini 표본 반영·수동 낱말 듣기 문장 30개·oh/ATM 4b33f47, KB 출시 데이터 1cec4c1(문장 991, 전수 가드 36,895문제 위반 0·dropped 0%).
+  - **KB-5 사람 표본 → 사용자 결정으로 Gemini 4 Hydrogen High(Orca antigravity 작업자)가 대신 검수**: 1차 300개 C5·M15 → 원고 반영(+같은 종류 전체) → 바뀐 46개 재검수 C1·M2 반영 → 새 문장 32개 C1·M5 반영 → **새 표본 300개(seed 777) C0·M3 = 합격**. README·노트에 "한국어 표본은 AI(Gemini) 독립 검수, 사람 검수 아님" 표기 필요(Z). 남은 M3(w0164 not ko, s0011, s0295)은 다음 원고 손질 때.
+  - 폰 G1(갤럭시 S24, 프로브 앱): base 중앙값 1.8~1.9초, 메모리 +232MB, 자체 시험 105/106(abort 2.59초) → PA1 이 whisper.cpp 패치(스케줄러 abort 콜백)로 PC 0.64→0.01초. Windows SDK 10.0.26100 사용자 설치, PC dll·native_bridge_test 106/0. PA1(v200p/pa1 e4e0e45) 독립 검토 중. P0 합격·보류(2.0.1).
+  - E4b 플레이어 2라운드 검토 중. 계약 메모: E5/E6 는 D5 새 내용에 `block:"new"`, DayPlan 에 `reopen_done: CourseStore.reopen_applied()`, 그날 홈 첫 그림에 `reopen_weeks` 한 번.
+  - 다음: E4b 합격 → E5(코스 홈)·E6(오늘 화면) 병렬 → 통합 시험 → Z 문서 → 2.0.0 릴리스(사용자 승인).
