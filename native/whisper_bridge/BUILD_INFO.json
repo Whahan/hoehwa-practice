@@ -8,13 +8,13 @@
     "artifacts":  {
                       "android-arm64":  {
                                             "file":  "godot/bin/libwhisper_bridge.android.arm64.so",
-                                            "bytes":  1917376,
-                                            "sha256":  "7dbcb127619ebacacbffcd952424fc422a8ebfaf50ee28b14fa6013b9188af3a"
+                                            "bytes":  1916928,
+                                            "sha256":  "ac22dc63dea2a6c006d3c9196ee05a02912e3c952e12d6a57403e0971a55cdaa"
                                         },
                       "windows-x64":  {
                                           "file":  "godot/bin/whisper_bridge.windows.x86_64.dll",
-                                          "bytes":  2356224,
-                                          "sha256":  "50774a2ae260985f1169568e50f6bb2eddd8c5e72364611f441563a9a74ae1ed"
+                                          "bytes":  2355712,
+                                          "sha256":  "53c17b966e931b6b7302b5937a9fdbe5f113fcc766866af41e7e55924dc8134c"
                                       }
                   },
     "whisper_cpp_patches":  [

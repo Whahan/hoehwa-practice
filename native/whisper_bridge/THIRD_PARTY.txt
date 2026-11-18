@@ -6,6 +6,9 @@ The built library (libwhisper_bridge.android.arm64.so / whisper_bridge.windows.x
    https://github.com/ggml-org/whisper.cpp
    License: MIT, Copyright (c) 2023-2026 The ggml authors
 
+   Modified: whisper.cpp is used with one patch, patches/whisper_abort_in_sched.patch (applied by build.ps1 for the build only):
+   the abort callback is also set on the ggml scheduler backends.
+
 2. godot-cpp, tag godot-4.5-stable (commit e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77)
    https://github.com/godotengine/godot-cpp
    License: MIT, Copyright (c) 2017-present Godot Engine contributors

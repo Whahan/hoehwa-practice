@@ -9,6 +9,21 @@ set(WB_DEPS "${CMAKE_CURRENT_LIST_DIR}/../_deps" CACHE PATH "folder with godot-c
 set(WB_WHISPER_COMMIT "unknown" CACHE STRING "whisper.cpp commit shown by WhisperBridge.version()")
 set(WB_BRIDGE_VERSION "1" CACHE STRING "bridge version shown by WhisperBridge.version()")
 
+set(WB_PATCHES "" CACHE STRING "names of the whisper.cpp patches that are applied (shown by WhisperBridge.version(), e.g. abort-sched)")
+
+# Same bytes whatever folder the sources and the build live in: no absolute paths in __FILE__ strings, deterministic PE timestamp.
+get_filename_component(WB_DEPS_ABS "${WB_DEPS}" ABSOLUTE)
+get_filename_component(WB_SRC_ABS "${CMAKE_CURRENT_LIST_DIR}" ABSOLUTE)
+if(MSVC)
+    file(TO_NATIVE_PATH "${WB_DEPS_ABS}" WB_DEPS_NATIVE)
+    file(TO_NATIVE_PATH "${WB_SRC_ABS}" WB_SRC_NATIVE)
+    file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}" WB_BIN_NATIVE)
+    add_compile_options("/d1trimfile:${WB_DEPS_NATIVE}\\" "/d1trimfile:${WB_SRC_NATIVE}\\" "/d1trimfile:${WB_BIN_NATIVE}\\")
+    add_link_options(/Brepro)
+else()
+    add_compile_options("-ffile-prefix-map=${WB_DEPS_ABS}=/wb/deps" "-ffile-prefix-map=${WB_SRC_ABS}=/wb/src" "-ffile-prefix-map=${CMAKE_BINARY_DIR}=/wb/build")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -60,6 +75,7 @@ target_include_directories(whisper_bridge PRIVATE
 target_compile_definitions(whisper_bridge PRIVATE
     WB_WHISPER_COMMIT="${WB_WHISPER_COMMIT}"
     WB_BRIDGE_VERSION="${WB_BRIDGE_VERSION}"
+    WB_PATCHES="${WB_PATCHES}"
 )
 
 if(ANDROID)

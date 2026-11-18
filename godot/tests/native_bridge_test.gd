@@ -13,6 +13,7 @@ var model_path: String = ""
 var tiny_path: String = ""
 var wav_dir: String = ""
 var expected: Dictionary = {}
+var flip_step: int = 1               ## --flip-step=N: test every Nth header bit (1 = all 448)
 var fail_names: PackedStringArray = PackedStringArray()   ## names of the failed checks (the probe copies them into its result text)
 var trace_path: String = ""          ## --trace=<file>: every item is written here BEFORE it runs (survives a crash); last line "done" = finished
 var trace_lines: PackedStringArray = PackedStringArray()
@@ -56,6 +57,8 @@ func _trace(item: String) -> void:
 func _ready() -> void:
 	print("== native_bridge start ==")
 	trace_path = _arg("--trace=")
+	if _arg("--flip-step=") != "":
+		flip_step = maxi(1, int(_arg("--flip-step=")))
 	_trace("start")
 	model_path = _arg("--model=")
 	tiny_path = _arg("--tiny=")
@@ -77,11 +80,13 @@ func _ready() -> void:
 	_selfcheck()
 	await _test_no_model()
 	await _test_bad_model_files()
+	await _test_header_damage()
 	await _test_normal()
 	await _test_bad_input()
 	await _test_options()
 	await _test_lifecycle()
 	await _test_abort()
+	await _test_abort_queued()
 	await _test_concurrent()
 	if _arg("--bench") != "" or "--bench" in OS.get_cmdline_user_args():
 		await _bench()
@@ -190,6 +195,7 @@ func _test_no_model() -> void:
 	var b: Object = _bridge()
 	var v: String = str(b.call("version"))
 	ok(v != "" and v.begins_with("bridge ") and v.contains("whisper.cpp"), "version() is '%s'" % v)
+	ok(v.contains("+abort-sched"), "version() shows the whisper.cpp abort patch ('+abort-sched'): a build without the patch must not pass")
 	ok(str(_bridge().call("version")) == v, "version() is stable across instances")
 	ok(not b.is_loaded(), "is_loaded() false before load_model")
 	ok(str(b.model_file()) == "", "model_file() empty before load_model")
@@ -367,6 +373,76 @@ func _test_options() -> void:
 	b.unload()
 
 
+## Header values that made ggml/whisper.cpp abort or crash (review round 1), and every single bit of the first 56 bytes.
+func _patch_bytes(path: String, offset: int, data: PackedByteArray) -> void:
+	var f: FileAccess = FileAccess.open(path, FileAccess.READ_WRITE)
+	f.seek(offset)
+	f.store_buffer(data)
+	f.close()
+
+
+func _i32(v: int) -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(4)
+	out.encode_s32(0, v)
+	return out
+
+
+func _damaged_header_refused(b: Object, gp: String, label: String) -> String:
+	_trace("check_model " + label)
+	var why: String = str(b.call("check_model", gp))
+	_trace("load_model " + label)
+	var err: int = int(b.load_model(gp))
+	var loaded: bool = b.is_loaded()
+	if loaded:
+		b.unload()
+	if err == OK or loaded:
+		ok(false, "%s: load_model must refuse it (err %d, check '%s')" % [label, err, why])
+	return why
+
+
+func _test_header_damage() -> void:
+	print("[damaged model headers]")
+	_trace("section damaged model headers")
+	var b: Object = _bridge()
+	var folder: String = "user://test_native_bridge"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(folder))
+	var gp: String = ProjectSettings.globalize_path(folder.path_join("hdr.bin"))
+	_trace("copy the model for the header tests")
+	DirAccess.copy_absolute(model_path, gp)
+	var orig: PackedByteArray = FileAccess.get_file_as_bytes(model_path).slice(0, 56)
+	# values that crashed or aborted before (ftype at byte 44, n_vocab at byte 4)
+	var specific: Dictionary = {44: [1005, 1004, 1006, 5, 6, 4, 1041, 1137, 2033, -1, 99999, 3009], 4: [50000, 52000, 55000, 59999, 60000, 0, -1, 2147483647, 51867]}
+	var n_specific: int = 0
+	var all_rejected: bool = true
+	for off in specific.keys():
+		for v in specific[off]:
+			_patch_bytes(gp, int(off), _i32(int(v)))
+			var why: String = _damaged_header_refused(b, gp, "header int32 at %d = %d" % [int(off), int(v)])
+			n_specific += 1
+			if why == "ok":
+				all_rejected = false
+			_patch_bytes(gp, int(off), orig.slice(int(off), int(off) + 4))
+	ok(all_rejected, "check_model refuses all %d odd ftype / n_vocab values (no 'ok', no abort)" % n_specific)
+	# every single bit of magic + hyper-parameters + mel filter header
+	var by_reason: Dictionary = {}
+	var flips: int = 0
+	for bit in range(0, 56 * 8, flip_step):
+		var byte_i: int = bit / 8
+		var flipped: int = orig[byte_i] ^ (1 << (bit % 8))
+		_patch_bytes(gp, byte_i, PackedByteArray([flipped]))
+		var why2: String = _damaged_header_refused(b, gp, "header bit %d (byte %d)" % [bit, byte_i])
+		by_reason[why2] = int(by_reason.get(why2, 0)) + 1
+		flips += 1
+		_patch_bytes(gp, byte_i, PackedByteArray([orig[byte_i]]))
+	print("    header bit flips: %d tried, check_model said %s" % [flips, str(by_reason)])
+	ok(flips >= 56 * 8 / maxi(1, flip_step) - 1, "%d header bit flips tried (step %d) without a crash" % [flips, flip_step])
+	_trace("check_model of the restored copy")
+	ok(str(b.call("check_model", gp)) == "ok" and int(b.load_model(gp)) == OK, "the restored copy is a good model again")
+	b.unload()
+	DirAccess.remove_absolute(gp)
+
+
 func _test_lifecycle() -> void:
 	print("[load / unload]")
 	_trace("section load / unload")
@@ -413,10 +489,48 @@ func _test_abort() -> void:
 	var res: Dictionary = out.get("result", {})
 	var took: int = int(out.get("done_at", Time.get_ticks_msec() + 99999)) - t_abort
 	ok(not res.is_empty() and not res["ok"] and res["error"] == "aborted", "abort() after 300 ms -> error 'aborted' (got '%s')" % str(res.get("error")))
-	ok(took <= 2000, "the aborted transcription ended %d ms after abort() (<= 2000)" % took)
+	var limit: int = 2000 if OS.has_feature("android") else 150   # PC: measured 5-16 ms with the patch, 130-640 ms without it
+	ok(took <= limit, "the aborted transcription ended %d ms after abort() (<= %d)" % [took, limit])
 	ok(contract_problems(res).is_empty(), "aborted result keeps its shape")
 	var r2: Dictionary = _transcribe(b, "coffee.wav")
 	ok(r2["ok"] and hits("I would like a cup of coffee, please.", str(r2["text"])) >= 5, "a normal transcription works right after an abort")
+	_trace("unload")
+	b.unload()
+
+
+## abort() must also reach a transcribe() call that has been made but still waits behind a running one (it used to be lost).
+func _test_abort_queued() -> void:
+	print("[abort reaches a waiting call]")
+	_trace("section abort reaches a waiting call")
+	var b: Object = _bridge()
+	_load(b, model_path)
+	var limit: int = 2000 if OS.has_feature("android") else 150
+	var bad: int = 0
+	for i in range(25):
+		var oa: Dictionary = {}
+		var ob: Dictionary = {}
+		var ta := Thread.new()
+		var tb := Thread.new()
+		_trace("abort-waiting round %d: thread A (long27.wav)" % i)
+		ta.start(_thread_transcribe.bind(b, "long27.wav", oa))
+		OS.delay_msec(80)
+		_trace("abort-waiting round %d: thread B (coffee.wav) waits behind A" % i)
+		tb.start(_thread_transcribe.bind(b, "coffee.wav", ob))
+		OS.delay_msec(80)
+		_trace("abort-waiting round %d: abort()" % i)
+		var t0: int = Time.get_ticks_msec()
+		b.abort()
+		ta.wait_to_finish()
+		tb.wait_to_finish()
+		var wall: int = Time.get_ticks_msec() - t0
+		var ea: String = str(oa["result"].get("error", "?"))
+		var eb: String = str(ob["result"].get("error", "?"))
+		if ea != "aborted" or eb != "aborted" or wall > limit:
+			bad += 1
+			print("    round %d: A '%s', B '%s', %d ms after abort()" % [i, ea, eb, wall])
+	ok(bad == 0, "25 rounds: abort() stops the running call AND the one waiting behind it, each within %d ms (%d bad rounds)" % [limit, bad])
+	var r: Dictionary = _transcribe(b, "coffee.wav")
+	ok(r["ok"] and hits("I would like a cup of coffee, please.", str(r["text"])) >= 5, "a normal transcription works after the rounds")
 	_trace("unload")
 	b.unload()
 

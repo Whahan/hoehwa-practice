@@ -40,6 +40,9 @@
 #ifndef WB_WHISPER_COMMIT
 #define WB_WHISPER_COMMIT "unknown"
 #endif
+#ifndef WB_PATCHES
+#define WB_PATCHES ""
+#endif
 #ifndef WB_BRIDGE_VERSION
 #define WB_BRIDGE_VERSION "1"
 #endif
@@ -56,12 +59,20 @@ constexpr float kMaxSecondsLimit = 30.0f; // one whisper window; longer audio is
 
 void drop_log(ggml_log_level, const char *, void *) {}
 
+// abort() applies to every transcribe() call that was already made (running, or still preparing / waiting for the mutex), never to a
+// later one: each call remembers the abort number it saw when it was called.
+struct AbortCtx {
+	const std::atomic<uint64_t> *gen;
+	uint64_t mine;
+	bool aborted() const { return gen->load() != mine; }
+};
+
 bool abort_cb(void *p_user) {
-	return static_cast<std::atomic<bool> *>(p_user)->load();
+	return static_cast<AbortCtx *>(p_user)->aborted();
 }
 
 bool encoder_begin_cb(whisper_context *, whisper_state *, void *p_user) {
-	return !static_cast<std::atomic<bool> *>(p_user)->load();
+	return !static_cast<AbortCtx *>(p_user)->aborted();
 }
 
 uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
@@ -321,7 +332,7 @@ WhisperBridge::WhisperBridge() {
 }
 
 WhisperBridge::~WhisperBridge() {
-	abort_.store(true);
+	abort_gen_.fetch_add(1);
 	std::lock_guard<std::mutex> lk(mutex_);
 	if (ctx_) {
 		whisper_free(ctx_);
@@ -331,7 +342,11 @@ WhisperBridge::~WhisperBridge() {
 }
 
 String WhisperBridge::version() {
-	return String("bridge ") + String(WB_BRIDGE_VERSION) + String(" / whisper.cpp ") + String(WB_WHISPER_COMMIT);
+	String v = String("bridge ") + String(WB_BRIDGE_VERSION) + String(" / whisper.cpp ") + String(WB_WHISPER_COMMIT);
+	if (WB_PATCHES[0] != 0) {
+		v += String(" +") + String(WB_PATCHES); // e.g. "+abort-sched": the whisper.cpp patch is in this build
+	}
+	return v;
 }
 
 int WhisperBridge::load_model(const String &p_path, int p_threads) {
@@ -448,7 +463,7 @@ String WhisperBridge::model_file() const {
 }
 
 void WhisperBridge::unload() {
-	abort_.store(true); // let a running transcription stop, then free under the mutex
+	abort_gen_.fetch_add(1); // let a running transcription stop, then free under the mutex
 	std::lock_guard<std::mutex> lk(mutex_);
 	if (ctx_) {
 		whisper_free(ctx_);
@@ -459,10 +474,11 @@ void WhisperBridge::unload() {
 }
 
 void WhisperBridge::abort() {
-	abort_.store(true);
+	abort_gen_.fetch_add(1);
 }
 
 Dictionary WhisperBridge::transcribe(const PackedByteArray &p_wav, const String &p_lang, const Dictionary &p_options) {
+	AbortCtx actx{ &abort_gen_, abort_gen_.load() }; // first thing: abort() from now on applies to this call
 	using clock = std::chrono::steady_clock;
 	auto t_start = clock::now();
 	auto elapsed_ms = [&]() { return (int)std::max<long long>(1, std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t_start).count()); };
@@ -498,7 +514,9 @@ Dictionary WhisperBridge::transcribe(const PackedByteArray &p_wav, const String 
 	double duration = (double)pcm.size() / (double)kTargetRate;
 
 	std::lock_guard<std::mutex> lk(mutex_);
-	abort_.store(false); // an abort() only ever applies to the transcription that is running
+	if (actx.aborted()) {
+		return fail("aborted", duration, elapsed_ms());
+	}
 	if (!ctx_) {
 		return fail("no_model", duration, elapsed_ms());
 	}
@@ -545,12 +563,12 @@ Dictionary WhisperBridge::transcribe(const PackedByteArray &p_wav, const String 
 		fp.beam_search.beam_size = beam;
 	}
 	fp.abort_callback = abort_cb;
-	fp.abort_callback_user_data = &abort_;
+	fp.abort_callback_user_data = &actx;
 	fp.encoder_begin_callback = encoder_begin_cb;
-	fp.encoder_begin_callback_user_data = &abort_;
+	fp.encoder_begin_callback_user_data = &actx;
 
 	int rc = wb_guard_full(ctx_, fp, pcm.data(), (int)pcm.size());
-	if (abort_.load()) {
+	if (actx.aborted()) {
 		return fail("aborted", duration, elapsed_ms(), model);
 	}
 	if (rc != 0) {

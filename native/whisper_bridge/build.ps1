@@ -87,7 +87,8 @@ try {
     $cmake = (Get-Command cmake -ErrorAction SilentlyContinue)
     if (-not $cmake) { Fail "cmake 를 찾지 못했어요 / cmake not found" }
     $Build = Join-Path $Out $Target
-    $common = @("-S", $Here, "-B", $Build, "-DCMAKE_BUILD_TYPE=Release", "-DWB_WHISPER_COMMIT=$($PinnedWhisper.Substring(0,7))", "-DWB_BRIDGE_VERSION=$BridgeVersion", "-DBUILD_SHARED_LIBS=OFF")
+    $patchName = if ($NoPatch) { "" } else { "abort-sched" }
+    $common = @("-S", $Here, "-B", $Build, "-DCMAKE_BUILD_TYPE=Release", "-DWB_WHISPER_COMMIT=$($PinnedWhisper.Substring(0,7))", "-DWB_BRIDGE_VERSION=$BridgeVersion", "-DWB_PATCHES=$patchName", "-DBUILD_SHARED_LIBS=OFF")
     $outName = $null
 
     if ($Target -eq "android-arm64") {

@@ -21,7 +21,7 @@ class WhisperBridge : public RefCounted {
 	mutable std::mutex name_mutex_; // guards model_file_ only (a String must not be read while it is written)
 	whisper_context *ctx_ = nullptr;
 	std::atomic<bool> loaded_{ false };
-	std::atomic<bool> abort_{ false };
+	std::atomic<uint64_t> abort_gen_{ 0 }; // abort() adds 1; a transcription is aborted when the number changed since it was called
 	int threads_ = 2;
 	String model_file_;
 

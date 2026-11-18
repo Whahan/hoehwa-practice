@@ -102,12 +102,50 @@ ModelCheck check_model_file(const std::string &path, int64_t *out_size) {
 	}
 	const int32_t n_vocab = hp[0], n_audio_ctx = hp[1], n_audio_state = hp[2], n_audio_head = hp[3], n_audio_layer = hp[4];
 	const int32_t n_text_ctx = hp[5], n_text_state = hp[6], n_text_head = hp[7], n_text_layer = hp[8], n_mels = hp[9], ftype = hp[10];
-	const bool layers_ok = n_audio_layer == 4 || n_audio_layer == 6 || n_audio_layer == 12 || n_audio_layer == 24 || n_audio_layer == 32;
-	const bool ranges_ok = n_vocab >= 50000 && n_vocab <= 60000 && n_audio_ctx >= 1 && n_audio_ctx <= 3000 && n_audio_state >= 64 &&
-			n_audio_state <= 2048 && n_audio_head >= 1 && n_audio_head <= 32 && n_audio_state % n_audio_head == 0 && layers_ok &&
-			n_text_ctx >= 1 && n_text_ctx <= 1024 && n_text_state == n_audio_state && n_text_head == n_audio_head && n_text_layer >= 1 &&
-			n_text_layer <= 32 && (n_mels == 80 || n_mels == 128) && ftype >= 0;
-	if (!ranges_ok || ggml_ftype_to_ggml_type((enum ggml_ftype)(ftype % GGML_QNT_VERSION_FACTOR)) == GGML_TYPE_COUNT) {
+	// Only the published Whisper sizes are accepted, exactly. Anything else (also a single flipped bit) is refused here: whisper.cpp and
+	// ggml assert/abort or crash on odd values (unknown ftype -> GGML_ASSERT, n_vocab > 51866 -> out-of-range writes, ...).
+	struct Size {
+		int32_t state, head, audio_layer, text_layer;
+	};
+	static const Size sizes[] = {
+		{ 384, 6, 4, 4 }, // tiny
+		{ 512, 8, 6, 6 }, // base
+		{ 768, 12, 12, 12 }, // small
+		{ 1024, 16, 24, 24 }, // medium
+		{ 1280, 20, 32, 32 }, // large
+		{ 1280, 20, 32, 4 }, // large-v3-turbo
+	};
+	bool size_ok = false;
+	for (const Size &z : sizes) {
+		if (n_audio_state == z.state && n_audio_head == z.head && n_audio_layer == z.audio_layer && n_text_layer == z.text_layer) {
+			size_ok = true;
+		}
+	}
+	const bool vocab_ok = n_vocab == 51864 || n_vocab == 51865 || n_vocab == 51866;
+	const bool mels_ok = (n_mels == 80 && n_vocab != 51866) || (n_mels == 128 && n_vocab == 51866); // 128 mel bands only in large-v3
+	// ftype = quantization version * 1000 + ggml ftype; list of the base ftypes whisper.cpp models use (ggml_ftype enum values)
+	const int32_t qntvr = ftype / GGML_QNT_VERSION_FACTOR;
+	const int32_t ft = ftype % GGML_QNT_VERSION_FACTOR;
+	bool ftype_ok = ftype >= 0 && qntvr <= 2;
+	switch (ft) {
+		case 0: // all f32
+		case 1: // mostly f16
+		case 2: // mostly q4_0
+		case 3: // mostly q4_1
+		case 7: // mostly q8_0
+		case 8: // mostly q5_0
+		case 9: // mostly q5_1
+		case 10: // q2_k
+		case 11: // q3_k
+		case 12: // q4_k
+		case 13: // q5_k
+		case 14: // q6_k
+			break;
+		default:
+			ftype_ok = false;
+	}
+	if (!(size_ok && vocab_ok && mels_ok && ftype_ok && n_audio_ctx == 1500 && n_text_ctx == 448 && n_text_state == n_audio_state &&
+				n_text_head == n_audio_head)) {
 		return ModelCheck::BadHparams;
 	}
 
@@ -116,7 +154,7 @@ ModelCheck check_model_file(const std::string &path, int64_t *out_size) {
 	if (!r.get(n_mel) || !r.get(n_fft)) {
 		return ModelCheck::Truncated;
 	}
-	if ((n_mel != 80 && n_mel != 128) || n_fft != 201) {
+	if (n_mel != n_mels || n_fft != 201) {
 		return ModelCheck::BadFilters;
 	}
 	const int64_t filter_bytes = (int64_t)n_mel * n_fft * 4;
@@ -132,7 +170,7 @@ ModelCheck check_model_file(const std::string &path, int64_t *out_size) {
 	if (!r.get(n_tok)) {
 		return ModelCheck::Truncated;
 	}
-	if (n_tok < 1 || n_tok > n_vocab) {
+	if (n_tok != 50257) { // every published Whisper model stores 50257 tokens (the rest are added by whisper.cpp)
 		return ModelCheck::BadVocab;
 	}
 	for (int32_t i = 0; i < n_tok; i++) {
