@@ -24,6 +24,8 @@ extends Control
 ##    new/listen/speak/recap -> CourseStore.unit_done({unit,w,d,ok,total,first_try,wrong,words_new,completed,seconds,block}),
 ##    check -> CourseStore.check_done, month -> CourseStore.month_done,
 ##    기록은 "준비 -> 기록" 순서다: 점수·복습 카드 목록 등을 모두 계산하고 데이터가 아직 있는지 확인한 뒤에만 쓴다(중간에 데이터가 사라지면 아무것도 기록하지 않는다).
+##    코스 진도 기록(unit_done/check_done/month_done)을 맨 먼저 하고, saved:false 면(거절 ignored 가 아닌 저장 실패) 아무것도 더 쓰지 않고 오류 화면으로 끝낸다.
+##    그 뒤 Store·StudyLog 저장이 실패하면 결과 카드가 "일부 기록을 저장하지 못했어요"라고 말한다(Store.save_progress 는 결과를 돌려주지 않아 같은 파일을 한 번 더 써서 확인한다).
 ##    저장소가 칸 기록을 거절하면(미리 해 본 칸 ahead, 코스 모드 아님) 레슨·XP 는 남기되 결과 카드가 그렇게 알리고, ahead 면 복습 카드는 넣지 않는다.
 ##    CourseCards.add_unit(kind new 만), 틀린 문제의 복습 카드, StudyLog.add_lesson, Store.add_xp / inc_stat / mark_today, StudyLog.note_resume.
 ##    예전 12개월 길의 레슨 기록은 건드리지 않는다. 일부러 그만두면 아무것도 기록하지 않는다.
@@ -49,6 +51,8 @@ const DONE_TITLES := {"new": "오늘 새 내용을 마쳤어요", "listen": "듣
 const TEXT_BUILD := "오늘 할 문제를 만들지 못했어요. 돌아가서 다시 시도해 주세요."
 const TEXT_DATA := "코스 데이터를 읽을 수 없어요. 앱을 다시 설치해 주세요."
 const TEXT_EMPTY := "풀 수 있는 문제가 없어서 기록하지 않았어요. 돌아가서 다시 시도해 주세요."
+const TEXT_SAVE := "진도를 저장하지 못했어요. 저장 공간을 확인한 뒤 다시 해 주세요."
+const TEXT_PARTIAL := "일부 기록을 저장하지 못했어요. 저장 공간을 확인해 주세요."
 const TEXT_KIND := "이 단위는 아직 열 수 없어요."
 const MONTH_PASS := 70
 const CARD_NOTE := "틀린 문제"
@@ -658,7 +662,13 @@ func _finish_unit() -> void:
 			passed = pct >= MONTH_PASS
 		_:
 			store_res = CourseStore.unit_done(unit_res)
-	var ahead: bool = bool(store_res.get("ignored", false)) and String(store_res.get("reason", "")) == "ahead"
+	var refused: bool = bool(store_res.get("ignored", false)) ## 미리 해 본 칸·코스 모드 아님 등: 실패가 아니라 "기록 대상이 아님"
+	if not refused and not bool(store_res.get("saved", false)):
+		# 코스 진도를 저장하지 못했다: 나머지(카드·XP·레슨)는 하나도 기록하지 않고, 메모리를 디스크 쪽으로 되돌린 뒤 오류로 끝낸다.
+		CourseStore.load()
+		_show_error(TEXT_SAVE)
+		return
+	var ahead: bool = refused and String(store_res.get("reason", "")) == "ahead"
 	StudyLog.add_lesson(LANG, good, total)
 	Store.add_xp(LANG, good * 10)
 	Store.inc_stat(LANG, "lessons")
@@ -668,8 +678,11 @@ func _finish_unit() -> void:
 	if not ahead: # 미리 해 본 칸의 복습 카드는 그 칸을 실제로 할 때 넣는다(중복 방지)
 		cards_unit = CourseCards.add_unit(w, d) if kind == "new" else 0
 		cards_wrong = Store.add_review(wrong_cards)
-	Store.save_progress()
 	StudyLog.note_resume("lesson", LANG)
+	Store.save_progress()
+	# Store.save_progress 는 성공 여부를 돌려주지 않는다(실패하면 알림만 띄운다): 같은 파일을 한 번 더 써 보고 결과를 확인한다.
+	var saved_all: bool = (not Store.progress_read_only) and Progress.save_file(Store.progress_path, Store.progress)
+	saved_all = StudyLog.flush() and saved_all
 	_recorded = true
 	var pos_after: Dictionary = CourseStore.pos()
 	result = unit_res.duplicate(true)
@@ -683,6 +696,7 @@ func _finish_unit() -> void:
 	result["speak_state"] = speak_state
 	result["pos_before"] = pos_before
 	result["moved"] = pos_after != pos_before
+	result["partial"] = not saved_all
 	result["cards_added"] = cards_unit + cards_wrong
 	result["cards_unit"] = cards_unit
 	result["cards_wrong"] = cards_wrong
@@ -772,6 +786,8 @@ func _show_result() -> void:
 	var nxt: String = _next_text()
 	if nxt != "":
 		card.body.add_child(_line("NextLine", nxt))
+	if bool(result.get("partial", false)):
+		card.body.add_child(_line("PartialLine", TEXT_PARTIAL))
 	page.content.add_child(card)
 	var footer := PanelContainer.new()
 	footer.name = "ResultFooter"

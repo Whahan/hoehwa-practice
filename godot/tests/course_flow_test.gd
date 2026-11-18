@@ -102,6 +102,7 @@ func _ready() -> void:
 	await _test_store_refuses()
 	await _test_finish_vanish()
 	await _test_dialogue_retry()
+	await _test_save_failures()
 	await _test_second_data()
 	await _test_resume()
 	await _test_speak_pc()
@@ -857,6 +858,7 @@ func _test_main_flow() -> void:
 	ok(cards_line.contains(CourseModel.progress_label("cards", int(res["cards_added"]), 0)), "CardsLine uses progress_label: %s" % cards_line)
 	ok(_label_text(p, "NextLine").contains("1주 4일"), "NextLine tells the next cell: %s" % _label_text(p, "NextLine"))
 	ok(bool(res["moved"]), "result.moved says pos moved")
+	ok(not bool(res["partial"]) and p.find_child("PartialLine", true, false) == null, "on a normal run every save worked and the card says nothing about failed saves")
 	# [완료] 는 한 번만 finished 를 낸다
 	press(_btn(p, "DoneBtn"), "DoneBtn (w1d3)")
 	eq(finished_log.size(), 1, "finished was emitted once")
@@ -948,6 +950,8 @@ func _test_check_and_month() -> void:
 	var af_total: int = int(pf.result["auto_total"])
 	eq(af_total + int(pf.result["speak_n"]), int(pf.result["total"]), "check: auto-graded + speaking questions = all questions")
 	ok(_label_text(pf, "ScoreLine").contains(CourseModel.progress_label("questions", af_ok, af_total)) and _label_text(pf, "ScoreLine").contains(CourseModel.progress_label("percent", int(pf.result["pct"]), 100)), "check card: ScoreLine counts only the auto-graded questions, with the percent of the same basis: %s" % _label_text(pf, "ScoreLine"))
+	eq(String(pf.result["speak_state"]), "unverified", "check: speaking that was all given up is recorded as unverified")
+	eq(String(CourseStore.week_state(1).get("speak", "")), "unverified", "and so is it in the course file")
 	ok(_label_text(pf, "SpeakLine").contains("건너뛰었어요"), "check card: given-up speaking is said to be skipped: %s" % _label_text(pf, "SpeakLine"))
 	eq(_lessons(), int(snap["lessons"]) + 1, "the check counts as a lesson")
 	press(_btn(pf, "DoneBtn"), "DoneBtn (check fail)")
@@ -1079,6 +1083,74 @@ func _test_finish_vanish() -> void:
 	CourseData.base_dir = K1_DIR
 	CourseData.reset()
 	CourseFeed.reset()
+	CoursePlayer.build_hook = Callable()
+
+
+## 마지막 문제를 풀고 [다음] 직전까지 간다.
+func _play_to_last(p: CoursePlayer, label: String) -> void:
+	var guard: int = 0
+	while p.state == "run" and guard < 60:
+		guard += 1
+		if CourseExerciseView.is_info_card(p.view.ex):
+			press(_btn(p, "NextBtn"), "NextBtn (%s: card)" % label)
+			await _frames(1)
+			continue
+		await _answer_current(p, true, label)
+		if p.idx >= p.queue.size() - 1:
+			break
+		press(_btn(p, "NextBtn"), "NextBtn (%s)" % label)
+		await _frames(1)
+
+
+func _test_save_failures() -> void:
+	print("[saving fails: the course file cannot be written / the progress file cannot be written]")
+	var bad_dir: String = "user://no_such_dir_e4b"
+	ok(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(bad_dir)), "the unwritable location really does not exist")
+	# 1) 코스 진도를 못 쓴다 -> 아무것도 기록하지 않고 오류 화면
+	_world(K1_DIR)
+	_advance_to(1, 3)
+	_use_hook(Callable(self, "_short_2"))
+	var snap: Dictionary = _snap()
+	var p: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 3, "seed": 2})
+	await _play_to_last(p, "save fail")
+	ok(p.state == "run" and p.view.state == "answered", "the last question is answered")
+	CourseStore.path = bad_dir + "/course.json"
+	press(_btn(p, "NextBtn"), "NextBtn (save fail: the last one)")
+	await _frames(2)
+	eq(p.state, "error", "unit_done could not save -> error screen, not a result card")
+	ok(_label_text(p, "ErrorText").contains("진도를 저장하지 못했어요"), "the error says the progress could not be saved: %s" % _label_text(p, "ErrorText"))
+	ok(_ready_btn(_btn(p, "ErrorBackBtn")), "[돌아가기] is there")
+	ok(p.find_child("ResultBox", true, false) == null and p.result.is_empty(), "no result card (so no 'next cell' promise) and no result")
+	eq(Store.xp("en"), int(snap["xp"]), "no XP was given")
+	eq(_lessons(), int(snap["lessons"]), "no StudyLog lesson was added")
+	eq(Store.stat("en", "lessons"), int(snap["stat"]), "no lessons stat")
+	eq(_review_n(), int(snap["review"]), "no review card was added")
+	CourseStore.path = CS
+	CourseStore.reset_memory()
+	eq(_snap(), snap, "read back from the disk, pos and everything else are as before")
+	press(_btn(p, "ErrorBackBtn"), "ErrorBackBtn (save fail)")
+	eq(left_n, 1, "[돌아가기] leaves")
+	# 2) 같은 일을 정상 경로로 하면 지금까지처럼 기록된다
+	var q: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 3, "seed": 2})
+	await _play_unit(q, {}, "save ok")
+	eq(q.state, "result", "with a writable path the same unit ends with a result card")
+	eq(CourseStore.pos(), {"w": 1, "d": 4}, "and pos moved")
+	ok(not bool(q.result["partial"]), "nothing is reported as unsaved")
+	# 3) 진도는 저장됐지만 진행 기록 파일을 못 쓴다 -> 결과 카드가 사실대로 말한다
+	_world(K1_DIR)
+	_advance_to(1, 3)
+	_use_hook(Callable(self, "_short_2"))
+	var r: CoursePlayer = await _open({"kind": "new", "w": 1, "d": 3, "seed": 2})
+	await _play_to_last(r, "partial")
+	Store.progress_path = bad_dir + "/test_e4b_progress.json"
+	press(_btn(r, "NextBtn"), "NextBtn (partial: the last one)")
+	await _frames(2)
+	Store.progress_path = PROG
+	eq(r.state, "result", "the course progress was saved, so the result card is shown")
+	eq(CourseStore.pos(), {"w": 1, "d": 4}, "pos moved")
+	ok(bool(r.result["partial"]), "result.partial is true")
+	ok(_label_text(r, "PartialLine").contains("일부 기록을 저장하지 못했어요"), "the card says some records were not saved: %s" % _label_text(r, "PartialLine"))
+	press(_btn(r, "DoneBtn"), "DoneBtn (partial)")
 	CoursePlayer.build_hook = Callable()
 
 
