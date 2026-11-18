@@ -1,0 +1,1372 @@
+{
+ "v": 1,
+ "w": 1,
+ "title_ko": "알파벳 이름·모음 소리·인사",
+ "can_do": [
+  "알파벳 26자의 이름을 듣고 따라 말할 수 있다",
+  "a, e, i, o, u 의 짧은 소리를 구별해 말할 수 있다",
+  "Hi, Hello, Thanks, Sorry 같은 인사를 말할 수 있다"
+ ],
+ "scene": {
+  "id": "sounds_hello",
+  "title_ko": "알파벳과 첫 인사",
+  "canada": [
+   "cn_app_voice",
+   "cn_zed"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0001",
+   "en": "hi",
+   "pos": "interj",
+   "ko": "안녕",
+   "ipa": "haɪ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0002"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0002",
+   "en": "hello",
+   "pos": "interj",
+   "ko": "안녕하세요",
+   "ipa": "həˈloʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [
+    "w0001"
+   ],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0003",
+   "en": "bye",
+   "pos": "interj",
+   "ko": "잘 가요",
+   "ipa": "baɪ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0004",
+   "en": "thanks",
+   "pos": "interj",
+   "ko": "고마워요",
+   "ipa": "θæŋks",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0005",
+   "en": "sorry",
+   "pos": "interj",
+   "ko": "미안해요",
+   "ipa": "ˈsɑːri",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0006",
+   "en": "yes",
+   "pos": "interj",
+   "ko": "네",
+   "ipa": "jɛs",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0007",
+   "en": "no",
+   "pos": "interj",
+   "ko": "아니요",
+   "ipa": "noʊ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0008",
+   "en": "cat",
+   "pos": "n",
+   "ko": "고양이",
+   "ipa": "kæt",
+   "say": "",
+   "tags": [
+    "animal"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0009",
+   "en": "bag",
+   "pos": "n",
+   "ko": "가방",
+   "ipa": "bæɡ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0010",
+   "en": "hat",
+   "pos": "n",
+   "ko": "모자",
+   "ipa": "hæt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0011",
+   "en": "bed",
+   "pos": "n",
+   "ko": "침대",
+   "ipa": "bɛd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0012",
+   "en": "pen",
+   "pos": "n",
+   "ko": "펜",
+   "ipa": "pɛn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0013",
+   "en": "red",
+   "pos": "adj",
+   "ko": "빨간",
+   "ipa": "rɛd",
+   "say": "",
+   "tags": [
+    "color"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0014",
+   "en": "big",
+   "pos": "adj",
+   "ko": "큰",
+   "ipa": "bɪɡ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0015",
+   "en": "sit",
+   "pos": "v",
+   "ko": "앉아요",
+   "ipa": "sɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0016",
+   "en": "hot",
+   "pos": "adj",
+   "ko": "뜨거운",
+   "ko2": "더운",
+   "ipa": "hɑːt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0017",
+   "en": "dog",
+   "pos": "n",
+   "ko": "개",
+   "ipa": "dɔːɡ",
+   "say": "",
+   "tags": [
+    "animal"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0018",
+   "en": "bus",
+   "pos": "n",
+   "ko": "버스",
+   "ipa": "bʌs",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0019",
+   "en": "cup",
+   "pos": "n",
+   "ko": "컵",
+   "ipa": "kʌp",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0020",
+   "en": "please",
+   "pos": "interj",
+   "ko": "부탁해요",
+   "ipa": "pliːz",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0021",
+   "en": "welcome",
+   "pos": "interj",
+   "ko": "환영해요",
+   "ipa": "ˈwɛlkəm",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0022",
+   "en": "good",
+   "pos": "adj",
+   "ko": "좋은",
+   "ipa": "ɡʊd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0023",
+   "en": "morning",
+   "pos": "n",
+   "ko": "아침",
+   "ipa": "ˈmɔːrnɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0024",
+   "en": "night",
+   "pos": "n",
+   "ko": "밤",
+   "ipa": "naɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0510",
+   "en": "Min",
+   "pos": "propn",
+   "ko": "민",
+   "ipa": "mɪn",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0511",
+   "en": "Sam",
+   "pos": "propn",
+   "ko": "샘",
+   "ipa": "sæm",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0512",
+   "en": "Anna",
+   "pos": "propn",
+   "ko": "애나",
+   "ipa": "ˈænə",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0513",
+   "en": "Ben",
+   "pos": "propn",
+   "ko": "벤",
+   "ipa": "bɛn",
+   "say": "",
+   "tags": [
+    "name"
+   ],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_greet",
+   "tpl": "Hi! / Hello! / Thanks. / Sorry.",
+   "slots": [
+    {
+     "name": "greeting",
+     "pos": [
+      "interj"
+     ]
+    }
+   ],
+   "title_ko": "인사·감사·사과 (안녕, 고마워요, 미안해요)",
+   "grammar_ko": [
+    "Hi 는 가볍게, Hello 는 처음 만났을 때도 쓰는 조금 더 단정한 인사예요.",
+    "Thanks 는 '고마워요'의 짧은 말이에요(Thank you 는 3주차에 배워요). Sorry 는 사과할 때 짧게 말해요.",
+    "이름을 뒤에 붙이면 더 다정해요: Hi, Min. / Thanks, Sam. 영어에는 존댓말이 따로 없어요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0001",
+    "s0002",
+    "s0004",
+    "s0005",
+    "s0008",
+    "s0009"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0001",
+   "en": "Hi.",
+   "ko": "안녕.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0002",
+   "en": "Hello.",
+   "ko": "안녕하세요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0003",
+   "en": "Bye.",
+   "ko": "잘 가요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0004",
+   "en": "Thanks.",
+   "ko": "고마워요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0005",
+   "en": "Sorry.",
+   "ko": "미안해요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0006",
+   "en": "Yes.",
+   "ko": "네.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0007",
+   "en": "No.",
+   "ko": "아니요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0008",
+   "en": "Yes, thanks.",
+   "ko": "네, 고마워요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0009",
+   "en": "No, thanks.",
+   "ko": "아니요, 괜찮아요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0010",
+   "en": "No, sorry.",
+   "ko": "아니요, 미안해요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0011",
+   "en": "Bye, bye.",
+   "ko": "바이바이.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0012",
+   "en": "Thanks, bye.",
+   "ko": "고마워요, 잘 가요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0013",
+   "en": "Hi, Min.",
+   "ko": "안녕, 민.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0014",
+   "en": "Hello, Sam.",
+   "ko": "안녕하세요, 샘.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0015",
+   "en": "Thanks, Min.",
+   "ko": "고마워요, 민.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0016",
+   "en": "Sorry, Sam.",
+   "ko": "미안해요, 샘.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0017",
+   "en": "Red hat.",
+   "ko": "빨간 모자요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0018",
+   "en": "Red bag.",
+   "ko": "빨간 가방이요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0019",
+   "en": "Red pen.",
+   "ko": "빨간 펜이요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0020",
+   "en": "Big red bed.",
+   "ko": "크고 빨간 침대요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0021",
+   "en": "No, red bag.",
+   "ko": "아니요, 빨간 가방이요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0022",
+   "en": "Big dog.",
+   "ko": "큰 개요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0023",
+   "en": "Big cat.",
+   "ko": "큰 고양이요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0024",
+   "en": "Big bus.",
+   "ko": "큰 버스요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0025",
+   "en": "Big bed.",
+   "ko": "큰 침대요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0026",
+   "en": "Hot cup.",
+   "ko": "뜨거운 컵이요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0027",
+   "en": "Hot dog.",
+   "ko": "핫도그요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0028",
+   "en": "Red bus.",
+   "ko": "빨간 버스요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0029",
+   "en": "Hi, Anna.",
+   "ko": "안녕, 애나.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0030",
+   "en": "Bye, Ben.",
+   "ko": "잘 가요, 벤.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0031",
+   "en": "Thanks, Anna.",
+   "ko": "고마워요, 애나.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0032",
+   "en": "Sorry, Ben.",
+   "ko": "미안해요, 벤.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0033",
+   "en": "Sit, Ben.",
+   "ko": "앉아요, 벤.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0034",
+   "en": "Please.",
+   "ko": "부탁해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0035",
+   "en": "Welcome.",
+   "ko": "어서 오세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0036",
+   "en": "Good morning.",
+   "ko": "좋은 아침이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0037",
+   "en": "Good night.",
+   "ko": "잘 자요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0038",
+   "en": "Good morning, Min.",
+   "ko": "좋은 아침이에요, 민.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0039",
+   "en": "Good night, Sam.",
+   "ko": "잘 자요, 샘.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0040",
+   "en": "Good night, cat.",
+   "ko": "잘 자요, 고양이.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0041",
+   "en": "Hello, welcome.",
+   "ko": "안녕하세요, 어서 오세요.",
+   "say": "",
+   "pat": "p_greet",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0042",
+   "en": "Sit, please.",
+   "ko": "앉아 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0043",
+   "en": "Hot dog, please.",
+   "ko": "핫도그 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0044",
+   "en": "Red hat, please.",
+   "ko": "빨간 모자 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0045",
+   "en": "Pen, please.",
+   "ko": "펜 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0046",
+   "en": "Bag, please.",
+   "ko": "가방 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0047",
+   "en": "Cup, please.",
+   "ko": "컵 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0048",
+   "en": "Yes, please.",
+   "ko": "네, 부탁해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0049",
+   "en": "Big cup, please.",
+   "ko": "큰 컵 주세요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0001",
+   "title_ko": "첫 인사",
+   "scene": "sounds_hello",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Hello, Min.",
+     "ko": "안녕하세요, 민.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Hi, Anna.",
+     "ko": "안녕, 애나.",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "Sit, please.",
+     "ko": "앉아 주세요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Thanks.",
+     "ko": "고마워요.",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": [
+  {
+   "id": "n0101",
+   "kind": "culture",
+   "text_ko": "앱의 소리는 컴퓨터 합성음이에요. 실제 사람의 말은 더 빠르고 억양이 달라서, 사람과 말하는 연습도 함께 하는 것이 좋아요.",
+   "_cn": "cn_app_voice"
+  },
+  {
+   "id": "n0102",
+   "kind": "sound",
+   "text_ko": "캐나다에서는 알파벳 Z 를 보통 zed 라고 읽어요. 미국의 zee 도 알아들으면 돼요.",
+   "_cn": "cn_zed"
+  },
+  {
+   "id": "n0103",
+   "kind": "sound",
+   "en": "A (ay)",
+   "text_ko": "알파벳 A: 이름은 ay 예요. cat, bag, hat 에 들어 있어요.",
+   "_sound": "snd_name_a"
+  },
+  {
+   "id": "n0104",
+   "kind": "sound",
+   "en": "B (bee)",
+   "text_ko": "알파벳 B: 이름은 bee 예요. bed, bus, bag 에 들어 있어요.",
+   "_sound": "snd_name_b"
+  },
+  {
+   "id": "n0105",
+   "kind": "sound",
+   "en": "C (see)",
+   "text_ko": "알파벳 C: 이름은 see 예요. cat, cup 에 들어 있어요.",
+   "_sound": "snd_name_c"
+  },
+  {
+   "id": "n0106",
+   "kind": "sound",
+   "en": "D (dee)",
+   "text_ko": "알파벳 D: 이름은 dee 예요. dog 에 들어 있어요.",
+   "_sound": "snd_name_d"
+  },
+  {
+   "id": "n0107",
+   "kind": "sound",
+   "en": "E (ee)",
+   "text_ko": "알파벳 E: 이름은 ee 예요. bed, red, pen 에 들어 있어요.",
+   "_sound": "snd_name_e"
+  },
+  {
+   "id": "n0108",
+   "kind": "sound",
+   "en": "F (eff)",
+   "text_ko": "알파벳 F: 이름은 eff 예요. 아랫입술을 윗니에 살짝 대고 내는 f 소리와 이름을 함께 연습해요.",
+   "_sound": "snd_name_f"
+  },
+  {
+   "id": "n0109",
+   "kind": "sound",
+   "en": "G (gee)",
+   "text_ko": "알파벳 G: 이름은 gee 예요. good 에 들어 있어요.",
+   "_sound": "snd_name_g"
+  },
+  {
+   "id": "n0110",
+   "kind": "sound",
+   "en": "H (aitch)",
+   "text_ko": "알파벳 H: 이름은 aitch 예요. hat, hot, hello 에 들어 있어요. 이름 aitch 는 h 소리로 시작해요(나라에 따라 haitch 라고도 해요).",
+   "_sound": "snd_name_h"
+  },
+  {
+   "id": "n0111",
+   "kind": "sound",
+   "en": "I (eye)",
+   "text_ko": "알파벳 I: 이름은 eye 예요. big, sit 에 들어 있어요. 이름 eye 는 '눈'(eye)과 같은 소리예요.",
+   "_sound": "snd_name_i"
+  },
+  {
+   "id": "n0112",
+   "kind": "sound",
+   "en": "J (jay)",
+   "text_ko": "알파벳 J: 이름은 jay 예요.",
+   "_sound": "snd_name_j"
+  },
+  {
+   "id": "n0113",
+   "kind": "sound",
+   "en": "K (kay)",
+   "text_ko": "알파벳 K: 이름은 kay 예요.",
+   "_sound": "snd_name_k"
+  },
+  {
+   "id": "n0114",
+   "kind": "sound",
+   "en": "L (el)",
+   "text_ko": "알파벳 L: 이름은 el 예요. 이름 el 은 끝에서 혀끝을 윗잇몸에 대요.",
+   "_sound": "snd_name_l"
+  },
+  {
+   "id": "n0115",
+   "kind": "sound",
+   "en": "M (em)",
+   "text_ko": "알파벳 M: 이름은 em 예요. morning 에 들어 있어요.",
+   "_sound": "snd_name_m"
+  },
+  {
+   "id": "n0116",
+   "kind": "sound",
+   "en": "N (en)",
+   "text_ko": "알파벳 N: 이름은 en 예요. night, no 에 들어 있어요.",
+   "_sound": "snd_name_n"
+  },
+  {
+   "id": "n0117",
+   "kind": "sound",
+   "en": "O (oh)",
+   "text_ko": "알파벳 O: 이름은 oh 예요. hot, dog 에 들어 있어요. 이름 oh 는 짧은 감탄 Oh 와 같은 소리예요.",
+   "_sound": "snd_name_o"
+  },
+  {
+   "id": "n0118",
+   "kind": "sound",
+   "en": "P (pee)",
+   "text_ko": "알파벳 P: 이름은 pee 예요. pen, please 에 들어 있어요.",
+   "_sound": "snd_name_p"
+  },
+  {
+   "id": "n0119",
+   "kind": "sound",
+   "en": "Q (cue)",
+   "text_ko": "알파벳 Q: 이름은 cue 예요.",
+   "_sound": "snd_name_q"
+  },
+  {
+   "id": "n0120",
+   "kind": "sound",
+   "en": "R (ar)",
+   "text_ko": "알파벳 R: 이름은 ar 예요. red 에 들어 있어요. 이름 ar 은 혀를 입천장에 닿지 않게 뒤로 말아요.",
+   "_sound": "snd_name_r"
+  },
+  {
+   "id": "n0121",
+   "kind": "sound",
+   "en": "S (ess)",
+   "text_ko": "알파벳 S: 이름은 ess 예요. sit, sorry 에 들어 있어요.",
+   "_sound": "snd_name_s"
+  },
+  {
+   "id": "n0122",
+   "kind": "sound",
+   "en": "T (tee)",
+   "text_ko": "알파벳 T: 이름은 tee 예요.",
+   "_sound": "snd_name_t"
+  },
+  {
+   "id": "n0123",
+   "kind": "sound",
+   "en": "U (you)",
+   "text_ko": "알파벳 U: 이름은 you 예요. bus, cup 에 들어 있어요.",
+   "_sound": "snd_name_u"
+  },
+  {
+   "id": "n0124",
+   "kind": "sound",
+   "en": "V (vee)",
+   "text_ko": "알파벳 V: 이름은 vee 예요. 이름 vee 는 아랫입술을 윗니에 대고 목을 울려요(b 와 달라요).",
+   "_sound": "snd_name_v"
+  },
+  {
+   "id": "n0125",
+   "kind": "sound",
+   "en": "W (double-you)",
+   "text_ko": "알파벳 W: 이름은 double-you 예요. welcome 에 들어 있어요. 이름은 두 글자처럼 double-you 라고 길게 말해요.",
+   "_sound": "snd_name_w"
+  },
+  {
+   "id": "n0126",
+   "kind": "sound",
+   "en": "X (ex)",
+   "text_ko": "알파벳 X: 이름은 ex 예요.",
+   "_sound": "snd_name_x"
+  },
+  {
+   "id": "n0127",
+   "kind": "sound",
+   "en": "Y (why)",
+   "text_ko": "알파벳 Y: 이름은 why 예요. yes 에 들어 있어요. 이름 why 는 '왜'(why)와 같은 소리예요.",
+   "_sound": "snd_name_y"
+  },
+  {
+   "id": "n0128",
+   "kind": "sound",
+   "en": "Z (zed)",
+   "text_ko": "알파벳 Z: 이름은 zed 예요. 캐나다·영국은 zed, 미국은 zee 라고 해요.",
+   "_sound": "snd_name_z"
+  },
+  {
+   "id": "n0129",
+   "kind": "sound",
+   "en": "a",
+   "text_ko": "짧은 a 소리: 입을 옆으로 크게 벌리고 혀를 낮춰서 짧게 내요. (cat, bag, hat)",
+   "_sound": "snd_short_a"
+  },
+  {
+   "id": "n0130",
+   "kind": "sound",
+   "en": "e",
+   "text_ko": "짧은 e 소리: 입을 중간쯤 벌리고 혀를 앞쪽에 둔 채 짧게 내요. (bed, red, pen)",
+   "_sound": "snd_short_e"
+  },
+  {
+   "id": "n0131",
+   "kind": "sound",
+   "en": "i",
+   "text_ko": "짧은 i 소리: 입을 조금만 벌리고 힘을 빼서 짧게 내요. 길게 끌지 않아요. (big, sit)",
+   "_sound": "snd_short_i"
+  },
+  {
+   "id": "n0132",
+   "kind": "sound",
+   "en": "o",
+   "text_ko": "짧은 o 소리: 입을 크게 벌리고 목 안쪽에서 짧게 내요. (hot, dog)",
+   "_sound": "snd_short_o"
+  },
+  {
+   "id": "n0133",
+   "kind": "sound",
+   "en": "u",
+   "text_ko": "짧은 u 소리: 입을 가볍게 벌리고 힘을 빼서 짧게 툭 내요. (bus, cup)",
+   "_sound": "snd_short_u"
+  }
+ ]
+}
