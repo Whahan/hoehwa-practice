@@ -411,7 +411,7 @@ after = tree_hashes(BACKEND)
 after_py = {k: v for k, v in after.items() if k.endswith(".py") and os.sep not in k}
 check("backend\\*.py sha256 identical before / after (%d files)" % len(after_py), after_py == BACKEND_PY_BEFORE and len(after_py) > 20, len(after_py))
 check("backend\\ whole tree (files and folders, incl. cache, data, content) identical before / after (%d entries)" % len(after), after == BACKEND_BEFORE)
-check("no backend\\cache, backend\\data, backend\\logs, __pycache__ were created", not any(k.split(os.sep)[0] in ("cache", "data", "logs", "models") or "__pycache__" in k for k in after))
+check("no backend\\cache, backend\\data, backend\\logs, __pycache__ were created", not any(k.split(os.sep)[0] in ("cache", "data", "logs", "models") or "__pycache__" in k for k in after if k not in BACKEND_BEFORE))
 tmp = tempfile.mkdtemp(prefix="hoehwa_aigolden_h_")
 try:
     with open(os.path.join(tmp, "x.py"), "wb") as fh:
