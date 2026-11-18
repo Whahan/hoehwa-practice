@@ -502,6 +502,11 @@ PA1 new native/whisper_bridge/src/register_types.h
 PA1 new native/whisper_bridge/src/register_types.cpp
 PA1 new native/whisper_bridge/src/whisper_bridge.h
 PA1 new native/whisper_bridge/src/whisper_bridge.cpp
+PA1 new native/whisper_bridge/src/model_check.h
+PA1 new native/whisper_bridge/src/model_check.cpp
+PA1 new native/whisper_bridge/src/wb_guard.h
+PA1 new native/whisper_bridge/src/wb_guard.cpp
+PA1 new native/whisper_bridge/patches/whisper_abort_in_sched.patch
 PA1 new godot/tests/native_bridge_test.gd
 PA1 new godot/tests/native_bridge_test.tscn
 PA2 new godot/scripts/core/score_core.gd
