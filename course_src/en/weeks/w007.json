@@ -1,0 +1,1562 @@
+{
+ "v": 1,
+ "w": 7,
+ "title_ko": "좋아하는 것",
+ "can_do": [
+  "좋아하는 것과 싫어하는 것을 말할 수 있다",
+  "Do you like ~? 로 묻고 답할 수 있다",
+  "My favourite ~ is ~. 로 가장 좋아하는 것을 말할 수 있다"
+ ],
+ "scene": {
+  "id": "likes_hobbies",
+  "title_ko": "취미와 좋아하는 것 이야기",
+  "canada": [
+   "cn_favourite"
+  ]
+ },
+ "words": [
+  {
+   "id": "w0175",
+   "en": "like",
+   "pos": "v",
+   "ko": "좋아해요",
+   "ipa": "laɪk",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0176",
+   "en": "don't",
+   "pos": "contr",
+   "ko": "~하지 않아요",
+   "ipa": "doʊnt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0177",
+   "en": "really",
+   "pos": "adv",
+   "ko": "정말",
+   "ipa": "ˈrɪli",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0178",
+   "en": "but",
+   "pos": "conj",
+   "ko": "하지만",
+   "ipa": "bʌt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0179",
+   "en": "great",
+   "pos": "adj",
+   "ko": "아주 좋은",
+   "ko2": "멋진",
+   "ipa": "ɡreɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0180",
+   "en": "bad",
+   "pos": "adj",
+   "ko": "나쁜",
+   "ipa": "bæd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0181",
+   "en": "fun",
+   "pos": "adj",
+   "ko": "재미있는",
+   "ipa": "fʌn",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0182",
+   "en": "music",
+   "pos": "n",
+   "ko": "음악",
+   "ipa": "ˈmjuːzɪk",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0183",
+   "en": "movie",
+   "pos": "n",
+   "ko": "영화",
+   "ipa": "ˈmuːvi",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "movies",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0184",
+   "en": "sport",
+   "pos": "n",
+   "ko": "운동",
+   "ko2": "스포츠",
+   "ipa": "spɔːrt",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "sports",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0185",
+   "en": "game",
+   "pos": "n",
+   "ko": "게임",
+   "ko2": "경기",
+   "ipa": "ɡeɪm",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [
+    {
+     "f": "games",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0186",
+   "en": "hockey",
+   "pos": "n",
+   "ko": "하키",
+   "ipa": "ˈhɑːki",
+   "say": "",
+   "tags": [
+    "hobby",
+    "canada"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0187",
+   "en": "soccer",
+   "pos": "n",
+   "ko": "축구",
+   "ipa": "ˈsɑːkər",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0188",
+   "en": "favourite",
+   "pos": "adj",
+   "ko": "제일 좋아하는",
+   "ipa": "ˈfeɪvərɪt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [
+    "favorite"
+   ],
+   "syn": [],
+   "ca": true,
+   "src": "own"
+  },
+  {
+   "id": "w0189",
+   "en": "cute",
+   "pos": "adj",
+   "ko": "귀여운",
+   "ipa": "kjuːt",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0190",
+   "en": "beautiful",
+   "pos": "adj",
+   "ko": "아름다운",
+   "ipa": "ˈbjuːtɪfəl",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0191",
+   "en": "boring",
+   "pos": "adj",
+   "ko": "지루한",
+   "ipa": "ˈbɔːrɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0192",
+   "en": "easy",
+   "pos": "adj",
+   "ko": "쉬운",
+   "ipa": "ˈiːzi",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0193",
+   "en": "hard",
+   "pos": "adj",
+   "ko": "어려운",
+   "ko2": "단단한",
+   "ipa": "hɑːrd",
+   "say": "",
+   "tags": [],
+   "role": "active",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0194",
+   "en": "animal",
+   "pos": "n",
+   "ko": "동물",
+   "ipa": "ˈænɪməl",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "animals",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0195",
+   "en": "song",
+   "pos": "n",
+   "ko": "노래",
+   "ipa": "sɔːŋ",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "songs",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0196",
+   "en": "party",
+   "pos": "n",
+   "ko": "파티",
+   "ipa": "ˈpɑːrti",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [
+    {
+     "f": "parties",
+     "pat": "p_plural_s"
+    }
+   ],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0197",
+   "en": "travel",
+   "pos": "v",
+   "ko": "여행해요",
+   "ipa": "ˈtrævəl",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0198",
+   "en": "hobby",
+   "pos": "n",
+   "ko": "취미",
+   "ipa": "ˈhɑːbi",
+   "say": "",
+   "tags": [
+    "hobby"
+   ],
+   "role": "active",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0199",
+   "en": "enjoy",
+   "pos": "v",
+   "ko": "즐겨요",
+   "ipa": "ɪnˈdʒɔɪ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0200",
+   "en": "prefer",
+   "pos": "v",
+   "ko": "더 좋아해요",
+   "ipa": "prɪˈfɜːr",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0201",
+   "en": "interesting",
+   "pos": "adj",
+   "ko": "흥미로운",
+   "ipa": "ˈɪntrəstɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 1,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0202",
+   "en": "popular",
+   "pos": "adj",
+   "ko": "인기 있는",
+   "ipa": "ˈpɑːpjələr",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0203",
+   "en": "terrible",
+   "pos": "adj",
+   "ko": "끔찍한",
+   "ipa": "ˈtɛrəbəl",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0204",
+   "en": "wonderful",
+   "pos": "adj",
+   "ko": "멋진",
+   "ipa": "ˈwʌndərfəl",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 2,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0205",
+   "en": "awesome",
+   "pos": "adj",
+   "ko": "굉장한",
+   "ipa": "ˈɔːsəm",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0206",
+   "en": "excellent",
+   "pos": "adj",
+   "ko": "훌륭한",
+   "ipa": "ˈɛksələnt",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 3,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0207",
+   "en": "exciting",
+   "pos": "adj",
+   "ko": "신나는",
+   "ipa": "ɪkˈsaɪtɪŋ",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  },
+  {
+   "id": "w0208",
+   "en": "dislike",
+   "pos": "v",
+   "ko": "싫어해요",
+   "ipa": "dɪsˈlaɪk",
+   "say": "",
+   "tags": [],
+   "role": "passive",
+   "d": 4,
+   "forms": [],
+   "alt": [],
+   "syn": [],
+   "ca": false,
+   "src": "own"
+  }
+ ],
+ "patterns": [
+  {
+   "id": "p_i_like",
+   "tpl": "I like ___. / I love ___.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I like ~ (저는 ~을 좋아해요)",
+   "grammar_ko": [
+    "I like 뒤에 좋아하는 것을 바로 말해요. 한국어 '을/를' 같은 조사가 없어요.",
+    "love 는 like 보다 훨씬 강해요. 사람에게 I like you 와 I love you 는 달라요.",
+    "I like music. 처럼 셀 수 없는 것은 a 없이 말해요. 여러 개를 좋아할 때는 I like movies. 처럼 -s 를 붙여요."
+   ],
+   "d": 1,
+   "examples": [
+    "s0374",
+    "s0375",
+    "s0376",
+    "s0377",
+    "s0378",
+    "s0379"
+   ]
+  },
+  {
+   "id": "p_do_you_like",
+   "tpl": "Do you like ___? - Yes, I do. / No, I don't.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "Do you like ~? (~ 좋아해요?)",
+   "grammar_ko": [
+    "일반 질문은 Do 로 시작해요: You like music. → Do you like music?",
+    "대답은 동사를 되풀이하지 않고 do 로 받아요: Yes, I do.",
+    "아니면 No, I don't. 처럼 do not 의 줄임말 don't 를 써요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0383",
+    "s0384",
+    "s0385",
+    "s0386",
+    "s0387",
+    "s0388"
+   ]
+  },
+  {
+   "id": "p_i_dont_like",
+   "tpl": "I don't like ___.",
+   "slots": [
+    {
+     "name": "thing",
+     "pos": [
+      "n"
+     ]
+    }
+   ],
+   "title_ko": "I don't like ~ (저는 ~을 안 좋아해요)",
+   "grammar_ko": [
+    "부정은 동사 앞에 don't 를 넣어요: I like → I don't like.",
+    "한국어 '안 좋아해요'처럼 동사 앞에 부정이 온다고 생각하면 쉬워요.",
+    "don't 뒤의 동사는 항상 원래 모양이에요."
+   ],
+   "d": 2,
+   "examples": [
+    "s0391",
+    "s0392",
+    "s0393",
+    "s0394",
+    "s0395",
+    "s0396"
+   ]
+  },
+  {
+   "id": "p_favourite",
+   "tpl": "My favourite ___ is ___.",
+   "slots": [
+    {
+     "name": "kind",
+     "pos": [
+      "n"
+     ]
+    },
+    {
+     "name": "answer",
+     "pos": [
+      "n",
+      "adj"
+     ]
+    }
+   ],
+   "title_ko": "My favourite ~ is ~ (제가 제일 좋아하는 ~은 ~예요)",
+   "grammar_ko": [
+    "favourite 는 캐나다·영국 철자예요. 미국은 favorite 라고 써요.",
+    "My favourite 뒤에 종류를 말하고 is 뒤에 답을 말해요: My favourite sport is hockey.",
+    "한국어 '제가 제일 좋아하는 운동은 하키예요'와 비슷한 순서예요."
+   ],
+   "d": 3,
+   "examples": [
+    "s0398",
+    "s0399",
+    "s0400",
+    "s0401",
+    "s0402",
+    "s0403"
+   ]
+  }
+ ],
+ "sentences": [
+  {
+   "id": "s0374",
+   "en": "I like music.",
+   "ko": "저는 음악을 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0375",
+   "en": "I like hockey.",
+   "ko": "저는 하키를 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0376",
+   "en": "I like soccer.",
+   "ko": "저는 축구를 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0377",
+   "en": "I like movies.",
+   "ko": "저는 영화를 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0378",
+   "en": "I love music.",
+   "ko": "저는 음악을 아주 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0379",
+   "en": "I love hockey.",
+   "ko": "저는 하키를 아주 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0380",
+   "en": "They like music.",
+   "ko": "그 사람들은 음악을 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0381",
+   "en": "I like to travel.",
+   "ko": "저는 여행하는 것을 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0382",
+   "en": "I really like soccer.",
+   "ko": "저는 축구를 정말 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0383",
+   "en": "Do you like hockey?",
+   "ko": "하키 좋아하세요?",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0384",
+   "en": "Do you like music?",
+   "ko": "음악 좋아하세요?",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0385",
+   "en": "Do you like soccer?",
+   "ko": "축구 좋아하세요?",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0386",
+   "en": "Do you like movies?",
+   "ko": "영화 좋아하세요?",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0387",
+   "en": "Do you like to travel?",
+   "ko": "여행하는 것을 좋아하세요?",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0388",
+   "en": "Yes, I do.",
+   "ko": "네, 좋아해요.",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0389",
+   "en": "No, I don't.",
+   "ko": "아니요, 안 좋아해요.",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0390",
+   "en": "Yes, I do. I love hockey.",
+   "ko": "네, 좋아해요. 저는 하키를 아주 좋아해요.",
+   "say": "",
+   "pat": "p_do_you_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0391",
+   "en": "I don't like hockey.",
+   "ko": "저는 하키를 안 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0392",
+   "en": "I don't like soccer.",
+   "ko": "저는 축구를 안 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0393",
+   "en": "I don't like fish.",
+   "ko": "저는 생선을 안 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0394",
+   "en": "I don't like this game.",
+   "ko": "저는 이 게임을 안 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0395",
+   "en": "I don't like boring movies.",
+   "ko": "저는 지루한 영화를 안 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0396",
+   "en": "I don't like long movies.",
+   "ko": "저는 긴 영화를 안 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0397",
+   "en": "No, I don't. But I like soccer.",
+   "ko": "아니요, 안 좋아해요. 하지만 축구는 좋아해요.",
+   "say": "",
+   "pat": "p_i_dont_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0398",
+   "en": "My favourite colour is blue.",
+   "ko": "제가 제일 좋아하는 색은 파란색이에요.",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0399",
+   "en": "My favourite sport is hockey.",
+   "ko": "제가 제일 좋아하는 운동은 하키예요.",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0400",
+   "en": "My favourite animal is a dog.",
+   "ko": "제가 제일 좋아하는 동물은 개예요.",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0401",
+   "en": "What's your favourite colour?",
+   "ko": "제일 좋아하는 색이 뭐예요?",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0402",
+   "en": "What's your favourite sport?",
+   "ko": "제일 좋아하는 운동이 뭐예요?",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0403",
+   "en": "What's your favourite animal?",
+   "ko": "제일 좋아하는 동물이 뭐예요?",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0404",
+   "en": "Hockey is my favourite sport.",
+   "ko": "하키는 제가 제일 좋아하는 운동이에요.",
+   "say": "",
+   "pat": "p_favourite",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0405",
+   "en": "I really like music.",
+   "ko": "저는 음악을 정말 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0406",
+   "en": "It's hard.",
+   "ko": "어려워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0407",
+   "en": "I love this song.",
+   "ko": "저는 이 노래를 아주 좋아해요.",
+   "say": "",
+   "pat": "p_i_like",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0408",
+   "en": "This song is great.",
+   "ko": "이 노래는 아주 좋아요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0409",
+   "en": "It's fun.",
+   "ko": "재미있어요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0410",
+   "en": "Hockey is fun.",
+   "ko": "하키는 재미있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0411",
+   "en": "This game is fun.",
+   "ko": "이 게임은 재미있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0412",
+   "en": "This movie is boring.",
+   "ko": "이 영화는 지루해요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0413",
+   "en": "Hockey is not boring.",
+   "ko": "하키는 지루하지 않아요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0414",
+   "en": "This game is easy.",
+   "ko": "이 게임은 쉬워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0415",
+   "en": "English is not easy.",
+   "ko": "영어는 쉽지 않아요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0416",
+   "en": "Hockey is hard, but it's fun.",
+   "ko": "하키는 어렵지만 재미있어요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0417",
+   "en": "Your dog is cute.",
+   "ko": "개가 귀여워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0418",
+   "en": "My cat is very cute.",
+   "ko": "제 고양이는 아주 귀여워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0419",
+   "en": "Canada is beautiful.",
+   "ko": "캐나다는 아름다워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0420",
+   "en": "This city is beautiful.",
+   "ko": "이 도시는 아름다워요.",
+   "say": "",
+   "pat": "",
+   "d": 3,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0421",
+   "en": "That's great.",
+   "ko": "아주 좋네요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0422",
+   "en": "The movie is great.",
+   "ko": "그 영화는 아주 좋아요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0423",
+   "en": "That's bad.",
+   "ko": "그건 안 좋네요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0424",
+   "en": "It's not bad.",
+   "ko": "나쁘지 않아요.",
+   "say": "",
+   "pat": "",
+   "d": 1,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0425",
+   "en": "What's your hobby?",
+   "ko": "취미가 뭐예요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0426",
+   "en": "My hobby is music.",
+   "ko": "제 취미는 음악이에요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0427",
+   "en": "I like hockey, but I don't like soccer.",
+   "ko": "저는 하키는 좋아하지만 축구는 안 좋아해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0428",
+   "en": "Do you like parties?",
+   "ko": "파티 좋아하세요?",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0429",
+   "en": "The party is fun.",
+   "ko": "파티가 재미있어요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "all",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0430",
+   "en": "I enjoy hockey.",
+   "ko": "저는 하키를 즐겨요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0431",
+   "en": "I prefer soccer.",
+   "ko": "저는 축구가 더 좋아요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0432",
+   "en": "This movie is interesting.",
+   "ko": "이 영화는 흥미로워요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0433",
+   "en": "Hockey is very popular.",
+   "ko": "하키는 아주 인기 있어요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0434",
+   "en": "That movie is terrible.",
+   "ko": "그 영화는 끔찍해요.",
+   "say": "",
+   "pat": "",
+   "d": 2,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0435",
+   "en": "The party is wonderful.",
+   "ko": "파티가 멋져요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  },
+  {
+   "id": "s0436",
+   "en": "The song is awesome.",
+   "ko": "그 노래는 굉장해요.",
+   "say": "",
+   "pat": "",
+   "d": 4,
+   "scope": "listen",
+   "accept": [],
+   "src": "own",
+   "tid": 0
+  }
+ ],
+ "dialogues": [
+  {
+   "id": "d0007",
+   "title_ko": "하키 좋아하세요?",
+   "scene": "likes_hobbies",
+   "user": "B",
+   "lines": [
+    {
+     "s": "A",
+     "en": "Do you like hockey?",
+     "ko": "하키 좋아하세요?",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Yes, I do. I love it. And you?",
+     "ko": "네, 좋아해요. 저는 아주 좋아해요. 어떠세요?",
+     "say": ""
+    },
+    {
+     "s": "A",
+     "en": "No, I don't. But I like soccer.",
+     "ko": "아니요, 안 좋아해요. 하지만 축구는 좋아해요.",
+     "say": ""
+    },
+    {
+     "s": "B",
+     "en": "Soccer is fun!",
+     "ko": "축구는 재미있어요!",
+     "say": ""
+    }
+   ]
+  }
+ ],
+ "speak_prompts": [],
+ "notes": [
+  {
+   "id": "n0701",
+   "kind": "spelling",
+   "ca": "favourite",
+   "us": "favorite",
+   "text_ko": "favourite 는 캐나다 철자예요. 미국은 favorite 라고 써요. 정답을 쓸 때 favorite 도 인정해요.",
+   "_cn": "cn_favourite"
+  },
+  {
+   "id": "n0702",
+   "kind": "culture",
+   "text_ko": "캐나다에서 hockey 라고 하면 보통 아이스하키를 말해요. 법으로 정한 캐나다의 겨울 국가 스포츠는 아이스하키이고, 여름 국가 스포츠는 라크로스예요."
+  },
+  {
+   "id": "n0703",
+   "kind": "vocab",
+   "text_ko": "캐나다에서 soccer 는 우리가 아는 축구예요. football 은 보통 미식축구(캐나다식 풋볼)를 가리켜요. 그러니 축구를 말할 때는 soccer 라고 해요."
+  },
+  {
+   "id": "n0704",
+   "kind": "vocab",
+   "text_ko": "like 와 love 는 세기가 달라요. I like hockey. 는 좋아한다는 말이고, I love hockey. 는 아주 좋아한다는 말이에요. 사물에 love 를 쓰는 일은 흔해요."
+  },
+  {
+   "id": "n0705",
+   "kind": "vocab",
+   "text_ko": "Do you like ~? 에 Yes, I do. 또는 No, I don't. 로 짧게 대답해요. No 라고만 하면 퉁명스럽게 들릴 수 있어서 한마디 덧붙이면 좋아요: No, I don't. But I like soccer."
+  }
+ ]
+}
