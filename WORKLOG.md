@@ -148,3 +148,10 @@ elease_1.0.1` 준비됨). **실제 릴리스는 자동 실행 권한 분류기�
   - 폰 G1(갤럭시 S24, 프로브 앱): base 중앙값 1.8~1.9초, 메모리 +232MB, 자체 시험 105/106(abort 2.59초) → PA1 이 whisper.cpp 패치(스케줄러 abort 콜백)로 PC 0.64→0.01초. Windows SDK 10.0.26100 사용자 설치, PC dll·native_bridge_test 106/0. PA1(v200p/pa1 e4e0e45) 독립 검토 중. P0 합격·보류(2.0.1).
   - E4b 플레이어 2라운드 검토 중. 계약 메모: E5/E6 는 D5 새 내용에 `block:"new"`, DayPlan 에 `reopen_done: CourseStore.reopen_applied()`, 그날 홈 첫 그림에 `reopen_weeks` 한 번.
   - 다음: E4b 합격 → E5(코스 홈)·E6(오늘 화면) 병렬 → 통합 시험 → Z 문서 → 2.0.0 릴리스(사용자 승인).
+- 2026-11-18 (밤) **2.0.0 공개 직전까지 완료, 공개만 사용자 승인 대기**:
+  - main 병합: E4b 1ec62fe(검토 3라운드), E5 a95c42a(건너뛰기 이중 기록 수정, course_player 에 skip 전달 — 소유권 예외 승인), E6 775cab9(D7 자유 날 = listen/block new, 오늘 칸 pref `course_today_cell`, 시험 user:// 누수 수정), Z 문서 7a190d4(README 새 코스·한계·출처, ROADMAP), 버전 a75d02a(2.0.0, versionCode 20000).
+  - **통합 시험 T**: `scratchpad\w_t9\run_godot.ps1`(v2.0 새 시험 + 1.7.0 회귀 목록) 130회 실행 전부 0 failed·SCRIPT ERROR 0·TEST_GUARD 1(`w_t9\results_full.tsv`). 도구 시험 OK, 린터 1-16 CHECK_OK, X1 REVIEW_OK, 출시 데이터 = 원고 재빌드와 바이트 동일. flow_test 는 8770 필요로 미검증(기존과 같음).
+  - **DryRun OK**: `packaging\out\release_2.0.0\`(setup.exe, update-2.0.0.zip ZIPCHECK OK, APK cb237886… 정식 키 df41c6f1…, 권한 3개, versionCode 20000). 공개 명령: `$env:LOCALAPPDATA=<Claude 가상 LocalAppData>; $env:APPDATA=<w_build\appdata + junction 3개>; $env:GH_CONFIG_DIR=...; publish_release.ps1 -Version 2.0.0 -NotesFile scratchpad\notes_2.0.0.md -WithApk` (push 는 gh credential helper 필요, 메모리 release-key-location 참고). junction 은 작업 뒤 `cmd /c rmdir`.
+  - **사용자 아침 할 일**: 바탕화면 `발음샘플\`(42개, `목록.txt`) 듣고 이상한 것 알려 주기 → "공개해". 결정 필요: 알파벳 글자 소리 노트는 앱이 읽지 않음(1주 sound 노트에 tts 연결 없음) — 2.0.0 에 넣을지/나중에. 가격 읽기($5.99 = five ninety-nine) 괜찮은지.
+  - 폰 PA1(v200p/pa1 67b9f36) 검토 2라운드 합격, 2.0.1 까지 보류(P0 f20df1f 도 보류). 남은 사소: load_model/unload 가 전사 중 막힘(LocalStt 비동기 호출), q8/f16 실물 미검증.
+  - 알려진 사소(나중에): Gemini 표본2 M3(w0164, s0011, s0295), E5 블록 머리글 글자 중간 줄바꿈(폰 font 1.5, 기존), E4b 저장 실패 오류 제목, E7 시험 font/dark 옵션 무시, 수동 낱말 중 일부는 듣기 단위에서만 나옴.
