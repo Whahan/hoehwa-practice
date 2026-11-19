@@ -74,7 +74,7 @@ class ScoreGoldenTests(unittest.TestCase):
         self.assertGreaterEqual(sum(1 for c in d["cases"] if c.get("ok_prob", 0.45) != 0.45), 10)
         self.assertGreaterEqual(len(d["align"]), 300)
         self.assertGreaterEqual(len(d["en_words"]), 380)
-        self.assertGreaterEqual(len(d["known_gaps"]), 1)
+        self.assertIsInstance(d["known_gaps"], list)
         ids = [c["id"] for c in d["cases"]]
         self.assertEqual(len(ids), len(set(ids)), "case ids are unique")
         self.assertEqual(d["v"], 1)
@@ -132,7 +132,7 @@ class ScoreGoldenTests(unittest.TestCase):
         self.assertEqual(ins["21"], ["twenty", "one"])
         self.assertEqual(ins["101"], ["one", "hundred", "and", "one"])
         self.assertEqual(ins["1234567890"], ["1234567890"])
-        for needle in ("1,234", "’", "—", " ", "Ｈ", "ﬁ", "café", "İstanbul"):
+        for needle in ("1,234", "\u2019", "\u2014", "\u00a0", "\uff28", "\ufb01", "cafe\u0301", "\u0130stanbul"):
             self.assertTrue(any(needle in k for k in ins), needle)
         self.assertGreaterEqual(sum(1 for e in self.doc["en_words"] if e["in"] in G.HARD_INPUTS), 80)
 
@@ -146,6 +146,19 @@ class ScoreGoldenTests(unittest.TestCase):
         self.assertGreaterEqual(sum(len(e["sim"]) for e in self.doc["align"]), 400)
         self.assertTrue(any(len(x) >= 200 for e in self.doc["align"] for x in e["a"] + e["b"]), "tokens of 200+ characters (autojunk)")
 
+    def test_08b_unicode_cases_present(self):
+        ids = {c["id"] for c in self.doc["cases"]}
+        for needed in ("unicode_marks_reordered", "unicode_marks_blocked", "unicode_digit_group", "unicode_armenian_stop", "unicode_greek_question"):
+            self.assertIn(needed, ids)
+        ins = {e["in"] for e in self.doc["en_words"]}
+        for needle in ("CAFE\u0315\u0301", "1,2\u06634", "1,234\u0589", "1,234\u037e"):
+            self.assertIn(needle, ins)
+        self.assertGreaterEqual(len(ins), 700)
+        by_id = {c["id"]: c for c in self.doc["cases"]}
+        r = by_id["unicode_marks_reordered"]["expect"]
+        self.assertEqual([u["t"] for u in r["units"]], ["caf"])
+        self.assertEqual(r["score"], 15)
+
     def test_08_rounding_cases_present(self):
         confs = {u["conf"] for c in self.doc["cases"] if c["id"].startswith("round_") for u in c["expect"]["units"]}
         for v in (0.062, 0.188, 0.312, 0.438, 0.123, 1.0):
@@ -158,16 +171,25 @@ class ScoreGoldenTests(unittest.TestCase):
 
     # ---- no side effects
     def test_10_no_socket_and_no_process_while_generating(self):
+        """inside the guard every attempt raises (no socket, no lookup, no process is made); afterwards the very same objects are
+        back, which is checked by identity: this test makes no socket"""
+        import subprocess
+        orig = (socket.socket.__init__, socket.getaddrinfo, socket.create_connection, subprocess.Popen.__init__)
         with G.no_network():
+            inside = (socket.socket.__init__, socket.getaddrinfo, socket.create_connection, subprocess.Popen.__init__)
+            for o, i in zip(orig, inside):
+                self.assertIsNot(o, i, "the guard replaced the member")
             with self.assertRaises(G.NetworkBlocked):
                 socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             with self.assertRaises(G.NetworkBlocked):
                 socket.getaddrinfo("localhost", 80)
             with self.assertRaises(G.NetworkBlocked):
-                import subprocess
+                socket.create_connection(("localhost", 80))
+            with self.assertRaises(G.NetworkBlocked):
                 subprocess.Popen(["cmd", "/c", "echo", "x"])
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)   # the guard is off again
-        s.close()
+        after = (socket.socket.__init__, socket.getaddrinfo, socket.create_connection, subprocess.Popen.__init__)
+        for o, a in zip(orig, after):
+            self.assertIs(o, a, "the guard put the original member back")
 
     def test_11_backend_is_untouched(self):
         with G.no_network():

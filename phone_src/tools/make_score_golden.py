@@ -131,36 +131,113 @@ def _lit(s):
     return json.dumps(s, ensure_ascii=True)   # \uXXXX escapes: a valid GDScript string literal
 
 
-def nfkc_tables_text():
-    """GDScript source of _NFKC_RUNS, _NFKC_ONE, _NONWORD, _ACCENT (from unicodedata of the Python running this tool).
-    en_words does NFKC, lower(), then keeps only a-z 0-9 ' (everything else is a space), deletes a thousands comma that has digits
-    on both sides and a non-word character after, and splits. So a code point matters when its NFKC text holds a-z 0-9 ' or a
-    comma; its other characters are reduced to U+00C0 (a word character) or a space (not a word character)."""
+def _ranges(values):
+    """sorted integers -> [(first, last), ...] of consecutive runs"""
+    out = []
+    if not values:
+        return out
+    s = p = values[0]
+    for x in values[1:]:
+        if x == p + 1:
+            p = x
+        else:
+            out.append((s, p))
+            s = p = x
+    out.append((s, p))
+    return out
+
+
+def unicode_data():
+    """The facts en_words needs from unicodedata (CPython's NFKC, lower(), \\d, \\w), as plain Python data.
+    en_words does NFKC, lower(), then keeps only a-z 0-9 ' (everything else is a space), deletes a thousands comma that has a digit
+    before it and three digits and a non-word character (or the end) after it, and splits. What can matter for one code point:
+      ent      its NFKC text holds a-z 0-9 ' or a comma: the text itself (non-ASCII letters reduced to U+00C0, a word character,
+               other non-ASCII characters to a space, which is what the final step makes of them)
+      mark_decomp / ccc / compose   canonical ordering and composition of an ASCII letter with the combining marks after it
+               (a letter that composes is no longer a-z: it becomes U+00C0, a word character; I + U+0307 gives U+0130 whose lower()
+               is "i" + U+0307, so "i" and a space)
+      digits   code points >= 0x80 with category Nd (\\d), nonword   code points >= 0x80 that are not \\w, both for the character
+               as it is after NFKC. Asserts below make sure the shortcuts used here are true for this Unicode version."""
     word = re.compile(r"\w")
+    digit = re.compile(r"\d")
+    N = unicodedata.normalize
 
     def proj(out):
         r = []
         for ch in out:
             if ord(ch) < 128:
                 r.append(ch)
-            elif ch in "’‘":
+            elif ch in "\u2019\u2018":
                 r.append("'")
+            elif digit.match(ch):
+                raise AssertionError("a non-ASCII digit in an NFKC text: U+%04X" % ord(ch))
             elif word.match(ch):
-                r.append("À")
+                r.append("\u00c0")
             else:
                 r.append(" ")
         return "".join(r)
-    ent = {}
-    for c in range(0x80, 0x30000):
+    ent, changed = {}, {}
+    for c in range(0x80, 0x110000):
         if 0xD800 <= c <= 0xDFFF:
             continue
         ch = chr(c)
-        n = unicodedata.normalize("NFKC", ch)
+        n = N("NFKC", ch)
         if n == ch:
             continue
+        changed[c] = n
         low = n.lower()
-        if re.search(r"[a-z0-9',]", low) or re.search("[’‘`]", low):
+        if re.search(r"[a-z0-9',]", low) or re.search("[\u2019\u2018`]", low):
             ent[c] = proj(n)
+        elif not n:
+            raise AssertionError("a character that vanishes under NFKC: U+%04X" % c)
+        elif any(digit.match(x) and ord(x) > 127 for x in n):
+            raise AssertionError("a non-ASCII digit in an NFKC text: U+%04X" % c)
+    # lower() of a character that NFKC leaves alone gives ASCII only for U+0130
+    for c in range(0x80, 0x30000):
+        if 0xD800 <= c <= 0xDFFF or c in changed:
+            continue
+        if re.search(r"[a-z0-9]", chr(c).lower()) and c != 0x130:
+            raise AssertionError("lower() gives ASCII for U+%04X" % c)
+    # marks
+    ccc = {}
+    for c in range(0x80, 0x110000):
+        if 0xD800 <= c <= 0xDFFF:
+            continue
+        cc = unicodedata.combining(chr(c))
+        if cc:
+            ccc[c] = cc
+    mark_decomp = {}
+    for c in range(0x80, 0x110000):
+        if 0xD800 <= c <= 0xDFFF:
+            continue
+        n = N("NFKD", chr(c))
+        if n != chr(c) and n and all(unicodedata.combining(x) > 0 for x in n):
+            mark_decomp[c] = [ord(x) for x in n]
+    for c in ent:   # no NFKC text of the table starts with a mark (it would join the letter before it)
+        assert not unicodedata.combining(N("NFKD", chr(c))[0]), "U+%04X" % c
+    for c, n in changed.items():   # a changed character that starts with a mark is one of mark_decomp
+        if unicodedata.combining(N("NFKD", chr(c))[0]):
+            assert c in mark_decomp, "U+%04X" % c
+    compose = {}
+    for m in sorted(ccc):
+        if m in mark_decomp:
+            continue
+        letters = "".join(L for L in string.ascii_letters if len(N("NFC", L + chr(m))) == 1)
+        if letters:
+            compose[m] = letters
+        for x in string.digits + "',":    # only letters compose with a mark
+            assert len(N("NFC", x + chr(m))) == 2, "U+%04X" % m
+    digits, nonword = [], []
+    for c in range(0x80, 0x110000):
+        if 0xD800 <= c <= 0xDFFF or c in ent:
+            continue
+        n = changed.get(c, chr(c))
+        f = n[0]
+        if not word.match(f):
+            nonword.append(c)
+        if c not in changed and digit.match(chr(c)):
+            digits.append(c)
+    # runs of NFKC-text that are consecutive ASCII
     items = sorted(ent.items())
     runs, singles = [], {}
     i = 0
@@ -177,51 +254,54 @@ def nfkc_tables_text():
         else:
             singles[c] = n
             i += 1
-    blocks = [(0x80, 0x2FF), (0x300, 0x36F), (0x2000, 0x2BFF), (0x2E00, 0x2FFF), (0x3000, 0x303F), (0x4DC0, 0x4DFF), (0xE000, 0xF8FF),
-              (0xFE00, 0xFE6F), (0xFF00, 0xFFEF), (0xFFF0, 0xFFFF), (0x1F000, 0x1FAFF), (0x323B0, 0x10FFFF)]
-    nw = []
-    for a, b in blocks:
-        for c in range(a, b + 1):
-            if c in ent:
-                continue
-            n = unicodedata.normalize("NFKC", chr(c))
-            f = n[0] if n else " "
-            if not word.match(f):
-                nw.append(c)
-    rng = []
-    s = p = nw[0]
-    for x in nw[1:]:
-        if x == p + 1:
-            p = x
+    ccc_runs, items2 = [], sorted(ccc.items())
+    for c, cc in items2:
+        if ccc_runs and ccc_runs[-1][1] == c - 1 and ccc_runs[-1][2] == cc:
+            ccc_runs[-1] = (ccc_runs[-1][0], c, cc)
         else:
-            rng.append((s, p))
-            s = p = x
-    rng.append((s, p))
+            ccc_runs.append((c, c, cc))
+    return {"runs": runs, "singles": singles, "mark_decomp": mark_decomp, "ccc": ccc_runs, "compose": compose,
+            "digits": _ranges(digits), "nonword": _ranges(nonword)}
+
+
+def nfkc_tables_text():
+    """GDScript source of the tables of score_core.gd (the block between the TABLES-BEGIN and TABLES-END comment lines)"""
+    d = unicode_data()
     out = ["const _NFKC_RUNS := ["]
-    line = ["[0x%X, 0x%X, %s]" % (a, b, _lit(base)) for a, b, base in runs]
+    line = ["[0x%X, 0x%X, %s]" % (a, b, _lit(base)) for a, b, base in d["runs"]]
     for k in range(0, len(line), 4):
         out.append("\t" + ", ".join(line[k:k + 4]) + ",")
     out.append("]")
     out.append("const _NFKC_ONE := {")
-    line = ["0x%X: %s" % (c, _lit(v)) for c, v in sorted(singles.items())]
+    line = ["0x%X: %s" % (c, _lit(v)) for c, v in sorted(d["singles"].items())]
     for k in range(0, len(line), 5):
         out.append("\t" + ", ".join(line[k:k + 5]) + ",")
     out.append("}")
-    out.append("const _NONWORD := [")
-    line = ["0x%X, 0x%X" % (a, b) for a, b in rng]
-    for k in range(0, len(line), 8):
-        out.append("\t" + ", ".join(line[k:k + 8]) + ",")
+    out.append("const _MARK_DECOMP := {")
+    line = ["0x%X: [%s]" % (c, ", ".join("0x%X" % x for x in v)) for c, v in sorted(d["mark_decomp"].items())]
+    for k in range(0, len(line), 4):
+        out.append("\t" + ", ".join(line[k:k + 4]) + ",")
+    out.append("}")
+    out.append("const _CCC := [")
+    line = ["0x%X, 0x%X, %d" % (a, b, cc) for a, b, cc in d["ccc"]]
+    for k in range(0, len(line), 6):
+        out.append("\t" + ", ".join(line[k:k + 6]) + ",")
     out.append("]")
-    pairs = {}
-    for m in range(0x300, 0x370):
-        letters = "".join(L for L in string.ascii_letters if unicodedata.normalize("NFKC", L + chr(m))[0] != L)
-        if letters:
-            pairs[m] = letters
-    out.append("const _ACCENT := {")
-    line = ['0x%X: "%s"' % (m, s2) for m, s2 in pairs.items()]
+    out.append("const _COMPOSE := {")
+    line = ['0x%X: "%s"' % (m, s) for m, s in d["compose"].items()]
     for k in range(0, len(line), 3):
         out.append("\t" + ", ".join(line[k:k + 3]) + ",")
     out.append("}")
+    out.append("const _DIGITS := [")
+    line = ["0x%X, 0x%X" % (a, b) for a, b in d["digits"]]
+    for k in range(0, len(line), 8):
+        out.append("\t" + ", ".join(line[k:k + 8]) + ",")
+    out.append("]")
+    out.append("const _NONWORD := [")
+    line = ["0x%X, 0x%X" % (a, b) for a, b in d["nonword"]]
+    for k in range(0, len(line), 8):
+        out.append("\t" + ", ".join(line[k:k + 8]) + ",")
+    out.append("]")
     return "\n".join(out) + "\n"
 
 
@@ -299,7 +379,7 @@ def hand_cases():
     # exact / good
     add("exact_basic", "I would like a cup of coffee, please.", spec_words("I would like a cup of coffee, please."))
     add("exact_caps_punct", "Where is the nearest station?", spec_words("Where is the nearest station?"))
-    add("exact_curly_quotes", "It’s a nice day, isn’t it?", spec_words("It’s a nice day, isn’t it?"))
+    add("exact_curly_quotes", "It\u2019s a nice day, isn\u2019t it?", spec_words("It\u2019s a nice day, isn\u2019t it?"))
     add("exact_one_word", "Hello", spec_words("Hello."))
     add("exact_two_words", "Thank you", spec_words("Thank you."))
     add("low_p_all", "I would like a cup of coffee, please.", spec_words("I would like a cup of coffee, please.", p=0.3))
@@ -363,7 +443,7 @@ def hand_cases():
     add("contr_lets", "Let's go", spec_words("Let us go"))
     add("contr_gonna", "I'm gonna leave", spec_words("I am going to leave"))
     add("contr_possessive", "This is John's book", spec_words("This is John's book"))
-    add("contr_curly_ive", "I’ve been there, you’re right", spec_words("I’ve been there, you’re right"))
+    add("contr_curly_ive", "I\u2019ve been there, you\u2019re right", spec_words("I\u2019ve been there, you\u2019re right"))
     add("contr_ll_d", "She'll come and he'd go", spec_words("She'll come and he'd go"))
     add("num_digits_target", "I have 3 apples", spec_words("I have three apples"))
     add("num_digits_heard", "I have three apples", spec_words("I have 3 apples"))
@@ -401,6 +481,12 @@ def hand_cases():
                                                                                [0.9] * 8, pause_at=2, pause=3.5))
     add("flu_short_span", "Hello there friend", spec_words("Hello there friend", scale=0.15))
     add("flu_two_words_slow", "Thank you", spec_words("Thank you", scale=6.0))
+    # canonical ordering of the marks after a letter (review, 2nd round): E + U+0315 + U+0301 is E-acute + U+0315, the letter is gone
+    add("unicode_marks_reordered", "CAFE\u0315\u0301", spec_words("cafe"))
+    add("unicode_marks_blocked", "ca\u0310\u0301b", spec_words("cab"))
+    add("unicode_digit_group", "I paid 1,2\u06634", spec_words("I paid twelve four"))
+    add("unicode_armenian_stop", "I paid 1,234\u0589", spec_words("I paid one thousand two hundred and thirty four"))
+    add("unicode_greek_question", "I paid 1,234\u037e", spec_words("I paid one thousand two hundred and thirty four"))
     # conf rounding (Python round(p, 3) on exact binary values)
     for k, ps in enumerate([
         [0.0625, 0.1875, 0.3125, 0.4375],
@@ -548,7 +634,7 @@ def build_align(S, sentences):
 HARD_INPUTS = [
     # text rules
     "Hello, World!", "  leading and trailing   spaces  ", "tab\tand\nnewline", "UPPER lower MiXeD", "well-known e-mail rock-and-roll",
-    "a–b a—b a - b", "Let’s go", "‘quoted’ words", "`backtick` words", "'single' quotes 'tis", "rock'n'roll",
+    "a\u2013b a\u2014b a - b", "Let\u2019s go", "\u2018quoted\u2019 words", "`backtick` words", "'single' quotes 'tis", "rock'n'roll",
     "''' only apostrophes '''", "don't can't won't shan't ain't", "cannot gonna wanna gotta gimme lemme kinda", "y'all ma'am o'clock",
     "I'm you're we've they'll he'd", "it's that's what's there's here's who's he's she's where's how's when's why's this's",
     "everything's something's nothing's someone's everyone's", "John's Mary's the dog's", "it'S IT'S", "the dogs' bones", "'s", "n't", "x'm", "x'd'd",
@@ -557,32 +643,57 @@ HARD_INPUTS = [
     "007", "00", "0000000001", "1000000000", "1234567890", "123456789", "999999999", "100", "101", "110", "999", "1000", "1001", "1100", "1101",
     "10000", "12345", "100000", "123456", "1000000", "1000001", "1001000", "1000100", "1001001", "1234567", "12345678", "500000500", "20000000",
     # Unicode
-    "café naïve", "café naïve", "é à ô", "İstanbul", "ﬁne ﬂow ﬃ", "x² H₂O 10³",
-    "①②③ ⓐⓑⓒ", "Ⅰ Ⅳ Ⅹ", "K elvin", "ſ ong", "㎝ ℃ ½ ™", "\U0001d407\U0001d41e\U0001d425\U0001d425\U0001d428",
-    "ＨＥＬＬＯ　ｗｏｒｌｄ１２３", "１，２３４ ｄｏｌｌａｒｓ",
-    "don＇t ｈｅｌｌｏ", "a b a b a　b a​b a⁠b", "hello…world", "“hello” «world»",
-    "こんにちは hello 안녕", "\U0001f600 hello \U0001f44d", "1,234 apples", "1,234—apples", "1,234é", "1,234́",
-    "Héllo wörld ßeta", "æ œ ø ð þ", "ABĆ xyz̈", "i̇ İ", "ẛ ẞ",
-    "", " ", "!!!", "　", "'", "-", "a", "I", "am", "ÀÉ", "ΑΒ АБ",
+    "caf\u00e9 na\u00efve", "cafe\u0301 nai\u0308ve", "e\u0301 a\u0300 o\u0302", "\u0130stanbul", "\ufb01ne \ufb02ow \ufb03", "x\u00b2 H\u2082O 10\u00b3",
+    "\u2460\u2461\u2462 \u24d0\u24d1\u24d2", "\u2160 \u2163 \u2169", "\u212a elvin", "\u017f ong", "\u339d \u2103 \u00bd \u2122", "\U0001d407\U0001d41e\U0001d425\U0001d425\U0001d428",
+    "\uff28\uff25\uff2c\uff2c\uff2f\u3000\uff57\uff4f\uff52\uff4c\uff44\uff11\uff12\uff13", "\uff11\uff0c\uff12\uff13\uff14 \uff44\uff4f\uff4c\uff4c\uff41\uff52\uff53",
+    "don\uff07t \uff48\uff45\uff4c\uff4c\uff4f", "a\u00a0b a\u2009b a\u3000b a\u200bb a\u2060b", "hello\u2026world", "\u201chello\u201d \u00abworld\u00bb",
+    "\u3053\u3093\u306b\u3061\u306f hello 안녕", "\U0001f600 hello \U0001f44d", "1,234\u00a0apples", "1,234\u2014apples", "1,234\u00e9", "1,234\u0301",
+    "H\u00e9llo w\u00f6rld \u00dfeta", "\u00e6 \u0153 \u00f8 \u00f0 \u00fe", "ABC\u0301 xyz\u0308", "i\u0307 I\u0307", "\u1e9b \u1e9e",
+    "", " ", "!!!", "\u3000", "'", "-", "a", "I", "am", "\u00c0\u00c9", "\u0391\u0392 \u0410\u0411",
+    # 2nd round (review): canonical ordering of marks, other-script digits and non-word characters around a thousands comma
+    "CAFE\u0315\u0301", "cafe\u0315\u0301", "1,2\u06634", "1,234\u0589", "1,234\u037e", "1,23\u0664", "1,234\u0482", "1,234\u0903",
+    "xe\u0320\u0301y", "a\u0310\u0301b", "e\u05b0\u0301", "e\u0344", "I\u0307 \u0130", "1,234e\u0301", "1,234 e\u0301", "\uff45\u0301",
+    "\ufb01\u0308", "e\u3099\u0301", "e\uff9e\u0301", "1,234\u0301", "1,234\u200b", "1,\u0663\u0664\u0665", "\u0663,234 1,234",
 ]
 
-# inputs where the GDScript copy is KNOWN to differ from the server: (text, why). The test asserts they still differ.
-KNOWN_GAP_INPUTS = [
-    ("xe\u0320\u0301y", "an ASCII letter, a combining mark that does not compose with it (U+0320), then one that does (U+0301): NFKC composes the letter with the second mark and the letter is gone; the copy only looks at the mark right after the letter"),
-    ("1,23\u0664", "digits of another script in the group after a thousands comma (Arabic-Indic four): Python's \\d counts them, the copy only counts 0-9, so the comma stays"),
-    ("1,234\u0482", "a character the copy takes for a word character but Python does not (U+0482, a symbol outside the _NONWORD ranges): Python deletes the comma, the copy keeps it"),
-    ("1,234\u0903", "a combining vowel sign of Devanagari after the group (a mark: not \\w in Python, a word character in the copy)"),
-]
+# Inputs where the GDScript copy is KNOWN to differ from the server: (text, why); the test asserts that each still differs.
+# Empty since the 2nd round: ScoreCore uses generated tables for NFKC, canonical ordering and composition, \d and \w. One-off scans (not
+# committed) found no difference to the server: every code point U+0020..U+2FFFF in four forms ("x?y", "1,234?", "e?", "CAFE?" + U+0301),
+# score_en for two of them, plane 3 and U+E0000..E0FFF and the ends of the private planes, a sample of the rest, 216 marks as pairs
+# (six letters) and 60,000 random strings with 2-4 marks. An entry added here must have a reason; the test asserts it still differs.
+KNOWN_GAP_INPUTS = []
+
+
+def unicode_inputs(rng):
+    """seeded inputs around marks and other-script characters: letter + 2..3 marks, digit groups with other-script digits,
+    "1,234" + a character from many categories"""
+    marks = [0x300, 0x301, 0x302, 0x307, 0x308, 0x30A, 0x30C, 0x315, 0x316, 0x31B, 0x320, 0x323, 0x327, 0x328, 0x338, 0x345, 0x344,
+             0x340, 0x5B0, 0x610, 0x64B, 0x93C, 0xE38, 0x3099, 0x1DC0, 0x20D0, 0xFF9E]
+    out = []
+    for k in range(120):
+        letter = rng.choice("eEIaxuoOAyz")
+        ms = "".join(chr(rng.choice(marks)) for _ in range(rng.choice([2, 2, 3])))
+        out.append("%s%s%s" % (rng.choice(["", "caf", "1,234", "x"]), letter + ms, rng.choice(["", "y", " z", "5"])))
+    digits = [0x660, 0x6F0, 0x966, 0x9E6, 0xE50, 0xFF10, 0x1D7CE, 0x1D7D8, 0x1D7E2]
+    for d in digits:
+        D = chr(d)
+        out += ["1,23" + D, "1,2" + D + "4", "1," + D + "34", D + ",234", "1" + D + ",234", "1,234" + D, D * 3, "1," + D * 3]
+    cats = [0x482, 0x589, 0x37E, 0x387, 0x58A, 0x5BE, 0x600, 0x6DD, 0x903, 0xF3A, 0x1680, 0x2028, 0x202F, 0x2E3A, 0x3002, 0x4DC0, 0xA830,
+            0xE000, 0xFE0F, 0xFFFD, 0x1F600, 0xE0001, 0x10FFFF, 0x3B1, 0x416, 0x5D0, 0x627, 0x4E00, 0xAC00, 0x3042, 0x2160, 0xB2, 0xBD]
+    for c in cats:
+        out += ["1,234" + chr(c), "1,234" + chr(c) + "5", "x" + chr(c) + "y"]
+    return out
 
 
 def build_en_words(S, sentences):
     rng = random.Random(SEED + 2)
     picked = sentences[::max(1, len(sentences) // 330)][:330]
-    extra = [s for s in sentences if re.search(r"['’]|\d", s)]
+    extra = [s for s in sentences if re.search(r"['\u2019]|\d", s)]
     picked += rng.sample(extra, min(40, len(extra)))
     inputs = list(dict.fromkeys(picked))
     inputs += [str(n) for n in range(100)]
     inputs += HARD_INPUTS
+    inputs += unicode_inputs(rng)
     out = []
     for s in inputs:
         out.append({"in": s, "out": S.en_words(s)})
