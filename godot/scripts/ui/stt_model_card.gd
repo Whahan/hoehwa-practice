@@ -35,6 +35,7 @@ var delete_btn: Button = null
 
 var _note: String = ""
 var _picks: Dictionary = {} ## model id -> Button
+var _picks_sig: String = ""
 var _events: Node = null
 
 
@@ -170,11 +171,18 @@ func refresh() -> void:
 
 
 func _rebuild_picks(models: Array, active: String, busy: bool) -> void:
+	# rebuilt only when something shown on a row changed (progress events come ten times a second)
+	pick_box.visible = models.size() >= 2
+	var sig: String = "%s|%s" % [active, busy]
+	for m in models:
+		sig += "|%s:%s" % [str((m as Dictionary)["id"]), ModelStore.state(str((m as Dictionary)["id"]))]
+	if sig == _picks_sig:
+		return
+	_picks_sig = sig
 	for ch in pick_box.get_children():
 		pick_box.remove_child(ch)
 		ch.queue_free()
 	_picks.clear()
-	pick_box.visible = models.size() >= 2
 	if models.size() < 2:
 		return
 	for m in models:
