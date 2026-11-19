@@ -65,6 +65,12 @@ var mode_box: VBoxContainer
 var cap_panel: CapabilityPanel
 var tts_engine_box: VBoxContainer
 var voice_box: VBoxContainer
+## The 음성 인식 group (phone standalone): `SttSection` holds the model card, the 채점 위치 radio (`ScoreWhereSeg`), the
+## switch that turns the phone scoring back on after the automatic switch-off (`SttPhoneOnBtn`) and `SttDiagBtn`.
+var stt_section: VBoxContainer
+var score_where_box: VBoxContainer
+var phone_on_box: VBoxContainer
+var _stt_sig: String = ""
 
 
 func _init() -> void:
@@ -120,6 +126,7 @@ func header_block() -> Control:
 func refresh() -> void:
 	_update_status()
 	_refresh_display_values()
+	_refill_stt_boxes()
 
 
 # ---------------------------------------------------------------- mounting
@@ -253,6 +260,7 @@ func _build_default_content() -> void:
 	if Platform.is_phone():
 		_build_status("connection", "PC 연결 상태")
 		if standalone:
+			_build_stt_section()
 			_build_processing()
 	else:
 		_build_status("engine", "AI 엔진 상태")
@@ -499,6 +507,125 @@ const SOURCE_LINES := [
 	"단어 빈도 자료: wordfreq (데이터 CC BY-SA 4.0)",
 	"예문: Tatoeba (tatoeba.org) · CC BY 2.0 FR",
 ]
+
+
+const SCORE_WHERE_CHOICES := [["phone", "폰에서 채점"], ["pc", "PC에서 채점"]]
+const SCORE_WHERE_NOTES := {
+	"phone": "말하기 점수를 이 폰에서 계산해요. 녹음은 폰 밖으로 나가지 않아요. 소리별 분석 화면만 PC를 써요.",
+	"pc": "PC에 연결돼 있으면 PC에서 채점해요(소리별 팁 포함). PC가 없으면 이 폰에서 채점해요.",
+}
+const TXT_STT_TITLE := "음성 인식"
+const TXT_PHONE_ON := "폰 채점 다시 켜기"
+const TXT_PHONE_ON_SUB := "두 번 연속 너무 오래 걸려서 폰 채점을 꺼 두었어요."
+const TXT_DIAG := "진단 보기"
+const TXT_DIAG_NOTE := "속도와 메모리 같은 숫자만 보여 주고 복사해요. 녹음은 폰 밖으로 나가지 않아요."
+
+
+## "음성 인식" (phone standalone, engine section, above 처리 위치): the model card, where scoring runs, the switch that
+## re-enables the phone scoring after the automatic switch-off, and the diagnosis sheet.
+func _build_stt_section() -> void:
+	stt_section = UI.vbox(10)
+	stt_section.name = "SttSection"
+	stt_section.add_child(UI.label(TXT_STT_TITLE, "H3"))
+	stt_section.add_child(SttModelCard.build(self))
+	stt_section.add_child(UI.hline())
+	score_where_box = UI.vbox(6)
+	score_where_box.name = "ScoreWhereBox"
+	stt_section.add_child(score_where_box)
+	phone_on_box = UI.vbox(0)
+	phone_on_box.name = "SttPhoneOnBox"
+	stt_section.add_child(phone_on_box)
+	var diag := UI.button(TXT_DIAG, "soft", Pal.PRIMARY)
+	diag.name = "SttDiagBtn"
+	diag.pressed.connect(func() -> void: SttDiagSheet.open(self))
+	stt_section.add_child(diag)
+	stt_section.add_child(UI.label(TXT_DIAG_NOTE, "Small"))
+	_fill_score_where_box()
+	_fill_phone_on_box()
+	_stt_sig = _stt_signature()
+	_add_custom("engine", stt_section)
+	Store.prefs_changed.connect(_on_stt_prefs_changed)
+
+
+## The saved `score_where` as the radio shows it: "phone" or "pc" (anything else reads as "phone").
+func score_where_value() -> String:
+	return Route.score_where()
+
+
+## Saves `score_where` ("phone" | "pc") and redraws what depends on it. A value that is not offered is ignored.
+func set_score_where(v: Variant) -> bool:
+	if typeof(v) != TYPE_STRING:
+		return false
+	var ok_value := false
+	for c in SCORE_WHERE_CHOICES:
+		if str(c[0]) == String(v):
+			ok_value = true
+	if not ok_value:
+		return false
+	Store.set_pref(Route.PREF_SCORE_WHERE, String(v))
+	_refill_stt_boxes.call_deferred()
+	return true
+
+
+## The pref `stt_phone_off` (set by LocalStt after two time-outs in a row): only a real `true` counts.
+static func phone_scoring_off() -> bool:
+	var v: Variant = Store.prefs.get("stt_phone_off", false)
+	return typeof(v) == TYPE_BOOL and v
+
+
+func _stt_signature() -> String:
+	return "%s|%s" % [Route.score_where(), phone_scoring_off()]
+
+
+func _on_stt_prefs_changed() -> void:
+	if stt_section != null and is_instance_valid(stt_section) and _stt_sig != _stt_signature():
+		_refill_stt_boxes.call_deferred()
+
+
+## Redraws the radio, the re-enable switch and the 기능 현황 table from the saved prefs (not from inside a pressed button).
+func _refill_stt_boxes() -> void:
+	if stt_section == null or not is_instance_valid(stt_section):
+		return
+	_stt_sig = _stt_signature()
+	_fill_score_where_box()
+	_fill_phone_on_box()
+	if cap_panel != null and is_instance_valid(cap_panel):
+		cap_panel.refresh()
+
+
+func _fill_score_where_box() -> void:
+	if score_where_box == null or not is_instance_valid(score_where_box):
+		return
+	UI.clear(score_where_box)
+	var cur: String = Route.score_where()
+	score_where_box.add_child(UI.label("채점 위치", "ListMain"))
+	var seg := UI.segmented(SCORE_WHERE_CHOICES, cur, func(v: String) -> void: set_score_where(v))
+	seg.name = "ScoreWhereSeg"
+	seg.set_meta("current", cur)
+	score_where_box.add_child(seg)
+	score_where_box.add_child(UI.label(str(SCORE_WHERE_NOTES[cur]), "Small"))
+	UI.fix_cjk(score_where_box)
+
+
+func _fill_phone_on_box() -> void:
+	if phone_on_box == null or not is_instance_valid(phone_on_box):
+		return
+	UI.clear(phone_on_box)
+	phone_on_box.visible = phone_scoring_off()
+	if not phone_on_box.visible:
+		return
+	var row := UI.switch_row(TXT_PHONE_ON, false, _on_phone_on_toggled, TXT_PHONE_ON_SUB)
+	var sw: CheckButton = row.get_meta("switch")
+	sw.name = "SttPhoneOnBtn"
+	phone_on_box.add_child(row)
+	UI.fix_cjk(phone_on_box)
+
+
+func _on_phone_on_toggled(on: bool) -> void:
+	if not on:
+		return
+	Store.set_pref("stt_phone_off", false)
+	_refill_stt_boxes.call_deferred()
 
 
 ## "처리 위치" (segmented: 자동 / 이 폰에서만 / PC에서만) and the "기능 현황" table, both in the engine section.
