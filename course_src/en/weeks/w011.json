@@ -768,7 +768,7 @@
    "title_ko": "It's ~ dollars (~ 달러예요)",
    "grammar_ko": [
     "값은 숫자 뒤에 dollar 를 붙여요. 둘 이상이면 dollars 예요: It's ten dollars.",
-    "가게에서는 dollars and cents 를 줄여서 5달러 99센트를 It's five ninety-nine. 처럼 숫자를 두 번에 나눠 말해요.",
+    "가게에서는 5달러 99센트를 말할 때 dollars와 cents를 빼고 It's five ninety-nine.처럼 숫자를 두 번에 나눠 말해요.",
     "한국어 '오천 원'처럼 단위가 숫자 뒤에 오는 점은 같아요."
    ],
    "d": 2,
