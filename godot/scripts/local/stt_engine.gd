@@ -295,7 +295,7 @@ func _ensure_bridge() -> bool:
 		var v: Variant = bridge_factory.call()
 		if v is Object:
 			b = v
-	elif ClassDB.can_instantiate("WhisperBridge"):
+	elif ClassDB.class_exists("WhisperBridge") and ClassDB.can_instantiate("WhisperBridge"):   # class_exists first: no engine ERROR without the bridge
 		b = ClassDB.instantiate("WhisperBridge")
 	if b == null:
 		return false

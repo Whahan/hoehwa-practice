@@ -93,7 +93,8 @@ static func _phone_off() -> bool:
 static func _engine_present() -> bool:
 	if bridge_factory.is_valid():
 		return bridge_factory.call() is Object
-	return ClassDB.can_instantiate("WhisperBridge")
+	# class_exists first: can_instantiate on an unknown class logs an engine ERROR (PC app, builds without the bridge)
+	return ClassDB.class_exists("WhisperBridge") and ClassDB.can_instantiate("WhisperBridge")
 
 
 ## The phone and the model is ready: start loading it in the background (nothing happens otherwise). Never waits.
