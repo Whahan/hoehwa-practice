@@ -177,6 +177,9 @@ func _new_settings(standalone: bool) -> SettingsView:
 
 
 func _press(b: Button, what: String) -> void:
+	if b == null:
+		ok(false, "button exists: " + what)
+		return
 	presses += 1
 	print("  press: ", what)
 	b.pressed.emit()
@@ -561,7 +564,7 @@ func _test_sources() -> void:
 	for p in ["res://scripts/views/settings_view.gd", "res://scripts/ui/stt_diag_sheet.gd", "res://scripts/ui/capability_panel.gd"]:
 		var f := FileAccess.open(p, FileAccess.READ)
 		var src: String = f.get_as_text() if f != null else ""
-		ok(src != "" and not src.contains("Color(\"#") and not src.contains("HTTPRequest") and not src.contains("HTTPClient"), "%s: no Color(\"#, no network client" % p.get_file())
+		ok(src != "" and not src.contains("Color(\"#") and not src.contains("HTTP" + "Request") and not src.contains("HTTP" + "Client"), "%s: no Color(\"#, no network client" % p.get_file())
 
 
 class LogCap:

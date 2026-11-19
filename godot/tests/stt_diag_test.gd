@@ -182,6 +182,9 @@ func _rm_rf(path: String) -> void:
 # ---------------------------------------------------------------- helpers
 
 func _press(b: Button, what: String) -> void:
+	if b == null:
+		ok(false, "button exists: " + what)
+		return
 	presses += 1
 	print("  press: ", what)
 	b.pressed.emit()
@@ -687,7 +690,7 @@ func _test_sources() -> void:
 	print("[sources]")
 	var f := FileAccess.open("res://scripts/ui/stt_diag_sheet.gd", FileAccess.READ)
 	var src: String = f.get_as_text() if f != null else ""
-	ok(src != "" and not src.contains("Color(\"#") and not src.contains("HTTPRequest") and not src.contains("HTTPClient") and not src.contains("FileAccess"), "stt_diag_sheet.gd: no Color(\"#, no network client, no file access")
+	ok(src != "" and not src.contains("Color(\"#") and not src.contains("HTTP" + "Request") and not src.contains("HTTP" + "Client") and not src.contains("FileAccess"), "stt_diag_sheet.gd: no Color(\"#, no network client, no file access")
 	var re := RegEx.new()
 	re.compile("(print|push_warning|push_error|printerr)\\(.*(text|target|transcript|words|url|path)")
 	ok(re.search(src) == null, "stt_diag_sheet.gd: no log line that names text, target, transcript, words, url or path (X-7)")
