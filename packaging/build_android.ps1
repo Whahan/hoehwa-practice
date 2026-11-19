@@ -8,6 +8,9 @@
 # -Emulator     : debug build that also contains the x86_64 libraries (...-debug-emulator.apk); export_presets.cfg is
 #                 changed for the duration of the export and restored afterwards.
 # -AllowNewKey  : do not stop when the APK's certificate differs from packaging\android_cert.sha256 (only for the very first release).
+# Phone speech library: a release build (and -VerifyApk of a release APK) needs godot\bin\libwhisper_bridge.android.arm64.so and
+#                 godot\whisper_bridge.gdextension (sha256 = native\whisper_bridge\BUILD_INFO.json) and runs check_phone_native.ps1 on the
+#                 finished APK; -Debug only warns when the library is missing.
 # Exit codes: 0 ok, 1 failure, 3 signing certificate differs from the pinned fingerprint.
 param(
     [string]$Version,
@@ -135,6 +138,41 @@ function Test-Apk([string]$apk, $tools, [string]$expectVersion, [string]$pinFile
     if ($sdkMin -ne "24") { Write-Host "    알림: 최소 SDK 가 24 가 아니에요($sdkMin)." -ForegroundColor Yellow }
 }
 
+# The phone speech-recognition library (native\whisper_bridge, copied to godot\bin by the build steps of its README) must be there
+# and must be the one BUILD_INFO.json records. Release build: anything wrong stops the build before any export (no APK is made).
+# Debug build: only a warning (a test APK without the library is allowed; recognition on the phone then reports engine_missing).
+function Test-NativeLib([bool]$isDebugBuild) {
+    $so = Join-Path $GodotPrj "bin\libwhisper_bridge.android.arm64.so"
+    $ext = Join-Path $GodotPrj "whisper_bridge.gdextension"
+    $infoFile = Join-Path $App "native\whisper_bridge\BUILD_INFO.json"
+    $why = $null
+    if (-not (Test-Path -LiteralPath $so -PathType Leaf)) { $why = "godot\bin\libwhisper_bridge.android.arm64.so 가 없어요" }
+    elseif (-not (Test-Path -LiteralPath $ext -PathType Leaf)) { $why = "godot\whisper_bridge.gdextension 이 없어요" }
+    elseif ((Get-Content -LiteralPath $ext -Raw -Encoding UTF8) -notmatch 'libwhisper_bridge\.android\.arm64\.so') { $why = "godot\whisper_bridge.gdextension 에 안드로이드 라이브러리 줄이 없어요" }
+    else {
+        $want = $null
+        try { $want = [string]((Get-Content -LiteralPath $infoFile -Raw -Encoding UTF8 | ConvertFrom-Json).artifacts.'android-arm64'.sha256) } catch {}
+        if (-not $want -or $want -notmatch '^[0-9a-f]{64}$') { $why = "native\whisper_bridge\BUILD_INFO.json 에서 android-arm64 sha256 을 읽지 못했어요" }
+        else {
+            $have = (Get-FileHash -LiteralPath $so -Algorithm SHA256).Hash.ToLower()
+            if ($have -ne $want) { $why = "라이브러리의 sha256 이 BUILD_INFO.json 의 기록과 달라요" }
+        }
+    }
+    if (-not $why) { Write-Host "    폰 음성 인식 라이브러리 OK (sha256 이 BUILD_INFO.json 과 같아요)"; return }
+    $msg = "폰 음성 인식 라이브러리가 없어요(또는 기록과 달라요). native\whisper_bridge\README.txt 의 순서로 준비한 뒤 다시 하세요. ($why)"
+    if ($isDebugBuild) { Write-Host "    경고: $msg 이 시험 APK 는 폰에서 음성 인식을 못 해요." -ForegroundColor Yellow }
+    else { Fail $msg }
+}
+
+# check_phone_native.ps1 on a finished APK (release builds only); throws when it does not end with PHONE_NATIVE_OK.
+function Invoke-NativeCheck([string]$apk) {
+    $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Pkg "check_phone_native.ps1"), "-Apk", $apk)
+    if ($AndroidSdk) { $a += @("-AndroidSdk", $AndroidSdk) }
+    $r = Native "powershell.exe" $a
+    $r[0] | ForEach-Object { Write-Host $_ }
+    if ($r[1] -ne 0) { Fail "폰 네이티브 라이브러리 검사에 실패했어요(종료코드 $($r[1]))." }
+}
+
 function Write-Final([string]$apk) {
     $h = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLower()
     Write-Host ("APK: {0}  {1:N1} MB  sha256={2}" -f $apk, ((Get-Item -LiteralPath $apk).Length / 1MB), $h)
@@ -146,6 +184,7 @@ try {
     if (-not $Version) { Fail "-Version 1.2.3 을 알려 주세요." }
     $Version = $Version.TrimStart("v", "V")
     if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail "버전은 1.2.3 같은 모양이어야 해요: $Version" }
+    if (-not $VerifyApk) { Step "폰 음성 인식 라이브러리 확인"; Test-NativeLib ([bool]($Debug -or $Emulator)) }
     if (-not $JavaHome) { $JavaHome = Join-Path $env:LOCALAPPDATA "Android\jdk-17" }
     if (-not (Test-Path -LiteralPath (Join-Path $JavaHome "bin\java.exe"))) { Fail "JDK 17 을 찾지 못했어요: $JavaHome (-JavaHome 으로 알려 주세요)" }
     $tools = Find-Tools
@@ -163,6 +202,7 @@ try {
         $pinForVerify = if ($Debug) { $null } else { $RepoPin }
         if (-not $usingDefaultKeys) { $pinForVerify = $PinFile }
         Test-Apk $VerifyApk $tools $Version $pinForVerify @("arm64-v8a") ([bool]$Debug)
+        if (-not $Debug) { Step "폰 네이티브 라이브러리 검사"; Invoke-NativeCheck (Resolve-Path -LiteralPath $VerifyApk).Path }
         $script:ExitCode = 0
         Write-Final (Resolve-Path -LiteralPath $VerifyApk).Path
     } else {
@@ -273,6 +313,7 @@ try {
     $pk = Native "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Pkg "check_phone_pack.ps1"), $tmpApk)
     $pk[0] | ForEach-Object { Write-Host $_ }
     if ($pk[1] -ne 0) { Fail "폰 단독 데이터 팩 검사에 실패했어요(종료코드 $($pk[1]))." }
+    if (-not $isDebugBuild) { Step "폰 네이티브 라이브러리 검사"; Invoke-NativeCheck $tmpApk }
     Move-Item -LiteralPath $tmpApk -Destination $finalApk -Force
     $tmpApk = $null
     $script:ExitCode = 0
