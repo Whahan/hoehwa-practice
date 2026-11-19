@@ -162,6 +162,7 @@ func _ready() -> void:
 	await _test_close_while_busy()
 	await _test_animated_close()
 	await _test_battery_zero()
+	await _test_closed_blocks_new_work()
 	await _test_reopen_keeps_numbers()
 	if _phone:
 		await _test_layout()
@@ -405,14 +406,18 @@ func _test_no_leak() -> void:
 	# the filters on their own: whole-string forms only, nothing is cleaned up
 	var nl: String = String.chr(10)
 	ok(SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234") == "1-abc1234" and SttDiagSheet.version_token("bridge 12 / whisper.cpp unknown +abort-sched") == "12-unknown+abort-sched", "the real bridge version forms are accepted (bridge 1 / whisper.cpp abc1234 [+abort-sched])")
-	ok(SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234" + nl) == "-" and SttDiagSheet.version_token("x bridge 1 / whisper.cpp abc1234") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234 +abort-sched trailing words") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp ABC1234") == "-", "a bridge version with text before or after it, a newline or upper case is rejected whole")
+	ok(SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234" + nl) == "-" and SttDiagSheet.version_token("x bridge 1 / whisper.cpp abc1234") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234 +abort-sched trailing words") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp ABC1234") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp abc12345") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp abc123") == "-", "a bridge version with text before or after it, a newline or upper case is rejected whole")
+	for patch in ["+sampleuser", "+demo-private-key-via-stats", "+abort-sched2", "+abort-sched +abort-sched", "+abort", "+Abort-sched", "+"]:
+		ok(SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234 " + patch) == "-", "a bridge version with the unregistered patch '%s' is rejected whole" % patch.replace("sampleuser", "name"))
 	ok(SttDiagSheet.app_token("2.0.1") == "2.0.1" and SttDiagSheet.app_token("2.0.1 beta") == "-" and SttDiagSheet.app_token("2.0") == "-", "app version: x.y.z only")
 	ok(SttDiagSheet.platform_token("Android") == "Android" and SttDiagSheet.platform_token("Windows") == "Windows" and SttDiagSheet.platform_token("sampleuser") == "-" and SttDiagSheet.platform_token("android") == "-", "platform: a name from the list only")
 	ok(SttDiagSheet.os_token("10.0.26300") == "10.0.26300" and SttDiagSheet.os_token("14") == "14" and SttDiagSheet.os_token("14 please read") == "-", "os version: digits and dots only")
-	ok(SttDiagSheet.device_token("SM-S921N") == "SM-S921N" and SttDiagSheet.device_token("Pixel 8") == "Pixel_8" and SttDiagSheet.device_token("/data/user/0/x") == "-" and SttDiagSheet.device_token("a b c d e f") == "-", "device: up to four words of letters, digits and . _ -")
+	ok(SttDiagSheet.device_token("SM-S921N") == "SM-S921N" and SttDiagSheet.device_token("Pixel 8") == "Pixel_8" and SttDiagSheet.device_token("CPH2451") == "CPH2451" and SttDiagSheet.device_token("Pixel 8 Pro") == "Pixel_8_Pro" and SttDiagSheet.device_token("/data/user/0/x") == "-" and SttDiagSheet.device_token("a b c d e f") == "-", "device: a maker model code or Pixel <n>")
+	for w in ["sampleuser", "GenericDevice", "please read this sentence", "demo-private-key-via-stats", "Pixel 8 sampleuser", "some user phone"]:
+		ok(SttDiagSheet.device_token(w) == "-", "device: '%s' is not a model code and reads -" % w.replace("sampleuser", "name"))
 	ok(SttDiagSheet.cpu_token("asimd fphp sve2") == "asimd+fphp+sve2" and SttDiagSheet.cpu_token("asimd sampleuser") == "-" and SttDiagSheet.cpu_token("") == "-" and SttDiagSheet.cpu_token(null) == "-", "cpu: only the bridge's own feature names")
 	ok(SttDiagSheet.model_id_token("whisper-base.en-q5_1") == "whisper-base.en-q5_1" and SttDiagSheet.model_id_token("sampleuser") == "-" and SttDiagSheet.model_id_token("Please Read") == "-", "model id: only an id of the model manifest")
-	ok(SttDiagSheet.host_token("release-assets.githubusercontent.com") == "release-assets.githubusercontent.com" and SttDiagSheet.host_token("huggingface.co") == "huggingface.co" and SttDiagSheet.host_token("evilgithub.com") == "-" and SttDiagSheet.host_token("sampleuser.example.org") == "-" and SttDiagSheet.host_token(MARK) == "-", "download host: only a host the model manifest allows")
+	ok(SttDiagSheet.host_token("release-assets.githubusercontent.com") == "githubusercontent.com" and SttDiagSheet.host_token("sampleuser.github.com") == "github.com" and SttDiagSheet.host_token("huggingface.co") == "huggingface.co" and SttDiagSheet.host_token("evilgithub.com") == "-" and SttDiagSheet.host_token("sampleuser.example.org") == "-" and SttDiagSheet.host_token(MARK) == "-", "download host: only one of the manifest hosts (a redirect host reads as its registered name)")
 	ok(SttDiagSheet.err_token("dl_host") == "dl_host" and SttDiagSheet.err_token("cancelled") == "cancelled" and SttDiagSheet.err_token("sampleuser") == "-" and SttDiagSheet.err_token(5) == "-", "download error: only ModelStore's own codes")
 	SttDiagSheet.stt_script_override = _fake
 
@@ -438,6 +443,10 @@ func _test_hostile_strings() -> void:
 			"host_token": SttDiagSheet.host_token, "err_token": SttDiagSheet.err_token}
 		for fn in fns.keys():
 			ok((fns[fn] as Callable).call(h) == "-", "hostile text %s through %s reads -" % [str(HOSTILE.find(h)), fn])
+	var patched: String = "extends RefCounted" + nl + "static func stats() -> Dictionary:" + nl + tab + "return {'bridge_version': 'bridge 1 / whisper.cpp abc1234 +sampleuser'}" + nl
+	SttDiagSheet.stt_script_override = _script(patched)
+	var tp: Dictionary = _all_tokens(SttDiagSheet.report_text())
+	ok(tp["bridge"] == "-" and not SttDiagSheet.report_text().contains("sampleuser"), "a valid bridge version with an unregistered patch name from stats reads - and the name is not in the block")
 	SttDiagSheet.stt_script_override = _fake
 	ok(SttDiagSheet.device_token("/home/sampleuser/cache/model.bin") == "-" and SttDiagSheet.device_token("/data/user/0/private/model.bin") == "-", "device (OS model name): a path is rejected")
 	ok(not SttDiagSheet.report_text().contains("sampleuser"), "the real block has no user name")
@@ -909,6 +918,141 @@ func _test_battery_zero() -> void:
 	ok(be.get_line_edit().text.replace("%", "").strip_edges() == "5", "stepping a box shows its number")
 	_close_diag(sh)
 	await _frames(3)
+	# focus only: the box refreshes its own text on focus, which is not an entry
+	var shf := _open_diag()
+	await _frames(3)
+	var bsf: SpinBox = shf.find_child("DiagBatStart", true, false) as SpinBox
+	bsf.get_line_edit().grab_focus()
+	await _frames(3)
+	ok(bsf.get_line_edit().has_focus(), "the start box has the focus (nothing typed) [entered=%s text=%s base=%s]" % [str(bsf.get_meta("entered")), bsf.get_line_edit().text, str(bsf.get_meta("base"))])
+	_press(_btn(shf, "DiagCopyBtn"), "결과 복사 (포커스만)")
+	ok(_line_of(_clip, "bench60") == "bench60 -", "a box that only had the focus copies as - [%s]" % _line_of(_clip, "bench60"))
+	bsf.get_line_edit().release_focus()
+	await _frames(2)
+	_press(_btn(shf, "DiagCopyBtn"), "결과 복사 (포커스를 잃은 뒤)")
+	ok(_line_of(_clip, "bench60") == "bench60 -", "... also after the focus left it again [%s]" % _line_of(_clip, "bench60"))
+	# Enter on the box confirms what it shows
+	bsf.get_line_edit().text_submitted.emit("0")
+	_press(_btn(shf, "DiagCopyBtn"), "결과 복사 (Enter 확정)")
+	ok(_line_tokens(_line_of(_clip, "bench60")).get("battery_start", "") == "0", "Enter on the box confirms its 0")
+	_close_diag(shf)
+	await _frames(3)
+	# typing a 0 (a real edit of the text)
+	var sht := _open_diag()
+	await _frames(3)
+	var bst: SpinBox = sht.find_child("DiagBatStart", true, false) as SpinBox
+	bst.get_line_edit().grab_focus()
+	await _frames(2)
+	bst.get_line_edit().select_all()
+	for down in [true, false]:
+		var key := InputEventKey.new()
+		key.keycode = KEY_0
+		key.physical_keycode = KEY_0
+		key.unicode = 48
+		key.pressed = down
+		get_viewport().push_input(key)
+		await get_tree().process_frame
+	_press(_btn(sht, "DiagCopyBtn"), "결과 복사 (0을 입력)")
+	ok(_line_tokens(_line_of(_clip, "bench60")).get("battery_start", "") == "0", "a typed 0 copies as battery_start=0 [%s]" % _line_of(_clip, "bench60"))
+	_close_diag(sht)
+	await _frames(3)
+	# stepping down to 0 with the arrows
+	var sha := _open_diag()
+	await _frames(3)
+	var bsa: SpinBox = sha.find_child("DiagBatStart", true, false) as SpinBox
+	bsa.value = 2
+	bsa.value = bsa.value - 1
+	bsa.value = bsa.value - 1
+	ok(bsa.value == 0.0, "the box was stepped down to 0")
+	_press(_btn(sha, "DiagCopyBtn"), "결과 복사 (화살표로 0까지)")
+	ok(_line_tokens(_line_of(_clip, "bench60")).get("battery_start", "") == "0", "a value stepped down to 0 copies as battery_start=0")
+	_close_diag(sha)
+	await _frames(3)
+
+
+## Real pointer input at a button's centre (scrolled into view first).
+func _click(sh: Sheet, b: Button) -> void:
+	var sc: ScrollContainer = sh._scroll
+	if sc != null:
+		sc.ensure_control_visible(b)
+	await get_tree().process_frame
+	var pos: Vector2 = b.get_global_rect().get_center()
+	for down in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = down
+		ev.position = pos
+		ev.global_position = pos
+		ev.button_mask = MOUSE_BUTTON_MASK_LEFT if down else 0
+		get_viewport().push_input(ev)
+		await get_tree().process_frame
+
+
+## After [닫기] (the sheet fades out for 200 ms) no new recording, speed test or copy may start: not by a pointer click on the
+## buttons that are still on the screen, and not by a press that gets past a disabled button either.
+func _test_closed_blocks_new_work() -> void:
+	print("[sheet: no new work after closing]")
+	Sheet.animate = true
+	SttDiagSheet._session = {}
+	SttDiagSheet.stt_script_override = _fake
+	Engine.set_meta("diag_calls", [])
+	Engine.set_meta("rec_calls", 0)
+	SttDiagSheet.record_hook = func() -> Dictionary:
+		Engine.set_meta("rec_calls", int(Engine.get_meta("rec_calls", 0)) + 1)
+		return {"ok": true, "wav": PackedByteArray([1, 2, 3, 4]), "duration": 1.0}
+	_clip = ""
+	_clip_count = 0
+	var errs0: int = _cap.count()
+	var sh := _open_diag()
+	await get_tree().create_timer(0.45).timeout
+	var body: Node = sh.find_child("SttDiagBody", true, false)
+	_press(_btn(sh, "DiagRecBtn"), "한 문장 녹음")
+	await _frames(3)
+	ok(int(Engine.get_meta("rec_calls", 0)) == 1, "one recording was taken before closing")
+	# positive control: a real click works while the sheet is open
+	await _click(sh, _btn(sh, "DiagCopyBtn"))
+	ok(_clip_count == 1, "a real pointer click on [결과 복사] works while the sheet is open")
+	_press(sh.buttons["close"], "닫기 (애니메이션 켠 채)")
+	var inside: bool = sh.is_closed() and sh.is_inside_tree() and body.is_inside_tree()
+	var all_off := true
+	for n in ["DiagRecBtn", "DiagBench20Btn", "DiagBench60Btn", "DiagCopyBtn"]:
+		all_off = all_off and _btn(sh, n).disabled
+	ok(all_off and (body.bat_start as SpinBox).editable == false, "closing turns the buttons and the number boxes off")
+	for n in ["DiagRecBtn", "DiagBench20Btn", "DiagBench60Btn", "DiagCopyBtn"]:
+		await _click(sh, _btn(sh, n))
+		inside = inside and sh.is_inside_tree()
+	ok(inside, "the clicks below all landed while the sheet was still fading out (in the tree)")
+	ok(int(Engine.get_meta("rec_calls", 0)) == 1 and (Engine.get_meta("diag_calls", []) as Array).is_empty() and _clip_count == 1, "real clicks after closing start no recording, no speed test and no copy")
+	# a press that gets past the disabled buttons (keyboard, accessibility) is refused by the entry points themselves
+	for n in ["DiagRecBtn", "DiagBench20Btn", "DiagBench60Btn", "DiagCopyBtn"]:
+		_btn(sh, n).pressed.emit()
+	await _frames(3)
+	ok(is_instance_valid(body) and int(Engine.get_meta("rec_calls", 0)) == 1 and (Engine.get_meta("diag_calls", []) as Array).is_empty() and _clip_count == 1, "presses that skip the disabled state start nothing either")
+	ok(not SttDiagSheet._session.has("bench20") and _cap.count() == errs0, "no session change, no engine error")
+	await get_tree().create_timer(0.4).timeout
+	# the same with the real Recorder
+	SttDiagSheet.record_hook = Callable()
+	Recorder.mode_override = "phone"
+	Recorder.test_audio_source = func() -> AudioStreamWAV: return WavUtil.sine(1.0, 48000, 440.0, 0.5, true)
+	var sh2 := _open_diag()
+	await get_tree().create_timer(0.45).timeout
+	var rec2: Button = _btn(sh2, "DiagRecBtn")
+	_press(sh2.buttons["close"], "닫기 (애니메이션 켠 채)")
+	await _click(sh2, rec2)
+	rec2.pressed.emit()
+	await _frames(4)
+	ok(not Recorder.recording and not Recorder.stopping and sh2.is_closed(), "after closing, [한 문장 녹음] does not start the real recorder")
+	await get_tree().create_timer(0.4).timeout
+	ok(not Recorder.recording and _cap.count() == errs0, "... and nothing is left running, no engine error")
+	Recorder.mode_override = ""
+	Recorder.test_audio_source = Callable()
+	Sheet.animate = false
+	SttDiagSheet.record_hook = Callable()
+	var host: Node = get_node_or_null("DiagHost")
+	while host != null:
+		host.free()
+		host = get_node_or_null("DiagHost")
+	await _frames(2)
 
 
 func _test_reopen_keeps_numbers() -> void:

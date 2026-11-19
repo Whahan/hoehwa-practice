@@ -39,10 +39,10 @@ const _PLATFORMS := ["Windows", "Android", "Linux", "macOS", "iOS", "Web", "Free
 const _CPU_FEATURES := ["asimd", "fphp", "asimdhp", "asimddp", "sve", "sve2", "i8mm", "bf16"]
 ## Whole-string formats (\A ... \z, nothing else may be in front of or behind the match). The bridge text is
 ## "bridge <n> / whisper.cpp <7 hex digits or unknown>[ +<patch>]..." (WhisperBridge::version()).
-const RE_BRIDGE := "\\Abridge ([0-9]{1,3}) / whisper\\.cpp ([0-9a-f]{7}|unknown)((?: \\+[a-z0-9-]{1,24}){0,3})\\z"
-const RE_APP := "\\A[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}(?:-[a-z0-9]{1,12})?\\z"
+const RE_BRIDGE := "\\Abridge ([0-9]{1,3}) / whisper\\.cpp ([0-9a-f]{7}|unknown)((?: \\+abort-sched)?)\\z"
+const RE_APP := "\\A[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}(?:-(?:alpha|beta|rc)[0-9]{0,2})?\\z"
 const RE_OS := "\\A[0-9]{1,3}(?:\\.[0-9]{1,5}){0,3}\\z"
-const RE_DEVICE := "\\A[A-Za-z0-9][A-Za-z0-9._-]{0,31}(?: [A-Za-z0-9][A-Za-z0-9._-]{0,15}){0,3}\\z"
+const RE_DEVICE := "\\A(?:[A-Z]{1,4}-?[A-Z0-9]{2,10}|Pixel [0-9]{1,2}(?: ?(?:Pro XL|Pro|XL|a|Fold))?)\\z"
 const RE_HOST := "\\A[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?){1,6}\\z"
 
 ## Tests: a script with the LocalStt functions (stats, bench, ...). null = load LOCAL_STT_PATH when it exists.
@@ -238,7 +238,8 @@ static func os_token(v: Variant) -> String:
 	return t if t != "" else NO_VALUE
 
 
-## The phone model the OS reports ("SM-S921N", "Pixel 8"): letters, digits and . _ - in up to four words; words joined by "_".
+## The phone model the OS reports (Build.MODEL): a maker's model code ("SM-S921N", "CPH2451") or "Pixel <n>[ Pro|XL|a|Fold]";
+## anything else (a name, a sentence, a path) reads "-". Words are joined by "_".
 static func device_token(v: Variant) -> String:
 	var t: String = _whole(v, RE_DEVICE)
 	return t.replace(" ", "_") if t != "" else NO_VALUE
@@ -260,17 +261,20 @@ static func model_id_token(v: Variant) -> String:
 	return String(v) if typeof(v) == TYPE_STRING and not ModelStore.model(String(v)).is_empty() else NO_VALUE
 
 
-## A download host: a host name of strict form that the model manifest allows (the same suffix rule ModelStore uses);
+## The download host as one of the model manifest's own host names (the registered name a redirect host belongs to, by the same
+## suffix rule ModelStore uses: "release-assets.githubusercontent.com" reads "githubusercontent.com"); anything else is "-".
 ## 127.0.0.1 only while ModelStore.allow_http_loopback is on (tests).
 static func host_token(v: Variant) -> String:
 	var t: String = _whole(v, RE_HOST)
 	if t == "":
 		return NO_VALUE
-	var mf: Dictionary = ModelStore.manifest()
-	for h in mf.get("hosts", []):
+	var best: String = ""
+	for h in ModelStore.manifest().get("hosts", []):
 		var suffix: String = str(h)
-		if t == suffix or t.ends_with("." + suffix):
-			return t
+		if (t == suffix or t.ends_with("." + suffix)) and suffix.length() > best.length():
+			best = suffix
+	if best != "":
+		return best
 	if ModelStore.allow_http_loopback and t == "127.0.0.1":
 		return t
 	return NO_VALUE
@@ -451,20 +455,36 @@ class DiagBody:
 		sb.suffix = "%"
 		sb.custom_minimum_size.y = maxf(48.0, Ds.touch_min())
 		sb.accessibility_name = caption
-		# Empty until the person types (or steps) a number: a typed 0 must differ from "nothing entered".
-		sb.get_line_edit().placeholder_text = SttDiagSheet.TXT_BATTERY_EMPTY
-		sb.get_line_edit().text = ""
-		sb.ready.connect(func() -> void: sb.get_line_edit().text = "") # the box writes its 0 when it enters the tree
-		# the text always shows the number the box holds (the box itself only redraws it on its next draw)
-		sb.value_changed.connect(func(v: float) -> void: sb.get_line_edit().text = str(int(round(v))))
+		# Empty until the person enters a number. `entered` says so on its own, apart from what the box writes into its text:
+		# true after a typed edit, Enter, a changed value (arrow keys) or a text that differs from what the box itself last showed.
+		var le: LineEdit = sb.get_line_edit()
+		le.placeholder_text = SttDiagSheet.TXT_BATTERY_EMPTY
+		le.text = ""
+		sb.set_meta("entered", false)
+		sb.set_meta("base", "")
+		sb.ready.connect(func() -> void:
+			le.text = "" # the box writes its 0 when it enters the tree
+			sb.set_meta("base", ""))
+		sb.value_changed.connect(func(v: float) -> void:
+			le.text = str(int(round(v))) # the box itself redraws its text only on the next draw
+			sb.set_meta("entered", true)
+			sb.set_meta("base", le.text))
+		le.text_changed.connect(func(_t: String) -> void: sb.set_meta("entered", true))
+		le.text_submitted.connect(func(_t: String) -> void: sb.set_meta("entered", true))
+		# the box rewrites its own text ("0") when the field gets or loses the focus: that text is not an entry
+		le.focus_entered.connect(func() -> void: sb.set_meta("focused", true))
+		le.focus_exited.connect(func() -> void: sb.set_meta("focused", true))
 		add_child(UI.field(caption, sb))
 		return sb
 
 
-	## The number the person entered in `sb` (typed text is applied first, so a typed 0 counts), clamped to 0..100; null = nothing entered.
+	## The number the person entered in `sb`, clamped to 0..100 (typed text is applied first); null = nothing entered.
 	func _battery_value(sb: SpinBox) -> Variant:
 		var typed: String = sb.get_line_edit().text.replace("%", "").strip_edges()
-		if typed == "" or not typed.is_valid_float():
+		var base: String = str(sb.get_meta("base", "")).replace("%", "").strip_edges()
+		var own_text: bool = bool(sb.get_meta("focused", false)) and typed == str(int(round(sb.value))) # the box's own refresh
+		var entered: bool = bool(sb.get_meta("entered", false)) or (typed != "" and typed != base and not own_text)
+		if not entered or typed == "" or not typed.is_valid_float():
 			return null
 		sb.apply()
 		return clampi(int(round(sb.value)), 0, 100)
@@ -478,6 +498,10 @@ class DiagBody:
 	func on_sheet_closed(_result: Variant = null) -> void:
 		_closed = true
 		_stop_work()
+		for n in find_children("*", "BaseButton", true, false):
+			(n as BaseButton).disabled = true
+		for n in find_children("*", "SpinBox", true, false):
+			(n as SpinBox).editable = false
 
 
 	func _exit_tree() -> void:
@@ -510,7 +534,7 @@ class DiagBody:
 	# -------- recording (memory only)
 
 	func _on_rec() -> void:
-		if _busy:
+		if _closed or _busy:
 			return
 		if SttDiagSheet.record_hook.is_valid():
 			_lock(true)
@@ -570,7 +594,7 @@ class DiagBody:
 	# -------- speed tests
 
 	func _on_bench(n: int, key: String) -> void:
-		if _busy:
+		if _closed or _busy:
 			return
 		var stt: GDScript = SttDiagSheet._stt()
 		if stt == null or not stt.has_method("bench"):
@@ -676,6 +700,8 @@ class DiagBody:
 	# -------- copy
 
 	func _on_copy() -> void:
+		if _closed:
+			return
 		var ex: Dictionary = extra.duplicate()
 		var b_start: Variant = _battery_value(bat_start)
 		var b_end: Variant = _battery_value(bat_end)
