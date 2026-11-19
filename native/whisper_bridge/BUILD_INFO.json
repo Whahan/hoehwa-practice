@@ -1,0 +1,27 @@
+{
+    "bridge_version":  "1",
+    "whisper_cpp_commit":  "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+    "whisper_cpp_tag":  "v1.9.5",
+    "godot_cpp_commit":  "e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77",
+    "godot_cpp_tag":  "godot-4.5-stable",
+    "ndk_version":  "28.1.13356709",
+    "artifacts":  {
+                      "android-arm64":  {
+                                            "file":  "godot/bin/libwhisper_bridge.android.arm64.so",
+                                            "bytes":  1916928,
+                                            "sha256":  "ac22dc63dea2a6c006d3c9196ee05a02912e3c952e12d6a57403e0971a55cdaa"
+                                        },
+                      "windows-x64":  {
+                                          "file":  "godot/bin/whisper_bridge.windows.x86_64.dll",
+                                          "bytes":  2355712,
+                                          "sha256":  "53c17b966e931b6b7302b5937a9fdbe5f113fcc766866af41e7e55924dc8134c"
+                                      }
+                  },
+    "whisper_cpp_patches":  [
+                                {
+                                    "file":  "native/whisper_bridge/patches/whisper_abort_in_sched.patch",
+                                    "sha256":  "623974775fc5ccf270369ad037bd0c38842a326b2b5771a7210eb24b00719a2a",
+                                    "purpose":  "abort callback also stops the ggml CPU compute inside the encoder/decoder graphs"
+                                }
+                            ]
+}
