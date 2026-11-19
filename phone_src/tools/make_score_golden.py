@@ -664,6 +664,39 @@ HARD_INPUTS = [
 KNOWN_GAP_INPUTS = []
 
 
+_UD_CACHE = {}
+
+
+def table_inputs():
+    """one input per entry of the generated tables, so that a changed table entry makes the GDScript test fail: every compatibility
+    character, both ends of every Nd range and of every non-word range (after "1,234"), the ends of every combining class range and
+    every composing mark with a letter that composes and one that does not"""
+    if "d" not in _UD_CACHE:
+        _UD_CACHE["d"] = unicode_data()
+    d = _UD_CACHE["d"]
+    out = []
+    for a, b, base in d["runs"]:
+        for c in range(a, b + 1):
+            out.append("x" + chr(c) + "y")
+    for c in sorted(d["singles"]):
+        out.append("x" + chr(c) + "y")
+    for a, b in d["digits"]:
+        out += ["1,2" + chr(a) + "4", "1,2" + chr(b) + "4"]
+    for a, b in d["nonword"]:
+        out += ["1,234" + chr(a), "1,234" + chr(b)]
+    for a, b, cc in d["ccc"]:
+        out += ["e" + chr(a) + "\u0301", "e" + chr(b) + "\u0301", "xe" + chr(a) + chr(a) + "y"]
+    for m, letters in d["compose"].items():
+        no = [L for L in string.ascii_letters if L not in letters]
+        out.append(letters[0] + chr(m) + "y")
+        out.append(letters[-1] + chr(m) + "y")
+        if no:
+            out.append(no[0] + chr(m) + "y")
+    for c in sorted(d["mark_decomp"]):
+        out.append("e" + chr(c) + "y")
+    return out
+
+
 def unicode_inputs(rng):
     """seeded inputs around marks and other-script characters: letter + 2..3 marks, digit groups with other-script digits,
     "1,234" + a character from many categories"""
@@ -694,6 +727,8 @@ def build_en_words(S, sentences):
     inputs += [str(n) for n in range(100)]
     inputs += HARD_INPUTS
     inputs += unicode_inputs(rng)
+    inputs += table_inputs()
+    inputs = list(dict.fromkeys(inputs))
     out = []
     for s in inputs:
         out.append({"in": s, "out": S.en_words(s)})
