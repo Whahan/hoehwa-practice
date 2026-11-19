@@ -491,7 +491,7 @@ $T   = "$S\w_rev_v201_<작업 소문자>"                     # 작성자는 "$S
 $BASE = '<분기 커밋>'                                    # 오케스트레이터가 지시에 적는다(1파는 이 문서를 커밋한 main 커밋)
 $G   = 'C:\Users\rtyu6\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe'
 $PY  = 'D:\Ai\언어\app\backend\.venv\Scripts\python.exe'
-$API = '--api=http://127.0.0.1:9'
+$API_ARG = '--api=http://127.0.0.1:9'                  # 이름이 Run-GT 의 -Api 스위치와 겹치면 안 된다(PowerShell 변수는 대소문자 무시, 2026-11-19 보정)
 New-Item -ItemType Directory -Force "$T\appdata" | Out-Null
 $env:APPDATA = "$T\appdata"                              # 실제 사용자 폴더를 쓰지 않게
 
@@ -503,7 +503,7 @@ function Run-GT([string]$name, [string]$mode = 'pc', [switch]$Api, [string[]]$Mo
   if ($mode -like 'phone*') { $u += '--phone' }
   if ($mode -like '*font')  { $u += '--font-scale=1.5' }
   if ($mode -like '*dark')  { $u += '--dark' }
-  if ($Api) { $u += $API }
+  if ($Api) { $u += $API_ARG }
   $u += $More
   if ($u.Count -gt 0) { $a += '--'; $a += $u }
   $out = Join-Path $T ("{0}_{1}.txt" -f $name, $mode)
