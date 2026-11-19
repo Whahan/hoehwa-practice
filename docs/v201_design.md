@@ -653,7 +653,7 @@ foreach ($x in $m.models) { "{0} {1} {2} default={3}" -f $x.id, $x.bytes, $x.sha
 - **PSA-3 버튼 흐름(C-14, `press:` ≥ 10)**: [PC에서 채점] → `Store.prefs.score_where == "pc"` 그리고 `Route.policy_for("POST","/score",{}).prefer == "pc"` → [폰에서 채점] → `"phone"`; `stt_phone_off=true` 상태에서 `SttPhoneOnBtn` → false; `SttDiagBtn` → 시트 열림 → `DiagRecBtn`(가짜 녹음) → `DiagBench20Btn`(가짜 LocalStt 의 `bench` 가 n=20 으로 불림) → `DiagCopyBtn` → `clipboard_hook` 이 받은 글의 첫 줄 `hoehwa-diag 1`.
 - **PSA-4 진단 글 계약**: `report_text()` 가 §4.3 의 키를 전부 포함(시험이 키 목록 ≥ 40개를 하나씩 단언), 가짜 `stats()` 에 표식 `ZZ_TGT_4417` 을 넣은 필드가 있어도 복사 글·화면에 0건, `user_dir_internal` 이 0/1, 경로 문자 `/data/`·`C:\`·`user://` 0건. 화면 글 연속 5자리 숫자 0 + selfcheck 줄.
 - **PSA-5 일부러 틀린 입력**: `score_where` 에 `"아무거나"`·`7`·`null` → 라디오 "폰에서 채점" 선택·크래시 0. `stt_script_override` 에 `has_method` 가 없는 스크립트·`null` → `stt=missing` 줄, 크래시 0. 배터리 `SpinBox` 범위 밖 입력 → 0~100 으로 잘림.
-- **PSA-6 기능 현황**: `CapabilityPanel` 키 16개 그대로, `REASONS` 의 `model_missing`·`model_corrupt`·`engine_error` 가 §2.5 문구, `no_ai` 줄 변경 0(`git -C $W diff $BASE -- godot/scripts/ui/capability_panel.gd | Select-String 'no_ai'` 0줄).
+- **PSA-6 기능 현황**: `CapabilityPanel` 키 16개 그대로, `REASONS` 의 `model_missing`·`model_corrupt`·`engine_error` 가 §2.5 문구, `no_ai` 줄 변경 0(`git -C $W diff -U0 $BASE -- godot/scripts/ui/capability_panel.gd | Select-String 'no_ai'` 0줄 — 문맥 줄을 빼려고 `-U0`, 2026-11-19 보정).
 - **PSA-7 상수 변이**: `Mutate 'godot\scripts\views\settings_view.gd' '["pc", "PC에서 채점"]' '["pc", "PC 채점"]'` → `phone_settings_asr_test phone` `exit=1`, 원복 뒤 0.
 - **금지**: `stt_model_card.gd`·`model_store.gd`(PA3) 수정, `project.godot`, X-8.
 
