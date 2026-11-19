@@ -923,6 +923,33 @@ class OutBoundary(unittest.TestCase):
             self.assertEqual(fr.files(), [])
             self.assertFalse(any(os.path.exists(p) or os.path.exists(p + ".json") for p in paths))
 
+    def test_an_alternate_data_stream_is_refused(self):
+        with FakeRepo("fake_repo_ads") as fr:
+            for pth in (fr.root + ":s", fr.backend + ":s", os.path.join(TMP, "ok_dir") + ":s", os.path.join(TMP, "f.json:s"),
+                        "\\\\?\\" + fr.root + ":s"):
+                self.assertTrue(cf.out_path_refused(pth), pth)
+            for label, call in tool_calls(fr.root + ":zz"):
+                buf = io.StringIO()
+                with self.subTest(tool=label), contextlib.redirect_stdout(buf):
+                    code = call()
+                self.assertEqual(code, 2, (label, buf.getvalue()))
+            self.assertEqual(fr.files(), [])
+        self.assertFalse(cf.out_path_refused(r"C:\Users\someone\scratch\x"))   # the drive colon alone is fine
+
+    def test_the_temp_folder_is_checked_before_it_is_used(self):
+        with FakeRepo("fake_repo_temp") as fr:
+            before = sorted(os.listdir(fr.root))
+            with mock.patch.object(tempfile, "tempdir", fr.root), mock.patch.dict(cf._SERVER, {"mod": None}):
+                with self.assertRaises(cf.OutPathRefused):
+                    cf.load_server()
+            self.assertEqual(sorted(os.listdir(fr.root)), before)
+            for k in ("TMPDIR", "TEMP", "TMP"):   # an environment variable alone, tempfile not asked yet
+                with self.subTest(var=k), mock.patch.object(tempfile, "tempdir", None), mock.patch.dict(os.environ, {k: fr.root}), \
+                        mock.patch.dict(cf._SERVER, {"mod": None}):
+                    with self.assertRaises(cf.OutPathRefused):
+                        cf.load_server()
+                self.assertEqual(sorted(os.listdir(fr.root)), before)
+
     def test_junction_short_name_and_extended_paths_to_a_forbidden_place(self):
         with FakeRepo("fake_repo_alias") as fr:
             links = os.path.join(TMP, "alias_links")

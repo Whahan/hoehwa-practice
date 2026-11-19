@@ -128,6 +128,8 @@ def out_path_refused(path):
     """True when `path`, as it really is on disk (resolve_path), is or lies inside a repository / worktree / backend folder. The forbidden
     roots are resolved the same way, so a link to them, their short name or an extended path to them is the same place."""
     try:
+        if ":" in os.path.splitdrive(_strip_ext_prefix(os.fspath(path)))[1]:
+            return True     # a ':' after the drive is an NTFS alternate data stream (folder:stream) — never a plain output file
         cands = {resolve_path(path), os.path.normcase(os.path.normpath(os.path.abspath(_strip_ext_prefix(os.fspath(path)))))}
         bases = {resolve_path(b) for b in FORBIDDEN_ROOTS + (ROOT, BACKEND)}
     except (OSError, ValueError, TypeError):
@@ -318,7 +320,10 @@ def load_server(work_dir=None):
         work = os.path.abspath(work_dir)
         guard_write(work, os.path.join(work, "espeak"), os.path.join(work, "tts_cache"))
     else:
+        # TEMP/TMP may point anywhere: check every candidate BEFORE tempfile looks at them (gettempdir() itself writes a probe file)
+        guard_write(*[v for v in (tempfile.tempdir, os.environ.get("TMPDIR"), os.environ.get("TEMP"), os.environ.get("TMP")) if v])
         work = tempfile.mkdtemp(prefix="hoehwa_calib_")
+        guard_write(work)
         atexit.register(shutil.rmtree, work, True)   # nothing is left behind in the temp folder
     os.makedirs(work, exist_ok=True)
     os.environ["HOEHWA_ESPEAK_DIR"] = os.path.join(work, "espeak")
