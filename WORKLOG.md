@@ -162,3 +162,5 @@ elease_1.0.1` 준비됨). **실제 릴리스는 자동 실행 권한 분류기�
   - 설계 보정(docs/v201_design.md): §8.1 D-1 단어 시각 정리 규칙(PA4·PA5 공유), D-2 자동 면제 없음, D-3 음성 수, PSA-6 `diff -U0`, §5.0 `Run-GT -Api` 버그(`$Api` 스위치와 `$API` 변수가 같은 이름 → `--api` 대신 True 전달) 수정 — 이전에 `-Api` 로 돌린 시험은 닫힌 API 주소 없이 돌았으므로 통합 시험 T 에서 다시 돈다.
   - 사용자 파일은 `D:\Ai\언어\영어\검수자료\` 로 옮김(바탕화면 금지).
   - **다음**: PWA(3파) 작업 중 → Sol 검토. ★사용자 8분 녹음(명령은 docs §4.1) 과 합성 음성 3종 추가 내려받기 여부(D-3) 대기 → PA5b. 그 뒤 4파: PZ 문서 → 버전 2.0.1 → 통합 시험 T → 시험 APK → models-1 업로드(사용자 확인) → 실기 H2~H5 → 공개.
+- 2026-11-19 (밤) **PWA 병합 fa01531** — 말하기 화면 ↔ 폰 채점 연결(모델 받기 버튼, "폰 간이 채점 · 보정 전" 배지, warm, need_ph). Sonnet `reviewer` 대체 검토 합격(Sol 한도). 병합 뒤 main 에서 phone_score_wiring 4모드 259/0, self_rate·smoke·route·local_stt·phone_settings_asr·stt_diag·practice·course_flow 모두 0 failed. 남은 사소: shadow_screen.gd 133~138 주석 순서 뒤바뀜(PZ 때 정리). Orca 의 한도로 멈춘 Sol 작업 2개(PA4·PSA 검토)는 worker-stop 후 failed(cancelled) 처리.
+  - **2.0.1 구현 작업 끝**(1~3파 중 PA5b 제외). **남은 것**: ★사용자 8분 녹음(docs §4.1 명령) + 합성 음성 3종 추가 여부(D-3) → PA5b 보정 → 4파(PZ 문서·버전 2.0.1·통합 시험 T(고친 Run-GT -Api 로)·시험 APK·models-1 업로드(사용자 확인)·실기 H2~H5·공개).
