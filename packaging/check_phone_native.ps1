@@ -181,6 +181,8 @@ function Test-BackupText([string]$txt) {
     }
     # The indentation of the aapt2 output is NOT used to decide anything. Only the order of the lines: an element's own attributes are the
     # run of "A:" lines right after its "E:" line; the first line that is not an "A:" line (E:, N:, T:, ...) ends that run.
+    # Known limit (accepted): aapt2 output with a child "E:" line deleted cannot be told apart from a real attribute run. The input is
+    # aapt2's own output for our own build, so this guards against a wrong manifest, not against a tampered aapt2.
     $appIdx = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -cmatch '^\s*E: application(\s|$)') { $appIdx += $i } }
     if ($appIdx.Count -ne 1) { return @{ ok = $false; text = "expected exactly one application element in the aapt2 output, found $($appIdx.Count)" } }
     if ($appIdx[0] -le $mi[0]) { return @{ ok = $false; text = "the application element is not after the manifest element" } }
@@ -192,13 +194,13 @@ function Test-BackupText([string]$txt) {
         $ind = ([regex]::Match($lines[$i], '^(\s*)')).Groups[1].Length
         if ($attrIndent -lt 0) { $attrIndent = $ind }
         elseif ($ind -ne $attrIndent) { return @{ ok = $false; text = "the attribute lines of the application element are indented differently (unexpected aapt2 output)" } }
-        $m = [regex]::Match($lines[$i], '^\s*A: http://schemas\.android\.com/apk/res/android:allowBackup\(0x[0-9a-fA-F]+\)=(\(type 0x[0-9a-fA-F]+\)0x[0-9a-fA-F]+|\S+)')
-        if ($m.Success) { $vals += $m.Groups[1].Value }
+        $m = [regex]::Match($lines[$i], '^\s*A: http://schemas\.android\.com/apk/res/android:allowBackup\(0x[0-9a-fA-F]+\)=(.*?)\s*$')
+        if ($m.Success) { $vals += $m.Groups[1].Value }      # the whole rest of the line, compared exactly below
     }
     if ($vals.Count -eq 0) { return @{ ok = $false; text = "the application element has no android:allowBackup attribute (a missing attribute means true)" } }
     if ($vals.Count -gt 1) { return @{ ok = $false; text = "the application element has several allowBackup attributes" } }
     $v = $vals[0]
-    if ($v -ceq "false" -or $v -cmatch '^\(type 0x12\)0x0$') { return @{ ok = $true; text = "application allowBackup=false" } }
+    if ($v -ceq "false" -or $v -ceq "(type 0x12)0x0") { return @{ ok = $true; text = "application allowBackup=false" } }
     return @{ ok = $false; text = "application allowBackup=$v (must be false)" }
 }
 function Check-Backup($ctx) {
@@ -482,6 +484,9 @@ function Invoke-SelfTest {
         $realOk = $hd + "      E: application (line=2)`n        A: ${A}:label(0x01010001)=@0x7f0b0004`n        A: $ab`n        A: ${A}:isGame(0x010103f4)=true`n          E: profileable (line=5)`n            A: ${A}:enabled(0x0101000e)=true`n          E: activity (line=6)`n            A: $nm`n            A: ${A}:exported(0x01010010)=false"
         Expect "real format: application false, then children" $null (Test-BackupText $realOk)
         Expect "real format, type 0x12 false" $null (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:allowBackup(0x01010280)=(type 0x12)0x0`n          E: activity (line=3)`n            A: $nm"))
+        Expect "type 0x12 false with a suffix" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:allowBackup(0x01010280)=(type 0x12)0x0junk"))
+        Expect "false with a suffix" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:allowBackup(0x01010280)=false junk"))
+        Expect "falsex" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:allowBackup(0x01010280)=falsex"))
         $actOnly = $hd + "      E: application (line=2)`n          E: activity (line=3)`n            A: $nm`n            A: $ab"
         Expect "activity-only, real indentation" "backup" (Test-BackupText $actOnly)
         $actOnly8 = $hd + "      E: application (line=2)`n          E: activity (line=3)`n        A: $nm`n        A: $ab"
