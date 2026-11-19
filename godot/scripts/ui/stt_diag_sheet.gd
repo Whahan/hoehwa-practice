@@ -250,6 +250,48 @@ static func _bridge_static(method: String) -> Variant:
 	return r
 
 
+# ---------------------------------------------------------------- long jobs
+# A coroutine that belongs to a node breaks when the node is freed while it waits ("Resumed function after await, but class
+# instance is gone"). So the two waits of the sheet (the recording hook, LocalStt.bench) run here, in static functions that
+# belong to no node, and hand the result back through a DiagJob that holds the sheet only weakly. A closed, freed or detached
+# sheet (or a job cancelled by it) simply drops the result.
+
+static func _run_record(job: DiagJob) -> void:
+	var r: Variant = await record_hook.call()
+	var b: Variant = job.alive()
+	if b != null:
+		b.record_done(r)
+
+
+static func _run_bench(job: DiagJob, stt: GDScript, wav: PackedByteArray, n: int, key: String) -> void:
+	var res: Variant = await stt.call("bench", wav, TARGET, n, Callable(job, "on_step"))
+	var b: Variant = job.alive()
+	if b != null:
+		b.bench_done(key, res)
+
+
+class DiagJob:
+	extends RefCounted
+	var body: WeakRef = null
+	var cancelled: bool = false
+	var total: int = 0
+
+	## The sheet body while it is still open and in the tree, else null.
+	func alive() -> Variant:
+		if cancelled or body == null:
+			return null
+		var b: Variant = body.get_ref()
+		if b == null or not is_instance_valid(b) or not (b as Node).is_inside_tree():
+			return null
+		return b
+
+	## LocalStt.bench reports its progress here (any argument shape: the first number is how many are done).
+	func on_step(a: Variant = null, _b: Variant = null, _c: Variant = null) -> void:
+		var b: Variant = alive()
+		if b != null:
+			b.step(a, total)
+
+
 # ---------------------------------------------------------------- the sheet content
 
 class DiagBody:
@@ -271,7 +313,7 @@ class DiagBody:
 
 	var _busy: bool = false
 	var _recording: bool = false
-	var _total: int = 0
+	var _job: DiagJob = null
 	var _touched: Dictionary = {"start": false, "end": false}
 
 
@@ -346,6 +388,8 @@ class DiagBody:
 
 
 	func _exit_tree() -> void:
+		if _job != null:
+			_job.cancelled = true # a bench or recording hook still running drops its result
 		if Recorder.finished.is_connected(_on_recorder_finished):
 			Recorder.finished.disconnect(_on_recorder_finished)
 		if _recording and Recorder.recording and Recorder.owner_id == get_instance_id():
@@ -373,11 +417,8 @@ class DiagBody:
 		if SttDiagSheet.record_hook.is_valid():
 			_lock(true)
 			_say("")
-			var r: Variant = await SttDiagSheet.record_hook.call()
-			if not is_instance_valid(self):
-				return
-			_lock(false)
-			_take_recording(r)
+			_job = _new_job(0)
+			SttDiagSheet._run_record(_job)
 			return
 		if _recording:
 			Recorder.end() # second press: stop now
@@ -442,12 +483,29 @@ class DiagBody:
 			return
 		_say("")
 		_lock(true)
-		_total = n
 		progress.visible = true
 		progress.text = "시험 중이에요… 0 / %d" % n
-		var res: Variant = await stt.call("bench", wav, SttDiagSheet.TARGET, n, Callable(self, "_on_step"))
-		if not is_instance_valid(self):
-			return
+		_job = _new_job(n)
+		SttDiagSheet._run_bench(_job, stt, wav, n, key)
+
+
+	func _new_job(n: int) -> DiagJob:
+		if _job != null:
+			_job.cancelled = true
+		var j := DiagJob.new()
+		j.body = weakref(self)
+		j.total = n
+		return j
+
+
+	## From the job: the recording hook returned.
+	func record_done(r: Variant) -> void:
+		_lock(false)
+		_take_recording(r)
+
+
+	## From the job: the bench returned (not called when the sheet was closed meanwhile).
+	func bench_done(key: String, res: Variant) -> void:
 		progress.visible = false
 		_lock(false)
 		if not (res is Dictionary) or not (res as Dictionary).has("n"):
@@ -458,12 +516,12 @@ class DiagBody:
 		_show_results()
 
 
-	## LocalStt.bench reports its progress here (any argument shape: the first number is how many are done).
-	func _on_step(a: Variant = null, _b: Variant = null, _c: Variant = null) -> void:
-		if not is_instance_valid(self) or not progress.visible:
+	## From the job: bench progress; `a` = how many runs are done.
+	func step(a: Variant, total: int) -> void:
+		if not progress.visible:
 			return
 		if typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT:
-			progress.text = "시험 중이에요… %d / %d" % [clampi(int(a), 0, _total), _total]
+			progress.text = "시험 중이에요… %d / %d" % [clampi(int(a), 0, total), total]
 
 
 	static func _numbers_only(res: Dictionary) -> Dictionary:

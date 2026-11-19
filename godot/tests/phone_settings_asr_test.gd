@@ -26,7 +26,9 @@ static func bench(wav: PackedByteArray, target: String, n: int, on_step: Callabl
 	if on_step.is_valid():
 		on_step.call(1, n)
 	var ml = Engine.get_main_loop()
-	await ml.process_frame
+	for i in 6:
+		await ml.process_frame
+	Engine.set_meta("psa_done", int(Engine.get_meta("psa_done", 0)) + 1)
 	return {"n": n, "ok": n, "fail": 0, "ms_p50": 1800, "ms_p95": 2600, "ms_max": 3100, "rss_mb_peak": 520, "seconds": 42.0}
 """
 
@@ -126,6 +128,7 @@ func _ready() -> void:
 		await _test_phone_off_switch()
 		await _test_model_card_inside()
 		await _test_diag_chain()
+		await _test_close_screen_during_bench()
 		await _test_odd_values()
 		await _test_layout()
 	_test_capability()
@@ -417,6 +420,7 @@ func _test_diag_chain() -> void:
 	print("[진단 보기 -> 녹음 -> 속도 시험 -> 복사]")
 	Store.prefs = {}
 	Engine.set_meta("psa_calls", [])
+	Engine.set_meta("psa_done", 0)
 	_clip = ""
 	var sv := _new_settings(true)
 	await _frames(3)
@@ -434,13 +438,13 @@ func _test_diag_chain() -> void:
 	_press(rec, "한 문장 녹음")
 	await _frames(3)
 	_press(b20, "20회 속도 시험")
-	await _until(func() -> bool: return (Engine.get_meta("psa_calls", []) as Array).size() >= 1)
+	await _until(func() -> bool: return int(Engine.get_meta("psa_done", 0)) >= 1)
 	await _frames(4)
 	var calls: Array = Engine.get_meta("psa_calls", [])
 	ok(calls.size() == 1 and int((calls[0] as Dictionary)["n"]) == 20, "the stand-in LocalStt.bench was called once with n == 20")
 	ok(calls.size() == 1 and int((calls[0] as Dictionary)["wav"]) == 8 and str((calls[0] as Dictionary)["target"]) == SttDiagSheet.TARGET, "... with the recorded wav and the fixed sentence")
 	_press(_btn(sh, "DiagBench60Btn"), "60회 연속 시험")
-	await _until(func() -> bool: return (Engine.get_meta("psa_calls", []) as Array).size() >= 2)
+	await _until(func() -> bool: return int(Engine.get_meta("psa_done", 0)) >= 2)
 	await _frames(4)
 	calls = Engine.get_meta("psa_calls", [])
 	ok(calls.size() == 2 and int((calls[1] as Dictionary)["n"]) == 60, "the stand-in LocalStt.bench was called a second time with n == 60")
@@ -453,6 +457,38 @@ func _test_diag_chain() -> void:
 	Sheet.close_top()
 	await _frames(2)
 	sv.queue_free()
+	await _frames(2)
+
+
+## The settings screen goes away (freed) while the diagnosis sheet it opened is busy: no engine error, nothing left open.
+func _test_close_screen_during_bench() -> void:
+	print("[screen freed during a bench]")
+	Store.prefs = {}
+	Engine.set_meta("psa_calls", [])
+	Engine.set_meta("psa_done", 0)
+	var errs0: int = _cap.count()
+	var sv := _new_settings(true)
+	await _frames(3)
+	_press(_btn(sv.stt_section, "SttDiagBtn"), "진단 보기")
+	await _frames(3)
+	var sh: Sheet = _open_sheet()
+	ok(sh != null, "the diagnosis sheet is open")
+	if sh != null:
+		_press(_btn(sh, "DiagRecBtn"), "한 문장 녹음")
+		await _frames(3)
+		_press(_btn(sh, "DiagBench20Btn"), "20회 속도 시험 (화면을 닫음)")
+		await _frames(2)
+	sv.free()
+	await _until(func() -> bool: return int(Engine.get_meta("psa_done", 0)) >= 1)
+	await _frames(4)
+	ok(int(Engine.get_meta("psa_done", 0)) == 1, "the bench ran to its end after the screen was freed")
+	ok(_cap.count() == errs0, "freeing the settings screen during a bench logs no engine error (%d new)" % (_cap.count() - errs0))
+	ok(not Sheet.is_open(), "no sheet is left open")
+	# the screen opens again and the whole thing works
+	var sv2 := _new_settings(true)
+	await _frames(3)
+	ok(sv2.stt_section != null and _btn(sv2.stt_section, "SttDiagBtn") != null, "a new settings screen builds its 음성 인식 group")
+	sv2.queue_free()
 	await _frames(2)
 
 

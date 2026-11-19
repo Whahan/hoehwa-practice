@@ -34,6 +34,22 @@ static func stats() -> Dictionary:
 		"load_ms_first": "1200", "stt_ms_p50": "ZZ_MARK_9731", "bridge_version": "ZZ_TGT_4417", "params_state": "ZZ_TGT_4417",
 		"beam": "ZZ_TGT_4417", "abort_patch": "ZZ_TGT_4417", "recent": ["ZZ_TGT_4417", 5, {"score": "ZZ_TGT_4417", "n": 2, "ok": 1}]}
 """
+## A bench that takes many frames and reports progress on every one (the sheet is closed while it runs).
+const FAKE_SLOW := """extends RefCounted
+static func stats() -> Dictionary:
+	return {}
+static func bench(wav: PackedByteArray, target: String, n: int, on_step: Callable = Callable()) -> Dictionary:
+	var ml = Engine.get_main_loop()
+	var calls: Array = Engine.get_meta("diag_calls", [])
+	calls.append({"n": n, "wav": wav.size(), "target": target})
+	Engine.set_meta("diag_calls", calls)
+	for i in 12:
+		await ml.process_frame
+		if on_step.is_valid():
+			on_step.call(i + 1, n)
+	Engine.set_meta("slow_done", true)
+	return {"n": n, "ok": n, "fail": 0, "ms_p50": 1000, "ms_p95": 1100, "ms_max": 1200, "rss_mb_peak": 300, "seconds": 5.0}
+"""
 const FAKE_NO_STATS := """extends RefCounted
 static func something_else() -> int:
 	return 1
@@ -142,6 +158,7 @@ func _ready() -> void:
 	await _test_sheet_failures()
 	await _test_battery_boxes()
 	await _test_real_recorder()
+	await _test_close_while_busy()
 	await _test_reopen_keeps_numbers()
 	if _phone:
 		await _test_layout()
@@ -626,6 +643,127 @@ func _test_real_recorder() -> void:
 	Recorder.mode_override = ""
 	Recorder.test_audio_source = Callable()
 	await _frames(2)
+
+
+## The person closes the sheet while it is busy: nothing may log an engine error ("class instance is gone"), the result is
+## dropped, the recording is cancelled, and a sheet opened afterwards works.
+func _test_close_while_busy() -> void:
+	print("[sheet: closed while busy]")
+	var rec_hook := func() -> Dictionary: return {"ok": true, "wav": PackedByteArray([1, 2, 3, 4, 5, 6]), "duration": 2.0}
+	SttDiagSheet.record_hook = rec_hook
+	SttDiagSheet._session = {}
+	var slow: GDScript = _script(FAKE_SLOW)
+	ok(slow != null and slow.has_method("bench"), "the slow stand-in compiles")
+	SttDiagSheet.stt_script_override = slow
+	# 1. closed (sheet.close) in the middle of a bench that takes many frames
+	Engine.set_meta("diag_calls", [])
+	Engine.set_meta("slow_done", false)
+	var errs0: int = _cap.count()
+	var sh := _open_diag()
+	await _frames(3)
+	_press(_btn(sh, "DiagRecBtn"), "한 문장 녹음")
+	await _frames(3)
+	var b20: Button = _btn(sh, "DiagBench20Btn")
+	_press(b20, "20회 속도 시험 (곧 닫음)")
+	await _frames(3)
+	ok(b20.disabled, "the bench is running (button off)")
+	_close_diag(sh)
+	await _until(func() -> bool: return bool(Engine.get_meta("slow_done", false)))
+	await _frames(4)
+	ok(bool(Engine.get_meta("slow_done", false)), "the bench kept running to its end after the close")
+	ok(_cap.count() == errs0, "closing during a bench logs no engine error (%d new)" % (_cap.count() - errs0))
+	ok(not SttDiagSheet._session.has("bench20"), "the result of a bench that was closed on is dropped")
+	# 2. a sheet opened afterwards is normal
+	var sh2 := _open_diag()
+	await _frames(3)
+	var r20: Label = sh2.find_child("DiagResult20", true, false) as Label
+	ok(r20 != null and not r20.visible and not _btn(sh2, "DiagBench20Btn").disabled and not _btn(sh2, "DiagRecBtn").disabled, "the reopened sheet shows no result and its buttons are usable")
+	SttDiagSheet.stt_script_override = _fake
+	Engine.set_meta("diag_calls", [])
+	_press(_btn(sh2, "DiagRecBtn"), "한 문장 녹음 (다시 열린 시트)")
+	await _frames(3)
+	var b20b: Button = _btn(sh2, "DiagBench20Btn")
+	_press(b20b, "20회 속도 시험 (다시 열린 시트)")
+	await _until(func() -> bool: return (Engine.get_meta("diag_calls", []) as Array).size() >= 1 and not b20b.disabled)
+	await _frames(2)
+	r20 = sh2.find_child("DiagResult20", true, false) as Label
+	ok(r20 != null and r20.visible and r20.text.contains("중앙값 1.8초"), "the reopened sheet runs a bench normally")
+	_close_diag(sh2)
+	await _frames(3)
+	# 3. the host is freed (the screen goes away) without closing the sheet first
+	SttDiagSheet.stt_script_override = slow
+	Engine.set_meta("slow_done", false)
+	errs0 = _cap.count()
+	var sh3 := _open_diag()
+	await _frames(3)
+	_press(_btn(sh3, "DiagRecBtn"), "한 문장 녹음")
+	await _frames(3)
+	_press(_btn(sh3, "DiagBench60Btn"), "60회 연속 시험 (화면째 닫음)")
+	await _frames(2)
+	get_node("DiagHost").free()
+	await _until(func() -> bool: return bool(Engine.get_meta("slow_done", false)))
+	await _frames(4)
+	ok(_cap.count() == errs0, "freeing the screen during a bench logs no engine error (%d new)" % (_cap.count() - errs0))
+	ok(not SttDiagSheet._session.has("bench60"), "... and the result is dropped")
+	# 4. closed while the recording hook is still waiting
+	var slow_rec := func() -> Dictionary:
+		for i in 8:
+			await get_tree().process_frame
+		return {"ok": true, "wav": PackedByteArray([1, 2, 3, 4]), "duration": 1.0}
+	SttDiagSheet.record_hook = slow_rec
+	errs0 = _cap.count()
+	var sh4 := _open_diag()
+	await _frames(3)
+	_press(_btn(sh4, "DiagRecBtn"), "한 문장 녹음 (곧 닫음)")
+	await _frames(2)
+	_close_diag(sh4)
+	await _frames(14)
+	ok(_cap.count() == errs0, "closing while the recording hook waits logs no engine error (%d new)" % (_cap.count() - errs0))
+	# 5. copy and close in the same frame
+	SttDiagSheet.stt_script_override = _fake
+	SttDiagSheet.record_hook = rec_hook
+	_clip = ""
+	errs0 = _cap.count()
+	var sh5 := _open_diag()
+	await _frames(3)
+	_press(_btn(sh5, "DiagCopyBtn"), "결과 복사 (바로 닫음)")
+	_close_diag(sh5)
+	await _frames(4)
+	ok(_clip.split("
+")[0] == "hoehwa-diag 1" and _cap.count() == errs0, "copy and close in one frame: the text is copied, no engine error")
+	# 6. recording through the real Recorder: closed while stopping, then while recording
+	SttDiagSheet.record_hook = Callable()
+	Recorder.mode_override = "phone"
+	Recorder.test_audio_source = func() -> AudioStreamWAV: return WavUtil.sine(1.0, 48000, 440.0, 0.5, true)
+	errs0 = _cap.count()
+	var sh6 := _open_diag()
+	await _frames(3)
+	var rec6: Button = _btn(sh6, "DiagRecBtn")
+	_press(rec6, "한 문장 녹음 (Recorder)")
+	await _until(func() -> bool: return Recorder.recording and Recorder.elapsed > 0.05)
+	_press(rec6, "녹음 끝내기 (바로 닫음)")
+	_close_diag(sh6)
+	await _until(func() -> bool: return not Recorder.stopping and not Recorder.recording)
+	await _frames(4)
+	ok(not Recorder.recording and not Recorder.stopping and _cap.count() == errs0, "closed while the recording is being finished: the recorder ends, no engine error (%d new)" % (_cap.count() - errs0))
+	var sh7 := _open_diag()
+	await _frames(3)
+	_press(_btn(sh7, "DiagRecBtn"), "한 문장 녹음 (Recorder, 닫기)")
+	await _until(func() -> bool: return Recorder.recording)
+	_close_diag(sh7)
+	await _frames(6)
+	ok(not Recorder.recording and _cap.count() == errs0, "closed while recording: the recorder is cancelled, no engine error (%d new)" % (_cap.count() - errs0))
+	Recorder.mode_override = ""
+	Recorder.test_audio_source = Callable()
+	# 7. open and close again and again
+	for i in 5:
+		var shx := _open_diag()
+		await _frames(1)
+		_close_diag(shx)
+		await _frames(1)
+	ok(_cap.count() == errs0 and not Sheet.is_open(), "five quick open/close rounds: no engine error, no sheet left")
+	SttDiagSheet.record_hook = Callable()
+	SttDiagSheet.stt_script_override = _fake
 
 
 func _test_reopen_keeps_numbers() -> void:
