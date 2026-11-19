@@ -53,8 +53,14 @@ const DONE_TITLES := {"new": "오늘 새 내용을 마쳤어요", "listen": "듣
 const TEXT_BUILD := "오늘 할 문제를 만들지 못했어요. 돌아가서 다시 시도해 주세요."
 const TEXT_DATA := "코스 데이터를 읽을 수 없어요. 앱을 다시 설치해 주세요."
 const TEXT_EMPTY := "풀 수 있는 문제가 없어서 기록하지 않았어요. 돌아가서 다시 시도해 주세요."
+const TITLE_OPEN := "문제를 열 수 없어요"
+const TITLE_SAVE := "기록을 저장하지 못했어요"
+## 저장 실패는 원인별로 사실에 맞게 말한다: 쓰기 실패(저장 공간·권한) / 더 새 버전 앱이 만든 파일 / 파일을 열 수 없음.
 const TEXT_SAVE := "진도를 저장하지 못했어요. 저장 공간을 확인한 뒤 다시 해 주세요."
+const TEXT_SAVE_FUTURE := "진도를 저장하지 못했어요. 이 코스 기록은 더 새로운 버전의 앱에서 만들어져서, 이 버전에서는 고치지 않고 그대로 두었어요. 앱을 최신 버전으로 업데이트해 주세요."
+const TEXT_SAVE_LOCKED := "진도를 저장하지 못했어요. 코스 기록 파일을 열 수 없어요. 다른 곳에서 쓰고 있거나 접근이 막혀 있는지 확인해 주세요."
 const TEXT_PARTIAL := "일부 기록을 저장하지 못했어요. 저장 공간을 확인해 주세요."
+const TEXT_PARTIAL_LOCKED := "일부 기록을 저장하지 못했어요. 진행 기록 파일을 열 수 없어서 그 기록은 쓰지 않았어요."
 const TEXT_KIND := "이 단위는 아직 열 수 없어요."
 const MONTH_PASS := 70
 const CARD_NOTE := "틀린 문제"
@@ -669,8 +675,10 @@ func _finish_unit() -> void:
 	var refused: bool = bool(store_res.get("ignored", false)) ## 미리 해 본 칸·코스 모드 아님 등: 실패가 아니라 "기록 대상이 아님"
 	if not refused and not bool(store_res.get("saved", false)):
 		# 코스 진도를 저장하지 못했다: 나머지(카드·XP·레슨)는 하나도 기록하지 않고, 메모리를 디스크 쪽으로 되돌린 뒤 오류로 끝낸다.
+		# 원인은 load() 가 상태를 지우기 전에 읽는다(읽기 전용 표시도 거기서 다시 정해진다).
+		var save_text: String = _save_fail_text()
 		CourseStore.load()
-		_show_error(TEXT_SAVE)
+		_show_error(save_text, TITLE_SAVE)
 		return
 	var ahead: bool = refused and String(store_res.get("reason", "")) == "ahead"
 	StudyLog.add_lesson(LANG, good, total)
@@ -792,7 +800,7 @@ func _show_result() -> void:
 	if nxt != "":
 		card.body.add_child(_line("NextLine", nxt))
 	if bool(result.get("partial", false)):
-		card.body.add_child(_line("PartialLine", TEXT_PARTIAL))
+		card.body.add_child(_line("PartialLine", TEXT_PARTIAL_LOCKED if Store.progress_read_only else TEXT_PARTIAL))
 	page.content.add_child(card)
 	var footer := PanelContainer.new()
 	footer.name = "ResultFooter"
@@ -913,7 +921,14 @@ func _next_text() -> String:
 	return "오늘 계획에 기록했어요"
 
 
-func _show_error(text: String) -> void:
+## 코스 진도를 쓰지 못한 원인에 맞는 안내 글. CourseStore.load() 를 부르기 전에 불러야 한다.
+func _save_fail_text() -> String:
+	if not CourseStore.is_read_only():
+		return TEXT_SAVE
+	return TEXT_SAVE_FUTURE if CourseStore.last_load_status == "future" else TEXT_SAVE_LOCKED
+
+
+func _show_error(text: String, title: String = TITLE_OPEN) -> void:
 	state = "error"
 	error_text = text
 	_hide_view()
@@ -926,7 +941,7 @@ func _show_error(text: String) -> void:
 	box.add_child(page)
 	var card: CardBox = UI.card("BigCard", 10)
 	card.name = "ErrorCard"
-	var t: Label = UI.label("문제를 열 수 없어요", "H2")
+	var t: Label = UI.label(title, "H2")
 	t.name = "ErrorTitle"
 	card.body.add_child(t)
 	var m: Label = UI.label(text)
