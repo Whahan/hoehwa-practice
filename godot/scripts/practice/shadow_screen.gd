@@ -13,6 +13,8 @@ const MARK_TODAY_AT := 5
 const REVIEW_MAX := 5
 const ATTRIBUTION := "예문 출처: Tatoeba (tatoeba.org) · CC BY 2.0 FR"
 const NEXT_LOCK_MSEC := 250
+const SELF_NOTE := "지금은 점수를 낼 수 없어요(점수는 PC 연결 시). 따라 말한 뒤 내 목소리와 원어민 소리를 들어 보고 스스로 평가해요."
+const SELF_NOTE_MODEL := "점수를 보려면 설정 > 음성 인식에서 모델을 받아 주세요(약 60 MB). 지금은 스스로 평가해요."
 const SPAN_NOTE := "구간 듣기는 그 부분만 따로 합성해서, 문장 속에서의 억양과 조금 달라요."
 
 ## 이미 나왔던 Tatoeba 문장 id (같은 문장이 연달아 나오지 않게 exclude 로 보낸다)
@@ -131,6 +133,11 @@ func start_session(src: String) -> void:
 
 
 ## 내 복습 카드에서 최대 SESSION_N 문장 (복습할 차례가 된 것 먼저).
+## 점수를 낼 수 없을 때 시작 화면에 붙는 안내 글: 영어에서 모델이 없으면 받으라는 글, 그 밖에는 기존 글.
+static func self_note(l: String) -> String:
+	return SELF_NOTE_MODEL if SelfRatePanel.none_reason(l) == "model_missing" else SELF_NOTE
+
+
 static func review_sentences(l: String) -> Array:
 	var cards: Array = Store.due_for(l, SESSION_N)
 	if cards.size() < SESSION_N:
@@ -561,7 +568,7 @@ func _render_start(c: VBoxContainer) -> void:
 	intro.body.add_child(UI.label("원어민 목소리를 한 번 듣고 곧바로 따라 말해요. 문장마다 점수와 억양을 보여 주고, 느리게 듣거나 일부분만 반복할 수 있어요.", "Muted"))
 	c.add_child(intro)
 	if SelfRatePanel.needed():
-		c.add_child(UI.label("지금은 점수를 낼 수 없어요(점수는 PC 연결 시). 따라 말한 뒤 내 목소리와 원어민 소리를 들어 보고 스스로 평가해요.", "Small"))
+		c.add_child(UI.label(self_note(lang), "Small"))
 
 	var week := UI.card("Card", 8)
 	week.body.add_child(UI.label("이번 주 예문", "H3"))

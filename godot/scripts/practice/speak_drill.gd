@@ -79,6 +79,17 @@ func _init(l: String = "en", src: String = "shadow") -> void:
 func _ready() -> void:
 	if not Tts.sequence_finished.is_connected(_on_seq_finished):
 		Tts.sequence_finished.connect(_on_seq_finished)
+	_warm_stt()
+
+
+## 폰에서 영어를 연습하는 화면이 열리면 음성 인식 모델을 미리 올려 둔다(비동기, 기다리지 않음). 일본어나 PC 앱은 아무것도 안 한다.
+## 핸들러가 없거나 `warm` 이 없으면 무시한다.
+func _warm_stt() -> void:
+	if lang != "en" or not Route.is_phone():
+		return
+	var h: GDScript = LocalApi.handler_for("stt")
+	if h != null and h.has_method("warm"):
+		h.call("warm")
 
 
 func _exit_tree() -> void:
@@ -386,6 +397,8 @@ func _submit(b64: String) -> void:
 	status_changed.emit()
 	var tgt: String = score_target if score_target != "" else target
 	var body := {"lang": lang, "target": tgt, "reading": reading if tgt == target else "", "audio_b64": b64}
+	if source == "drill" and lang == "en":
+		body["need_ph"] = true # 소리별 분석 화면: Route 가 PC 를 먼저 고른다 (PC 가 없으면 폰 점수)
 	var score_req: Object = request("/score", body, Api.TIMEOUT_SHORT)
 	_score_call = score_req
 	if lang == "en" and show_prosody and not Store.pref_bool("hide_prosody"):

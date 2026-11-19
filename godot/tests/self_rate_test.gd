@@ -13,7 +13,7 @@ const TEST_PROGRESS := "user://self_rate_progress.json"
 const TEST_LOG := "user://self_rate_studylog.json"
 const TARGET := "Can I have a menu?"
 const SECTIONS := ["widget", "lesson_none", "lesson_again", "review_none", "shadow_none", "phoneme_none", "drill_none",
-	"pc_mode", "phone_mode", "caps", "review_count"]
+	"pc_mode", "phone_mode", "caps", "review_count", "model_btn"]
 
 
 ## Spy code appended to a copy of api.gd (see _make_spy_script): `_start` is the one entry of every request.
@@ -190,6 +190,23 @@ func _mode_phone_score() -> void:
 	LocalApi.handler_override = {"stt": g}
 
 
+## Score = none because of the model (v2.0.1 PWA): mode phone and a stt handler that says why (model_missing | model_corrupt | ...).
+func _mode_reason(code: String) -> void:
+	Route.mode = "phone"
+	Route.phone_hook = func() -> bool: return true
+	var g := GDScript.new()
+	g.source_code = "extends RefCounted
+static func is_available() -> bool:
+	return false
+static func unavailable_reason() -> Dictionary:
+	return {\"err_code\": \"%s\", \"text_ko\": \"\"}
+static func handle(_m, _p, _q, _b):
+	return {\"ok\": false}
+" % code
+	g.reload()
+	LocalApi.handler_override = {"stt": g}
+
+
 func _log() -> Array:
 	return Api.get("spy_log") as Array
 
@@ -346,6 +363,7 @@ func _run() -> void:
 	await _test_pc_mode()
 	await _test_phone_mode()
 	await _test_caps()
+	await _test_model_btn()
 
 
 func _test_widget() -> void:
@@ -744,3 +762,55 @@ func _test_caps() -> void:
 	var caps2: Dictionary = Route.caps()
 	ok(str(caps2["items"]["score"]["use"]) == "pc" and not SelfRatePanel.needed(), "PC app: score use is pc and needed() is false")
 	reached["caps"] = true
+
+
+## v2.0.1 PWA: the card carries [음성 인식 모델 받기 (약 60 MB)] only on the phone, English, model missing or corrupt.
+func _test_model_btn() -> void:
+	print("[model button]")
+	var saved_anim: bool = Sheet.animate
+	Sheet.animate = false
+	_fresh_state()
+	_mode_reason("model_missing")
+	var p := SelfRatePanel.new("en", TARGET, rec, Pal.EN)
+	add_child(p)
+	await _frames(2)
+	var b: Button = find_button(p, "음성 인식 모델 받기 (약 60 MB)")
+	ok(b != null and b.name == "SelfRateModelBtn", "model missing: the card has [음성 인식 모델 받기 (약 60 MB)]")
+	ok(find_label(p, Route.text_for("model_missing")) != null, "model missing: the card text is the Route text")
+	ok(find_button(p, "잘했어요") != null and find_button(p, "다시") != null, "model missing: [잘했어요] and [다시] stay")
+	if b != null:
+		b.pressed.emit()
+		await _frames(2)
+		ok(Sheet.is_open(), "pressing the button opens the model card sheet")
+		while Sheet.is_open():
+			Sheet.close_top()
+		await _frames(1)
+	p.queue_free()
+	_mode_reason("model_corrupt")
+	var p2 := SelfRatePanel.new("en", TARGET, rec, Pal.EN)
+	add_child(p2)
+	await _frames(2)
+	ok(find_button(p2, "음성 인식 모델 다시 받기") != null, "model corrupt: the button says '음성 인식 모델 다시 받기'")
+	p2.queue_free()
+	for code in ["engine_missing", "needs_pc", "pack_missing"]:
+		_mode_reason(code)
+		var p3 := SelfRatePanel.new("en", TARGET, rec, Pal.EN)
+		add_child(p3)
+		await _frames(2)
+		ok(p3.find_child("SelfRateModelBtn", true, false) == null, "reason %s: no model button" % code)
+		ok(find_label(p3, SelfRatePanel.INTRO_TEXT) != null, "reason %s: the old intro text" % code)
+		p3.queue_free()
+	_mode_reason("model_missing")
+	var p4 := SelfRatePanel.new("ja", TARGET, rec, Pal.EN)
+	add_child(p4)
+	await _frames(2)
+	ok(p4.find_child("SelfRateModelBtn", true, false) == null, "Japanese: no model button")
+	p4.queue_free()
+	_mode_pc()
+	var p5 := SelfRatePanel.new("en", TARGET, rec, Pal.EN)
+	add_child(p5)
+	await _frames(2)
+	ok(p5.find_child("SelfRateModelBtn", true, false) == null, "PC app: no model button")
+	p5.queue_free()
+	Sheet.animate = saved_anim
+	reached["model_btn"] = true

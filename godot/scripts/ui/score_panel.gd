@@ -13,6 +13,12 @@ const SELECTED_BW := 3
 const IPA_LONG := "ː"
 const IPA_STOP := "ʔ"
 
+## Small text next to the score when the phone scored it (res.via == "phone"); " · 보정 전" is added while the score
+## is not calibrated yet (res.degraded holds "score_uncalibrated").
+const PHONE_BADGE := "폰 간이 채점"
+const UNCALIBRATED_SUFFIX := " · 보정 전"
+const UNCALIBRATED_KEY := "score_uncalibrated"
+
 
 static func score_color(score: float) -> Color:
 	if score >= 80.0:
@@ -37,6 +43,18 @@ static func verdict(score: float) -> String:
 	if score >= 70.0:
 		return "대체로 알아들어요"
 	return "잘 전달되지 않았어요"
+
+
+## The badge text for a result, "" when the phone did not score it. Only the string "phone" counts (a number, an array
+## or a missing `via` is ignored); `degraded` counts only as an Array.
+static func phone_badge_text(res: Dictionary) -> String:
+	var via: Variant = res.get("via", null)
+	if not (via is String) or str(via) != "phone":
+		return ""
+	var deg: Variant = res.get("degraded", null)
+	if deg is Array and (deg as Array).has(UNCALIBRATED_KEY):
+		return PHONE_BADGE + UNCALIBRATED_SUFFIX
+	return PHONE_BADGE
 
 
 static func _num(v: Variant) -> int:
@@ -90,6 +108,11 @@ static func build(res: Dictionary, lang: String) -> VBoxContainer:
 	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	side.add_child(UI.label("발음 점수", "Small", false))
 	side.add_child(UI.colored(verdict(score), score_text_color(score), "Strong"))
+	var badge: String = phone_badge_text(res)
+	if badge != "":
+		var bl := UI.label(badge, "Small", false)
+		bl.name = "PhoneScoreBadge"
+		side.add_child(bl)
 	top.add_child(side)
 	box.add_child(top)
 

@@ -19,8 +19,16 @@ const PROSODY_REASON := "억양 비교는 PC 연결 시"
 const PHONEME_REASON := "발음기호 분석은 PC 연결 시"
 const INTRO_TEXT := "지금은 점수를 낼 수 없어요. 내 목소리와 원어민 소리를 번갈아 들어 보고 직접 평가해 보세요. (점수는 PC에 연결하면 볼 수 있어요)"
 
+## [모델 받기] 버튼 (설계 v201 2.6): 폰이고 모델이 없거나 손상됐을 때만 카드 안에 나온다. 눈금 글자는 ModelStore.mb_label 이 만든다.
+const MODEL_GET_TEXT := "음성 인식 모델 받기"
+const MODEL_AGAIN_TEXT := "음성 인식 모델 다시 받기"
+const MODEL_BTN_REASONS := ["model_missing", "model_corrupt"]
+
 ## 시험 전용: Callable(who: String) — "mine" | "native" 를 누른 직후 불린다.
 static var play_hook: Callable = Callable()
+## 시험 전용: 모델 도우미 스크립트 경로(없는 경로면 버튼이 안 나온다, 크래시 없음).
+static var model_store_path: String = "res://scripts/local/model_store.gd"
+static var model_card_path: String = "res://scripts/ui/stt_model_card.gd"
 
 var lang: String = "en"
 var text: String = ""
@@ -53,6 +61,44 @@ static func prosody_off() -> bool:
 ## 폰에서는 1단계에 음소 분석이 없다: 채점이 PC로 갈 때만 발음기호가 나온다.
 static func phoneme_off() -> bool:
 	return Route.is_phone() and Route.decide("POST", "/score", {}) != "pc"
+
+
+## 모델 받기 버튼이 필요한 이유 코드("model_missing" | "model_corrupt"), 필요 없으면 "". 일본어와 PC 앱은 늘 "".
+static func model_button_reason(l: String) -> String:
+	if l == "ja" or not Route.is_phone():
+		return ""
+	var code: String = str(Route.why_none("POST", "/score", {}).get("err_code", ""))
+	return code if code in MODEL_BTN_REASONS else ""
+
+
+## 말하기 화면의 안내 글이 이유별로 갈릴 때 쓰는 이유 코드: 영어 + 점수 낼 곳이 없을 때만 Route 의 err_code, 아니면 "".
+static func none_reason(l: String) -> String:
+	if l != "en" or not needed():
+		return ""
+	return str(Route.why_none("POST", "/score", {}).get("err_code", ""))
+
+
+static func _load_script(path: String) -> GDScript:
+	if path == "" or not ResourceLoader.exists(path):
+		return null
+	var r: Resource = load(path)
+	return r as GDScript
+
+
+## 버튼 글자. 모델 도우미나 카드 스크립트가 없거나 모델 정보를 못 읽으면 "" (= 버튼 없음).
+static func model_button_text(reason: String) -> String:
+	var store: GDScript = _load_script(model_store_path)
+	var card: GDScript = _load_script(model_card_path)
+	if store == null or card == null or not card.has_method("open_sheet"):
+		return ""
+	if not (store.has_method("active_id") and store.has_method("model") and store.has_method("mb_label")):
+		return ""
+	if reason == "model_corrupt":
+		return MODEL_AGAIN_TEXT
+	var m: Variant = store.call("model", str(store.call("active_id")))
+	if not (m is Dictionary) or not ((m as Dictionary).get("bytes", null) is int or (m as Dictionary).get("bytes", null) is float):
+		return ""
+	return "%s (%s)" % [MODEL_GET_TEXT, str(store.call("mb_label", int((m as Dictionary)["bytes"])))]
 
 
 ## "잘했어요" 가 기록으로 넘기는 결과 (StudyLog.add_score 가 받는 모양 + self_rated).
@@ -100,6 +146,7 @@ func _ready() -> void:
 	var card := UI.card("Card", 10)
 	card.body.add_child(UI.label("스스로 평가", "Eyebrow", false))
 	card.body.add_child(UI.label(_intro(), "Muted"))
+	_add_model_button(card)
 	var listen := UI.flow(8, 8)
 	_btn_mine = UI.button("▶ 내 목소리 듣기", "soft", accent, h)
 	_btn_mine.pressed.connect(play_mine)
@@ -126,11 +173,36 @@ func _ready() -> void:
 
 
 func _intro() -> String:
-	# "모델 없음" 이면 Route 의 안내(설정 > 음성 인식에서 내려받기)를 그대로 쓴다.
+	# "모델 없음·손상" 이면 Route 의 안내(설정 > 음성 인식에서 내려받기)를 그대로 쓴다.
 	var why: Dictionary = Route.why_none("POST", "/score", {})
-	if str(why.get("err_code", "")) == "model_missing":
-		return Route.text_for("model_missing")
+	var code: String = str(why.get("err_code", ""))
+	if code == "model_missing" or code == "model_corrupt":
+		return Route.text_for(code)
 	return INTRO_TEXT
+
+
+## 폰에서 모델이 없거나 손상됐으면 카드 안에 [음성 인식 모델 받기 (약 N MB)] → 모델 카드 시트.
+func _add_model_button(card: CardBox) -> void:
+	var reason: String = model_button_reason(lang)
+	if reason == "":
+		return
+	var t: String = model_button_text(reason)
+	if t == "":
+		return
+	var b := UI.button(t, "soft", accent, maxf(48.0, maxf(44.0, Ds.touch_min() if Platform.is_phone() else 0.0)))
+	b.name = "SelfRateModelBtn"
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	b.pressed.connect(open_model_sheet)
+	card.body.add_child(b)
+
+
+## [모델 받기] 를 눌렀을 때: 설정의 카드와 같은 내용을 시트로 연다(화면이 다시 그려져도 남도록 장면 뿌리에 단다).
+func open_model_sheet() -> void:
+	var card: GDScript = _load_script(model_card_path)
+	if card == null or not card.has_method("open_sheet"):
+		return
+	card.call("open_sheet", get_tree().root if is_inside_tree() else null)
 
 
 func _exit_tree() -> void:
