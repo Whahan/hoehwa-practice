@@ -5,6 +5,8 @@
 
 English sentences of 3..10 words (godot\\data\\pack\\practice_en.json, topped up from godot\\data\\course\\en_sentences.json when there
 are too few) are spoken by the server's own TTS (`synth_wav`, Kokoro, called in this process: no server, no port, no network).
+Sentences that are the same after the server's word normalization (en_words) count once, and the course sentences are only added when
+there are too few practice sentences. --out may not be inside a repository, a worktree or backend (exit 2, nothing written).
 Voices: only the voice packs already on disk; asking for more than there are is NOT an error ("CALIB_SET_VOICES_LIMITED have=.. want=..").
 Per sentence and voice, 8 variants (VARIANTS): clean / wrong (one word of the sentence replaced, the target stays the original) /
 speed 0.8 / speed 1.25 / noise SNR 20 dB / SNR 10 dB / band limited to 8 kHz sampling / amplitude x0.2.
@@ -14,7 +16,7 @@ Output (everything under --out; nothing is written anywhere else, nothing under 
                   `wrong.index` counts the words of target.split(); `said` is what is read instead. Same seed -> same sentences, same
                   replaced words, same noise; the manifest bytes are the same too when the TTS is deterministic.
   clips\\<clip>.wav  16 kHz mono 16-bit
-Exit code: 0 ok, 1 failure (CALIB_SET_FAIL <reason>), 2 usage error.
+Exit code: 0 ok, 1 failure (CALIB_SET_FAIL <reason>), 2 usage error or a forbidden --out.
 """
 import argparse
 import difflib
@@ -65,28 +67,49 @@ def sentence_ok(text, lo=MIN_WORDS, hi=MAX_WORDS):
     return lo <= len(text.split()) <= hi
 
 
-def load_pool(lo=MIN_WORDS, hi=MAX_WORDS, practice=PRACTICE_PATH, course=COURSE_PATH):
-    """[(sentence_id, text)] sorted by id: practice_en.json first, then the course sentences (an id that clashes gets a "c" prefix);
-    no text twice"""
+_KEY_CACHE = {}
+
+
+def norm_key(text):
+    """the sentence as the SERVER's scoring sees it (en_words): two texts with the same key are the same sentence"""
+    k = _KEY_CACHE.get(text)
+    if k is None:
+        import calib_fit
+        k = _KEY_CACHE[text] = " ".join(calib_fit.load_server().en_words(text))
+    return k
+
+
+def load_pool(lo=MIN_WORDS, hi=MAX_WORDS, need=0, practice=PRACTICE_PATH, course=COURSE_PATH, key_fn=None):
+    """[(sentence_id, text)] sorted by id: the practice sentences (practice_en.json); the course sentences are added ONLY when there are
+    fewer than `need` of them (an id that clashes gets a "c" prefix). A sentence is listed once per key_fn value (default norm_key:
+    the same words after the server's normalization, whatever the case or punctuation)."""
+    key_fn = key_fn or norm_key
     out, seen = [], set()
     try:
         for s in _read_json(practice).get("sentences", []):
             t = str(s.get("text", "")).strip()
-            if sentence_ok(t, lo, hi) and t.lower() not in seen:
-                seen.add(t.lower())
+            if not sentence_ok(t, lo, hi):
+                continue
+            k = key_fn(t)
+            if k and k not in seen:
+                seen.add(k)
                 out.append((str(s["id"]), t))
     except (OSError, ValueError, KeyError) as e:
         raise SetError("cannot read practice_en.json (%s)" % type(e).__name__)
-    have = {i for i, _t in out}
-    try:
-        for s in _read_json(course).get("sentences", []):
-            t = str(s.get("en", "")).strip()
-            if sentence_ok(t, lo, hi) and t.lower() not in seen:
-                seen.add(t.lower())
-                sid = str(s["id"])
-                out.append((("c" + sid) if sid in have else sid, t))
-    except (OSError, ValueError, KeyError):
-        pass   # the course file only tops the pool up
+    if len(out) < need:
+        have = {i for i, _t in out}
+        try:
+            for s in _read_json(course).get("sentences", []):
+                t = str(s.get("en", "")).strip()
+                if not sentence_ok(t, lo, hi):
+                    continue
+                k = key_fn(t)
+                if k and k not in seen:
+                    seen.add(k)
+                    sid = str(s["id"])
+                    out.append((("c" + sid) if sid in have else sid, t))
+        except (OSError, ValueError, KeyError):
+            pass   # the course file only tops the pool up
     out.sort(key=lambda x: x[0])
     return out
 
@@ -134,7 +157,7 @@ def choose_wrong(text, rng, vocab):
         if not opts:
             opts = [w for w in vocab if w != low]
         if not opts:
-            raise SetError("no word to replace %r with" % low)
+            raise SetError("no word to replace a word with")
         said = rng.choice(opts)
     spoken_core = said.capitalize() if core[0].isupper() else said
     toks2 = list(toks)
@@ -219,10 +242,11 @@ def write_wav16(path, x):
 # ------------------------------------------------------------------------------------------------ the tool
 def build(out_dir, n_sentences, voices_wanted, seed, out=print):
     import calib_fit
+    calib_fit.require_out_paths(out_dir)
     work = os.path.join(out_dir, "_work")
     with calib_fit.no_network():
         S = calib_fit.load_server(work_dir=work)
-        pool = load_pool()
+        pool = load_pool(MIN_WORDS, MAX_WORDS, n_sentences)
         if not pool:
             raise SetError("no sentences")
         sentences = pick_sentences(pool, n_sentences, seed)
@@ -288,13 +312,17 @@ def main(argv=None):
     if args.n_sentences < 1 or args.voices < 1:
         print("--n-sentences and --voices must be at least 1")
         return 2
+    import calib_fit
     try:
         build(os.path.abspath(args.out), args.n_sentences, args.voices, args.seed)
+    except calib_fit.OutPathRefused:
+        print("CALIB_SET_FAIL out_path")
+        return 2
     except SetError as e:
         print("CALIB_SET_FAIL %s" % e)
         return 1
-    except Exception as e:   # a TTS or audio failure: the reason is a type and a short text, never a sentence
-        print("CALIB_SET_FAIL %s: %s" % (type(e).__name__, str(e)[:200]))
+    except Exception as e:   # a TTS or audio failure: only the type (an exception text may hold a sentence)
+        print("CALIB_SET_FAIL %s" % type(e).__name__)
         return 1
     return 0
 

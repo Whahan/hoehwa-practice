@@ -10,7 +10,8 @@ written under backend\\. Writes only --out:
    "clips":[{id, sentence_id, group("synth"|"user"), variant, voice, target, text, words:[{w,p,start,end}], duration, score:<score_en result>}]}
 `id` is the manifest `clip`. The file holds transcripts: keep it in the scratch folder, never in the repository, and never print it.
 Each clip file is checked against its sha256 first (a changed file is "CALIB_PC_FAIL sha256", exit 1).
-Exit code: 0 ok, 1 failure (CALIB_PC_FAIL <reason>), 2 usage error.
+--out may not be inside a repository, a worktree or backend (CALIB_PC_FAIL out_path, exit 2, nothing written).
+Exit code: 0 ok, 1 failure (CALIB_PC_FAIL <reason>), 2 usage error or a forbidden --out.
 """
 import argparse
 import datetime
@@ -76,6 +77,7 @@ def sha256_file(path):
 
 def run(set_dir, out_path, out=print):
     import calib_fit
+    calib_fit.require_out_paths(out_path)
     m = read_manifest(set_dir)
     group = "user" if m.get("kind") == "user" else "synth"
     for c in m["clips"]:   # check the files before the (slow) model loads
@@ -111,13 +113,17 @@ def main(argv=None):
     ap.add_argument("--set", required=True, help="folder with manifest.json and the clips")
     ap.add_argument("--out", required=True, help="json file to write (scratch folder)")
     args = ap.parse_args(argv)
+    import calib_fit
     try:
         return run(os.path.abspath(args.set), os.path.abspath(args.out))
+    except calib_fit.OutPathRefused:
+        print("CALIB_PC_FAIL out_path")
+        return 2
     except PcRunError as e:
         print("CALIB_PC_FAIL %s" % e)
         return 1
-    except Exception as e:   # the reason is a type and a short text (never a transcript)
-        print("CALIB_PC_FAIL %s: %s" % (type(e).__name__, str(e)[:200]))
+    except Exception as e:   # only the type (an exception text may hold a file name or a transcript)
+        print("CALIB_PC_FAIL %s" % type(e).__name__)
         return 1
 
 

@@ -12,7 +12,8 @@ score gets a monotone map too (`final_map`).
 Inputs (written by calib_pc_run.py and godot\\tools\\calib_phone.gd; clips are joined by `id`, never by position):
   pc.json    {"v":1,"kind":"pc","date":"YYYY-MM-DD","clips":[{id, sentence_id, group("synth"|"user"), variant, voice, target, text,
                 words:[{w,p,start,end}], duration, score:<server score_en result>}]}
-  phone.json {"v":1,"kind":"phone","model":"<file name>","beam":1,"clips":[{id, text, words:[{w,p,start,end}], ms}]}
+  phone.json {"v":1,"kind":"phone","status":"ok","model":"<file name>","beam":1,"clips":[{id, ok(must be true), error, text, duration,
+                words:[{w,p,start,end}], ms}]}   (a file with status "fail", or a clip with ok false, is "CALIB_FAIL data")
 
 What it does: split the SENTENCES (not the clips) 70 / 30 with --seed, fit on the 70 %, judge on the 30 %:
   p_map     isotonic regression (pool adjacent violators) of the PC `p` on the phone `p`, over the words that BOTH engines matched
@@ -21,10 +22,11 @@ What it does: split the SENTENCES (not the clips) 70 / 30 with --seed, fit on th
   judging   the server's `score_en` is called in this process on the mapped phone words (nothing is copied here)
 Gates (GATES below, holdout only): word ok agreement synth >= 0.85 / user >= 0.80, final score MAE <= 10 and p90 <= 20, fluency
 MAE <= 15, wrong clip below its clean clip in >= 95 % of the pairs, wrong clips scoring 70+ <= 10 %, clean clips under 70 <= 10 %.
-With --fit-final (the last fallback, docs 2.4 step 3) the two final-score distances to the PC (MAE, p90) are measured and reported but
-not judged ("WAIVED"): the map moves the phone's score away from the PC's on purpose. Below a gate: "CALIB_FAIL <metric> ..." and exit 1 and --out-params is NOT written (--report is). Bad data (not one agreed pair of
+Below a gate (none is waived): "CALIB_FAIL <metric> ..." and exit 1 and --out-params is NOT written (--report is). Bad data (not one agreed pair of
 files, empty, a clip on one side only, pairing agreement < 0.6): "CALIB_FAIL <input|pairing|data|agreement>" and exit 1.
-Exit code: 0 fitted and every gate passed, 1 failed, 2 usage error (argparse).
+Exit code: 0 fitted and every gate passed, 1 failed, 2 usage error (argparse) or an --out-params / --report path inside a repository, a
+worktree or backend (nothing is written).
+The phone words are cleaned with the D-1 time rule (clean_word_times, docs 8.1) before they are scored, as the app does.
 
 The report holds numbers only (counts, metrics, intervals); no sentence, no transcript. Nothing is written but --out-params and --report.
 Safety: no network, no server process, nothing is written under backend\\ (the server is imported in this process; see load_server()).
@@ -38,6 +40,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import socket
 import sys
@@ -72,7 +75,12 @@ GATES = (
 )
 
 
-FINAL_MAP_WAIVES = ("score_mae", "score_p90")   # not judged when --fit-final found a final_map
+# the tools write ONLY below the folder the user names with --out, and never inside a repository / worktree / backend (recordings and
+# transcripts must not land in a place that is committed or shared): these roots, and the repo that holds this file, are refused
+FORBIDDEN_ROOTS = ("D:\\Ai\\언어\\app", "D:\\Ai\\언어\\app_wt")
+RETIME = True                  # D-1 word time cleanup before the phone words are scored (tests and the before/after measure turn it off)
+MODEL_FILE_RE = re.compile(r"^ggml-[A-Za-z0-9._-]{1,60}\.bin$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class CalibError(Exception):
@@ -82,6 +90,44 @@ class CalibError(Exception):
         Exception.__init__(self, "%s: %s" % (code, msg))
         self.code = code
         self.msg = msg
+
+
+# ------------------------------------------------------------------------------------------------ where the tools may write
+def _norm_path(p):
+    return os.path.normcase(os.path.abspath(os.fspath(p)))
+
+
+def out_path_refused(path):
+    """True when `path` (made absolute, `..` resolved, links followed) is, or lies inside, a repository / worktree / backend folder"""
+    try:
+        cands = {_norm_path(path), os.path.normcase(os.path.realpath(os.fspath(path)))}
+    except (OSError, ValueError, TypeError):
+        return True
+    bases = {_norm_path(b) for b in FORBIDDEN_ROOTS + (ROOT, BACKEND)}
+    bases |= {os.path.normcase(os.path.realpath(b)) for b in (ROOT, BACKEND)}
+    for c in cands:
+        for b in bases:
+            if c == b or c.startswith(b + os.sep):
+                return True
+    return False
+
+
+class OutPathRefused(Exception):
+    """a path the tool was told to write lies inside a repository / worktree / backend (the message never holds the path)"""
+
+
+def require_out_paths(*paths):
+    """raise OutPathRefused unless every path may be written"""
+    if refuse_out_paths(paths) is not None:
+        raise OutPathRefused()
+
+
+def refuse_out_paths(paths):
+    """the first path that may not be written, or None (the caller prints its own `<TOOL>_FAIL out_path` line and exits 2)"""
+    for p in paths:
+        if out_path_refused(p):
+            return p
+    return None
 
 
 # ------------------------------------------------------------------------------------------------ the map rules (docs/v201_design.md 2.1)
@@ -144,6 +190,30 @@ def map_final(score, final_map):
         return int(math.floor(s + 0.5))
     y = _interp(s, final_map)
     return int(min(100, max(0, math.floor(y + 0.5))))
+
+
+def clean_word_times(words, clip_sec):
+    """D-1 (docs/v201_design.md 8.1), the one rule of the phone app and of these tools. words: [{w, p, start, end}] in transcription order,
+    clip_sec: the length of the WAV in seconds. 1) a start / end that is not a finite number is 0; 2) start and end are cut to
+    [0, clip_sec]; 3) from the first word on, start = max(start, the previous word's start); 4) end = max(end, start); 5) when a next word
+    exists, end = min(end, the next word's cleaned start), and an end below start becomes start; 6) order, count, w and p stay, and the
+    times are NOT rounded. Returns new dicts."""
+    clip = float(clip_sec) if _is_num(clip_sec) and clip_sec > 0 else 0.0
+    starts, ends = [], []
+    for w in words:
+        a = float(w["start"]) if _is_num(w.get("start")) else 0.0
+        b = float(w["end"]) if _is_num(w.get("end")) else 0.0
+        a, b = min(clip, max(0.0, a)), min(clip, max(0.0, b))
+        if starts:
+            a = max(a, starts[-1])
+        b = max(b, a)
+        starts.append(a)
+        ends.append(b)
+    for i in range(len(ends) - 1):
+        ends[i] = min(ends[i], starts[i + 1])
+        if ends[i] < starts[i]:
+            ends[i] = starts[i]
+    return [dict(w, start=starts[i], end=ends[i]) for i, w in enumerate(words)]
 
 
 # ------------------------------------------------------------------------------------------------ safety helpers and the server
@@ -233,6 +303,19 @@ def load_server(work_dir=None):
         server.HF_DIR = home
         for k in ("HF_HOME", "HF_HUB_CACHE"):
             os.environ[k] = home
+    os.environ["HF_HUB_OFFLINE"] = "1"   # Kokoro (huggingface_hub) must never look at the network, whatever the caller's environment says
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+    def _load_whisper_local(device, compute_type):
+        """server._load_whisper with local_files_only=True spelled out (the model files are only read, never fetched)"""
+        from faster_whisper import WhisperModel
+        import numpy as np
+        m = WhisperModel(server.CFG["stt"]["model"], device=device, compute_type=compute_type,
+                         download_root=os.path.join(server.HF_DIR, "whisper"), local_files_only=True)
+        segs, _info = m.transcribe(np.zeros(16000, dtype=np.float32), language="en", beam_size=1)
+        list(segs)
+        return m
+    server._load_whisper = _load_whisper_local
     _SERVER["mod"] = server
     return server
 
@@ -250,6 +333,7 @@ def ok_prob_as(S, value):
 
 # ------------------------------------------------------------------------------------------------ reading the files
 def _clean_words(raw, where):
+    """`where` is a position ("file 2, clip 17"), never a clip id or a file name: error texts must not carry what the user's files say"""
     if not isinstance(raw, list):
         raise CalibError("input", "%s: words is not a list" % where)
     out = []
@@ -261,32 +345,41 @@ def _clean_words(raw, where):
     return out
 
 
-def read_run(path, kind):
-    """one pc.json or phone.json -> (header dict, clips dict id -> clip)"""
+def read_run(path, kind, file_no=1):
+    """one pc.json or phone.json -> (header dict, clips dict id -> clip). Errors name the file and the clip by NUMBER only."""
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             d = json.load(f)
     except (OSError, ValueError) as e:
-        raise CalibError("input", "cannot read %s (%s)" % (os.path.basename(str(path)), type(e).__name__))
+        raise CalibError("input", "file %d cannot be read (%s)" % (file_no, type(e).__name__))
     if not isinstance(d, dict) or not isinstance(d.get("clips"), list):
-        raise CalibError("input", "%s: no clips list" % os.path.basename(str(path)))
+        raise CalibError("input", "file %d has no clips list" % file_no)
+    if d.get("status") == "fail":
+        raise CalibError("data", "file %d is marked as a failed run" % file_no)
     clips = {}
-    for c in d["clips"]:
+    for n, c in enumerate(d["clips"], 1):
+        where = "file %d, clip %d" % (file_no, n)
         if not isinstance(c, dict) or not isinstance(c.get("id"), str) or not c["id"]:
-            raise CalibError("input", "a clip without an id")
+            raise CalibError("input", "%s: no id" % where)
         cid = c["id"]
         if cid in clips:
-            raise CalibError("input", "clip id twice: %s" % cid)
-        rec = {"id": cid, "words": _clean_words(c.get("words"), cid), "text": c.get("text") if isinstance(c.get("text"), str) else ""}
+            raise CalibError("input", "%s: its id is used twice" % where)
+        rec = {"id": cid, "words": _clean_words(c.get("words"), where), "text": c.get("text") if isinstance(c.get("text"), str) else ""}
+        if kind == "phone":
+            if c.get("ok") is not True:
+                raise CalibError("data", "%s: the phone could not transcribe it" % where)
+            if not _is_num(c.get("duration")) or c["duration"] < 0:
+                raise CalibError("input", "%s: no clip length" % where)
+            rec["duration"] = float(c["duration"])
         if kind == "pc":
             if not isinstance(c.get("target"), str) or not isinstance(c.get("score"), dict) or not isinstance(c["score"].get("units"), list):
-                raise CalibError("input", "%s: no target / score" % cid)
+                raise CalibError("input", "%s: no target / score" % where)
             sc = c["score"]
             if not _is_num(sc.get("score")) or not _is_num(sc.get("fluency")):
-                raise CalibError("input", "%s: score without score / fluency" % cid)
+                raise CalibError("input", "%s: score without score / fluency" % where)
             for u in sc["units"]:
                 if not isinstance(u, dict) or not isinstance(u.get("ok"), bool):
-                    raise CalibError("input", "%s: a unit without ok" % cid)
+                    raise CalibError("input", "%s: a unit without ok" % where)
             rec.update(target=c["target"], score=sc, group=c.get("group") if c.get("group") in ("synth", "user") else "synth",
                        variant=str(c.get("variant", "")), voice=str(c.get("voice", "")),
                        sentence_id=str(c.get("sentence_id") or c["target"]))
@@ -297,12 +390,12 @@ def read_run(path, kind):
 def read_runs(paths, kind):
     """several files of one kind -> (headers, merged clips); the same id in two files is an error"""
     heads, merged = [], {}
-    for p in paths:
-        h, clips = read_run(p, kind)
+    for no, p in enumerate(paths, 1):
+        h, clips = read_run(p, kind, no)
         heads.append(h)
         for cid, c in clips.items():
             if cid in merged:
-                raise CalibError("input", "clip id in two files: %s" % cid)
+                raise CalibError("input", "file %d has a clip id that an earlier file already used" % no)
             merged[cid] = c
     return heads, merged
 
@@ -349,18 +442,38 @@ def pair_agreement(S, rows):
     return tot / len(rows)
 
 
-def split_sentences(rows, seed=SEED, holdout=HOLDOUT):
+def sentence_key(S, pc, cache=None):
+    """the group a clip's sentence belongs to: the target as the SERVER's scoring sees it (en_words), so two ids with the same words,
+    case or punctuation are one sentence. A clip without a target falls back to its sentence id."""
+    t = pc.get("target")
+    if isinstance(t, str) and t:
+        if cache is not None and t in cache:
+            return cache[t]
+        words = S.en_words(t) if S is not None else re.findall(r"[a-z0-9']+", t.lower())   # no server loaded: lower case words
+        key = "t:" + " ".join(words)
+        if cache is not None:
+            cache[t] = key
+        if key != "t:":
+            return key
+    return "id:" + str(pc.get("sentence_id"))
+
+
+def split_sentences(rows, seed=SEED, holdout=HOLDOUT, S=None):
     """(train rows, holdout rows). The split is by SENTENCE: every clip of a sentence (all voices, variants, and the user's clips of the
-    same sentence) goes to one side, so no sentence is in both."""
-    keys = sorted({pc["sentence_id"] for pc, _ph in rows})
+    same sentence) goes to one side, so no sentence is in both. "Same sentence" = the same words after the server's normalization
+    (sentence_key), not only the same id."""
+    S = S or _SERVER["mod"]   # the server's en_words when it is loaded (the tool always has it); else plain lower case words
+    cache = {}
+    keyed = [(sentence_key(S, pc, cache), (pc, ph)) for pc, ph in rows]
+    keys = sorted({k for k, _r in keyed})
     if len(keys) < 2:
         raise CalibError("data", "need at least 2 sentences to split into fit and holdout")
     rng = random.Random(seed)
     rng.shuffle(keys)
     n_hold = min(len(keys) - 1, max(1, int(round(len(keys) * holdout))))
     hold = set(keys[:n_hold])
-    train = [r for r in rows if r[0]["sentence_id"] not in hold]
-    held = [r for r in rows if r[0]["sentence_id"] in hold]
+    train = [r for k, r in keyed if k not in hold]
+    held = [r for k, r in keyed if k in hold]
     return train, held
 
 
@@ -402,11 +515,11 @@ def fit_p_map(pairs, xs=P_MAP_X):
 def word_rows(S, rows):
     """per clip: (pc ok list, phone exact p list); the PC ok is the server's own `ok` stored in the pc file"""
     out = []
-    for pc, ph in rows:
+    for n, (pc, ph) in enumerate(rows, 1):
         tw, ps = exact_ps(S, pc["target"], ph["words"])
         units = pc["score"]["units"]
         if len(units) != len(tw):
-            raise CalibError("input", "%s: score units do not match the target" % pc["id"])
+            raise CalibError("input", "clip %d (in id order): the score units do not match the target" % n)
         out.append(([bool(u["ok"]) for u in units], ps))
     return out
 
@@ -450,7 +563,8 @@ def fit_ok_prob(wrows, p_map):
 
 def phone_result(S, pc, ph, p_map, ok_prob, final_map=None):
     """the server's score_en on the mapped phone words (a copy of the result; `score` goes through final_map when given)"""
-    mapped = [{"w": w["w"], "p": map_p(w["p"], p_map), "start": w["start"], "end": w["end"]} for w in ph["words"]]
+    words = clean_word_times(ph["words"], ph.get("duration", 0.0)) if RETIME else ph["words"]
+    mapped = [{"w": w["w"], "p": map_p(w["p"], p_map), "start": w["start"], "end": w["end"]} for w in words]
     with ok_prob_as(S, ok_prob):
         r = S.score_en(pc["target"], mapped, ph["text"])
     r = dict(r)
@@ -459,10 +573,30 @@ def phone_result(S, pc, ph, p_map, ok_prob, final_map=None):
     return r
 
 
+def final_map_step(a):
+    """a monotone map under which raw score a is the lowest raw score that reaches 70 (raw a-1 stays below), and every other raw
+    score stays as it is where it can: below 70 it is the identity up to the step, above it the identity again. No x twice."""
+    if a == PASS_SCORE:
+        return [[0, 0], [100, 100]]
+    if a < PASS_SCORE:
+        pts = [[0, 0]] if a >= 1 else [[0, PASS_SCORE]]
+        if a >= 2:
+            pts.append([a - 1, a - 1])
+        if a >= 1:
+            pts.append([a, PASS_SCORE])
+        pts.append([PASS_SCORE, PASS_SCORE])
+        pts.append([100, 100])
+        return pts
+    pts = [[0, 0], [PASS_SCORE - 1, PASS_SCORE - 1], [a - 1, PASS_SCORE - 1], [a, a]]
+    if a < 100:
+        pts.append([100, 100])
+    return pts
+
+
 def fit_final_map(S, rows, p_map, ok_prob):
     """the last fallback: a monotone map of the final score under which the wrong clips of `rows` score 70+ and the clean clips
-    score under 70 in at most 10 % each. One step at the raw score `a` (raw a -> 70, raw a-1 -> 69), chosen to make the worse of the
-    two rates smallest (ties: nearest 70, then the smaller). Returns the map or None when no step reaches the 10 % limit."""
+    score under 70 in at most 10 % each. One step at the raw score `a` (final_map_step), chosen to make the worse of the two rates
+    smallest (ties: nearest 70, then the smaller). Returns the map or None when no step reaches the 10 % limit."""
     clean, wrong = [], []
     for pc, ph in rows:
         if pc["variant"] not in CLEAN_VARIANTS and pc["variant"] not in WRONG_VARIANTS:
@@ -481,12 +615,7 @@ def fit_final_map(S, rows, p_map, ok_prob):
     (worst, _d, _a), a = best
     if worst > 0.10:
         return None
-    if a <= 0:
-        m = [[0, PASS_SCORE], [100, 100]]
-    elif a == 1:
-        m = [[0, 0], [1, PASS_SCORE], [100, 100]]
-    else:
-        m = [[0, 0], [a - 1, PASS_SCORE - 1], [a, PASS_SCORE], [100, 100]]
+    m = final_map_step(a)
     return m if valid_final_map(m) else None
 
 
@@ -516,11 +645,11 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
     diffs, fl_diffs = [], []
     by_key = {}   # (sentence, voice) -> {"clean": score, "wrong": score}
     wrong_scores, clean_scores = [], []
-    for pc, ph in rows:
+    for n, (pc, ph) in enumerate(rows, 1):
         r = phone_result(S, pc, ph, p_map, ok_prob, final_map)
         units = pc["score"]["units"]
         if len(units) != len(r["units"]):
-            raise CalibError("input", "%s: score units do not match the target" % pc["id"])
+            raise CalibError("input", "clip %d (in id order): the score units do not match the target" % n)
         for a, b in zip(units, r["units"]):
             word_items[pc["group"]].append((bool(a["ok"]), bool(b["ok"])))
             word_items["all"].append((bool(a["ok"]), bool(b["ok"])))
@@ -558,15 +687,12 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
     return m
 
 
-def judge(metrics, groups_present, waive=()):
-    """[{name, op, limit, value, result}] with result "OK" | "FAIL" | "SKIP" (a group that has no clip at all) | "WAIVED" (listed in
-    `waive`: measured and reported, not judged)"""
+def judge(metrics, groups_present):
+    """[{name, op, limit, value, result}] with result "OK" | "FAIL" | "SKIP" (a group that has no clip at all). No gate is waived (D-2)."""
     out = []
     for name, op, limit, group in GATES:
         value = metrics.get(name)
-        if name in waive:
-            result = "WAIVED"
-        elif group is not None and group not in groups_present:
+        if group is not None and group not in groups_present:
             result = "SKIP"
         elif value is None:
             result = "FAIL"   # the group is there but the holdout has nothing to measure: not proven, not passed
@@ -603,6 +729,11 @@ def _write_json(path, obj):
 # ------------------------------------------------------------------------------------------------ the tool
 def run(args, S=None, out=print):
     """returns the exit code; every outcome is a `CALIB_OK` / `CALIB_FAIL ...` line"""
+    refused = refuse_out_paths([args.out_params, args.report])
+    if refused is not None:
+        out("CALIB_FAIL out_path")
+        out("  --out-params / --report may not be inside a repository, a worktree or backend")
+        return 2
     S = S or load_server()
     try:
         pc_heads, pc = read_runs(args.pc, "pc")
@@ -619,13 +750,26 @@ def run(args, S=None, out=print):
         beam = betas.pop()
         if isinstance(beam, bool) or not isinstance(beam, int) or beam not in (1, 2, 3):
             raise CalibError("input", "phone beam must be 1, 2 or 3")
-        model_id = model_id_from_file(models.pop())
-        if not model_id:
-            raise CalibError("input", "phone file has no model name")
+        model_name = models.pop()
+        if not isinstance(model_name, str) or not MODEL_FILE_RE.match(model_name):
+            raise CalibError("input", "the phone model name is not an allowed ggml file name")
+        model_id = model_id_from_file(model_name)
+        date = None
+        for h in pc_heads:
+            d = h.get("date")
+            if d is None:
+                continue
+            try:
+                if not isinstance(d, str) or not DATE_RE.match(d):
+                    raise ValueError
+                datetime.date.fromisoformat(d)
+            except ValueError:
+                raise CalibError("input", "the pc date is not a valid YYYY-MM-DD date")
+            date = date or d
         agree = pair_agreement(S, rows)
         if agree < MIN_PAIR_AGREEMENT:
             raise CalibError("agreement", "pairing agreement %.3f < %.2f (the phone clips are not the PC clips)" % (agree, MIN_PAIR_AGREEMENT))
-        train, held = split_sentences(rows, args.seed, args.holdout)
+        train, held = split_sentences(rows, args.seed, args.holdout, S)
         pairs = matched_pairs(S, train)
         p_map = fit_p_map(pairs)
         wrows = word_rows(S, train)
@@ -637,10 +781,7 @@ def run(args, S=None, out=print):
             fallback = "final_map"
         metrics = evaluate(S, held, p_map, ok_prob, final_map)
         groups = {pc_clip["group"] for pc_clip, _p in rows}
-        # with a fitted final_map the final score is moved away from the PC's ON PURPOSE (docs 2.4 step 3: the wrong clips must fall
-        # under 70), so its distance to the PC's score is reported but not judged
-        waive = FINAL_MAP_WAIVES if final_map is not None else ()
-        gates = judge(metrics, groups, waive)
+        gates = judge(metrics, groups)
     except CalibError as e:
         out("CALIB_FAIL %s" % e.code)
         out("  %s" % e.msg)
@@ -652,10 +793,10 @@ def run(args, S=None, out=print):
     if args.fit_final and final_map is None:
         out("  final_map: no step keeps both rates under 10 %")
     failed = [g["name"] for g in gates if g["result"] == "FAIL"]
-    date = next((h.get("date") for h in pc_heads if isinstance(h.get("date"), str) and h.get("date")), None) or datetime.date.today().isoformat()
+    date = date or datetime.date.today().isoformat()
     report = {
         "v": 1, "status": "fail" if failed else "ok", "failed": failed, "date": date, "seed": args.seed, "holdout": args.holdout,
-        "model_id": model_id, "beam": beam, "fallback": fallback,
+        "model_id": model_id, "beam": beam, "fallback": fallback, "retime": bool(RETIME),
         "clips": {"total": len(rows), "synth": sum(1 for r in rows if r[0]["group"] == "synth"),
                   "user": sum(1 for r in rows if r[0]["group"] == "user"), "fit": len(train), "holdout": len(held)},
         "sentences": {"fit": len({r[0]["sentence_id"] for r in train}), "holdout": len({r[0]["sentence_id"] for r in held})},
@@ -711,6 +852,9 @@ def main(argv=None):
     except CalibError as e:   # load_server problems and the like
         print("CALIB_FAIL %s" % e.code)
         print("  %s" % e.msg)
+        return 1
+    except Exception as e:   # only the type: an exception text may carry what a file said
+        print("CALIB_FAIL internal (%s)" % type(e).__name__)
         return 1
 
 

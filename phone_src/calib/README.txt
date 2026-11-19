@@ -29,17 +29,20 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
 
 1) 합성 세트
      & $PY -I -X utf8 $W\phone_src\tools\calib_make_set.py --out $T\set_synth [--n-sentences 200] [--voices 4] [--seed 7]
-   문장: godot\data\pack\practice_en.json 의 3~10 낱말 문장(모자라면 코스 문장으로 보충). 문장·음성마다 8가지 변형:
+   문장: godot\data\pack\practice_en.json 의 3~10 낱말 문장. 코스 문장(en_sentences.json)은 연습 문장이 모자랄 때만 보충한다.
+   서버 en_words 정규화(대소문자·구두점 무시)가 같은 문장은 한 번만 쓴다. 문장·음성마다 8가지 변형:
    clean / wrong(낱말 1개를 바꿔 읽음, 타깃은 원문) / speed08 / speed125 / snr20 / snr10 / band8k / amp02.
    음성은 이 PC 에 이미 있는 것만 쓴다. 요청보다 적으면 "CALIB_SET_VOICES_LIMITED have=.. want=.." 를 찍고 계속한다
    (2026-11-19 이 PC: 영어 음성 1종 af_heart. PA5b-1 의 "음성 >= 4" 는 새 음성을 내려받지 않는 한 채울 수 없다).
    같은 시드면 문장·바꾼 낱말·잡음·오디오가 같다(합성 전에 torch 시드를 고정한다).
+   모든 도구의 --out 은 절대 경로로 바꾼 뒤 저장소·worktree·backend 안(D:\Ai\언어pp, D:\Ai\언어pp_wt 아래와 이 도구가 든 저장소)이면
+   거절한다(종료 2, 아무것도 쓰지 않음, 메시지에 경로를 되풀이하지 않음). calib_phone.gd 는 res://·user://·상대 경로도 거절한다.
    결과: $T\set_synth\manifest.json 과 clips\*.wav (16 kHz 모노 16비트). manifest 의 각 클립: clip, file, sentence_id, target,
    variant, voice, wrong(null 또는 {index, said}; index 는 target.split() 의 몇 번째 낱말), spoken, seconds, sha256.
 
 2) 사용자 녹음 (사용자가 직접, 마이크 앞)
      & $PY -I -X utf8 $W\phone_src\tools\calib_record.py --out $T\calib_user        (--dry-run 은 문구·문장만 보이고 아무것도 안 씀)
-   먼저 동의 문구를 그대로 보이고 y 를 입력해야 시작한다:
+   먼저 동의 문구를 그대로 보이고 소문자 y 한 글자(앞뒤 공백만 무시)를 입력해야 시작한다. Y·yes·빈 입력은 녹음기를 열지 않고 종료 1:
      "영어 문장 30개를 한 번은 바르게, 한 번은 화면이 알려 주는 낱말 하나를 바꿔서 읽어요(약 8분). 녹음은 이 PC 의 임시 폴더에만
       저장되고 저장소·인터넷으로 나가지 않아요. 보정이 끝나면 지워요(원하면 보관). 시작할까요? (y/n)"
    문장 30개 x (바르게, 낱말 하나 바꿔) = 60클립. 클립마다 Enter 로 6초 녹음(카운트다운 표시), Enter = 다음, r = 다시, q = 여기서 그만.
@@ -56,7 +59,11 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
 4) 맞추기
      & $PY -I -X utf8 $W\phone_src\tools\calib_fit.py --pc $T\pc_synth.json $T\pc_user.json --phone $T\phone_synth.json $T\phone_user.json `
          --out-params $T\score_params.json --report $T\report.json [--holdout 0.3] [--seed 7] [--fit-final]
-   - 클립은 id 로 짝짓는다(순서가 아니다). 한쪽에만 있는 클립, 빈 입력, 깨진 JSON 은 종료 코드 1.
+   - 클립은 id 로 짝짓는다(순서가 아니다). 한쪽에만 있는 클립, 빈 입력, 깨진 JSON, 전사에 실패한 폰 클립(ok:false, 또는 status "fail" 파일)은 종료 코드 1.
+   - 폰 낱말 시각은 채점 전에 D-1 규칙(docs201_design.md 8.1: 시각을 [0, 클립 길이]로 자르고 start 단조, end 는 start 이상·다음 start 이하)으로
+     정리한다(앱과 같은 규칙, calib_fit.clean_word_times). 오류·보고서에는 파일 이름·클립 id·문장·모델 이름 원문을 넣지 않고 번호·개수·코드만 쓴다.
+     모델 이름은 ggml-*.bin 형식, 날짜는 YYYY-MM-DD 일 때만 받는다.
+   - 문장 단위 분할의 "같은 문장"은 서버 en_words 정규화가 같은 타깃이다(id 가 달라도 한쪽에만 간다).
    - 문장 단위로 70 % / 30 % 로 나눈다(같은 문장의 모든 음성·변형·사용자 클립이 한쪽에만). 70 % 로 맞추고 30 % 로 판정.
    - 짝 일치도(두 엔진이 들은 낱말 목록의 SequenceMatcher 비율 평균)가 0.6 미만이면 "CALIB_FAIL agreement", 종료 코드 1.
    - p_map: 서버 정렬로 두 엔진이 정확히 맞춘 낱말쌍에서 폰 p -> PC p 의 등위(isotonic) 회귀, 고정 10점(0, .05, .1, .2, .3, .45, .6, .75, .9, 1)에서 읽음.
@@ -75,9 +82,9 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
   1) beam 2 -> 3: calib_phone.gd --beam=2 (또는 3) 로 폰 쪽만 다시 돌려 calib_fit.py 를 다시 한다(beam 은 폰 JSON 에서 읽는다).
   2) 그래도 미달이면 멈추고 보고(q8_0 모델 비교는 사용자 재승인 뒤 별도 지시).
   3) calib_fit.py --fit-final: 최종 점수 매핑 final_map 을 찾는다. 틀린 클립 70+ <= 0.10 과 깨끗한 클립 70 미만 <= 0.10 을 같이
-     만족하는 계단 하나(원점수 a -> 70, a-1 -> 69)를 학습 쪽에서 찾는다. 이때 폰 점수를 일부러 PC 점수에서 떼어 놓으므로
-     최종 점수 MAE·p90(PC 와의 거리)은 숫자로 보고만 하고 판정하지 않는다("WAIVED"). 나머지 6개 합격선은 그대로 적용된다.
-     report.fallback 은 "final_map"(beam 만 올렸으면 "beam", 아니면 "none").
+     만족하는 계단 하나(원점수 a 가 70 에 처음 닿고 a-1 은 70 미만)를 학습 쪽에서 찾고, 그 밖의 점수는 가능한 한 그대로 둔다
+     (a > 70 이면 70..a-1 만 69 로 눌린다). 면제는 없다: 점수 MAE·p90 을 포함한 8개 합격선을 똑같이 판정하고, 미달이면
+     CALIB_FAIL 과 숫자(공개 여부는 §2.4 대로 오케스트레이터가 정한다, D-2). report.fallback 은 "final_map"(beam 만 올렸으면 "beam", 아니면 "none").
 
 개인정보와 삭제
 ---------------
@@ -89,8 +96,6 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
 
 알려진 한계 (2026-11-19, 이 PC에서 직접 확인)
 - 합성 영어 음성이 af_heart 1종뿐이다. 새로 내려받지 않았다.
-- 폰 쪽 단어 시각(whisper.cpp token_timestamps)이 불안정하다: 짧은 클립에서도 마지막 낱말 끝이 30초 근처로 나오고
-  낱말 하나가 몇 초씩 차지하는 경우가 있다. 서버 유창성 점수는 이 시각으로 계산하므로 calib_fit.py 는 폰 시각을 그대로 쓰면
-  유창성 MAE 가 크게 나온다(작은 세트 5문장·40클립에서 약 74). PA4 의 "시각 정리"(docs\v201_design.md 2.3 6번)가 병합되면
-  그 규칙으로 시각을 고친 phone JSON 을 쓰거나 calib_fit.py 앞에 같은 정리를 넣어야 한다. 이 도구는 시각을 고치지 않는다.
+- 폰 쪽 단어 시각(whisper.cpp token_timestamps)이 불안정할 수 있다(마지막 낱말 끝이 30초 근처로 나온 클립이 있었다). 그래서 채점 전에
+  D-1 규칙으로 정리한다. 정리 전후 유창성 MAE(5문장·40클립 작은 세트): 9.75 -> 4.19 (calib_fit.RETIME 을 False 로 하면 정리 없이 계산).
 - calib_pc_run.py 는 CPU int8(서버 --stt-cpu 와 같은 설정)이라 클립이 많으면 오래 걸린다(작은 세트 40클립 약 85초).

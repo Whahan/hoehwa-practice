@@ -13,7 +13,9 @@ variant "user_clean" / "user_wrong" and voice "user"). The recordings never leav
 file of this tool keeps what was said or read (the screen shows the sentences, nothing else is kept). At the end only the number of
 clips and the total length are printed. Deleting the folder after the calibration is the user's choice (docs 4.1: the default is delete).
 --dry-run opens no microphone, writes nothing (not even --out) and prints the consent text and the 30 sentences.
-Exit code: 0 ok (also `q` after some clips), 1 consent not given / microphone problem / --out not empty, 2 usage error.
+Consent is exactly the lower case letter `y` (spaces around it are ignored): `Y`, `yes`, `n`, an empty line all mean no.
+--out may not be inside a repository, a worktree or backend (exit 2, nothing written, not even for --dry-run).
+Exit code: 0 ok (also `q` after some clips), 1 consent not given / microphone problem / --out not empty, 2 usage error or a forbidden --out.
 """
 import argparse
 import datetime
@@ -30,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.append(HERE)   # -I does not add the script folder
 
+import calib_fit as cf   # noqa: E402
 import calib_make_set as ms   # noqa: E402  (sentence pool and the word replacement are shared with the synthetic set)
 
 CONSENT_TEXT = ("영어 문장 30개를 한 번은 바르게, 한 번은 화면이 알려 주는 낱말 하나를 바꿔서 읽어요(약 8분). "
@@ -47,7 +50,8 @@ class RecError(Exception):
 
 def plan(seed, n=N_SENTENCES):
     """[(sentence_id, text, wrong {index, said}, spoken text)] for the user: fixed by the seed, so the dry run shows what will be asked"""
-    pool = ms.load_pool(USER_WORDS[0], USER_WORDS[1])
+    with cf.no_network():
+        pool = ms.load_pool(USER_WORDS[0], USER_WORDS[1], n)
     if len(pool) < n:
         raise RecError("only %d sentences available" % len(pool))
     chosen = ms.pick_sentences(pool, n, seed)
@@ -104,6 +108,7 @@ def peak_of(samples):
 
 
 def run(out_dir, dry_run, seed, input_fn=input, recorder=default_recorder, out=print, wav_writer=write_wav):
+    cf.require_out_paths(out_dir)
     items = plan(seed)
     if dry_run:
         out(CONSENT_TEXT)
@@ -116,7 +121,7 @@ def run(out_dir, dry_run, seed, input_fn=input, recorder=default_recorder, out=p
         out("CALIB_REC_FAIL --out folder is not empty")
         return 1
     out(CONSENT_TEXT)
-    if input_fn("> ").strip() not in ("y", "Y"):
+    if input_fn("> ").strip() != "y":
         out("CALIB_REC_FAIL consent not given (nothing recorded)")
         return 1
     consent = {"given": True, "text_sha256": hashlib.sha256(CONSENT_TEXT.encode("utf-8")).hexdigest(),
@@ -170,6 +175,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
     try:
         return run(os.path.abspath(args.out), args.dry_run, args.seed)
+    except cf.OutPathRefused:
+        print("CALIB_REC_FAIL out_path")
+        return 2
     except RecError as e:
         print("CALIB_REC_FAIL %s" % e)
         return 1
