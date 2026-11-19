@@ -1,0 +1,40 @@
+{
+	"v": 1,
+	"hosts": ["github.com", "githubusercontent.com", "huggingface.co", "hf.co"],
+	"models": [
+		{
+			"id": "whisper-base.en-q5_1",
+			"kind": "stt",
+			"langs": ["en"],
+			"file": "ggml-base.en-q5_1.bin",
+			"bytes": 59721011,
+			"sha256": "4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f",
+			"min_free_mb": 250,
+			"default": true,
+			"ram_hint_mb": 400,
+			"label_ko": "기본 모델",
+			"urls": [
+				"https://github.com/Whahan/hoehwa-practice/releases/download/models-1/ggml-base.en-q5_1.bin",
+				"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin"
+			],
+			"license": "MIT (OpenAI Whisper weights, ggml conversion by whisper.cpp)"
+		},
+		{
+			"id": "whisper-tiny.en-q5_1",
+			"kind": "stt",
+			"langs": ["en"],
+			"file": "ggml-tiny.en-q5_1.bin",
+			"bytes": 32166155,
+			"sha256": "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b",
+			"min_free_mb": 150,
+			"default": false,
+			"ram_hint_mb": 250,
+			"label_ko": "작은 모델(느린 폰용)",
+			"urls": [
+				"https://github.com/Whahan/hoehwa-practice/releases/download/models-1/ggml-tiny.en-q5_1.bin",
+				"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin"
+			],
+			"license": "MIT (OpenAI Whisper weights, ggml conversion by whisper.cpp)"
+		}
+	]
+}
