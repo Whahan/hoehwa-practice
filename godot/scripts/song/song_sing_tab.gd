@@ -10,6 +10,7 @@ signal line_passed(line_i: int, score: int)
 
 const NOTE := "한 줄씩 듣고 따라 불러 보세요. 녹음하는 동안 노래는 멈춰요. 노래 점수는 참고용이에요."
 const SELF_NOTE := "지금은 점수를 낼 수 없어요(점수는 PC 연결 시). 따라 부른 뒤 내 목소리와 원어민 소리를 들어 보고 스스로 평가해요."
+const SELF_NOTE_MODEL := "점수를 보려면 설정 > 음성 인식에서 모델을 받아 주세요(약 60 MB). 지금은 따라 부른 뒤 내 목소리와 원어민 소리를 들어 보고 스스로 평가해요."
 
 var song: Dictionary = {}
 var lang: String = "en"
@@ -35,6 +36,11 @@ func _init() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
+## 점수를 낼 수 없을 때의 안내 글: 영어 노래에서 모델이 없으면 받으라는 글, 그 밖(일본어 포함)은 기존 글.
+static func self_note(l: String) -> String:
+	return SELF_NOTE_MODEL if SelfRatePanel.none_reason(l) == "model_missing" else SELF_NOTE
+
+
 func setup(song_in: Dictionary, ctx: Dictionary = {}) -> void:
 	song = song_in
 	lang = str(ctx.get("lang", song.get("lang", "en")))
@@ -48,7 +54,7 @@ func setup(song_in: Dictionary, ctx: Dictionary = {}) -> void:
 	intro.body.add_child(UI.label("따라 부르기", "Eyebrow", false))
 	intro.body.add_child(UI.label(NOTE, "Muted"))
 	if SelfRatePanel.needed():
-		intro.body.add_child(UI.label(SELF_NOTE, "Small"))
+		intro.body.add_child(UI.label(self_note(lang), "Small"))
 	add_child(intro)
 	if n == 0:
 		add_child(UI.label("가사 줄이 없어요.", "Muted"))
