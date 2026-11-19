@@ -7,12 +7,21 @@ extends Node
 ##
 ## Modes (prefs.route_mode): "auto" (PC first, phone when the PC is unreachable), "phone" (never talk to the
 ## PC), "pc" (old behaviour, phone handlers never used). Any other value is treated as "auto".
+## Exception (v2.0, docs/v200_phone_design.md §1.8): in auto mode /stt and /score prefer the phone (pref `score_where`,
+## "phone" by default; "pc" = PC first), a /score request with need_ph:true prefers the PC. AI paths stay PC first and
+## never switch to a key on the phone by themselves.
 ## Standalone mode belongs to the phone: on the PC app (Platform.is_phone() == false) every path is "pc",
 ## whatever the mode or the policy says.
 
 const MODES := ["auto", "phone", "pc"]
 const DEFAULT_MODE := "auto"
 const PREF_MODE := "route_mode"
+
+## Pref `score_where` ("phone" | "pc"): which side scores speech first (/stt, /score) in auto mode. Anything else, or a
+## missing value, means DEFAULT_SCORE_WHERE. The AI paths (/chat, /fix, /feedback, /missions/judge) ignore it.
+const PREF_SCORE_WHERE := "score_where"
+const SCORE_WHERES := ["phone", "pc"]
+const DEFAULT_SCORE_WHERE := "phone"
 
 ## Seconds during which, after one transport failure in auto mode, requests skip the PC and go to the phone.
 const FLAKY_SEC := 60.0
@@ -28,15 +37,19 @@ const CAP_KEYS := ["lesson", "lesson_ai", "practice", "missions", "missions_judg
 ##   phone   : LocalApi handler key ("" = no phone processing in stage 1)
 ##   prefer  : "pc" or "phone" — which side wins in auto mode when both are available
 ##   cap     : key in caps().items ("" = not shown)
-## `POST /lesson` with body.source == "ai" is routed like the "lesson_ai" entry below (see `policy_for`).
+## `POST /lesson` with body.source == "ai" is routed like the "lesson_ai" entry below, `POST /score` with body.need_ph == true
+## like "POST /score#ph" (see `policy_for`).
 const POLICY := {
 	"GET /health": {"pc": true, "phone": "health", "prefer": "pc", "cap": ""},
 	# prefer pc: a connected phone keeps getting the PC's (possibly newer) curriculum; without a ready PC the bundled copy.
 	"GET /curriculum": {"pc": true, "phone": "curriculum", "prefer": "pc", "cap": ""},
 	"POST /tts": {"pc": true, "phone": "", "prefer": "pc", "cap": "tts"},          # Tts autoload picks the engine itself
 	"GET /tts/voices": {"pc": true, "phone": "", "prefer": "pc", "cap": "tts"},
-	"POST /stt": {"pc": true, "phone": "stt", "prefer": "pc", "cap": "stt"},
-	"POST /score": {"pc": true, "phone": "stt", "prefer": "pc", "cap": "score"},
+	# v2.0 phone-first scoring (docs/v200_phone_design.md §1.8): prefer is "phone" unless the pref `score_where` is "pc"
+	# (`policy_for` applies that). A /score body with need_ph:true (phoneme screens) is the "#ph" entry: the PC first.
+	"POST /stt": {"pc": true, "phone": "stt", "prefer": "phone", "cap": "stt"},
+	"POST /score": {"pc": true, "phone": "stt", "prefer": "phone", "cap": "score"},
+	"POST /score#ph": {"pc": true, "phone": "stt", "prefer": "pc", "cap": ""},
 	"POST /prosody": {"pc": true, "phone": "", "prefer": "pc", "cap": "prosody"},
 	"POST /lesson": {"pc": true, "phone": "lessons", "prefer": "phone", "cap": "lesson"},
 	"POST /lesson#ai": {"pc": true, "phone": "ai", "prefer": "pc", "cap": "lesson_ai"},
@@ -73,7 +86,17 @@ const ERR_TEXT := {
 	"model_missing": "음성 인식 모델이 아직 없어요. 설정 > 음성 인식에서 내려받으면(약 60 MB) 폰에서 바로 채점할 수 있어요. 지금은 녹음해서 들어 보고 스스로 평가할 수 있어요.",
 	"model_corrupt": "음성 인식 모델 파일이 손상됐어요. 설정 > 음성 인식에서 다시 내려받아 주세요.",
 	"engine_missing": "이 앱 빌드에는 폰 음성 인식이 들어 있지 않아요. PC에 연결하면 채점할 수 있어요.",
-	"no_ai": "AI 대화는 AI 연결이 필요해요. 지금은 PC에 연결하거나 설정 > AI 연결에 본인 API 키를 넣으면 쓸 수 있어요. 키 없이도 '대본 대화'로 연습할 수 있어요.",
+	"no_ai": "AI를 쓰려면 설정 > AI 연결에서 본인 AI 키를 한 번 넣어 주세요. PC에 연결해도 돼요. 키 없이도 '대본 대화'로 연습할 수 있어요.",
+	# v2.0 phone design §2.7 (AI direct connection) and §1 (phone speech engine); the texts are fixed, never carry a key or a body.
+	"engine_error": "폰 음성 인식이 잠깐 멈췄어요. 잠시 뒤 다시 말해 보세요. 계속 안 되면 설정 > 음성 인식에서 'PC에서 채점'을 고를 수 있어요.",
+	"stt_timeout": "음성 인식이 너무 오래 걸려서 멈췄어요. 조금 짧게 말하거나 잠시 뒤 다시 시도해 주세요. 계속 안 되면 설정 > 음성 인식에서 'PC에서 채점'을 고를 수 있어요.",
+	"ai_offline": "인터넷에 연결돼 있지 않아요. 와이파이나 데이터를 켠 뒤 다시 시도해 주세요. 지금은 '대본 대화'로 연습할 수 있어요.",
+	"ai_tls": "보안 연결에 실패했어요. 폰의 날짜와 시간이 맞는지 확인해 주세요.",
+	"ai_model": "AI 모델을 찾을 수 없어요. 설정 > AI 연결에서 모델을 다시 골라 주세요.",
+	"ai_url": "주소가 안전하지 않아요. https:// 로 시작하는 주소만 쓸 수 있어요.",
+	"ai_key_format": "키 형식이 올바르지 않아요. 복사한 키를 그대로 붙여 넣어 주세요.",
+	"ja_ai_pc": "일본어 AI 대화는 아직 PC에서만 돼요.",
+	"no_space": "휴대폰 저장 공간이 부족해요. 공간을 확보한 뒤 다시 시도해 주세요.",
 	"ai_auth": "키가 맞지 않아요. 설정 > AI 연결에서 확인해 주세요.",
 	"ai_limit": "AI 사용 한도에 걸렸어요. 잠시 뒤 다시 시도해 주세요.",
 	"ai_overload": "AI 서버가 응답하지 않아요. 잠시 뒤 다시 시도해 주세요.",
@@ -92,10 +115,14 @@ const ERR_HTTP := {
 	"model_corrupt": 503, "engine_missing": 503, "no_ai": 503, "ai_auth": 401, "ai_limit": 429, "ai_overload": 502,
 	"bad_format": 502, "no_voice": 503, "no_permission": 403, "ja_reading_pc": 503, "not_connected": 503,
 	"bad_request": 400, "not_found": 404,
+	# v2.0 phone design: none of the new codes is 401 (ai_auth, the provider key problem, stays the only phone-side 401)
+	"engine_error": 500, "stt_timeout": 504, "ai_offline": 503, "ai_tls": 502, "ai_model": 502, "ai_url": 400,
+	"ai_key_format": 400, "ja_ai_pc": 503, "no_space": 507,
 }
 
-## `degraded` values a phone result may carry (§5.2).
-const DEGRADED := ["phoneme_off", "prosody_off", "ja_reading_approx", "gloss_partial", "examples_subset", "bank_repeat", "ai_off"]
+## `degraded` values a phone result may carry (§5.2; `score_uncalibrated` / `stt_tiny_model`: v2.0 phone design §1.5).
+const DEGRADED := ["phoneme_off", "prosody_off", "ja_reading_approx", "gloss_partial", "examples_subset", "bank_repeat", "ai_off",
+	"score_uncalibrated", "stt_tiny_model"]
 
 ## Emitted when `mode` changes (settings card, tests).
 signal mode_changed(mode: String)
@@ -132,15 +159,31 @@ func set_mode(m: String) -> void:
 	mode_changed.emit(m)
 
 
+## The effective `score_where` pref: "phone" or "pc" (a missing or odd value is DEFAULT_SCORE_WHERE).
+static func score_where() -> String:
+	var v: Variant = Store.prefs.get(PREF_SCORE_WHERE, DEFAULT_SCORE_WHERE)
+	if v is String and (v as String) in SCORE_WHERES:
+		return v
+	return DEFAULT_SCORE_WHERE
+
+
 ## "GET"/"POST" + path without query -> policy entry (a copy) or {} when the path is PC-only.
-## `body` matters for POST /lesson: {"source": "ai"} selects the "#ai" entry.
+## `body` matters for POST /lesson: {"source": "ai"} selects the "#ai" entry, and for POST /score: {"need_ph": true}
+## selects the "#ph" entry. The `prefer` of /stt and /score (not "#ph") follows the pref `score_where`.
 static func policy_for(method: String, path: String, body: Dictionary = {}) -> Dictionary:
 	var p: String = path.split("?")[0]
 	var key: String = method.to_upper() + " " + p
 	if key == "POST /lesson" and str(body.get("source", "")) == "ai":
 		key = "POST /lesson#ai"
+	elif key == "POST /score":
+		var need_ph: Variant = body.get("need_ph", false)
+		if typeof(need_ph) == TYPE_BOOL and need_ph:
+			key = "POST /score#ph"
 	if POLICY.has(key):
-		return (POLICY[key] as Dictionary).duplicate()
+		var e: Dictionary = (POLICY[key] as Dictionary).duplicate()
+		if key == "POST /stt" or key == "POST /score":
+			e["prefer"] = "pc" if score_where() == "pc" else "phone"
+		return e
 	return {}
 
 
