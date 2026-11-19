@@ -13,19 +13,23 @@ Request path:   /f/<token>/<payload file name>?<behaviour switches>
   switches      (all optional, combined freely)
     redir=N       answer N times with a redirect before serving (each hop lowers N)
     code=302      redirect status (301 302 303 307 308)
-    kind=abs|rel|sig|evil|suffix|plainhttp
+    kind=abs|rel|sig|evil|suffix|plainhttp|schemerel|ftp|file|js|data|upperhttp
                   abs   Location is http://127.0.0.1:<port>/...   (default)
                   rel   Location is a path starting with /
                   sig   like abs, with a signed-looking ?sig=... query (must never be stored by the app)
                   evil  Location is https://evilgithub.com/...        (the app must refuse)
                   suffix Location is https://release-assets.githubusercontent.com/...  (allowed by suffix)
                   plainhttp Location is http://github.com/...         (http: the app must refuse)
+                  schemerel Location is //127.0.0.1:<port>/...         (scheme-relative: allowed)
+                  ftp|file|js|data  Location with that other scheme    (the app must refuse before any request)
+                  upperhttp Location is HTTP://github.com/...          (the app must refuse)
     cut=P         the first answer that would serve the body sends P percent of it and drops the connection
     norange=1     ignore a Range header and send 200 with the whole body
     r416=1        answer 416 when a Range header is present
     slow=MS       sleep MS milliseconds after every 64 KB chunk
     status=NNN    answer that status with a short body, always
     zero=1        200 with an empty body
+    nobody=1      200 with no Content-Length and no body, then the connection closes
     clmis=D       declare (and send) D bytes less/more than the file really has (Content-Length mismatch)
     over=D        send D extra bytes after the file (Content-Length says file size + D)
     stall=K       send K KB, then say nothing for 8 seconds (a dead connection)
@@ -111,6 +115,18 @@ class Handler(BaseHTTPRequestHandler):
                 loc = "https://release-assets.githubusercontent.com" + tail
             elif kind == "plainhttp":
                 loc = "http://github.com" + tail
+            elif kind == "upperhttp":
+                loc = "HTTP://github.com" + tail
+            elif kind == "schemerel":
+                loc = "//127.0.0.1:%d%s" % (port, tail)
+            elif kind == "ftp":
+                loc = "ftp://127.0.0.1:%d%s" % (port, tail)
+            elif kind == "file":
+                loc = "file://" + tail
+            elif kind == "js":
+                loc = "javascript:void(0)"
+            elif kind == "data":
+                loc = "data:text/plain,hello"
             else:
                 loc = "http://127.0.0.1:%d%s" % (port, tail)
             rec["status"] = code
@@ -122,6 +138,14 @@ class Handler(BaseHTTPRequestHandler):
             rec["status"] = int(st)
             log_line(rec)
             self._send(int(st), b"error body")
+            return
+        if q.get("nobody") == "1":
+            rec["status"] = 200
+            log_line(rec)
+            self.send_response(200)
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
             return
         if q.get("zero") == "1":
             rec["status"] = 200

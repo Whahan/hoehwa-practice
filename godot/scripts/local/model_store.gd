@@ -21,14 +21,13 @@ const SPACE_MARGIN_MB := 100
 const MAX_REDIRECTS := 5
 const MB := 1000000 ## the screen MB is 10^6 bytes, rounded to a whole number
 const PREF_KEY := "stt_model"
-const SPACE_UNKNOWN_TEXT := "남은 공간을 확인하지 못했어요. 약 100 MB 이상 비어 있는지 확인하고 계속할까요?"
 const ERR_TEXT := {
-	"dl_net": "인터넷 연결이 끊겼어요. 연결을 확인하고 [이어받기]를 눌러 주세요.",
+	"dl_net": "인터넷 연결이 끊겼어요. 연결을 확인하고 다시 눌러 주세요.",
 	"dl_http": "모델 서버가 응답하지 않아요. 잠시 뒤 다시 시도해 주세요.",
 	"dl_redirect": "받을 주소를 찾지 못했어요. 잠시 뒤 다시 시도해 주세요.",
 	"dl_host": "허용되지 않은 주소라서 받지 않았어요. 앱을 최신 버전으로 업데이트해 주세요.",
 	"no_space": "저장 공간이 모자라요. 공간을 비운 뒤 다시 시도해 주세요.",
-	"model_corrupt": "받은 파일이 올바르지 않아서 지웠어요. [다시 받기]를 눌러 주세요.",
+	"model_corrupt": "받은 파일이 올바르지 않았어요. 잠시 뒤 다시 받아 주세요.",
 	"io": "파일을 저장하지 못했어요. 저장 공간을 확인해 주세요.",
 	"bad_manifest": "모델 목록을 읽지 못했어요. 앱을 다시 설치하거나 업데이트해 주세요.",
 }
@@ -100,13 +99,44 @@ class Runner extends Node:
 
 # ---------------------------------------------------------------- manifest
 
-## Checks a parsed models.json. Returns {ok, models, hosts, err} (err "" or "bad_manifest").
+## File and id names: a short allow-list, so no name can reach outside the model folder or name a device / special file.
+const NAME_RX := "^[a-z0-9][a-z0-9._-]{0,63}$"
+const RESERVED_STEMS := ["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+	"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]
+const SIDE_SUFFIXES := [".part", ".part.json", ".ok"]
+const MAX_BYTES := 8000000000 ## 8 GB: far above any speech model, far below int overflow games
+
+
+static func valid_name(n: Variant) -> bool:
+	if typeof(n) != TYPE_STRING:
+		return false
+	var s: String = n
+	if RegEx.create_from_string(NAME_RX).search(s) == null or s.contains("..") or s.ends_with("."):
+		return false
+	if RESERVED_STEMS.has(s.split(".")[0]):
+		return false
+	return true
+
+
+static func _str_array(v: Variant) -> bool:
+	if not (v is Array):
+		return false
+	for x in v:
+		if typeof(x) != TYPE_STRING:
+			return false
+	return true
+
+
+## Checks a parsed models.json. Every field is type-checked before it is converted or used; anything wrong ends as
+## {ok: false, err: "bad_manifest"}. Returns {ok, models, hosts, err}.
 static func validate_manifest(d: Variant) -> Dictionary:
 	var bad := {"ok": false, "models": [], "hosts": [], "err": "bad_manifest"}
 	if not (d is Dictionary):
 		return bad
 	var dd: Dictionary = d
-	if int(dd.get("v", 0)) != 1 or not (dd.get("hosts") is Array) or not (dd.get("models") is Array):
+	if not _is_whole(dd.get("v")) or int(dd["v"]) != 1:
+		return bad
+	if not (dd.get("hosts") is Array) or not (dd.get("models") is Array):
 		return bad
 	var hosts: Array = []
 	for h in dd["hosts"]:
@@ -117,37 +147,58 @@ static func validate_manifest(d: Variant) -> Dictionary:
 		return bad
 	var models: Array = []
 	var ids := {}
+	var files := {} ## every file name any model may touch -> true
 	var defaults := 0
 	var sha_rx := RegEx.create_from_string("^[0-9a-f]{64}$")
 	for m in dd["models"]:
 		if not (m is Dictionary):
 			return bad
 		var md: Dictionary = m
-		var id: String = str(md.get("id", ""))
-		var file: String = str(md.get("file", ""))
-		if id == "" or ids.has(id) or typeof(md.get("id")) != TYPE_STRING:
+		if not valid_name(md.get("id")) or not valid_name(md.get("file")):
 			return bad
-		if file == "" or typeof(md.get("file")) != TYPE_STRING or file.contains("/") or file.contains("\\") or file.contains("..") or file.begins_with("."):
+		var id: String = md["id"]
+		var file: String = md["file"]
+		if ids.has(id):
 			return bad
-		if not _is_whole(md.get("bytes")) or int(md["bytes"]) <= 0:
+		for suf in SIDE_SUFFIXES:
+			if file.ends_with(suf):
+				return bad
+		for suf in [""] + SIDE_SUFFIXES:
+			if files.has(file + suf):
+				return bad
+			files[file + suf] = true
+		if not _is_whole(md.get("bytes")) or int(md["bytes"]) <= 0 or int(md["bytes"]) > MAX_BYTES:
 			return bad
 		if typeof(md.get("sha256")) != TYPE_STRING or sha_rx.search(String(md["sha256"])) == null:
 			return bad
-		if not (md.get("urls") is Array) or (md["urls"] as Array).is_empty():
+		if not _str_array(md.get("urls")) or (md["urls"] as Array).is_empty():
 			return bad
 		for u in md["urls"]:
-			if typeof(u) != TYPE_STRING or not bool(parse_url(String(u)).get("ok", false)):
+			if not bool(parse_url(String(u)).get("ok", false)):
 				return bad
 		var minf: Variant = md.get("min_free_mb", 0)
-		if not _is_whole(minf) or int(minf) < 0:
+		if not _is_whole(minf) or int(minf) < 0 or int(minf) > 1000000:
+			return bad
+		var ram: Variant = md.get("ram_hint_mb", 0)
+		if not _is_whole(ram) or int(ram) < 0:
+			return bad
+		if md.has("default") and typeof(md["default"]) != TYPE_BOOL:
+			return bad
+		if md.has("kind") and typeof(md["kind"]) != TYPE_STRING:
+			return bad
+		if md.has("label_ko") and typeof(md["label_ko"]) != TYPE_STRING:
+			return bad
+		if md.has("license") and typeof(md["license"]) != TYPE_STRING:
+			return bad
+		if md.has("langs") and not _str_array(md["langs"]):
 			return bad
 		ids[id] = true
 		if bool(md.get("default", false)):
 			defaults += 1
 		models.append({
-			"id": id, "kind": str(md.get("kind", "stt")), "langs": md.get("langs", []) if md.get("langs") is Array else [],
+			"id": id, "kind": str(md.get("kind", "stt")), "langs": (md["langs"] as Array).duplicate() if md.has("langs") else [],
 			"file": file, "bytes": int(md["bytes"]), "sha256": String(md["sha256"]), "min_free_mb": int(minf),
-			"default": bool(md.get("default", false)), "ram_hint_mb": int(md.get("ram_hint_mb", 0)) if _is_whole(md.get("ram_hint_mb", 0)) else 0,
+			"default": bool(md.get("default", false)), "ram_hint_mb": int(ram),
 			"label_ko": str(md.get("label_ko", id)), "urls": (md["urls"] as Array).duplicate(), "license": str(md.get("license", "")),
 		})
 	if defaults != 1:
@@ -217,6 +268,19 @@ static func set_active(id: String) -> bool:
 
 static func _file_abs(m: Dictionary, suffix: String = "") -> String:
 	return ProjectSettings.globalize_path(base_dir).path_join(str(m["file"]) + suffix)
+
+
+## True when `abs_path` sits directly in the model folder (no sub-folder, no `..`, no other drive or parent).
+static func in_store(abs_path: String, dir_abs: String = "") -> bool:
+	var dir: String = (dir_abs if dir_abs != "" else ProjectSettings.globalize_path(base_dir)).replace("\\", "/").simplify_path()
+	var p: String = abs_path.replace("\\", "/").simplify_path()
+	return dir != "" and p.get_base_dir().trim_suffix("/") == dir.trim_suffix("/") and p.get_file() != ""
+
+
+## Deletes one model file, but only when it is directly in the model folder.
+static func _rm(abs_path: String, dir_abs: String = "") -> void:
+	if in_store(abs_path, dir_abs):
+		DirAccess.remove_absolute(abs_path)
 
 
 static func path_of(id: String) -> String:
@@ -342,11 +406,16 @@ static func mark_corrupt(id: String) -> void:
 		return
 	if _job_of(id) != null:
 		return
-	DirAccess.remove_absolute(_file_abs(m, ".ok")) ## the file stays until the person acts; without the marker it is not "ready"
+	_rm(_file_abs(m, ".ok")) ## the file stays until the person acts; without the marker it is not "ready"
 	_mutex.lock()
 	_corrupt[id] = true
 	_mutex.unlock()
 	_emit_state(id)
+
+
+## The question shown when the free space cannot be read; `need_mb` is the amount start() asked for.
+static func space_unknown_text(need_mb: int) -> String:
+	return "남은 공간을 확인하지 못했어요. 약 %d MB 이상 비어 있는지 확인하고 계속할까요?" % maxi(need_mb, 1)
 
 
 static func _free_bytes() -> int:
@@ -382,14 +451,14 @@ static func start(id: String, space_confirmed: bool = false) -> Dictionary:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(base_dir))
 	if state(id) == "corrupt": ## a bad file is replaced: it is deleted before anything is fetched
 		for suf in ["", ".ok"]:
-			DirAccess.remove_absolute(_file_abs(m, suf))
+			_rm(_file_abs(m, suf))
 	_mutex.lock()
 	_corrupt.erase(id)
 	_mutex.unlock()
 	var part: int = _len(_file_abs(m, ".part"))
 	if part > int(m["bytes"]):
-		DirAccess.remove_absolute(_file_abs(m, ".part"))
-		DirAccess.remove_absolute(_file_abs(m, ".part.json"))
+		_rm(_file_abs(m, ".part"))
+		_rm(_file_abs(m, ".part.json"))
 		part = 0
 	var need: int = int(ceil(float(maxi(0, int(m["bytes"]) - part)) * 1.1)) + SPACE_MARGIN_MB * MB
 	need = maxi(need, int(m["min_free_mb"]) * MB)
@@ -438,7 +507,7 @@ static func remove(id: String) -> bool:
 		_join(job) ## the worker looks at the flag every few milliseconds
 		_jobs.erase(id)
 	for suf in ["", ".part", ".part.json", ".ok"]:
-		DirAccess.remove_absolute(_file_abs(m, suf))
+		_rm(_file_abs(m, suf))
 	_mutex.lock()
 	_corrupt.erase(id)
 	_mutex.unlock()
@@ -538,8 +607,9 @@ static func _origin(u: Dictionary) -> String:
 ## Resolves a Location header against the address it came from (absolute, //host, /path, ?query, relative).
 static func resolve_location(base: Dictionary, loc: String) -> String:
 	var l: String = loc.strip_edges()
-	var low: String = l.to_lower()
-	if low.begins_with("http://") or low.begins_with("https://"):
+	# any explicit scheme (https:, http:, ftp:, file:, javascript:, data:, in any letter case) is kept as written: it is
+	# never read as a relative path, so the address check that follows sees it and refuses what is not allowed
+	if RegEx.create_from_string("^[A-Za-z][A-Za-z0-9+.-]*:").search(l) != null:
 		return l
 	if l.begins_with("//"):
 		return str(base["scheme"]) + ":" + l
@@ -609,8 +679,8 @@ static func _write_part_json(job: Job, url_index: int) -> void:
 
 
 static func _drop_part(job: Job) -> void:
-	DirAccess.remove_absolute(_p(job, ".part"))
-	DirAccess.remove_absolute(_p(job, ".part.json"))
+	_rm(_p(job, ".part"), job.dir_abs)
+	_rm(_p(job, ".part.json"), job.dir_abs)
 	job.done = 0
 
 
@@ -625,7 +695,7 @@ static func _download(job: Job) -> Dictionary:
 	job.done = part_len
 	var pj: Dictionary = _read_json(_p(job, ".part.json"))
 	var url_start: int = clampi(int(pj.get("url_index", 0)), 0, urls.size() - 1) if _is_whole(pj.get("url_index", 0)) else 0
-	DirAccess.remove_absolute(_p(job, ".ok")) ## a stale marker must never vouch for a new download
+	_rm(_p(job, ".ok"), job.dir_abs) ## a stale marker must never vouch for a new download
 	if job.done < bytes:
 		var last_err := "dl_net"
 		var got := false
@@ -675,6 +745,8 @@ static func _attempt(job: Job, idx: int) -> Dictionary:
 			var loc: String = str(hd.get("location", ""))
 			redirects += 1
 			if redirects > MAX_REDIRECTS or loc == "":
+				return {"ok": false, "err": "dl_redirect", "stop": false}
+			if not location_clean(loc):
 				return {"ok": false, "err": "dl_redirect", "stop": false}
 			url = resolve_location(u, loc)
 			continue
@@ -780,6 +852,9 @@ static func _request(job: Job, u: Dictionary, range_from: int) -> Dictionary:
 
 
 static func _stream(job: Job, c: HTTPClient, append: bool, idx: int, bytes: int) -> Dictionary:
+	if c.get_status() != HTTPClient.STATUS_BODY: ## an answer without a body: nothing to store, nothing to leave behind
+		c.close()
+		return {"ok": false, "err": "dl_net", "stop": false}
 	var path: String = _p(job, ".part")
 	var f: FileAccess = null
 	if append:
@@ -799,6 +874,8 @@ static func _stream(job: Job, c: HTTPClient, append: bool, idx: int, bytes: int)
 		if job.cancel != "":
 			break
 		c.poll()
+		if c.get_status() != HTTPClient.STATUS_BODY: ## poll() saw the connection end: the body API must not be called now
+			break
 		var chunk: PackedByteArray = c.read_response_body_chunk()
 		var now: int = Time.get_ticks_msec()
 		if chunk.size() > 0:
@@ -826,6 +903,9 @@ static func _stream(job: Job, c: HTTPClient, append: bool, idx: int, bytes: int)
 	if job.done > bytes:
 		_drop_part(job)
 		return {"ok": false, "err": "model_corrupt", "stop": true}
+	if job.done == 0: ## not one byte arrived: no .part, no .part.json
+		_drop_part(job)
+		return {"ok": false, "err": "cancelled" if job.cancel != "" else "dl_net", "stop": true}
 	_write_part_json(job, idx)
 	if job.cancel != "":
 		return {"ok": false, "err": "cancelled", "stop": true}
@@ -862,9 +942,20 @@ static func _verify(job: Job) -> Dictionary:
 		return {"ok": false, "err": "model_corrupt"}
 	if not _write_text(_p(job, ".ok"), JSON.stringify({"v": 1, "sha256": hex, "bytes": int(m["bytes"])})):
 		return {"ok": false, "err": "io"}
-	DirAccess.remove_absolute(_p(job, ""))
+	_rm(_p(job, ""), job.dir_abs)
 	if DirAccess.rename_absolute(_p(job, ".part"), _p(job, "")) != OK:
-		DirAccess.remove_absolute(_p(job, ".ok"))
+		_rm(_p(job, ".ok"), job.dir_abs)
 		return {"ok": false, "err": "io"}
-	DirAccess.remove_absolute(_p(job, ".part.json"))
+	_rm(_p(job, ".part.json"), job.dir_abs)
 	return {"ok": true, "err": ""}
+
+
+## A Location value must be plain printable ASCII (no space, control character or non-ASCII), or it is refused.
+static func location_clean(loc: String) -> bool:
+	if loc.strip_edges() == "":
+		return false
+	for i in loc.strip_edges().length():
+		var c: int = loc.strip_edges().unicode_at(i)
+		if c <= 32 or c >= 127:
+			return false
+	return true

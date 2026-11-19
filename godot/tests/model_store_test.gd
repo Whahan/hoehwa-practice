@@ -24,6 +24,7 @@ var _wf_sec: float = 0.0
 var _payloads: Dictionary = {}
 var _old_prefs: String = ""
 var _normal_tok: String = ""
+var _cap: LogCap = null
 
 
 func ok(cond: bool, name: String) -> void:
@@ -55,6 +56,8 @@ func _args() -> void:
 
 func _ready() -> void:
 	print("== model_store_test start ==")
+	_cap = LogCap.new()
+	OS.add_logger(_cap)
 	_args()
 	_old_prefs = Store.prefs_path
 	DirAccess.make_dir_recursive_absolute(_g(DIR))
@@ -95,6 +98,7 @@ func _ready() -> void:
 	await _d_hosts()
 	await _d_bad()
 	await _d_manifest_bad()
+	await _d_hardening()
 	await _d_stall_and_close()
 	await _d_remove()
 	await _d_misc()
@@ -102,6 +106,11 @@ func _ready() -> void:
 
 
 func _finish() -> void:
+	if _cap != null:
+		OS.remove_logger(_cap)
+		ok(_cap.count() == 0, "no engine ERROR line during the run (%d)" % _cap.count())
+		for l in _cap.snapshot().slice(0, 5):
+			print("engine error: ", l)
 	ModelStore.free_space_hook = Callable()
 	ModelStore.write_error_hook = Callable()
 	ModelStore.allow_http_loopback = false
@@ -371,7 +380,7 @@ func _helpers() -> void:
 	var texts: Array = [ModelStore.progress_label(3000000000, 3000000000), ModelStore.mb_label(3000000000)]
 	for k in ModelStore.ERR_TEXT.keys():
 		texts.append(str(ModelStore.ERR_TEXT[k]))
-	texts.append(ModelStore.SPACE_UNKNOWN_TEXT)
+	texts.append(ModelStore.space_unknown_text(250))
 	var scan_ok := true
 	for t in texts:
 		if _has5(str(t)):
@@ -775,6 +784,144 @@ func _d_manifest_bad() -> void:
 	_single("x", [""]) # restore a valid one
 
 
+func _good_manifest() -> Dictionary:
+	return {"v": 1, "hosts": HOSTS.duplicate(), "models": [
+		{"id": "ma", "kind": "stt", "langs": ["en"], "file": "ma.bin", "bytes": 100, "sha256": "a".repeat(64), "min_free_mb": 0, "default": true,
+			"ram_hint_mb": 1, "label_ko": "a", "urls": ["https://github.com/x/a"], "license": "t"},
+		{"id": "mb", "kind": "stt", "langs": ["en"], "file": "mb.bin", "bytes": 100, "sha256": "b".repeat(64), "min_free_mb": 0, "default": false,
+			"ram_hint_mb": 1, "label_ko": "b", "urls": ["https://github.com/x/b"], "license": "t"}]}
+
+
+## Mutates one field of model 0 (or the top level when top is true) and checks validate_manifest refuses it.
+func _refuses(label: String, key: String, value: Variant, top: bool = false) -> void:
+	var d: Dictionary = _good_manifest()
+	if top:
+		d[key] = value
+	else:
+		(d["models"][0] as Dictionary)[key] = value
+	var r: Dictionary = ModelStore.validate_manifest(d)
+	ok(not bool(r["ok"]) and str(r["err"]) == "bad_manifest" and (r["models"] as Array).is_empty(), "bad_manifest: " + label)
+
+
+func _d_hardening() -> void:
+	ok(bool(ModelStore.validate_manifest(_good_manifest())["ok"]), "hardening: the reference manifest is accepted")
+	# 1. wrong types: valid JSON, wrong kinds of value. None may raise a script or engine error (the error log is checked at the end).
+	_refuses("v is an object", "v", {"a": 1}, true)
+	_refuses("v is a string", "v", "1", true)
+	_refuses("v is a float 1.5", "v", 1.5, true)
+	_refuses("v is 2", "v", 2, true)
+	_refuses("v is a bool", "v", true, true)
+	_refuses("hosts is a string", "hosts", "github.com", true)
+	_refuses("hosts holds a number", "hosts", [5], true)
+	_refuses("models is an object", "models", {}, true)
+	_refuses("bytes is a string", "bytes", "100")
+	_refuses("bytes is negative", "bytes", -5)
+	_refuses("bytes is 0", "bytes", 0)
+	_refuses("bytes is a float 1.5", "bytes", 1.5)
+	_refuses("bytes is an array", "bytes", [1])
+	_refuses("bytes is huge", "bytes", 900000000000000)
+	_refuses("urls is a string", "urls", "https://github.com/x")
+	_refuses("urls holds a number", "urls", [5])
+	_refuses("urls holds an object", "urls", [{}])
+	_refuses("urls holds a bad address", "urls", ["not an address"])
+	_refuses("sha256 upper case", "sha256", "A".repeat(64))
+	_refuses("sha256 short", "sha256", "a".repeat(63))
+	_refuses("sha256 is a number", "sha256", 5)
+	_refuses("default is a string", "default", "yes")
+	_refuses("default is a number", "default", 1)
+	_refuses("min_free_mb is a string", "min_free_mb", "250")
+	_refuses("min_free_mb is negative", "min_free_mb", -1)
+	_refuses("ram_hint_mb is an object", "ram_hint_mb", {})
+	_refuses("label_ko is a number", "label_ko", 5)
+	_refuses("kind is an array", "kind", [])
+	_refuses("langs is a string", "langs", "en")
+	_refuses("langs holds a number", "langs", [1])
+	_refuses("license is a number", "license", 5)
+	_refuses("id is a number", "id", 5)
+	_refuses("file is an object", "file", {})
+	for junk in [null, 5, "text", [], [1, 2]]:
+		ok(not bool(ModelStore.validate_manifest(junk)["ok"]), "bad_manifest: top level is %s" % str(junk))
+	print("selfcheck FAIL-as-expected manifest_types (all of the above end as bad_manifest)")
+	# the review probe: a file with a wrong-typed version, through every public function
+	var f := FileAccess.open(_g(DIR + "/typed.json"), FileAccess.WRITE)
+	f.store_string("{\"v\": {\"x\": 1}, \"hosts\": [\"github.com\"], \"models\": [{\"id\": \"ma\"}]}")
+	f.close()
+	ModelStore.manifest_path = DIR + "/typed.json"
+	ok(not bool(ModelStore.manifest()["ok"]) and str(ModelStore.manifest()["err"]) == "bad_manifest", "hardening: a wrong-typed version in the file -> manifest() bad_manifest")
+	var rs: Dictionary = ModelStore.start("ma")
+	ok(not bool(rs["ok"]) and str(rs["err_code"]) == "bad_manifest", "hardening: start() -> bad_manifest")
+	ok(ModelStore.model("ma").is_empty() and ModelStore.state("ma") == "missing" and ModelStore.info("ma").is_empty() and ModelStore.path_of("ma") == "" and ModelStore.default_id() == "" and ModelStore.active_id() == "", "hardening: every other call stays quiet")
+	ok(not ModelStore.remove("ma") and not ModelStore.set_active("ma"), "hardening: remove() and set_active() refuse")
+	# 2. names
+	for n in ["a:b.bin", "x:", "C:evil", "../x.bin", "a/b.bin", "a\\b.bin", "con.bin", "CON", "con", "nul.txt", "com1", "lpt9.bin", "x.", ".hidden", "-x.bin", "UPPER.bin", "a b.bin", "",
+			"x".repeat(65), "한글.bin", "a..b.bin", "a%2fb.bin", "x.part", "x.ok", "x.part.json"]:
+		_refuses("file name '%s'" % n, "file", n)
+	for n in ["a:b", "a/b", "a\\b", "..", "a..b", "UP", "", "x".repeat(65), " a"]:
+		_refuses("id '%s'" % n, "id", n)
+	for n in ["ma", "a.b-c_d", "ggml-base.en-q5_1.bin", "x".repeat(64), "0"]:
+		var d: Dictionary = _good_manifest()
+		(d["models"][0] as Dictionary)["id"] = n
+		(d["models"][0] as Dictionary)["file"] = n if n != "ma" else "ma.bin"
+		ok(bool(ModelStore.validate_manifest(d)["ok"]), "name '%s' is accepted" % n.left(20))
+	# collisions among the four files of every model
+	var cases: Array = [["same file", "ma.bin"], [".part of another", "ma.bin.part"], [".ok of another", "ma.bin.ok"], [".part.json of another", "ma.bin.part.json"]]
+	for c in cases:
+		var d2: Dictionary = _good_manifest()
+		(d2["models"][1] as Dictionary)["file"] = str(c[1])
+		var r2: Dictionary = ModelStore.validate_manifest(d2)
+		ok(not bool(r2["ok"]) and str(r2["err"]) == "bad_manifest", "bad_manifest: file name collision (%s)" % str(c[0]))
+	var d5: Dictionary = _good_manifest()
+	(d5["models"][1] as Dictionary)["file"] = "mb.bin"
+	(d5["models"][0] as Dictionary)["file"] = "mb.bin.x"
+	ok(bool(ModelStore.validate_manifest(d5)["ok"]), "names that only look alike are accepted (mb.bin.x and mb.bin)")
+	var d3: Dictionary = _good_manifest()
+	(d3["models"][1] as Dictionary)["id"] = "ma"
+	ok(not bool(ModelStore.validate_manifest(d3)["ok"]), "bad_manifest: duplicate id")
+	print("selfcheck FAIL-as-expected manifest_names (colon, device names and collisions are refused)")
+	# the model folder boundary
+	var dir: String = _g(ModelStore.base_dir)
+	ok(ModelStore.in_store(dir.path_join("ma.bin")) and ModelStore.in_store(dir.path_join("ma.bin.part.json")), "in_store: a file directly in the folder")
+	ok(not ModelStore.in_store(dir.path_join("sub/ma.bin")) and not ModelStore.in_store(dir.path_join("../ma.bin")) and not ModelStore.in_store(dir.trim_suffix("/").get_base_dir().path_join("ma.bin")), "in_store: sub-folder and parent paths are refused")
+	ok(not ModelStore.in_store(dir) and not ModelStore.in_store("") and not ModelStore.in_store(dir.path_join("..") + "/x"), "in_store: the folder itself, empty and '..' are refused")
+	print("selfcheck FAIL-as-expected in_store (a path outside the model folder is refused)")
+	var outside: String = _g(DIR).path_join("outside.txt")
+	var fo := FileAccess.open(outside, FileAccess.WRITE)
+	fo.store_string("keep")
+	fo.close()
+	ModelStore._rm(outside)
+	ok(FileAccess.file_exists(outside), "delete guard: a file outside the model folder is not deleted")
+	DirAccess.remove_absolute(outside)
+	# 3. Location schemes: other schemes are refused before any request
+	for kind in ["ftp", "file", "js", "data", "upperhttp", "plainhttp"]:
+		var c: Dictionary = _single("sch_" + kind, ["?redir=1&kind=" + kind])
+		ModelStore.test_host_map = {"github.com": {"host": "127.0.0.1", "port": _port}}
+		var r: Dictionary = await _run(c["id"])
+		await _frames(15)
+		ModelStore.test_host_map = {}
+		ok(not bool(r["ok"]) and str(r["err"]) == "dl_host", "location scheme %s -> dl_host" % kind)
+		ok(_log(c["tok"]).size() == 1, "location scheme %s: 0 requests after the redirect" % kind)
+		ok(ModelStore.state(c["id"]) == "missing" and not FileAccess.file_exists(_abs(c["file"], ".part")), "location scheme %s: nothing stored" % kind)
+	var csr: Dictionary = _single("schemerel", ["?redir=1&kind=schemerel"])
+	var rsr: Dictionary = await _run(csr["id"])
+	ok(bool(rsr["ok"]), "location //host keeps working (scheme-relative)")
+	var base: Dictionary = ModelStore.parse_url("https://github.com/a/b.bin")
+	for loc in ["ftp://x/y", "FILE:///etc/x", "javascript:alert(1)", "data:text/plain,x", "HTTP://github.com/x", "mailto:a@b", "a:b"]:
+		ok(ModelStore.resolve_location(base, loc) == loc, "resolve_location keeps an explicit scheme as written (%s)" % loc)
+	ok(not bool(ModelStore.parse_url("ftp://x/y").get("ok", false)) and not bool(ModelStore.parse_url("javascript:alert(1)").get("ok", false)), "parse_url refuses other schemes")
+	ok(ModelStore.location_clean("/a/b?x=1") and not ModelStore.location_clean("/a b") and not ModelStore.location_clean("/a\r\nX: y") and not ModelStore.location_clean("") and not ModelStore.location_clean("/한글"), "location_clean: printable ASCII only")
+	print("selfcheck FAIL-as-expected location_clean (space, line break and non-ASCII are refused)")
+	# 4. an answer without a body leaves nothing behind
+	var cn: Dictionary = _single("nobody", ["?nobody=1"])
+	var rn: Dictionary = await _run(cn["id"])
+	ok(not bool(rn["ok"]) and str(rn["err"]) == "dl_net", "no body: a 200 without length and body -> dl_net")
+	ok(not FileAccess.file_exists(_abs(cn["file"], ".part")) and not FileAccess.file_exists(_abs(cn["file"], ".part.json")) and ModelStore.state(cn["id"]) == "missing", "no body: no .part and no .part.json are left")
+	var cz: Dictionary = _single("cut0", ["?cut=0"])
+	var rz: Dictionary = await _run(cz["id"])
+	ok(not bool(rz["ok"]) and str(rz["err"]) == "dl_net", "no body: a connection closed before the first byte -> dl_net")
+	ok(not FileAccess.file_exists(_abs(cz["file"], ".part")) and not FileAccess.file_exists(_abs(cz["file"], ".part.json")) and ModelStore.state(cz["id"]) == "missing", "no body: nothing is left after a close before the first byte")
+	_single("x", [""])
+
+
 func _d_stall_and_close() -> void:
 	# a connection that goes silent is given up after the stall limit; the .part stays
 	ModelStore.stall_timeout_ms = 1200
@@ -862,3 +1009,26 @@ func _d_misc() -> void:
 	ok(ModelStore.state(id) == "corrupt", "misc: a model file of the wrong size -> corrupt")
 	ModelStore.remove(id)
 	ok(not _leaks(JSON.stringify(ModelStore.stats())), "misc: stats carry no marker text")
+
+
+class LogCap:
+	extends Logger
+	var lines: Array = []
+	var mu := Mutex.new()
+
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String, _editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		mu.lock()
+		lines.append("%s %s:%d %s %s" % [function, file, line, code, rationale])
+		mu.unlock()
+
+	func count() -> int:
+		mu.lock()
+		var n: int = lines.size()
+		mu.unlock()
+		return n
+
+	func snapshot() -> Array:
+		mu.lock()
+		var c: Array = lines.duplicate()
+		mu.unlock()
+		return c

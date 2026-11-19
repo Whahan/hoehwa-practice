@@ -14,6 +14,7 @@ const TITLE := "음성 인식 모델"
 const WIFI_TITLE := "음성 인식 모델 받기"
 const DELETE_TITLE := "모델 지우기"
 const DELETE_TEXT := "받은 음성 인식 모델을 지워요. 다시 쓰려면 새로 받아야 해요."
+const CORRUPT_STATUS := "음성 인식 모델에 문제가 있어요. [다시 받기]로 새로 받거나 [모델 지우기]로 지워 주세요."
 const LOW_RAM_TEXT := "이 폰은 메모리가 적어서 작은 모델을 추천해요."
 const BUSY_TEXT := "다른 모델을 받는 중이에요. 끝난 뒤에 다시 시도해 주세요."
 const LOW_RAM_BYTES := 3221225472 ## 3 GiB: a "3 GB" phone reports less than this
@@ -155,7 +156,7 @@ func refresh() -> void:
 		"ready":
 			status_label.text = "준비됐어요 · %s · %s" % [str(inf.get("label_ko", "")), ModelStore.mb_label(total)]
 		"corrupt":
-			status_label.text = ModelStore.ERR_TEXT["model_corrupt"]
+			status_label.text = CORRUPT_STATUS
 		_:
 			status_label.text = "음성 인식 모델(%s)을 받으면 이 폰에서 영어 발음을 채점해요." % ModelStore.mb_label(total)
 	note_label.text = _note
@@ -245,7 +246,7 @@ func _begin(id: String, space_confirmed: bool) -> void:
 	if bool(r.get("ok", false)):
 		_note = ""
 	elif code == "space_unknown":
-		var sh := Sheet.confirm(_host(), WIFI_TITLE, ModelStore.SPACE_UNKNOWN_TEXT, "계속", false, "취소")
+		var sh := Sheet.confirm(_host(), WIFI_TITLE, ModelStore.space_unknown_text(int(r.get("need_mb", 0))), "계속", false, "취소")
 		sh.closed.connect(func(res: Variant) -> void:
 			if typeof(res) == TYPE_STRING and String(res) == "ok" and is_instance_valid(self):
 				_begin(id, true))

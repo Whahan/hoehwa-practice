@@ -2,12 +2,12 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File godot\tests\run_model_tests.ps1
 # 가짜 모델 서버(phone_src\tools\fake_model_server.py)를 18791~18799 중 비어 있는 포트에 띄우고, Godot 시험
 # model_store_test(pc 1회)와 stt_model_card_test(pc, phone, phonefont, phonedark)를 차례로 돌린다.
-# 실패 판정: 종료 코드 != 0, failed > 0, 줄 어디든 `SCRIPT ERROR:`, 결과 줄 없음, `TEST_GUARD on` 이 1줄이 아님,
+# 실패 판정: 종료 코드 != 0, failed > 0, 줄 어디든 `SCRIPT ERROR:`, 엔진 `ERROR:` 줄(종료 때 나오는 자원 누수 보고 3종만 허용), 결과 줄 없음, `TEST_GUARD on` 이 1줄이 아님,
 #            시험 개수가 기대보다 적음(model_store_test 90, stt_model_card_test 모드마다 40), 시간 초과.
 # 안전:
 #   - 서버 포트는 직접 bind 해 보고 비어 있는 것만 쓴다. 서버·Godot 은 자기가 시작한 PID 의 프로세스 트리만 끈다.
 #   - 자식 프로세스의 APPDATA 를 작업 폴더로 돌려 실제 사용자 폴더는 읽지도 쓰지도 않는다.
-#   - 접속은 127.0.0.1 의 가짜 서버뿐이다(8770/8775/8776 및 외부 네트워크 없음).
+#   - 접속은 127.0.0.1 의 가짜 서버뿐이다(8770/8775/8776 및 외부 네트워크 없음). 모든 시험에 `--api=http://127.0.0.1:9`(닫힌 포트)를 넘긴다.
 # 환경 변수: MODEL_GODOT (Godot console exe), MODEL_PY (python.exe), MODEL_ONLY (쉼표로 구분한 `이름` 또는 `이름 모드`만 실행),
 #           MODEL_TIMEOUT (한 시험의 제한 시간 초, 기본 300).
 # 끝: 요약 표, 마지막 줄 `남은 프로세스·열린 포트 없음`(서버 PID 종료와 18791~18799 닫힘을 확인했을 때). 하나라도 실패면 종료 코드 1.
@@ -22,6 +22,9 @@ $timeoutSec = if ($env:MODEL_TIMEOUT) { [int]$env:MODEL_TIMEOUT } else { 300 }
 $only = @(); if ($env:MODEL_ONLY) { $only = $env:MODEL_ONLY.Split(',') | ForEach-Object { $_.Trim() } }
 $server = Join-Path $root 'phone_src\tools\fake_model_server.py'
 $ports = 18791..18799
+
+# Allowed `ERROR:` lines (exact list): what Godot reports about its own resources when the process exits.
+$allowedEngine = '^\s*ERROR: \d+ RID allocations of type .* were leaked at exit\.$|^\s*ERROR: \d+ resources still in use at exit|^\s*ERROR: \d+ ObjectDB instances leaked'
 
 $plan = @(
     @{ name = 'model_store_test'; mode = 'pc'; min = 90 },
@@ -95,7 +98,7 @@ try {
         $a = @('--headless', '--path', $godotDir)
         if ($t.mode -like 'phone*') { $a += @('--resolution', '412x915') }
         $a += "res://tests/$($t.name).tscn"
-        $u = @("--port=$port", "--srv-root=$srv")
+        $u = @("--port=$port", "--srv-root=$srv", '--api=http://127.0.0.1:9') # C-4: the closed API address, never a real engine
         if ($t.mode -like 'phone*') { $u += '--phone' }
         if ($t.mode -like '*font') { $u += '--font-scale=1.5' }
         if ($t.mode -like '*dark') { $u += '--dark' }
@@ -119,6 +122,8 @@ try {
         if ($m.Count -gt 0) { $np = [int]$m[$m.Count - 1].Groups[1].Value; $nf = [int]$m[$m.Count - 1].Groups[2].Value }
         $se = ([regex]::Matches($text, 'SCRIPT ERROR:')).Count
         $tg = ([regex]::Matches($text, 'TEST_GUARD on')).Count
+        # engine errors (`ERROR:` lines) count as failures, except the known leak report Godot prints when it exits
+        $eng = @($text -split "`r?`n" | Where-Object { $_ -match '^\s*(USER )?ERROR:' -and $_ -notmatch $allowedEngine }).Count
         $why = @()
         if ($code -eq -999) { $why += 'timeout' } elseif ($code -ne 0) { $why += "exit $code" }
         if ($null -eq $np) { $why += 'no result line' } else {
@@ -126,12 +131,13 @@ try {
             if ($np -lt [int]$t.min) { $why += "only $np tests (need $($t.min))" }
         }
         if ($se -gt 0) { $why += "$se SCRIPT ERROR" }
+        if ($eng -gt 0) { $why += "$eng engine ERROR" }
         if ($tg -ne 1) { $why += "TEST_GUARD x$tg" }
         $res = if ($why.Count -eq 0) { 'PASS' } else { 'FAIL (' + ($why -join ', ') + ')' }
         if ($why.Count -gt 0) { $exitCode = 1 }
         $row = [pscustomobject]@{ Name = $t.name; Mode = $t.mode; Passed = $np; Failed = $nf; SE = $se; Guard = $tg; Result = $res; Log = $log }
         $rows += $row
-        Write-Host ("{0} {1}: {2} passed, {3} failed | SCRIPT_ERROR={4} TEST_GUARD={5} | {6}" -f $t.name, $t.mode, $np, $nf, $se, $tg, $res)
+        Write-Host ("{0} {1}: {2} passed, {3} failed | SCRIPT_ERROR={4} ENGINE_ERROR={5} TEST_GUARD={6} | {7}" -f $t.name, $t.mode, $np, $nf, $se, $eng, $tg, $res)
     }
     if ($rows.Count -eq 0) { $exitCode = 1; Write-Host 'nothing ran' }
 }

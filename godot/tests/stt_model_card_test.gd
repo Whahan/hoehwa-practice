@@ -422,7 +422,7 @@ func _flow_space() -> void:
 	var s: Sheet = _top_sheet()
 	await _press(s.buttons["ok"], "받기")
 	s = _top_sheet()
-	ok(s != null and _sheet_text(s) == ModelStore.SPACE_UNKNOWN_TEXT, "space unknown: the card asks before it goes on")
+	ok(s != null and _sheet_text(s) == ModelStore.space_unknown_text(int(ceil((float(SIZE) * 1.1 + 100.0 * 1000000.0) / 1000000.0))), "space unknown: the card asks before it goes on, with the real amount (104 MB)")
 	await _press(s.buttons["cancel"], "취소(공간)")
 	ok(ModelStore.state("card_base") == "missing", "space unknown: [취소] starts nothing")
 	await _press(_card.get_btn, "ModelGetBtn")
