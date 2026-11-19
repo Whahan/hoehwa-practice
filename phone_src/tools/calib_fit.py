@@ -30,6 +30,7 @@ The report holds numbers only (counts, metrics, intervals); no sentence, no tran
 Safety: no network, no server process, nothing is written under backend\\ (the server is imported in this process; see load_server()).
 """
 import argparse
+import atexit
 import contextlib
 import datetime
 import difflib
@@ -37,6 +38,7 @@ import json
 import math
 import os
 import random
+import shutil
 import socket
 import sys
 import tempfile
@@ -209,7 +211,11 @@ def load_server(work_dir=None):
     if _SERVER["mod"] is not None:
         return _SERVER["mod"]
     sys.dont_write_bytecode = True
-    work = os.path.abspath(work_dir) if work_dir else tempfile.mkdtemp(prefix="hoehwa_calib_")
+    if work_dir:
+        work = os.path.abspath(work_dir)
+    else:
+        work = tempfile.mkdtemp(prefix="hoehwa_calib_")
+        atexit.register(shutil.rmtree, work, True)   # nothing is left behind in the temp folder
     os.makedirs(work, exist_ok=True)
     os.environ["HOEHWA_ESPEAK_DIR"] = os.path.join(work, "espeak")
     os.environ["LANG_TTS_CACHE_DIR"] = os.path.join(work, "tts_cache")
