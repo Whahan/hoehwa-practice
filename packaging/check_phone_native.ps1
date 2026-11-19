@@ -8,8 +8,10 @@
 #                little endian, ET_DYN and e_machine AArch64 (183) - the folder name alone proves nothing
 #   (b) align    every LOAD segment of every lib/*/*.so has p_align >= 2**14 (llvm-objdump from the NDK) - 16 KB pages
 #   (c) zipalign zipalign -c -P 16 -v 4 ends with "Verification successful"
-#   (d) backup   aapt2 dump xmltree --file AndroidManifest.xml: the android:allowBackup attribute of the <application> element (child of <manifest>)
-#                is false; a missing attribute counts as true = fail; a false on <activity> or <manifest> does not count
+#   (d) backup   aapt2 dump xmltree --file AndroidManifest.xml: the android:allowBackup attribute of the <application> element (exactly one, after
+#                <manifest>) is false; its own attributes are only the run of "A:" lines right after its "E: application" line (indentation is not
+#                used to decide; differently indented lines inside that run = fail); a missing attribute counts as true = fail; a false on
+#                <activity> or <manifest> does not count
 #   (e) needed   the bridge library needs at least one library and only libc.so libm.so libdl.so liblog.so libandroid.so
 #   (f) files    no .dll and no ggml-*.bin anywhere in the APK
 #   (g) size     APK <= 100,000,000 bytes and growth over the baseline APK <= $MaxGrowBytes (no default baseline APK found = "unverified" line;
@@ -170,39 +172,36 @@ function Check-ZipAlign($ctx) {
 }
 function Test-BackupText([string]$txt) {
     $lines = @($txt -split "`r?`n")
-    $mi = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -cmatch '^(\s*)E: manifest\b') { $mi += $i } }
+    $mi = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -cmatch '^\s*E: manifest(\s|$)') { $mi += $i } }
     if ($mi.Count -ne 1) { return @{ ok = $false; text = "expected exactly one manifest element in the aapt2 output, found $($mi.Count)" } }
     if (-not $BackupApplicationOnly) {   # old behaviour, kept only so the self test can prove the new one is needed
         $m0 = [regex]::Match($txt, 'allowBackup\(0x[0-9a-fA-F]+\)=(\S+)')
         if (-not $m0.Success) { return @{ ok = $false; text = "no allowBackup attribute" } }
         return @{ ok = ($m0.Groups[1].Value -ceq "false"); text = "allowBackup=$($m0.Groups[1].Value) (first match anywhere)" }
     }
-    $mIndent = ([regex]::Match($lines[$mi[0]], '^(\s*)')).Groups[1].Length
-    $appIdx = @()
-    for ($i = $mi[0] + 1; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -notmatch '\S') { continue }
-        $ind = ([regex]::Match($lines[$i], '^(\s*)')).Groups[1].Length
-        if ($ind -le $mIndent) { break }
-        if ($ind -eq $mIndent + 4 -and $lines[$i] -cmatch '^\s*E: application\b') { $appIdx += $i }
-    }
-    if ($appIdx.Count -ne 1) { return @{ ok = $false; text = "expected exactly one application element under manifest, found $($appIdx.Count)" } }
-    $aIndent = $mIndent + 4      # aapt2 xmltree: an element's attributes are indented 2 more than the element, its child elements 4 more
+    # The indentation of the aapt2 output is NOT used to decide anything. Only the order of the lines: an element's own attributes are the
+    # run of "A:" lines right after its "E:" line; the first line that is not an "A:" line (E:, N:, T:, ...) ends that run.
+    $appIdx = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -cmatch '^\s*E: application(\s|$)') { $appIdx += $i } }
+    if ($appIdx.Count -ne 1) { return @{ ok = $false; text = "expected exactly one application element in the aapt2 output, found $($appIdx.Count)" } }
+    if ($appIdx[0] -le $mi[0]) { return @{ ok = $false; text = "the application element is not after the manifest element" } }
+    $attrIndent = -1
     $vals = @()
     for ($i = $appIdx[0] + 1; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -notmatch '\S') { continue }
+        if ($lines[$i] -cnotmatch '^\s*A: ') { break }      # BLOCKEND: the application's own attributes end at the first line that is not an A: line
         $ind = ([regex]::Match($lines[$i], '^(\s*)')).Groups[1].Length
-        if ($ind -le $aIndent) { break }
-        if ($ind -eq $aIndent + 2) {
-            $m = [regex]::Match($lines[$i], '^\s*A: http://schemas\.android\.com/apk/res/android:allowBackup\(0x[0-9a-fA-F]+\)=(\S+)')
-            if ($m.Success) { $vals += $m.Groups[1].Value }
-        }
+        if ($attrIndent -lt 0) { $attrIndent = $ind }
+        elseif ($ind -ne $attrIndent) { return @{ ok = $false; text = "the attribute lines of the application element are indented differently (unexpected aapt2 output)" } }
+        $m = [regex]::Match($lines[$i], '^\s*A: http://schemas\.android\.com/apk/res/android:allowBackup\(0x[0-9a-fA-F]+\)=(\(type 0x[0-9a-fA-F]+\)0x[0-9a-fA-F]+|\S+)')
+        if ($m.Success) { $vals += $m.Groups[1].Value }
     }
     if ($vals.Count -eq 0) { return @{ ok = $false; text = "the application element has no android:allowBackup attribute (a missing attribute means true)" } }
     if ($vals.Count -gt 1) { return @{ ok = $false; text = "the application element has several allowBackup attributes" } }
     $v = $vals[0]
     if ($v -ceq "false" -or $v -cmatch '^\(type 0x12\)0x0$') { return @{ ok = $true; text = "application allowBackup=false" } }
     return @{ ok = $false; text = "application allowBackup=$v (must be false)" }
-}function Check-Backup($ctx) {
+}
+function Check-Backup($ctx) {
     $r = Native $ctx.Tools.Aapt2 @("dump", "xmltree", "--file", "AndroidManifest.xml", $ctx.Apk)
     if ($r[1] -ne 0) { return @{ ok = $false; text = "aapt2 dump xmltree failed (exit $($r[1]))" } }
     return Test-BackupText ($r[0] -join "`n")
@@ -475,7 +474,28 @@ function Invoke-SelfTest {
         $mTrueAct = "N: android=$A`n  E: manifest (line=2)`n      E: application (line=5)`n        A: ${A}:allowBackup(0x01010280)=false`n          E: activity (line=9)`n            A: ${A}:allowBackup(0x01010280)=true"
         Expect "application false, activity true" $null (Test-BackupText $mTrueAct)
         $mTrueApp = "N: android=$A`n  E: manifest (line=2)`n      E: application (line=5)`n        A: ${A}:allowBackup(0x01010280)=true`n          E: activity (line=9)`n            A: ${A}:allowBackup(0x01010280)=false"
-        Expect "application true, activity false" "backup" (Test-BackupText $mTrueApp)        # baseline file must be an APK
+        Expect "application true, activity false" "backup" (Test-BackupText $mTrueApp)
+        # allowBackup is read from the run of A: lines right after E: application, whatever the indentation says (real aapt2 2-space steps used below)
+        $hd = "N: android=$A (line=1)`n  E: manifest (line=1)`n    A: ${A}:compileSdkVersion(0x01010572)=36`n    A: package=`"x`" (Raw: `"x`")`n"
+        $nm = "${A}:name(0x01010003)=`".TestActivity`" (Raw: `".TestActivity`")"
+        $ab = "${A}:allowBackup(0x01010280)=false"
+        $realOk = $hd + "      E: application (line=2)`n        A: ${A}:label(0x01010001)=@0x7f0b0004`n        A: $ab`n        A: ${A}:isGame(0x010103f4)=true`n          E: profileable (line=5)`n            A: ${A}:enabled(0x0101000e)=true`n          E: activity (line=6)`n            A: $nm`n            A: ${A}:exported(0x01010010)=false"
+        Expect "real format: application false, then children" $null (Test-BackupText $realOk)
+        Expect "real format, type 0x12 false" $null (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:allowBackup(0x01010280)=(type 0x12)0x0`n          E: activity (line=3)`n            A: $nm"))
+        $actOnly = $hd + "      E: application (line=2)`n          E: activity (line=3)`n            A: $nm`n            A: $ab"
+        Expect "activity-only, real indentation" "backup" (Test-BackupText $actOnly)
+        $actOnly8 = $hd + "      E: application (line=2)`n          E: activity (line=3)`n        A: $nm`n        A: $ab"
+        Expect "activity-only, activity attribute lines moved to 8 columns" "backup" (Test-BackupText $actOnly8)
+        Expect "activity-only, attribute lines at 6 columns" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n          E: activity (line=3)`n      A: $ab"))
+        Expect "application has a label, activity false with the same indentation" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:label(0x01010001)=@0x7f0b0004`n          E: activity (line=3)`n        A: $ab"))
+        Expect "application attribute lines indented differently" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:label(0x01010001)=@0x7f0b0004`n          A: $ab"))
+        Expect "application attribute lines indented differently (false first)" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n          A: $ab`n        A: ${A}:label(0x01010001)=@0x7f0b0004"))
+        Expect "two application elements" "backup" (Test-BackupText ($realOk + "`n      E: application (line=20)`n        A: $ab"))
+        Expect "two application elements, first without allowBackup" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: ${A}:label(0x01010001)=@0x7f0b0004`n      E: application (line=20)`n        A: $ab"))
+        Expect "application before manifest" "backup" (Test-BackupText ("      E: application (line=2)`n        A: $ab`n" + $hd))
+        Expect "two allowBackup attributes in the application" "backup" (Test-BackupText ($hd + "      E: application (line=2)`n        A: $ab`n        A: $ab"))
+        Expect "application has no attribute lines at all" "backup" (Test-BackupText ($hd + "      E: application (line=2)"))
+        # baseline file must be an APK
         $txtBase = Join-Path $dir "base.txt"; [IO.File]::WriteAllText($txtBase, ("this is not a zip file " * 100))
         Expect "baseline is a text file" "size" (Test-Baseline $txtBase)
         $noMan = Zip-Of "nomanifest" ([ordered]@{ "assets/a.txt" = [byte[]](1) }) $false
