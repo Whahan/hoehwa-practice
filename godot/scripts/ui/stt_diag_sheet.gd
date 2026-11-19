@@ -28,10 +28,22 @@ const TXT_BENCH_FAIL := "시험을 끝내지 못했어요. 모델을 받았는�
 const TXT_REC_FAIL := "녹음하지 못했어요. 마이크 권한을 확인하고 다시 해 보세요."
 const TXT_REC_SILENT := "소리가 거의 안 들어왔어요. 조금 더 크게 읽고 다시 녹음해 주세요."
 const TXT_COPIED := "복사했어요. 대화창에 붙여 넣어 주세요."
+const TXT_RUNNING := "시험 중이에요… "
+const TXT_BATTERY_EMPTY := "입력 안 함"
 const TXT_BATTERY_NOTE := "배터리 %는 시험 전후에 직접 적어 주세요(폰 화면 위쪽 숫자)."
 
 const _STATES := ["missing", "partial", "downloading", "verifying", "ready", "corrupt"]
 const _PARAM_STATES := ["calibrated", "uncalibrated"]
+const _PLATFORMS := ["Windows", "Android", "Linux", "macOS", "iOS", "Web", "FreeBSD", "NetBSD", "OpenBSD", "BSD"]
+## What WhisperBridge.cpu_features() can list (native/whisper_bridge/src/whisper_bridge.cpp).
+const _CPU_FEATURES := ["asimd", "fphp", "asimdhp", "asimddp", "sve", "sve2", "i8mm", "bf16"]
+## Whole-string formats (\A ... \z, nothing else may be in front of or behind the match). The bridge text is
+## "bridge <n> / whisper.cpp <7 hex digits or unknown>[ +<patch>]..." (WhisperBridge::version()).
+const RE_BRIDGE := "\\Abridge ([0-9]{1,3}) / whisper\\.cpp ([0-9a-f]{7}|unknown)((?: \\+[a-z0-9-]{1,24}){0,3})\\z"
+const RE_APP := "\\A[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}(?:-[a-z0-9]{1,12})?\\z"
+const RE_OS := "\\A[0-9]{1,3}(?:\\.[0-9]{1,5}){0,3}\\z"
+const RE_DEVICE := "\\A[A-Za-z0-9][A-Za-z0-9._-]{0,31}(?: [A-Za-z0-9][A-Za-z0-9._-]{0,15}){0,3}\\z"
+const RE_HOST := "\\A[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?){1,6}\\z"
 
 ## Tests: a script with the LocalStt functions (stats, bench, ...). null = load LOCAL_STT_PATH when it exists.
 static var stt_script_override: GDScript = null
@@ -55,7 +67,10 @@ static func reset_for_tests() -> void:
 static func open(host: Node) -> Node:
 	var body := DiagBody.new()
 	body.build()
-	return Sheet.open(host, TXT_TITLE, body, [{"id": "close", "text": "닫기", "kind": "flat"}])
+	var sh: Sheet = Sheet.open(host, TXT_TITLE, body, [{"id": "close", "text": "닫기", "kind": "flat"}])
+	# `closed` is sent the moment the sheet starts to close (the fade-out takes 200 ms more): from then on nothing may land in it
+	sh.closed.connect(body.on_sheet_closed)
+	return sh
 
 
 # ---------------------------------------------------------------- the copied block
@@ -70,18 +85,17 @@ static func report_text(extra: Dictionary = {}) -> String:
 	var mem: Dictionary = OS.get_memory_info()
 	var ram_mb: int = int(round(float(int(mem.get("physical", 0))) / 1000000.0))
 	lines.append("app=%s platform=%s os=%s device=%s cores=%d ram_mb=%d" % [
-		_free(str(ProjectSettings.get_setting("application/config/version", ""))), _free(OS.get_name()),
-		_free(OS.get_version()), _free(OS.get_model_name()), OS.get_processor_count(), maxi(ram_mb, 0)])
-	var ver: String = _version_token(st.get("bridge_version", null))
+		app_token(ProjectSettings.get_setting("application/config/version", "")), platform_token(OS.get_name()),
+		os_token(OS.get_version()), device_token(OS.get_model_name()), OS.get_processor_count(), maxi(ram_mb, 0)])
+	var ver: String = version_token(st.get("bridge_version", null))
 	if ver == NO_VALUE:
-		ver = _version_token(_bridge_static("version"))
+		ver = version_token(_bridge_static("version"))
 	var patch: String = NO_VALUE
 	if typeof(st.get("abort_patch", null)) in [TYPE_INT, TYPE_FLOAT]:
 		patch = "1" if int(st["abort_patch"]) == 1 else "0"
 	elif ver != NO_VALUE:
 		patch = "1" if ver.contains("+abort-sched") else "0"
-	var cpu_v: Variant = _bridge_static("cpu_features")
-	var cpu: String = _free(str(cpu_v).strip_edges().replace(" ", "+")) if cpu_v != null else NO_VALUE
+	var cpu: String = cpu_token(_bridge_static("cpu_features"))
 	lines.append("bridge=%s abort_patch=%s cpu=%s" % [ver, patch, cpu])
 	var ud: String = OS.get_user_data_dir()
 	lines.append("user_dir_internal=%d" % (1 if (ud.begins_with("/data/user/") or ud.begins_with("/data/data/")) else 0))
@@ -89,7 +103,7 @@ static func report_text(extra: Dictionary = {}) -> String:
 	var ds: Dictionary = ModelStore.stats()
 	lines.append("dl_requests=%s dl_resumed=%s dl_resume_mb=%s dl_last_host=%s dl_last_err=%s" % [
 		_num(ds.get("requests", null)), _num(ds.get("resumed", null)), _num(_mb(ds.get("resume_bytes", null))),
-		_word(ds.get("last_host", null), "^[a-z0-9.-]{1,80}$"), _word(ds.get("last_err", null), "^[a-z_]{1,24}$")])
+		host_token(ds.get("last_host", null)), err_token(ds.get("last_err", null))])
 	lines.append("stt_runs=%s stt_ok=%s timeouts=%s engine_err=%s aborted=%s load_count=%s unload_count=%s load_ms_first=%s" % [
 		_num(st.get("runs", null)), _num(st.get("ok", null)), _num(st.get("timeouts", null)), _num(st.get("engine_err", null)),
 		_num(st.get("aborted", null)), _num(st.get("load_count", null)), _num(st.get("unload_count", null)), _num(st.get("load_ms_first", null))])
@@ -121,7 +135,7 @@ static func _model_line(st: Dictionary) -> String:
 	if not _PARAM_STATES.has(params):
 		params = NO_VALUE
 	return "stt_model=%s state=%s file_mb=%s verified=%d params=%s beam=%s phone_off=%d score_where=%s" % [
-		_free(id), state, _num(_mb(bytes)), 1 if state == "ready" else 0, params, _num(st.get("beam", null)),
+		model_id_token(id), state, _num(_mb(bytes)), 1 if state == "ready" else 0, params, _num(st.get("beam", null)),
 		1 if SettingsView.phone_scoring_off() else 0, Route.score_where()]
 
 
@@ -185,34 +199,89 @@ static func _mb(bytes: Variant) -> Variant:
 	return float(bytes) / 1000000.0
 
 
-## A string that matches `pattern` as a whole (lower-case words, host names, codes); anything else is "-".
-static func _word(v: Variant, pattern: String) -> String:
+## `v` when it is a String that `pattern` matches from its first to its last character, else "". Nothing is cleaned up:
+## a string that is not exactly of the expected form is rejected whole.
+static func _whole(v: Variant, pattern: String) -> String:
 	if typeof(v) != TYPE_STRING:
+		return ""
+	var t: String = String(v)
+	var re := RegEx.new()
+	if t == "" or re.compile(pattern) != OK:
+		return ""
+	var m: RegExMatch = re.search(t)
+	if m == null or m.get_start() != 0 or m.get_end() != t.length():
+		return ""
+	return t
+
+
+## The bridge version as one token "<n>-<commit>[+<patch>]..." (from "bridge 1 / whisper.cpp abc1234 +abort-sched"), else "-".
+static func version_token(v: Variant) -> String:
+	if _whole(v, RE_BRIDGE) == "":
 		return NO_VALUE
 	var re := RegEx.new()
-	if re.compile(pattern) != OK or re.search(String(v)) == null:
+	re.compile(RE_BRIDGE)
+	var m: RegExMatch = re.search(String(v))
+	return "%s-%s%s" % [m.get_string(1), m.get_string(2), m.get_string(3).replace(" ", "")]
+
+
+static func app_token(v: Variant) -> String:
+	var t: String = _whole(v, RE_APP)
+	return t if t != "" else NO_VALUE
+
+
+static func platform_token(v: Variant) -> String:
+	return String(v) if typeof(v) == TYPE_STRING and _PLATFORMS.has(String(v)) else NO_VALUE
+
+
+static func os_token(v: Variant) -> String:
+	var t: String = _whole(v, RE_OS)
+	return t if t != "" else NO_VALUE
+
+
+## The phone model the OS reports ("SM-S921N", "Pixel 8"): letters, digits and . _ - in up to four words; words joined by "_".
+static func device_token(v: Variant) -> String:
+	var t: String = _whole(v, RE_DEVICE)
+	return t.replace(" ", "_") if t != "" else NO_VALUE
+
+
+## CPU features of the bridge: every word must be a known feature name, else "-".
+static func cpu_token(v: Variant) -> String:
+	if typeof(v) != TYPE_STRING or String(v).strip_edges() == "":
 		return NO_VALUE
-	return String(v)
+	var out: PackedStringArray = PackedStringArray()
+	for w in String(v).strip_edges().split(" ", false):
+		if not _CPU_FEATURES.has(String(w)):
+			return NO_VALUE
+		out.append(String(w))
+	return "+".join(out)
 
 
-## The bridge version as one token: only lower-case letters, digits and . / + _ - (the real text is
-## "bridge 1 / whisper.cpp abc1234 +abort-sched"); spaces and slashes become "_".
-static func _version_token(v: Variant) -> String:
-	var w: String = _word(v, "^[a-z0-9 ./+_-]{1,80}$")
-	if w == NO_VALUE:
+static func model_id_token(v: Variant) -> String:
+	return String(v) if typeof(v) == TYPE_STRING and not ModelStore.model(String(v)).is_empty() else NO_VALUE
+
+
+## A download host: a host name of strict form that the model manifest allows (the same suffix rule ModelStore uses);
+## 127.0.0.1 only while ModelStore.allow_http_loopback is on (tests).
+static func host_token(v: Variant) -> String:
+	var t: String = _whole(v, RE_HOST)
+	if t == "":
 		return NO_VALUE
-	return w.replace(" / ", "_").replace(" ", "_").replace("/", "_")
+	var mf: Dictionary = ModelStore.manifest()
+	for h in mf.get("hosts", []):
+		var suffix: String = str(h)
+		if t == suffix or t.ends_with("." + suffix):
+			return t
+	if ModelStore.allow_http_loopback and t == "127.0.0.1":
+		return t
+	return NO_VALUE
 
 
-## A string the OS gave (version, device name): characters outside letters, digits and . _ + - become "_".
-static func _free(s: String) -> String:
-	var out: String = ""
-	for ch in s.strip_edges():
-		var c: int = ch.unicode_at(0)
-		var good: bool = (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or ch in [".", "_", "+", "-"]
-		out += ch if good else "_"
-	out = out.substr(0, 40)
-	return out if out != "" else NO_VALUE
+## The last download error: one of ModelStore's own codes (or "cancelled"), else "-".
+static func err_token(v: Variant) -> String:
+	if typeof(v) != TYPE_STRING:
+		return NO_VALUE
+	var t: String = String(v)
+	return t if ModelStore.ERR_TEXT.has(t) or t == "cancelled" else NO_VALUE
 
 
 # ---------------------------------------------------------------- LocalStt and the bridge, looked up by name
@@ -281,7 +350,7 @@ class DiagJob:
 		if cancelled or body == null:
 			return null
 		var b: Variant = body.get_ref()
-		if b == null or not is_instance_valid(b) or not (b as Node).is_inside_tree():
+		if b == null or not is_instance_valid(b) or not (b as Node).is_inside_tree() or not b.is_open():
 			return null
 		return b
 
@@ -314,7 +383,7 @@ class DiagBody:
 	var _busy: bool = false
 	var _recording: bool = false
 	var _job: DiagJob = null
-	var _touched: Dictionary = {"start": false, "end": false}
+	var _closed: bool = false
 
 
 	func build() -> void:
@@ -353,8 +422,8 @@ class DiagBody:
 		progress.visible = false
 		add_child(progress)
 		add_child(UI.label(SttDiagSheet.TXT_BATTERY_NOTE, "Small"))
-		bat_start = _battery_box("시작 배터리 %", "DiagBatStart", "start")
-		bat_end = _battery_box("끝 배터리 %", "DiagBatEnd", "end")
+		bat_start = _battery_box("시작 배터리 %", "DiagBatStart")
+		bat_end = _battery_box("끝 배터리 %", "DiagBatEnd")
 		copy_btn = UI.button("결과 복사", "primary", Pal.PRIMARY)
 		copy_btn.name = "DiagCopyBtn"
 		copy_btn.pressed.connect(_on_copy)
@@ -372,7 +441,7 @@ class DiagBody:
 		UI.fix_cjk(self)
 
 
-	func _battery_box(caption: String, node_name: String, which: String) -> SpinBox:
+	func _battery_box(caption: String, node_name: String) -> SpinBox:
 		var sb := SpinBox.new()
 		sb.name = node_name
 		sb.min_value = 0
@@ -382,16 +451,45 @@ class DiagBody:
 		sb.suffix = "%"
 		sb.custom_minimum_size.y = maxf(48.0, Ds.touch_min())
 		sb.accessibility_name = caption
-		sb.value_changed.connect(func(_v: float) -> void: _touched[which] = true)
+		# Empty until the person types (or steps) a number: a typed 0 must differ from "nothing entered".
+		sb.get_line_edit().placeholder_text = SttDiagSheet.TXT_BATTERY_EMPTY
+		sb.get_line_edit().text = ""
+		sb.ready.connect(func() -> void: sb.get_line_edit().text = "") # the box writes its 0 when it enters the tree
+		# the text always shows the number the box holds (the box itself only redraws it on its next draw)
+		sb.value_changed.connect(func(v: float) -> void: sb.get_line_edit().text = str(int(round(v))))
 		add_child(UI.field(caption, sb))
 		return sb
 
 
+	## The number the person entered in `sb` (typed text is applied first, so a typed 0 counts), clamped to 0..100; null = nothing entered.
+	func _battery_value(sb: SpinBox) -> Variant:
+		var typed: String = sb.get_line_edit().text.replace("%", "").strip_edges()
+		if typed == "" or not typed.is_valid_float():
+			return null
+		sb.apply()
+		return clampi(int(round(sb.value)), 0, 100)
+
+
+	func is_open() -> bool:
+		return not _closed
+
+
+	## The sheet started to close (Sheet.closed): drop a bench or recording hook still running, cancel a live recording.
+	func on_sheet_closed(_result: Variant = null) -> void:
+		_closed = true
+		_stop_work()
+
+
 	func _exit_tree() -> void:
-		if _job != null:
-			_job.cancelled = true # a bench or recording hook still running drops its result
+		_closed = true
+		_stop_work()
 		if Recorder.finished.is_connected(_on_recorder_finished):
 			Recorder.finished.disconnect(_on_recorder_finished)
+
+
+	func _stop_work() -> void:
+		if _job != null:
+			_job.cancelled = true
 		if _recording and Recorder.recording and Recorder.owner_id == get_instance_id():
 			Recorder.cancel()
 		_recording = false
@@ -484,7 +582,7 @@ class DiagBody:
 		_say("")
 		_lock(true)
 		progress.visible = true
-		progress.text = "시험 중이에요… 0 / %d" % n
+		progress.text = SttDiagSheet.TXT_RUNNING + CourseModel.progress_label("", 0, n)
 		_job = _new_job(n)
 		SttDiagSheet._run_bench(_job, stt, wav, n, key)
 
@@ -521,7 +619,7 @@ class DiagBody:
 		if not progress.visible:
 			return
 		if typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT:
-			progress.text = "시험 중이에요… %d / %d" % [clampi(int(a), 0, total), total]
+			progress.text = SttDiagSheet.TXT_RUNNING + CourseModel.progress_label("", int(a), total)
 
 
 	static func _numbers_only(res: Dictionary) -> Dictionary:
@@ -579,10 +677,12 @@ class DiagBody:
 
 	func _on_copy() -> void:
 		var ex: Dictionary = extra.duplicate()
-		if bool(_touched["start"]):
-			ex["battery_start"] = clampi(int(bat_start.value), 0, 100)
-		if bool(_touched["end"]):
-			ex["battery_end"] = clampi(int(bat_end.value), 0, 100)
+		var b_start: Variant = _battery_value(bat_start)
+		var b_end: Variant = _battery_value(bat_end)
+		if b_start != null:
+			ex["battery_start"] = b_start
+		if b_end != null:
+			ex["battery_end"] = b_end
 		var text: String = SttDiagSheet.report_text(ex)
 		if SttDiagSheet.clipboard_hook.is_valid():
 			SttDiagSheet.clipboard_hook.call(text)

@@ -97,7 +97,7 @@ func _ready() -> void:
 	Backend._starting = true # nothing may start an engine
 	Backend.set_process(false)
 	if not _phone:
-		Api.base_url = "http://127.0.0.1:9" # a closed port: the PC run must never reach the user's engine (8770)
+		Api.base_url = "http://127.0.0.1:9" # a closed port: the PC run must never reach a real engine
 	Sheet.animate = false
 	Toast.message.connect(func(_t: String, _k: String) -> void: pass)
 	var want := Vector2i(412, 915) if _phone else Vector2i(1280, 800)

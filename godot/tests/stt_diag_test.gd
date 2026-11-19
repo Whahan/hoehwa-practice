@@ -151,6 +151,7 @@ func _ready() -> void:
 	_selfchecks()
 	_test_report_keys()
 	_test_report_values()
+	_test_hostile_strings()
 	_test_report_clamps()
 	_test_no_leak()
 	_test_missing_stt()
@@ -159,6 +160,8 @@ func _ready() -> void:
 	await _test_battery_boxes()
 	await _test_real_recorder()
 	await _test_close_while_busy()
+	await _test_animated_close()
+	await _test_battery_zero()
 	await _test_reopen_keeps_numbers()
 	if _phone:
 		await _test_layout()
@@ -345,7 +348,7 @@ func _test_report_values() -> void:
 	ok(t["rtf_p50"] == "0.56", "a decimal keeps two places (rtf_p50 0.56)")
 	ok(t["rss_mb_before_load"] == "180" and t["rss_mb_after_load"] == "410" and t["rss_mb_peak"] == "520", "memory numbers come through")
 	ok(t["abort_patch"] == "1" and t["params"] == "uncalibrated" and t["beam"] == "1", "abort_patch, params and beam come through")
-	ok(t["bridge"] == "bridge_1_whisper.cpp_abc1234_+abort-sched", "the bridge version becomes one token (%s)" % t["bridge"])
+	ok(t["bridge"] == "1-abc1234+abort-sched", "the bridge version becomes one token (%s)" % t["bridge"])
 	ok(t["recent"] == "81/8/7,64/5/3", "recent lists score/words/right for each entry")
 	ok(t["user_dir_internal"] in ["0", "1"], "user_dir_internal is 0 or 1")
 	ok(t["phone_off"] == "0" and t["score_where"] == "phone", "phone_off 0 and score_where phone by default")
@@ -399,11 +402,45 @@ func _test_no_leak() -> void:
 	if fired:
 		print("selfcheck FAIL-as-expected leak_injected")
 	ok(fired, "selfcheck: the same block with the marker injected is reported as a leak")
-	# the filters on their own
-	ok(SttDiagSheet._word(MARK, "^[a-z0-9.-]{1,80}$") == "-" and SttDiagSheet._word("release-assets.githubusercontent.com", "^[a-z0-9.-]{1,80}$") == "release-assets.githubusercontent.com", "host filter: a marker reads -, a real host name passes")
-	ok(SttDiagSheet._word("dl_host", "^[a-z_]{1,24}$") == "dl_host" and SttDiagSheet._word("C:/x", "^[a-z_]{1,24}$") == "-" and SttDiagSheet._word(5, "^[a-z_]{1,24}$") == "-", "code filter: a code passes, a path and a number read -")
-	ok(SttDiagSheet._free("SM-S921N 5G") == "SM-S921N_5G" and SttDiagSheet._free("") == "-" and SttDiagSheet._free("a/b\\c") == "a_b_c", "OS strings: spaces and slashes become _, empty reads -")
+	# the filters on their own: whole-string forms only, nothing is cleaned up
+	var nl: String = String.chr(10)
+	ok(SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234") == "1-abc1234" and SttDiagSheet.version_token("bridge 12 / whisper.cpp unknown +abort-sched") == "12-unknown+abort-sched", "the real bridge version forms are accepted (bridge 1 / whisper.cpp abc1234 [+abort-sched])")
+	ok(SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234" + nl) == "-" and SttDiagSheet.version_token("x bridge 1 / whisper.cpp abc1234") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp abc1234 +abort-sched trailing words") == "-" and SttDiagSheet.version_token("bridge 1 / whisper.cpp ABC1234") == "-", "a bridge version with text before or after it, a newline or upper case is rejected whole")
+	ok(SttDiagSheet.app_token("2.0.1") == "2.0.1" and SttDiagSheet.app_token("2.0.1 beta") == "-" and SttDiagSheet.app_token("2.0") == "-", "app version: x.y.z only")
+	ok(SttDiagSheet.platform_token("Android") == "Android" and SttDiagSheet.platform_token("Windows") == "Windows" and SttDiagSheet.platform_token("sampleuser") == "-" and SttDiagSheet.platform_token("android") == "-", "platform: a name from the list only")
+	ok(SttDiagSheet.os_token("10.0.26300") == "10.0.26300" and SttDiagSheet.os_token("14") == "14" and SttDiagSheet.os_token("14 please read") == "-", "os version: digits and dots only")
+	ok(SttDiagSheet.device_token("SM-S921N") == "SM-S921N" and SttDiagSheet.device_token("Pixel 8") == "Pixel_8" and SttDiagSheet.device_token("/data/user/0/x") == "-" and SttDiagSheet.device_token("a b c d e f") == "-", "device: up to four words of letters, digits and . _ -")
+	ok(SttDiagSheet.cpu_token("asimd fphp sve2") == "asimd+fphp+sve2" and SttDiagSheet.cpu_token("asimd sampleuser") == "-" and SttDiagSheet.cpu_token("") == "-" and SttDiagSheet.cpu_token(null) == "-", "cpu: only the bridge's own feature names")
+	ok(SttDiagSheet.model_id_token("whisper-base.en-q5_1") == "whisper-base.en-q5_1" and SttDiagSheet.model_id_token("sampleuser") == "-" and SttDiagSheet.model_id_token("Please Read") == "-", "model id: only an id of the model manifest")
+	ok(SttDiagSheet.host_token("release-assets.githubusercontent.com") == "release-assets.githubusercontent.com" and SttDiagSheet.host_token("huggingface.co") == "huggingface.co" and SttDiagSheet.host_token("evilgithub.com") == "-" and SttDiagSheet.host_token("sampleuser.example.org") == "-" and SttDiagSheet.host_token(MARK) == "-", "download host: only a host the model manifest allows")
+	ok(SttDiagSheet.err_token("dl_host") == "dl_host" and SttDiagSheet.err_token("cancelled") == "cancelled" and SttDiagSheet.err_token("sampleuser") == "-" and SttDiagSheet.err_token(5) == "-", "download error: only ModelStore's own codes")
 	SttDiagSheet.stt_script_override = _fake
+
+
+## Strings that do not belong in the block, put into every string field a stand-in LocalStt can fill: all read "-".
+const HOSTILE := ["please read this sentence", "/data/user/0/private/model.bin", "/home/sampleuser/cache/model.bin", "sampleuser", "demo-private-key-via-stats", "ZZ_TGT_4417"]
+
+
+func _test_hostile_strings() -> void:
+	print("[hostile strings in string fields]")
+	var nl: String = String.chr(10)
+	var tab: String = String.chr(9)
+	for h in HOSTILE:
+		var src: String = "extends RefCounted" + nl + "static func stats() -> Dictionary:" + nl + tab + "return {'bridge_version': " + var_to_str(h) + ", 'params_state': " + var_to_str(h) + ", 'model_id': " + var_to_str(h) + ", 'runs': " + var_to_str(h) + ", 'recent': [" + var_to_str(h) + "]}" + nl
+		SttDiagSheet.stt_script_override = _script(src)
+		var text: String = SttDiagSheet.report_text()
+		var t: Dictionary = _all_tokens(text)
+		ok(t["bridge"] == "-" and t["params"] == "-" and t["stt_runs"] == "-" and t["recent"] == "-", "hostile text %s: bridge, params, stt_runs and recent read -" % str(HOSTILE.find(h)))
+		ok(not text.contains(str(h)) and _allowed_chars(text), "hostile text %s: it is not in the block" % str(HOSTILE.find(h)))
+		# the device name comes from the OS (OS.get_model_name), never from LocalStt, so it is not in this list
+		var fns := {"version_token": SttDiagSheet.version_token, "app_token": SttDiagSheet.app_token, "platform_token": SttDiagSheet.platform_token,
+			"os_token": SttDiagSheet.os_token, "cpu_token": SttDiagSheet.cpu_token, "model_id_token": SttDiagSheet.model_id_token,
+			"host_token": SttDiagSheet.host_token, "err_token": SttDiagSheet.err_token}
+		for fn in fns.keys():
+			ok((fns[fn] as Callable).call(h) == "-", "hostile text %s through %s reads -" % [str(HOSTILE.find(h)), fn])
+	SttDiagSheet.stt_script_override = _fake
+	ok(SttDiagSheet.device_token("/home/sampleuser/cache/model.bin") == "-" and SttDiagSheet.device_token("/data/user/0/private/model.bin") == "-", "device (OS model name): a path is rejected")
+	ok(not SttDiagSheet.report_text().contains("sampleuser"), "the real block has no user name")
 
 
 func _test_missing_stt() -> void:
@@ -667,6 +704,9 @@ func _test_close_while_busy() -> void:
 	_press(b20, "20회 속도 시험 (곧 닫음)")
 	await _frames(3)
 	ok(b20.disabled, "the bench is running (button off)")
+	var prog: Label = sh.find_child("DiagProgress", true, false) as Label
+	var done_n: int = int(prog.text.trim_prefix(SttDiagSheet.TXT_RUNNING).get_slice("/", 0)) if prog != null else -1
+	ok(prog != null and prog.visible and prog.text == SttDiagSheet.TXT_RUNNING + CourseModel.progress_label("", done_n, 20), "the progress text is CourseModel.progress_label (%s)" % (prog.text if prog != null else ""))
 	_close_diag(sh)
 	await _until(func() -> bool: return bool(Engine.get_meta("slow_done", false)))
 	await _frames(4)
@@ -766,6 +806,111 @@ func _test_close_while_busy() -> void:
 	SttDiagSheet.stt_script_override = _fake
 
 
+## The production fade-out (Sheet.animate on): `closed` is sent at once and the sheet stays in the tree for 200 ms more.
+## From the first moment nothing may land in it: a bench result, a recording result, a live recording.
+func _test_animated_close() -> void:
+	print("[sheet: closed with the fade-out on]")
+	Sheet.animate = true
+	SttDiagSheet._session = {}
+	SttDiagSheet.stt_script_override = _fake
+	SttDiagSheet.record_hook = func() -> Dictionary: return {"ok": true, "wav": PackedByteArray([1, 2, 3, 4]), "duration": 1.0}
+	Engine.set_meta("diag_calls", [])
+	var errs0: int = _cap.count()
+	# 1. a bench that finishes while the sheet fades out
+	var sh := _open_diag()
+	await get_tree().create_timer(0.45).timeout
+	var body: Node = sh.find_child("SttDiagBody", true, false)
+	_press(_btn(sh, "DiagRecBtn"), "한 문장 녹음")
+	await _frames(2)
+	_press(_btn(sh, "DiagBench20Btn"), "20회 속도 시험 (바로 [닫기])")
+	_press(sh.buttons["close"], "닫기 (애니메이션 켠 채)")
+	ok(sh.is_closed() and sh.is_inside_tree() and body.is_inside_tree(), "the sheet is closed but still in the tree (fading out)")
+	var late: bool = false
+	for i in 4:
+		await get_tree().process_frame
+		if is_instance_valid(body) and body.is_inside_tree() and (SttDiagSheet._session.has("bench20") or not (body.extra as Dictionary).is_empty()):
+			late = true
+	ok(not late and not SttDiagSheet._session.has("bench20"), "the bench result that arrives during the fade-out is dropped (session and sheet unchanged)")
+	await get_tree().create_timer(0.35).timeout
+	ok(not SttDiagSheet._session.has("bench20") and _cap.count() == errs0, "... and still nothing after the sheet is gone, no engine error")
+	# 2. a recording hook that returns during the fade-out
+	var slow_rec := func() -> Dictionary:
+		for i in 3:
+			await get_tree().process_frame
+		return {"ok": true, "wav": PackedByteArray([9, 9, 9, 9]), "duration": 1.0}
+	SttDiagSheet.record_hook = slow_rec
+	var sh2 := _open_diag()
+	await get_tree().create_timer(0.45).timeout
+	var body2: Node = sh2.find_child("SttDiagBody", true, false)
+	_press(_btn(sh2, "DiagRecBtn"), "한 문장 녹음 (바로 [닫기])")
+	_press(sh2.buttons["close"], "닫기 (애니메이션 켠 채)")
+	var wav_seen: bool = false
+	for i in 8:
+		await get_tree().process_frame
+		if is_instance_valid(body2) and not (body2.wav as PackedByteArray).is_empty():
+			wav_seen = true
+	ok(not wav_seen, "a recording that returns during the fade-out is not taken")
+	await get_tree().create_timer(0.35).timeout
+	# 3. a live recording is cancelled at the moment of closing, not 200 ms later
+	SttDiagSheet.record_hook = Callable()
+	Recorder.mode_override = "phone"
+	Recorder.test_audio_source = func() -> AudioStreamWAV: return WavUtil.sine(1.0, 48000, 440.0, 0.5, true)
+	var sh3 := _open_diag()
+	await get_tree().create_timer(0.45).timeout
+	_press(_btn(sh3, "DiagRecBtn"), "한 문장 녹음 (Recorder)")
+	await _until(func() -> bool: return Recorder.recording and Recorder.elapsed > 0.05)
+	_press(sh3.buttons["close"], "닫기 (녹음 중, 애니메이션 켠 채)")
+	ok(not Recorder.recording, "the live recording is cancelled the moment the sheet starts to close")
+	await get_tree().create_timer(0.35).timeout
+	ok(not Recorder.recording and not Recorder.stopping and _cap.count() == errs0, "... and nothing is left running, no engine error")
+	Recorder.mode_override = ""
+	Recorder.test_audio_source = Callable()
+	Sheet.animate = false
+	SttDiagSheet.record_hook = Callable()
+	var host: Node = get_node_or_null("DiagHost")
+	while host != null:
+		host.free()
+		host = get_node_or_null("DiagHost")
+	await _frames(2)
+
+
+## A battery value of 0 that the person typed must reach the block; an empty box must not.
+func _test_battery_zero() -> void:
+	print("[battery: a typed 0]")
+	SttDiagSheet._session = {}
+	var sh := _open_diag()
+	await _frames(3)
+	var bs: SpinBox = sh.find_child("DiagBatStart", true, false) as SpinBox
+	var be: SpinBox = sh.find_child("DiagBatEnd", true, false) as SpinBox
+	ok(bs.get_line_edit().text == "" and be.get_line_edit().text == "", "both boxes start empty (nothing entered)")
+	_clip = ""
+	_press(_btn(sh, "DiagCopyBtn"), "결과 복사 (배터리 비움)")
+	var t0: Dictionary = _line_tokens(_line_of(_clip, "bench60"))
+	ok(_line_of(_clip, "bench60") == "bench60 -", "empty boxes copy as 'bench60 -' [%s]" % _line_of(_clip, "bench60"))
+	bs.get_line_edit().text = "0"
+	bs.apply()
+	_press(_btn(sh, "DiagCopyBtn"), "결과 복사 (시작 0, 입력 후 적용)")
+	var t1: Dictionary = _line_tokens(_line_of(_clip, "bench60"))
+	ok(t1.get("battery_start", "") == "0" and t1.get("battery_end", "x") == "-", "a typed and applied 0 copies as battery_start=0 (end stays -) [%s]" % _line_of(_clip, "bench60"))
+	be.get_line_edit().text = "0"
+	_press(_btn(sh, "DiagCopyBtn"), "결과 복사 (끝 0, 입력만 하고 확정 안 함)")
+	var t2: Dictionary = _line_tokens(_line_of(_clip, "bench60"))
+	ok(t2.get("battery_start", "") == "0" and t2.get("battery_end", "") == "0", "a 0 typed but not confirmed is taken when copying (battery_end=0)")
+	be.get_line_edit().text = ""
+	_press(_btn(sh, "DiagCopyBtn"), "결과 복사 (끝을 다시 비움)")
+	ok(_line_tokens(_line_of(_clip, "bench60")).get("battery_end", "") == "-", "a box that is emptied again copies as -")
+	be.get_line_edit().text = "qwe"
+	_press(_btn(sh, "DiagCopyBtn"), "결과 복사 (끝에 글자)")
+	ok(_line_tokens(_line_of(_clip, "bench60")).get("battery_end", "") == "-" and not _clip.contains("qwe"), "typed letters copy as -")
+	be.get_line_edit().text = "250"
+	_press(_btn(sh, "DiagCopyBtn"), "결과 복사 (끝 250)")
+	ok(_line_tokens(_line_of(_clip, "bench60")).get("battery_end", "") == "100", "250 typed copies as 100")
+	be.value = 5
+	ok(be.get_line_edit().text.replace("%", "").strip_edges() == "5", "stepping a box shows its number")
+	_close_diag(sh)
+	await _frames(3)
+
+
 func _test_reopen_keeps_numbers() -> void:
 	print("[sheet: reopen]")
 	SttDiagSheet._session = {}
@@ -832,6 +977,12 @@ func _test_sources() -> void:
 	var re := RegEx.new()
 	re.compile("(print|push_warning|push_error|printerr)\\(.*(text|target|transcript|words|url|path)")
 	ok(re.search(src) == null, "stt_diag_sheet.gd: no log line that names text, target, transcript, words, url or path (X-7)")
+	var bad: PackedStringArray = PackedStringArray()
+	for pat in ["%d" + " / " + "%d", "%d" + "/" + "%d", "0 / " + "%d"]:
+		if src.contains(pat):
+			bad.append(pat)
+	ok(bad.is_empty(), "stt_diag_sheet.gd: no hand-made progress text (CourseModel.progress_label only) %s" % str(bad))
+	ok(src.contains("CourseModel.progress_label"), "stt_diag_sheet.gd builds its progress text with CourseModel.progress_label")
 
 
 class LogCap:
