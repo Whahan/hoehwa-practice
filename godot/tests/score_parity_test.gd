@@ -107,9 +107,9 @@ func _test_rules() -> void:
 	ok(ScoreCore.en_words("1,23") == ["one", "twenty", "three"], "1,23: the comma is not a thousands comma (it splits)")
 	ok(ScoreCore.en_words("1234567890") == ["1234567890"], "10 digits stay digits")
 	ok(ScoreCore.en_words("well-known") == ["well", "known"], "hyphen splits")
-	ok(ScoreCore.en_words("Ｈｉ") == ["hi"], "full-width letters")
-	ok(ScoreCore.en_words("a b") == ["a", "b"], "no-break space splits")
-	ok(ScoreCore.en_words("Let’s") == ["let", "us"], "curly apostrophe")
+	ok(ScoreCore.en_words("\uFF28\uFF49") == ["hi"], "full-width letters")
+	ok(ScoreCore.en_words("a\u00A0b") == ["a", "b"], "no-break space splits")
+	ok(ScoreCore.en_words("Let\u2019s") == ["let", "us"], "curly apostrophe")
 	# Unicode (review of round 1): written out, from the server
 	var thousand: Array = ["one", "thousand", "two", "hundred", "and", "thirty", "four"]
 	ok(ScoreCore.en_words("CAFE\u0315\u0301") == ["caf"], "E + U+0315 + U+0301: NFC sorts the marks (230 before 232), E composes with U+0301, the letter is gone")
@@ -122,6 +122,14 @@ func _test_rules() -> void:
 		"a letter (also one made by composing) after the group keeps the comma from being a thousands comma")
 	var ca: Dictionary = ScoreCore.score_en("CAFE\u0315\u0301", [{"w": "cafe", "p": 0.9, "start": 0.0, "end": 0.5}], "cafe")
 	ok(ca["units"][0]["t"] == "caf" and ca["units"][0]["ok"] == false and int(ca["score"]) < 50, "the reviewer's case: target CAFE + U+0315 + U+0301 against 'cafe' is a wrong answer")
+	# 3rd round: U+0130 is I + U+0307 for NFKC; marks after it are sorted (U+0323 and U+0328 before U+0307) and composed with the I
+	ok(ScoreCore.en_words("AN \u0130\u0328 AND") == ["an", "and"] and ScoreCore.en_words("AN I\u0307\u0328 AND") == ["an", "and"], "\u0130 + U+0328 and I + U+0307 + U+0328 are the same text: no i")
+	ok(ScoreCore.en_words("YOU DRANK \u0130\u0323 COFFEE") == ["you", "drank", "coffee"] and ScoreCore.en_words("YOU DRANK I\u0307\u0323 COFFEE") == ["you", "drank", "coffee"],
+		"\u0130 + U+0323 and I + U+0307 + U+0323 are the same text: no i")
+	ok(ScoreCore.en_words("\u0130") == ["i"] and ScoreCore.en_words("I\u0307") == ["i"] and ScoreCore.en_words("I\u0323\u0307") == [] and ScoreCore.en_words("\u0130x") == ["i", "x"],
+		"\u0130 alone and I + U+0307 give i; with U+0323 first the I is composed and gone")
+	var di: Dictionary = ScoreCore.score_en("YOU DRANK \u0130\u0323 COFFEE", [{"w": "you", "p": 0.9, "start": 0.0, "end": 0.3}, {"w": "drank", "p": 0.9, "start": 0.4, "end": 0.7}, {"w": "coffee", "p": 0.9, "start": 0.8, "end": 1.1}], "you drank coffee")
+	ok((di["units"] as Array).size() == 3 and int(di["score"]) == 98, "the reviewer's case 2: three words, all heard, 98 points")
 	ok(ScoreCore.word_sim("abc", "abc") == 1.0, "word_sim equal = 1")
 	ok(ScoreCore.word_sim("", "") == 1.0, "word_sim of two empty strings = 1")
 	ok(ScoreCore.word_sim("abc", "xyz") == 0.0, "word_sim without common letters = 0")
@@ -396,15 +404,20 @@ func _test_perf() -> void:
 	var other: Array = []
 	for i in 60:
 		other.append({"w": vocab[(i * 11 + 5) % vocab.size()] + "q", "p": 0.6, "start": float(i) * 0.4, "end": float(i) * 0.4 + 0.3})
-	var worst: int = 1 << 30
+	var runs: Array = []
 	var res2: Dictionary = {}
-	for rep in 3:
+	for rep in 6:
 		var t1: int = Time.get_ticks_usec()
 		res2 = ScoreCore.score_en(target, other, "x")
-		worst = mini(worst, Time.get_ticks_usec() - t1)
-	print("PA2-8 perf (worst case, one replace block 40 x 60): %.1f ms (best of 3)" % [float(worst) / 1000.0])
+		runs.append(float(Time.get_ticks_usec() - t1) / 1000.0)
+	var worst_ms: float = 0.0
+	var runs_txt: String = ""
+	for r in runs:
+		worst_ms = maxf(worst_ms, float(r))
+		runs_txt += "%.1f " % [float(r)]
+	print("PA2-8 perf (worst case, one replace block 40 x 60), 6 runs in ms: %s| max %.1f" % [runs_txt, worst_ms])
 	ok(res2.has("score"), "worst case gives a result")
-	ok(worst <= 50000, "the worst case (everything different, one 40 x 60 block) takes at most 50 ms (%.1f ms; design aim 30 ms)" % [float(worst) / 1000.0])
+	ok(worst_ms <= 50.0, "the worst case (everything different, one 40 x 60 block) takes at most 50 ms in each of 6 runs (max %.1f ms; design aim 30 ms)" % [worst_ms])
 
 
 ## The comparisons above are only worth something if they can fail: wrong expectations must be rejected.

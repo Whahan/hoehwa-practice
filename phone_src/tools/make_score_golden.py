@@ -192,6 +192,16 @@ def unicode_data():
             raise AssertionError("a character that vanishes under NFKC: U+%04X" % c)
         elif any(digit.match(x) and ord(x) > 127 for x in n):
             raise AssertionError("a non-ASCII digit in an NFKC text: U+%04X" % c)
+    # lower() changes the length of a text only for U+0130 (to "i" + U+0307) and gives ASCII only for it: no table of multi-character
+    # lower() mappings is needed, U+0130 is handled as I + U+0307 (its canonical decomposition) before the marks are composed
+    for c in range(0x80, 0x110000):
+        if 0xD800 <= c <= 0xDFFF:
+            continue
+        if len(chr(c).lower()) != 1 and c != 0x130:
+            raise AssertionError("lower() of U+%04X is not one character" % c)
+    assert N("NFD", "\u0130") == "I\u0307" and N("NFKC", "\u0130") == "\u0130" and "\u0130".lower() == "i\u0307"
+    for c, out in ent.items():   # the projection drops marks: no NFKC text of the table may hold one
+        assert not any(unicodedata.combining(x) for x in N("NFKC", chr(c))), "U+%04X" % c
     # lower() of a character that NFKC leaves alone gives ASCII only for U+0130
     for c in range(0x80, 0x30000):
         if 0xD800 <= c <= 0xDFFF or c in changed:
@@ -487,6 +497,10 @@ def hand_cases():
     add("unicode_digit_group", "I paid 1,2\u06634", spec_words("I paid twelve four"))
     add("unicode_armenian_stop", "I paid 1,234\u0589", spec_words("I paid one thousand two hundred and thirty four"))
     add("unicode_greek_question", "I paid 1,234\u037e", spec_words("I paid one thousand two hundred and thirty four"))
+    # 3rd round (review): U+0130 is I + U+0307 for NFKC, the marks after it are sorted and composed with the I before lower() runs
+    add("unicode_dotted_I_equivalent", "YOU DRANK \u0130\u0323 COFFEE", spec_words(["you", "drank", "I\u0307\u0323", "coffee"]))
+    add("unicode_dotted_I_ogonek", "AN \u0130\u0328 AND", spec_words("an and"))
+    add("unicode_dotted_I_plain", "AN \u0130 AND", spec_words("an i and"))
     # conf rounding (Python round(p, 3) on exact binary values)
     for k, ps in enumerate([
         [0.0625, 0.1875, 0.3125, 0.4375],
@@ -652,6 +666,7 @@ HARD_INPUTS = [
     "", " ", "!!!", "\u3000", "'", "-", "a", "I", "am", "\u00c0\u00c9", "\u0391\u0392 \u0410\u0411",
     # 2nd round (review): canonical ordering of marks, other-script digits and non-word characters around a thousands comma
     "CAFE\u0315\u0301", "cafe\u0315\u0301", "1,2\u06634", "1,234\u0589", "1,234\u037e", "1,23\u0664", "1,234\u0482", "1,234\u0903",
+    "I\u0307\u0323", "\u0130\u0323", "AN \u0130\u0328 AND", "I\u0323\u0307", "I\u0328\u0307", "\u0130\u0307", "i\u0307",
     "xe\u0320\u0301y", "a\u0310\u0301b", "e\u05b0\u0301", "e\u0344", "I\u0307 \u0130", "1,234e\u0301", "1,234 e\u0301", "\uff45\u0301",
     "\ufb01\u0308", "e\u3099\u0301", "e\uff9e\u0301", "1,234\u0301", "1,234\u200b", "1,\u0663\u0664\u0665", "\u0663,234 1,234",
 ]
@@ -697,6 +712,19 @@ def table_inputs():
     return out
 
 
+def dotted_inputs():
+    """characters that NFKC or lower() changes (and the letters around them) with one and two marks of different combining classes"""
+    specials = [0x49, 0x69, 0x130, 0x4B, 0x212A, 0xFB01, 0x1E9B, 0x1C6, 0x65, 0x45, 0x61, 0xC9, 0xE9, 0x1ECA, 0x12E, 0x1E2C]
+    marks = [0x323, 0x328, 0x301, 0x307, 0x315, 0x345, 0x310, 0x320, 0x338, 0x344]
+    out = []
+    for c in specials:
+        for m in marks:
+            out.append("x" + chr(c) + chr(m) + "y")
+            for m2 in marks:
+                out.append("x" + chr(c) + chr(m) + chr(m2) + "y")
+    return out
+
+
 def unicode_inputs(rng):
     """seeded inputs around marks and other-script characters: letter + 2..3 marks, digit groups with other-script digits,
     "1,234" + a character from many categories"""
@@ -728,6 +756,7 @@ def build_en_words(S, sentences):
     inputs += HARD_INPUTS
     inputs += unicode_inputs(rng)
     inputs += table_inputs()
+    inputs += dotted_inputs()
     inputs = list(dict.fromkeys(inputs))
     out = []
     for s in inputs:

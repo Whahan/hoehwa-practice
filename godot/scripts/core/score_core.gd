@@ -23,11 +23,14 @@ extends RefCounted
 ##   _NFKC_RUNS / _NFKC_ONE: every code point U+0080..U+10FFFF whose NFKC text holds a-z, 0-9, an apostrophe or a comma (full-width
 ##     letters and digits, ligatures, superscripts, circled and mathematical letters, ...). Non-ASCII letters of such a text are
 ##     reduced to U+00C0 (a word character) and the other non-ASCII characters to a space, because en_words turns every non-a-z
-##     character into a space anyway. İ (U+0130) is "i" + space (its lower() is i + U+0307).
+##     character into a space anyway.
 ##   _MARK_DECOMP, _CCC, _COMPOSE: canonical ordering and composition of an ASCII letter with the combining marks after it, as
 ##     NFC does it (marks that decompose into marks are spelled out, the marks are sorted stably by combining class, the first
 ##     mark that composes with the letter and is not blocked by an earlier mark of the same or a higher class ends the search).
-##     A letter that composes is no longer a-z: it becomes U+00C0, a word character; I + U+0307 gives İ: "i" and a space.
+##     A letter that composes is no longer a-z: it becomes U+00C0, a word character. Order of the server's steps: NFKC of the whole
+##     text, lower(), the replacements; lower() makes ASCII from a non-ASCII character only for İ (U+0130 -> i + U+0307), which
+##     NFKC leaves as one character only when nothing but U+0307 composes with the I: then "i" and a space (the I + U+0307 case of
+##     the composition below), otherwise the I has composed with another mark and is gone. U+0130 itself is spelled I + U+0307.
 ##   _DIGITS, _NONWORD: Python's \d (category Nd) and the complement of \w for every code point >= U+0080, for the character as it
 ##     is after NFKC. They decide the rule "a comma between a digit and three digits is deleted when the group is followed by a
 ##     non-word character or the end".
@@ -682,15 +685,16 @@ static func _normalise(text: String) -> PackedInt32Array:
 	if _nfkc_map.is_empty():
 		_build_nfkc()
 	# 1. NFKC. a) compatibility characters whose text holds a-z 0-9 ' or a comma come from the table, marks that decompose into
-	#    marks (U+0344 -> U+0308 U+0301) are spelled out, İ is "i" + space (lower() of it is i + U+0307)
+	#    marks (U+0344 -> U+0308 U+0301) are spelled out, İ (U+0130) is spelled as its canonical decomposition I + U+0307: the server
+	#    does NFKC on the whole text first (the marks after it are sorted and composed with the I), lower() comes after
 	var mapped := PackedInt32Array()
 	for i in text.length():
 		var c: int = text.unicode_at(i)
 		if c < 0x80:
 			mapped.append(c)
 		elif c == 0x130:
-			mapped.append(0x69)
-			mapped.append(0x20)
+			mapped.append(0x49)
+			mapped.append(0x307)
 		elif _nfkc_map.has(c):
 			var rep: String = _nfkc_map[c]
 			for k in rep.length():

@@ -148,7 +148,7 @@ class ScoreGoldenTests(unittest.TestCase):
 
     def test_08b_unicode_cases_present(self):
         ids = {c["id"] for c in self.doc["cases"]}
-        for needed in ("unicode_marks_reordered", "unicode_marks_blocked", "unicode_digit_group", "unicode_armenian_stop", "unicode_greek_question"):
+        for needed in ("unicode_dotted_I_equivalent", "unicode_dotted_I_ogonek", "unicode_marks_reordered", "unicode_marks_blocked", "unicode_digit_group", "unicode_armenian_stop", "unicode_greek_question"):
             self.assertIn(needed, ids)
         ins = {e["in"] for e in self.doc["en_words"]}
         for needle in ("CAFE\u0315\u0301", "1,2\u06634", "1,234\u0589", "1,234\u037e"):
@@ -158,6 +158,10 @@ class ScoreGoldenTests(unittest.TestCase):
         r = by_id["unicode_marks_reordered"]["expect"]
         self.assertEqual([u["t"] for u in r["units"]], ["caf"])
         self.assertEqual(r["score"], 15)
+        d = by_id["unicode_dotted_I_equivalent"]["expect"]
+        self.assertEqual([x["t"] for x in d["units"]], ["you", "drank", "coffee"])
+        self.assertEqual(d["score"], 98)
+        self.assertEqual([x["t"] for x in by_id["unicode_dotted_I_ogonek"]["expect"]["units"]], ["an", "and"])
 
     def test_08_rounding_cases_present(self):
         confs = {u["conf"] for c in self.doc["cases"] if c["id"].startswith("round_") for u in c["expect"]["units"]}
