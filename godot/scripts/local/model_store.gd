@@ -121,8 +121,6 @@ static func valid_name(n: Variant) -> bool:
 	if typeof(n) != TYPE_STRING:
 		return false
 	var s: String = n
-	if not printable_ascii(s):
-		return false
 	if RegEx.create_from_string(NAME_RX).search(s) == null or s.contains("..") or s.ends_with("."):
 		return false
 	if RESERVED_STEMS.has(s.split(".")[0]):
@@ -181,7 +179,7 @@ static func validate_manifest(d: Variant) -> Dictionary:
 			files[file + suf] = true
 		if not _is_whole(md.get("bytes")) or int(md["bytes"]) <= 0 or int(md["bytes"]) > MAX_BYTES:
 			return bad
-		if typeof(md.get("sha256")) != TYPE_STRING or not printable_ascii(String(md["sha256"])) or sha_rx.search(String(md["sha256"])) == null:
+		if typeof(md.get("sha256")) != TYPE_STRING or sha_rx.search(String(md["sha256"])) == null:
 			return bad
 		if not _str_array(md.get("urls")) or (md["urls"] as Array).is_empty():
 			return bad
