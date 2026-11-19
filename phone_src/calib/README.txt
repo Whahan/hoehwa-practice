@@ -36,7 +36,11 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
    (2026-11-19 이 PC: 영어 음성 1종 af_heart. PA5b-1 의 "음성 >= 4" 는 새 음성을 내려받지 않는 한 채울 수 없다).
    같은 시드면 문장·바꾼 낱말·잡음·오디오가 같다(합성 전에 torch 시드를 고정한다).
    모든 도구의 --out 은 절대 경로로 바꾼 뒤 저장소·worktree·backend 안(D:\Ai\언어pp, D:\Ai\언어pp_wt 아래와 이 도구가 든 저장소)이면
-   거절한다(종료 2, 아무것도 쓰지 않음, 메시지에 경로를 되풀이하지 않음). calib_phone.gd 는 res://·user://·상대 경로도 거절한다.
+   거절한다(종료 2, 아무것도 쓰지 않음, 메시지에 경로를 되풀이하지 않음). 파이썬 도구 4개는 경로를 실제 위치로 풀어서 비교한다:
+   정션·심볼릭 링크·8.3 짧은 이름은 realpath 로 풀고, \\?\ \\.\ \\?\UNC\ 접두사는 벗기고, 대소문자는 접는다. 금지 폴더도 같은 방식으로 푼다.
+   파일을 여러 개 쓰는 도구(calib_make_set 의 clips\, 녹음 클립, manifest, 보고서)는 최상위 --out 만이 아니라 실제로 쓰는 파일마다
+   쓰기 직전에 다시 검사한다(하위 폴더가 정션이어도 잡힌다).
+   calib_phone.gd 는 res://·user://·상대 경로, \\?\·\\.\ 접두사 경로, "~" 가 든 경로 구성 요소(8.3 이름 모양)도 거절한다.
    결과: $T\set_synth\manifest.json 과 clips\*.wav (16 kHz 모노 16비트). manifest 의 각 클립: clip, file, sentence_id, target,
    variant, voice, wrong(null 또는 {index, said}; index 는 target.split() 의 몇 번째 낱말), spoken, seconds, sha256.
 
@@ -95,6 +99,9 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
   합성 세트·pc/phone JSON 도 같은 방법으로 지운다(저장소 밖 scratch 폴더라 저장소에는 영향이 없다).
 
 알려진 한계 (2026-11-19, 이 PC에서 직접 확인)
+- calib_phone.gd 는 정션·심볼릭 링크를 풀 수 없다(GDScript 에 방법이 없다). 금지 폴더로 가는 정션을 일부러 만들어 --out 으로 주면
+  막지 못한다. 문자열 검사(위)만 한다. 뒷받침: 저장소의 추적 파일 속 오디오·전사는 packaging\check_no_media.ps1 과
+  publish_release.ps1 -ScanOnly 가 공개 전에 막는다. 오케스트레이터가 이 한계를 받아들였다.
 - 합성 영어 음성이 af_heart 1종뿐이다. 새로 내려받지 않았다.
 - 폰 쪽 단어 시각(whisper.cpp token_timestamps)이 불안정할 수 있다(마지막 낱말 끝이 30초 근처로 나온 클립이 있었다). 그래서 채점 전에
   D-1 규칙으로 정리한다. 정리 전후 유창성 MAE(5문장·40클립 작은 세트): 9.75 -> 4.19 (calib_fit.RETIME 을 False 로 하면 정리 없이 계산).

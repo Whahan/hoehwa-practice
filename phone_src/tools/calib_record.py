@@ -88,6 +88,7 @@ def default_recorder(seconds, tick=None):
 
 def write_wav(path, samples):
     import soundfile as sf
+    cf.guard_write(path)   # the real place of this file, checked right before it is written
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     sf.write(path, samples, RATE, subtype="PCM_16", format="WAV")
 

@@ -99,6 +99,7 @@ def run(set_dir, out_path, out=print):
         stt = dict(S.CFG["stt"])
     doc = {"v": 1, "kind": "pc", "date": datetime.date.today().isoformat(),
            "stt": {"model": stt.get("model"), "device": stt.get("device"), "compute_type": stt.get("compute_type")}, "clips": clips}
+    calib_fit.guard_write(out_path)   # checked again right before the write
     d = os.path.dirname(os.path.abspath(out_path))
     os.makedirs(d, exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:

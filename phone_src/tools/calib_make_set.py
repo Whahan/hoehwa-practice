@@ -174,6 +174,8 @@ def sha256_file(path):
 
 
 def write_json(path, obj):
+    import calib_fit
+    calib_fit.guard_write(path)
     d = os.path.dirname(os.path.abspath(path))
     os.makedirs(d, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
@@ -233,6 +235,8 @@ def band_limit_8k(x):
 def write_wav16(path, x):
     import numpy as np
     import soundfile as sf
+    import calib_fit
+    calib_fit.guard_write(path)   # the real place of THIS file (a clips\ folder that is a junction into a forbidden place is caught here)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     pcm = (np.clip(x, -1.0, 1.0) * 32767.0).round().astype(np.int16)
     sf.write(path, pcm, 16000, subtype="PCM_16", format="WAV")
@@ -262,6 +266,7 @@ def build(out_dir, n_sentences, voices_wanted, seed, out=print):
         rng = random.Random(seed * 1000003 + 17)
         wrong_plan = {sid: choose_wrong(text, rng, vocab) for sid, text in sentences}   # same word for every voice
         clips = []
+        calib_fit.guard_write(os.path.join(out_dir, "clips"))
         os.makedirs(os.path.join(out_dir, "clips"), exist_ok=True)
         for sid, text in sentences:
             wrong, spoken = wrong_plan[sid]
@@ -297,6 +302,7 @@ def build(out_dir, n_sentences, voices_wanted, seed, out=print):
     manifest = {"v": 1, "kind": "synth", "seed": seed, "n_sentences": len(sentences), "voices_requested": voices_wanted,
                 "voices": voices, "variants": list(VARIANTS), "clips": clips}
     write_json(os.path.join(out_dir, "manifest.json"), manifest)
+    calib_fit.guard_write(work)
     shutil.rmtree(work, ignore_errors=True)   # the espeak copy and the TTS cache are not part of the set
     out("CALIB_SET_OK clips=%d sentences=%d voices=%d" % (len(clips), len(sentences), len(voices)))
     return manifest

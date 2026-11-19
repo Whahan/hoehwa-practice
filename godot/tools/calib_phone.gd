@@ -9,6 +9,10 @@ extends SceneTree
 ## --out 은 절대 경로여야 하고 res://·user:// 도, 저장소·worktree·backend 안(D:/Ai/언어/app, D:/Ai/언어/app_wt, 이 프로젝트 폴더)도 거절한다
 ##   (CALIB_PHONE_FAIL out_path, 종료 2, 아무것도 쓰지 않음). 전사가 하나라도 실패하면(ok < clips) status "fail" 로 --out 을 쓰고
 ##   CALIB_PHONE_FAIL transcribe 와 종료 1 (calib_fit.py 는 그 파일을 받지 않는다).
+## 알려진 한계: GDScript 는 정션·심볼릭 링크·8.3 짧은 이름을 풀 방법이 없다. 이 도구는 문자열로만 막는다 - res://·user://·상대 경로,
+##   \\?\ 와 \\.\ (그리고 //?/ //./) 로 시작하는 경로, "~" 가 든 경로 구성 요소(8.3 이름 모양), 금지 폴더 이름과 접두사가 같은 경로.
+##   금지 폴더로 가는 정션·링크를 일부러 만들어 --out 으로 쓰면 이 도구는 막지 못한다(파이썬 도구 4개는 realpath 로 풀어서 막는다).
+##   뒷받침: 저장소에 추적되는 오디오·전사는 packaging\check_no_media.ps1 과 publish_release.ps1 -ScanOnly 가 공개 전에 막는다.
 ## 종료 코드: 0 성공, 1 실패(CALIB_PHONE_FAIL <이유>), 2 브리지(GDExtension)가 없음(CALIB_PHONE_NO_ENGINE) 또는 거절된 --out
 
 const CHUNK_SECONDS := 30.0
@@ -34,6 +38,14 @@ func _out_allowed(out_path: String) -> bool:
 		return false
 	if not out_path.is_absolute_path():
 		return false
+	# Windows 확장·장치 경로(\\?\C:\x, \\.\C:\x)는 같은 곳을 다른 철자로 가리키므로 풀지 않고 거절한다
+	for pre in ["\\\\?\\", "\\\\.\\", "//?/", "//./"]:
+		if out_path.begins_with(pre):
+			return false
+	# "~" 가 든 구성 요소는 8.3 짧은 이름(PROGRA~1)일 수 있어 거절한다
+	for part in out_path.replace("\\", "/").split("/"):
+		if part.contains("~"):
+			return false
 	var p: String = out_path.replace("\\", "/").simplify_path().to_lower()
 	var bans: Array = FORBIDDEN_OUT.duplicate()
 	bans.append(ProjectSettings.globalize_path("res://").replace("\\", "/").simplify_path().trim_suffix("/").to_lower())

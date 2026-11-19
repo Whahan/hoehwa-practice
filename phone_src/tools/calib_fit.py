@@ -25,7 +25,8 @@ MAE <= 15, wrong clip below its clean clip in >= 95 % of the pairs, wrong clips 
 Below a gate (none is waived): "CALIB_FAIL <metric> ..." and exit 1 and --out-params is NOT written (--report is). Bad data (not one agreed pair of
 files, empty, a clip on one side only, pairing agreement < 0.6): "CALIB_FAIL <input|pairing|data|agreement>" and exit 1.
 Exit code: 0 fitted and every gate passed, 1 failed, 2 usage error (argparse) or an --out-params / --report path inside a repository, a
-worktree or backend (nothing is written).
+worktree or backend (nothing is written). The place is judged as it really is: links, junctions, 8.3 short names and extended / device paths are
+resolved first (resolve_path), and every file is checked again right before it is written (guard_write).
 The phone words are cleaned with the D-1 time rule (clean_word_times, docs 8.1) before they are scored, as the app does.
 
 The report holds numbers only (counts, metrics, intervals); no sentence, no transcript. Nothing is written but --out-params and --report.
@@ -93,18 +94,44 @@ class CalibError(Exception):
 
 
 # ------------------------------------------------------------------------------------------------ where the tools may write
-def _norm_path(p):
-    return os.path.normcase(os.path.abspath(os.fspath(p)))
+_EXT_PREFIXES = ("\\\\?\\UNC\\", "\\\\.\\UNC\\", "\\\\?\\", "\\\\.\\", "//?/UNC/", "//./UNC/", "//?/", "//./")
+
+
+def _strip_ext_prefix(p):
+    r"""\\?\C:\x -> C:\x, \\.\C:\x -> C:\x, \\?\UNC\srv\share -> \\srv\share (the long-path / device spellings of the same place)"""
+    for pre in _EXT_PREFIXES:
+        if p[:len(pre)].lower() == pre.lower():
+            rest = p[len(pre):]
+            return ("\\\\" + rest) if "UNC" in pre else rest
+    return p
+
+
+def resolve_path(path):
+    """one comparable spelling of a place: the extended prefix is stripped, the path is made absolute, its NEAREST EXISTING ANCESTOR is
+    resolved with realpath (junctions, symbolic links and 8.3 short names become the real long path), the not yet existing rest is
+    appended, the prefix is stripped once more (realpath may add one) and the case is folded"""
+    cur = os.path.abspath(_strip_ext_prefix(os.fspath(path)))
+    tail = []
+    while not os.path.exists(cur):
+        parent, name = os.path.split(cur)
+        if parent == cur or not name:
+            break
+        tail.append(name)
+        cur = parent
+    real = _strip_ext_prefix(os.path.realpath(cur))
+    for name in reversed(tail):
+        real = os.path.join(real, name)
+    return os.path.normcase(os.path.normpath(_strip_ext_prefix(real)))
 
 
 def out_path_refused(path):
-    """True when `path` (made absolute, `..` resolved, links followed) is, or lies inside, a repository / worktree / backend folder"""
+    """True when `path`, as it really is on disk (resolve_path), is or lies inside a repository / worktree / backend folder. The forbidden
+    roots are resolved the same way, so a link to them, their short name or an extended path to them is the same place."""
     try:
-        cands = {_norm_path(path), os.path.normcase(os.path.realpath(os.fspath(path)))}
+        cands = {resolve_path(path), os.path.normcase(os.path.normpath(os.path.abspath(_strip_ext_prefix(os.fspath(path)))))}
+        bases = {resolve_path(b) for b in FORBIDDEN_ROOTS + (ROOT, BACKEND)}
     except (OSError, ValueError, TypeError):
         return True
-    bases = {_norm_path(b) for b in FORBIDDEN_ROOTS + (ROOT, BACKEND)}
-    bases |= {os.path.normcase(os.path.realpath(b)) for b in (ROOT, BACKEND)}
     for c in cands:
         for b in bases:
             if c == b or c.startswith(b + os.sep):
@@ -120,6 +147,12 @@ def require_out_paths(*paths):
     """raise OutPathRefused unless every path may be written"""
     if refuse_out_paths(paths) is not None:
         raise OutPathRefused()
+
+
+def guard_write(*paths):
+    """call right BEFORE every write (folder creation, file, delete): each path is checked again with the same function, so a sub folder
+    that is a junction into a forbidden place is caught even when the top --out folder was fine"""
+    require_out_paths(*paths)
 
 
 def refuse_out_paths(paths):
@@ -283,6 +316,7 @@ def load_server(work_dir=None):
     sys.dont_write_bytecode = True
     if work_dir:
         work = os.path.abspath(work_dir)
+        guard_write(work, os.path.join(work, "espeak"), os.path.join(work, "tts_cache"))
     else:
         work = tempfile.mkdtemp(prefix="hoehwa_calib_")
         atexit.register(shutil.rmtree, work, True)   # nothing is left behind in the temp folder
@@ -338,10 +372,12 @@ def _clean_words(raw, where):
         raise CalibError("input", "%s: words is not a list" % where)
     out = []
     for w in raw:
-        if (not isinstance(w, dict) or not isinstance(w.get("w"), str) or not _is_num(w.get("p"))
-                or not _is_num(w.get("start")) or not _is_num(w.get("end"))):
-            raise CalibError("input", "%s: a word without w/p/start/end" % where)
-        out.append({"w": w["w"], "p": min(1.0, max(0.0, float(w["p"]))), "start": float(w["start"]), "end": float(w["end"])})
+        if not isinstance(w, dict) or not isinstance(w.get("w"), str) or not _is_num(w.get("p")):
+            raise CalibError("input", "%s: a word without w/p" % where)
+        # D-1 step 1 right here: a start / end that is missing, null, NaN, infinite or not a number becomes 0 (it is not an error)
+        start = float(w["start"]) if _is_num(w.get("start")) else 0.0
+        end = float(w["end"]) if _is_num(w.get("end")) else 0.0
+        out.append({"w": w["w"], "p": min(1.0, max(0.0, float(w["p"]))), "start": start, "end": end})
     return out
 
 
@@ -719,6 +755,7 @@ def _round(v, n=4):
 
 
 def _write_json(path, obj):
+    guard_write(path)
     d = os.path.dirname(os.path.abspath(path))
     os.makedirs(d, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
@@ -849,6 +886,9 @@ def main(argv=None):
     try:
         with no_network():
             return run(args)
+    except OutPathRefused:   # a file that would be written lies in a forbidden place (checked right before each write)
+        print("CALIB_FAIL out_path")
+        return 2
     except CalibError as e:   # load_server problems and the like
         print("CALIB_FAIL %s" % e.code)
         print("  %s" % e.msg)

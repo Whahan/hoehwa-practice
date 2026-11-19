@@ -817,55 +817,191 @@ class OtherTools(unittest.TestCase):
 GODOT = r"C:\Users\rtyu6\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe"
 
 
+def make_junction(link, target):
+    r = subprocess.run(["cmd", "/c", "mklink", "/J", link, target], capture_output=True)
+    if r.returncode != 0:
+        raise unittest.SkipTest("cannot make a junction here")
+
+
+def remove_junction(link):
+    """removes only the link (cmd rmdir), never what it points at"""
+    if os.path.lexists(link):
+        subprocess.run(["cmd", "/c", "rmdir", link], capture_output=True)
+
+
+def short_name(path):
+    from ctypes import WinDLL, create_unicode_buffer
+    buf = create_unicode_buffer(32768)
+    n = WinDLL("kernel32", use_last_error=True).GetShortPathNameW(path, buf, len(buf))
+    return buf.value if n else None
+
+
+class FakeRepo:
+    """a disposable stand-in for the repository inside TMP: the forbidden roots are pointed at it, so a test (also a test run with a broken
+    guard) can really write there without ever touching a real repository, worktree or backend"""
+
+    def __init__(self, name="fake_repo"):
+        self.root = os.path.join(TMP, name)
+        for sub in ("backend", "phone_src", "other"):
+            os.makedirs(os.path.join(self.root, sub), exist_ok=True)
+        self.backend = os.path.join(self.root, "backend")
+        self.patches = [mock.patch.object(cf, "FORBIDDEN_ROOTS", (self.root,)), mock.patch.object(cf, "ROOT", self.root),
+                        mock.patch.object(cf, "BACKEND", self.backend)]
+
+    def __enter__(self):
+        for x in self.patches:
+            x.start()
+        return self
+
+    def __exit__(self, *a):
+        for x in reversed(self.patches):
+            x.stop()
+
+    def files(self):
+        return [os.path.join(d, f) for d, _s, fs in os.walk(self.root) for f in fs]
+
+
+def tool_calls(q):
+    """(label, callable) for every tool, all writing to / below q"""
+    return (
+        ("make_set", lambda: ms.main(["--out", q, "--n-sentences", "1", "--voices", "1"])),
+        ("record dry", lambda: rec.main(["--out", q, "--dry-run"])),
+        ("record", lambda: rec.main(["--out", q])),
+        ("pc_run", lambda: pr.main(["--set", TMP, "--out", q + ".json"])),
+        ("fit params", lambda: cf.main(["--pc", "a", "--phone", "b", "--out-params", q + ".json", "--report", os.path.join(TMP, "r.json")])),
+        ("fit report", lambda: cf.main(["--pc", "a", "--phone", "b", "--out-params", os.path.join(TMP, "p.json"), "--report", q + ".json"])),
+    )
+
+
 class OutBoundary(unittest.TestCase):
-    """every tool refuses an output path inside a repository, a worktree or backend: exit 2 and nothing written"""
+    """every tool refuses an output place inside a repository, a worktree or backend, however it is spelled: exit 2 and nothing written.
+    Tests that write use a FakeRepo in the scratch folder; nothing here can write into a real repository."""
 
-    def bad_paths(self):
-        return [os.path.join(ROOT, "backend", "zz_probe_out"), os.path.join(ROOT, "phone_src", "zz_probe_out"),
-                os.path.join(ROOT, "zz_probe_out"), r"D:\Ai\언어\app\zz_probe_out", r"D:\Ai\언어\app_wt\zz_probe_out",
-                r"D:\Ai\언어\app_wt\v201_other\zz_probe_out", os.path.join(ROOT, "docs", "..", "backend", "zz_probe_out")]
-
-    def test_the_checker_refuses_repos_and_allows_scratch(self):
-        for pth in self.bad_paths() + [ROOT, BACKEND, r"d:\ai\언어\APP\x"]:
+    def test_the_checker_refuses_real_repos_and_allows_scratch(self):   # only asks, never writes
+        for pth in (os.path.join(ROOT, "backend", "zz"), os.path.join(ROOT, "phone_src", "zz"), os.path.join(ROOT, "zz"),
+                    r"D:\Ai\언어\app\zz", r"D:\Ai\언어\app_wt\zz", r"D:\Ai\언어\app_wt\v201_other\zz",
+                    os.path.join(ROOT, "docs", "..", "backend", "zz"), ROOT, BACKEND, r"d:\ai\언어\APP\x",
+                    "\\\\?\\" + os.path.join(ROOT, "backend", "zz"), "\\\\.\\" + os.path.join(ROOT, "backend", "zz")):
             self.assertTrue(cf.out_path_refused(pth), pth)
         for pth in (os.path.join(TMP, "x"), os.path.join(TMP, "a", "..", "b"), r"C:\Users\someone\scratch\x"):
             self.assertFalse(cf.out_path_refused(pth), pth)
-        self.assertTrue(cf.out_path_refused(os.path.relpath(os.path.join(ROOT, "zz_probe_out"))) or os.path.splitdrive(os.getcwd())[0] != os.path.splitdrive(ROOT)[0])
         with self.assertRaises(cf.OutPathRefused):
             cf.require_out_paths(os.path.join(TMP, "ok"), os.path.join(ROOT, "backend", "x"))
 
-    def test_every_python_tool_exits_2_and_writes_nothing(self):
-        for pth in self.bad_paths():
-            for tool, argv in (
-                ("make_set", lambda q: ms.main(["--out", q, "--n-sentences", "1", "--voices", "1"])),
-                ("record dry", lambda q: rec.main(["--out", q, "--dry-run"])),
-                ("record", lambda q: rec.main(["--out", q])),
-                ("pc_run", lambda q: pr.main(["--set", TMP, "--out", q + ".json"])),
-                ("fit params", lambda q: cf.main(["--pc", "a", "--phone", "b", "--out-params", q + ".json", "--report", os.path.join(TMP, "r.json")])),
-                ("fit report", lambda q: cf.main(["--pc", "a", "--phone", "b", "--out-params", os.path.join(TMP, "p.json"), "--report", q + ".json"])),
-            ):
-                buf = io.StringIO()
-                with self.subTest(tool=tool, path=pth), contextlib.redirect_stdout(buf):
-                    code = argv(pth)
-                self.assertEqual(code, 2, (tool, buf.getvalue()))
-                self.assertFalse(os.path.exists(pth) or os.path.exists(pth + ".json"))
-                self.assertNotIn("zz_probe_out", buf.getvalue())   # the message does not repeat the path either
+    def test_resolve_path_spellings(self):
+        d = os.path.join(TMP, "resolve_dir")
+        os.makedirs(d, exist_ok=True)
+        want = cf.resolve_path(d)
+        self.assertEqual(cf.resolve_path("\\\\?\\" + d), want)
+        self.assertEqual(cf.resolve_path("\\\\.\\" + d), want)
+        self.assertEqual(cf.resolve_path(d.upper()), want)
+        self.assertEqual(cf.resolve_path(os.path.join(d, "a", "..")), want)
+        self.assertEqual(cf.resolve_path(os.path.join(d, "not", "yet", "there")), os.path.join(want, "not", "yet", "there"))
+        self.assertEqual(cf._strip_ext_prefix("\\\\?\\UNC\\srv\\share\\x"), "\\\\srv\\share\\x")
+        self.assertEqual(cf._strip_ext_prefix("\\\\?\\C:\\x"), "C:\\x")
+        self.assertEqual(cf._strip_ext_prefix("C:\\x"), "C:\\x")
+        # a junction is the place it points at
+        link = os.path.join(TMP, "resolve_link")
+        make_junction(link, d)
+        try:
+            self.assertEqual(cf.resolve_path(link), want)
+            self.assertEqual(cf.resolve_path(os.path.join(link, "child")), os.path.join(want, "child"))
+        finally:
+            remove_junction(link)
 
-    def test_selfcheck_a_scratch_path_is_not_refused_by_the_tools(self):
+    def test_every_python_tool_exits_2_and_writes_nothing(self):
+        with FakeRepo() as fr:
+            paths = [os.path.join(fr.backend, "zz_out"), os.path.join(fr.root, "phone_src", "zz_out"), os.path.join(fr.root, "zz_out"),
+                     os.path.join(fr.root, "other", "..", "backend", "zz_out")]
+            for pth in paths:
+                for label, call in tool_calls(pth):
+                    buf = io.StringIO()
+                    with self.subTest(tool=label, path=pth), contextlib.redirect_stdout(buf):
+                        code = call()
+                    self.assertEqual(code, 2, (label, buf.getvalue()))
+                    self.assertNotIn("zz_out", buf.getvalue())   # the message does not repeat the path either
+            self.assertEqual(fr.files(), [])
+            self.assertFalse(any(os.path.exists(p) or os.path.exists(p + ".json") for p in paths))
+
+    def test_junction_short_name_and_extended_paths_to_a_forbidden_place(self):
+        with FakeRepo("fake_repo_alias") as fr:
+            links = os.path.join(TMP, "alias_links")
+            os.makedirs(links, exist_ok=True)
+            top = os.path.join(links, "to_backend")
+            make_junction(top, fr.backend)
+            try:
+                spellings = {"junction": os.path.join(top, "zz_out"), "extended": "\\\\?\\" + os.path.join(fr.backend, "zz_out"),
+                             "device": "\\\\.\\" + os.path.join(fr.backend, "zz_out"), "upper": os.path.join(fr.backend, "zz_out").upper()}
+                sn = short_name(fr.backend)
+                if sn and sn.lower() != fr.backend.lower():
+                    spellings["short83"] = os.path.join(sn, "zz_out")
+                for name, pth in spellings.items():
+                    self.assertTrue(cf.out_path_refused(pth), name)
+                    for label, call in tool_calls(pth):
+                        buf = io.StringIO()
+                        with self.subTest(spelling=name, tool=label), contextlib.redirect_stdout(buf):
+                            code = call()
+                        self.assertEqual(code, 2, (name, label, buf.getvalue()))
+                self.assertEqual(fr.files(), [])
+            finally:
+                remove_junction(top)
+
+    def test_a_junction_below_a_fine_out_folder_is_caught_at_every_file(self):
+        import numpy as np
+        from types import SimpleNamespace
+        with FakeRepo("fake_repo_nested") as fr:
+            out = os.path.join(TMP, "nested_out")
+            os.makedirs(out, exist_ok=True)
+            link = os.path.join(out, "clips")
+            self.assertFalse(cf.out_path_refused(out))              # the top --out is fine ...
+            make_junction(link, os.path.join(fr.root, "other"))      # ... its clips\ folder is a junction into the forbidden place
+            try:
+                self.assertTrue(cf.out_path_refused(os.path.join(link, "x.wav")))
+                server = SimpleNamespace(en_words=lambda t: t.lower().split(), available_voices=lambda *_: ["voice"])
+                buf = io.StringIO()
+                with mock.patch.object(cf, "load_server", lambda **_: server), \
+                        mock.patch.object(ms, "synth16", lambda *_: np.zeros(16000, dtype=np.float32)), contextlib.redirect_stdout(buf):
+                    code = ms.main(["--out", out, "--n-sentences", "1", "--voices", "1"])
+                self.assertEqual(code, 2, buf.getvalue())
+                self.assertEqual(fr.files(), [])
+                self.assertFalse(os.path.exists(os.path.join(out, "manifest.json")))
+                # the same junction hits the other writers too: a recorded clip and the pc json
+                with self.assertRaises(cf.OutPathRefused):
+                    rec.write_wav(os.path.join(link, "u01_clean.wav"), np.zeros(1600, dtype=np.int16))
+                with self.assertRaises(cf.OutPathRefused):
+                    ms.write_wav16(os.path.join(link, "c.wav"), np.zeros(1600, dtype=np.float32))
+                with self.assertRaises(cf.OutPathRefused):
+                    ms.write_json(os.path.join(link, "manifest.json"), {})
+                with self.assertRaises(cf.OutPathRefused):
+                    cf._write_json(os.path.join(link, "report.json"), {})
+                self.assertEqual(fr.files(), [])
+            finally:
+                remove_junction(link)
+
+    def test_selfcheck_scratch_is_not_refused_and_the_guard_lets_it_write(self):
+        import numpy as np
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             code = rec.main(["--out", os.path.join(TMP, "dry_ok"), "--dry-run"])
         self.assertEqual(code, 0)
+        p = os.path.join(TMP, "guard_ok", "c.wav")
+        self.assertGreater(ms.write_wav16(p, np.zeros(1600, dtype=np.float32)), 0)
+        self.assertTrue(os.path.exists(p))
 
     @unittest.skipUnless(os.path.isfile(GODOT) and os.path.isdir(os.path.join(ROOT, "godot", ".godot")), "Godot or the imported project is missing")
-    def test_calib_phone_gd_refuses_res_user_relative_and_repo_paths(self):
+    def test_calib_phone_gd_refuses_res_user_relative_repo_extended_and_short_name_paths(self):
         env = dict(os.environ, APPDATA=os.path.join(TMP, "gd_appdata"))
         os.makedirs(env["APPDATA"], exist_ok=True)
-        for out, expect_refused in (("res://zz_probe_out.json", True), ("user://zz_probe_out.json", True), ("zz_probe_out.json", True),
-                                    (os.path.join(ROOT, "zz_probe_out.json"), True), (os.path.join(ROOT, "backend", "zz.json"), True),
-                                    (r"D:\Ai\언어\app\zz_probe_out.json", True), (r"D:/Ai/언어/app_wt/zz_probe_out.json", True),
-                                    (os.path.join(ROOT, "godot", "zz.json"), True),
-                                    (os.path.join(TMP, "gd_ok.json"), False)):
+        cases = [("res://zz_probe_out.json", True), ("user://zz_probe_out.json", True), ("zz_probe_out.json", True),
+                 (os.path.join(ROOT, "zz_probe_out.json"), True), (os.path.join(ROOT, "backend", "zz.json"), True),
+                 (r"D:\Ai\언어\app\zz_probe_out.json", True), (r"D:/Ai/언어/app_wt/zz_probe_out.json", True),
+                 (os.path.join(ROOT, "godot", "zz.json"), True),
+                 ("\\\\?\\" + os.path.join(TMP, "gd_ext.json"), True), ("\\\\.\\" + os.path.join(TMP, "gd_dev.json"), True),
+                 ("//?/" + os.path.join(TMP, "gd_ext2.json").replace("\\", "/"), True),
+                 (r"C:\PROGRA~1\zz.json", True), (os.path.join(TMP, "a~b", "gd_tilde.json"), True), (r"D:\Ai\~1\zz.json", True)]
+        if "~" not in TMP:
+            cases.append((os.path.join(TMP, "gd_ok.json"), False))
+        for out, expect_refused in cases:
             r = subprocess.run([GODOT, "--headless", "--path", os.path.join(ROOT, "godot"), "-s", "res://tools/calib_phone.gd", "--",
                                 "--model=" + os.path.join(TMP, "nomodel.bin"), "--set=" + TMP, "--out=" + out],
                                capture_output=True, env=env, cwd=TMP)
@@ -878,6 +1014,13 @@ class OutBoundary(unittest.TestCase):
                     self.assertNotIn("out_path", text)
                 self.assertFalse(os.path.exists(os.path.join(ROOT, "zz_probe_out.json")))
                 self.assertFalse(os.path.exists(os.path.join(ROOT, "godot", "zz_probe_out.json")))
+
+    def test_the_junction_limit_of_the_gd_tool_is_written_down(self):
+        gd = open(os.path.join(ROOT, "godot", "tools", "calib_phone.gd"), encoding="utf-8").read()
+        readme = open(os.path.join(ROOT, "phone_src", "calib", "README.txt"), encoding="utf-8").read()
+        for text in (gd.split("const CHUNK_SECONDS")[0], readme):
+            self.assertIn("정션", text)
+            self.assertIn("알려진 한계", text)
 
 
 MARKERS = ("ZQSECRET", "ZQFILE", "ZQMODEL", "ZQDATE", "ZQWORDS")
@@ -1036,6 +1179,58 @@ class WordTimes(unittest.TestCase):
         self.assertLess(raw, 60)
         self.assertGreater(clean, raw)
         self.assertGreaterEqual(clean, 90)
+
+
+class WordTimesAtTheEntry(unittest.TestCase):
+    """D-1 step 1 at the CLI entry: a start / end that is NaN, infinite, null or missing is 0, not an error; w and p are still checked"""
+
+    def test_read_run_turns_unusable_times_into_zero(self):
+        doc = {"clips": [{"id": "a", "ok": True, "duration": 2.0, "text": "",
+                          "words": [{"w": "x", "p": 0.5, "start": float("nan"), "end": float("inf")},
+                                    {"w": "y", "p": 0.5, "start": None, "end": "soon"}, {"w": "z", "p": 0.5}]}]}
+        _h, clips = cf.read_run(dump(doc, "d1_entry.json"), "phone")
+        self.assertEqual([(w["start"], w["end"]) for w in clips["a"]["words"]], [(0.0, 0.0)] * 3)
+
+    def test_w_and_p_are_still_checked(self):
+        for bad in ({"w": "x", "start": 0.0, "end": 1.0}, {"w": 5, "p": 0.5, "start": 0.0, "end": 1.0},
+                    {"w": "x", "p": float("nan"), "start": 0.0, "end": 1.0}, {"w": "x", "p": None, "start": 0.0, "end": 1.0}):
+            doc = {"clips": [{"id": "a", "ok": True, "duration": 2.0, "words": [bad]}]}
+            with self.subTest(bad=str(bad)), self.assertRaises(cf.CalibError):
+                cf.read_run(dump(doc, "d1_bad.json"), "phone")
+
+    def test_the_cli_goes_on_to_cleaning_and_fitting(self):
+        pc, ph = FIX["good"]
+        finite = copy.deepcopy(ph)
+        for c in finite["clips"][:6]:
+            c["words"][0]["start"] = 0.0
+        for label, value in (("nan", float("nan")), ("null", None), ("inf", float("inf")), ("minus_inf", float("-inf"))):
+            bad = copy.deepcopy(ph)
+            for c in bad["clips"][:6]:
+                if value is None:
+                    c["words"][0]["start"] = None
+                else:
+                    c["words"][0]["start"] = value
+            code, out, params, report = run_cli(pc, bad, "d1_" + label)
+            with self.subTest(label):
+                self.assertNotIn("CALIB_FAIL input", out)
+                self.assertIn("score_mae", out)   # the run reached the judging
+                self.assertIn(code, (0, 1))
+            code0, out0, _p0, report0 = run_cli(pc, finite, "d1_zero_" + label)
+            with self.subTest(label + " equals 0.0"):   # the same result as a file that has a 0 there
+                self.assertEqual(open(report, encoding="utf-8").read(), open(report0, encoding="utf-8").read())
+        # a missing start key is the same
+        miss = copy.deepcopy(ph)
+        for c in miss["clips"][:6]:
+            c["words"][0].pop("start")
+        code, out, _p, _r = run_cli(pc, miss, "d1_missing")
+        self.assertNotIn("CALIB_FAIL input", out)
+
+    def test_selfcheck_a_non_number_that_is_not_a_time_problem_still_fails(self):
+        pc, ph = FIX["good"]
+        bad = copy.deepcopy(ph)
+        bad["clips"][0]["words"][0]["p"] = None
+        code, out, _p, _r = run_cli(pc, bad, "d1_pnull")
+        self.assertEqual((code, "CALIB_FAIL input" in out), (1, True))
 
 
 class SentenceGroups(unittest.TestCase):
