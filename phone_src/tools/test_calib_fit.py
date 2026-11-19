@@ -1,0 +1,1426 @@
+# -*- coding: utf-8 -*-
+"""PA5a tests (docs/v201_design.md 2.4 and 5.5): calib_fit.py and the other calibration tools.
+
+  <repo>\\..\\app\\backend\\.venv\\Scripts\\python.exe -I -X utf8 -m unittest discover -s phone_src\\tools -p test_calib_fit.py
+
+Covers: the map rules of docs 2.1 (map_p / map_final / valid_*), isotonic regression (monotone), ok_prob search, the word agreement
+definition, the split by sentence (no leak), the join by clip id (never by position), the gates, final_map, the whole tool on
+synthetic runs (success, bytes repeat, shuffled phone clips, empty / broken / one-sided input, a gate failing, --fit-final), a report
+without any sentence, calib_record (consent, dry run, nothing written), the audio helpers of calib_make_set, and that the server files
+under backend\\ are untouched. The runs are built in memory with the real server `score_en` (this process; no model, no network).
+
+  helper (PA5a-5): python test_calib_fit.py --shuffle-phone <phone.json> <out.json>
+      writes a copy of a phone file whose clip CONTENT is moved to other clip ids (the ids stay): a wrongly paired phone file.
+Every checker also gets wrong input ("selfcheck" tests).
+"""
+import contextlib
+import copy
+import hashlib
+import io
+import json
+import math
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+sys.dont_write_bytecode = True
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))
+BACKEND = os.path.join(ROOT, "backend")
+
+import calib_fit as cf   # noqa: E402
+import calib_make_set as ms   # noqa: E402
+import calib_pc_run as pr   # noqa: E402
+import calib_record as rec   # noqa: E402
+
+
+def backend_state():
+    """(sha256 of every file directly in backend\\, the folder names)"""
+    h = {}
+    for n in sorted(os.listdir(BACKEND)):
+        p = os.path.join(BACKEND, n)
+        if os.path.isfile(p):
+            with open(p, "rb") as f:
+                h[n] = hashlib.sha256(f.read()).hexdigest()
+    return h, sorted(n for n in os.listdir(BACKEND) if os.path.isdir(os.path.join(BACKEND, n)))
+
+
+BACKEND_BEFORE = backend_state()
+S = None
+TMP = None
+FIX = {}
+
+VOCAB = ["apple", "banana", "chair", "table", "water", "river", "green", "yellow", "happy", "music", "window", "garden", "summer",
+         "winter", "school", "teacher", "friend", "coffee", "dinner", "morning", "evening", "pencil", "office", "market", "doctor",
+         "flower", "bridge", "engine", "pocket", "silver", "orange", "purple", "rabbit", "monkey", "basket", "candle", "button",
+         "ticket", "castle", "valley"]
+
+
+def _words(spoken, rng, ps):
+    out, t = [], 0.0
+    for w, p in zip(spoken, ps):
+        out.append({"w": w, "p": round(min(1.0, max(0.0, p)), 4), "start": round(t, 3), "end": round(t + 0.4, 3)})
+        t += 0.45
+    return out
+
+
+def make_fixture(n_sent=40, n_user=12, seed=3, wrong_subs=3, phone_fn=lambda p: p ** 1.8, noise=0.02, voices=("v1", "v2")):
+    """(pc doc, phone doc) built in memory. PC p of a right word 0.6..1.0; the phone's p is phone_fn(p) + noise (a lower, curved scale)"""
+    rng = random.Random(seed)
+    pc_clips, ph_clips = [], []
+
+    def add(sid, voice, variant, target_words, group):
+        target = " ".join(target_words) + "."
+        spoken = list(target_words)
+        subs = set()
+        if variant.endswith("wrong"):
+            subs = set(rng.sample(range(len(spoken)), wrong_subs))
+            for i in subs:
+                spoken[i] = rng.choice([w for w in VOCAB if w not in target_words])
+        ps = [rng.uniform(0.5, 0.95) if i in subs else rng.uniform(0.6, 1.0) for i in range(len(spoken))]
+        pcw = _words(spoken, rng, ps)
+        text = " ".join(spoken)
+        score = S.score_en(target, pcw, text)
+        phw = _words(spoken, rng, [phone_fn(p) + rng.gauss(0, noise) for p in ps])
+        cid = "%s_%s_%s" % (sid, voice, variant)
+        pc_clips.append({"id": cid, "sentence_id": sid, "group": group, "variant": variant, "voice": voice, "target": target,
+                         "text": text, "words": pcw, "duration": 2.5, "score": score})
+        ph_clips.append({"id": cid, "ok": True, "error": "", "text": text, "duration": 2.5, "ms": 100, "words": phw})
+
+    for k in range(n_sent):
+        tw = rng.sample(VOCAB, 5)
+        for v in voices:
+            add("s%03d" % k, v, "clean", tw, "synth")
+            add("s%03d" % k, v, "wrong", tw, "synth")
+    for k in range(n_user):
+        tw = rng.sample(VOCAB, 5)
+        sid = "s%03d" % k if k % 3 == 0 else "u%03d" % k   # some user sentences are also in the synthetic set
+        if k % 3 == 0:
+            tw = [c for c in pc_clips if c["sentence_id"] == sid][0]["target"].rstrip(".").split()
+        add(sid, "user", "user_clean", tw, "user")
+        add(sid, "user", "user_wrong", tw, "user")
+    pc = {"v": 1, "kind": "pc", "date": "2026-11-19", "clips": pc_clips}
+    ph = {"v": 1, "kind": "phone", "model": "ggml-base.en-q5_1.bin", "beam": 1, "clips": ph_clips}
+    return pc, ph
+
+
+def setUpModule():
+    global S, TMP
+    S = cf.load_server()
+    TMP = tempfile.mkdtemp(prefix="hoehwa_calibtest_")
+    FIX["good"] = make_fixture()
+    FIX["one_word"] = make_fixture(wrong_subs=1, seed=5)
+
+
+def tearDownModule():
+    shutil.rmtree(TMP, ignore_errors=True)
+
+
+def dump(obj, name):
+    p = os.path.join(TMP, name)
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(obj, f, ensure_ascii=False)
+    return p
+
+
+def run_cli(pc_doc, ph_doc, tag, extra=()):
+    """the whole tool through main(): (exit code, output text, params path, report path)"""
+    pcp, php = dump(pc_doc, tag + "_pc.json"), dump(ph_doc, tag + "_phone.json")
+    params, report = os.path.join(TMP, tag + "_params.json"), os.path.join(TMP, tag + "_report.json")
+    for p in (params, report):
+        if os.path.exists(p):
+            os.remove(p)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = cf.main(["--pc", pcp, "--phone", php, "--out-params", params, "--report", report] + list(extra))
+    return code, buf.getvalue(), params, report
+
+
+def shuffled_phone(ph_doc):
+    """the clip content moved to other ids (half a turn around the sorted ids), the ids stay"""
+    d = copy.deepcopy(ph_doc)
+    ids = [c["id"] for c in d["clips"]]
+    body = [{k: v for k, v in c.items() if k != "id"} for c in d["clips"]]
+    k = max(1, len(body) // 2)
+    body = body[k:] + body[:k]
+    d["clips"] = [dict(b, id=i) for i, b in zip(ids, body)]
+    return d
+
+
+# ================================================================================================ the map rules (docs 2.1)
+class MapRules(unittest.TestCase):
+    def test_map_p_identity_and_linear(self):
+        ident = [[0.0, 0.0], [1.0, 1.0]]
+        for p in (0.0, 0.13, 0.5, 0.99, 1.0):
+            self.assertAlmostEqual(cf.map_p(p, ident), p)
+        m = [[0.0, 0.0], [0.5, 0.2], [1.0, 1.0]]
+        self.assertAlmostEqual(cf.map_p(0.25, m), 0.1)         # t = 0.5 inside the first segment
+        self.assertAlmostEqual(cf.map_p(0.75, m), 0.6)         # y = 0.2 + 0.8 * 0.5
+
+    def test_map_p_follows_the_sentence_of_the_design(self):
+        rng = random.Random(1)
+        for _ in range(50):
+            xs = sorted(rng.sample([i / 20.0 for i in range(1, 20)], 3))
+            ys = sorted(rng.uniform(0, 1) for _ in range(5))
+            m = [[0.0, ys[0]], [xs[0], ys[1]], [xs[1], ys[2]], [xs[2], ys[3]], [1.0, ys[4]]]
+            p = rng.uniform(0, 1)
+            for (x0, y0), (x1, y1) in zip(m, m[1:]):
+                if x0 <= p <= x1:
+                    t = (p - x0) / (x1 - x0)
+                    self.assertAlmostEqual(cf.map_p(p, m), y0 + (y1 - y0) * t, places=9)
+                    break
+
+    def test_map_p_end_values_outside_and_nan(self):
+        m = [[0.0, 0.1], [1.0, 0.9]]
+        self.assertAlmostEqual(cf.map_p(-5.0, m), 0.1)
+        self.assertAlmostEqual(cf.map_p(7.0, m), 0.9)
+        self.assertAlmostEqual(cf.map_p(float("nan"), m), 0.1)   # NaN is 0
+        self.assertAlmostEqual(cf.map_p(None, m), 0.1)
+        self.assertAlmostEqual(cf.map_p(float("inf"), m), 0.1)   # not a finite number -> 0
+
+    def test_map_p_invalid_map_leaves_p_alone(self):
+        for bad in (None, [], [[0, 0]], [[0, 0.5], [1, 0.2]], "x"):
+            self.assertAlmostEqual(cf.map_p(0.37, bad), 0.37)
+
+    def test_valid_p_map_rejects(self):
+        bad = {
+            "not a list": None, "one point": [[0.0, 0.0]], "33 points": [[i / 32.0, i / 32.0] for i in range(33)],
+            "no x 0": [[0.1, 0.0], [1.0, 1.0]], "no x 1": [[0.0, 0.0], [0.9, 1.0]], "x twice": [[0.0, 0.0], [0.5, 0.5], [0.5, 0.6], [1.0, 1.0]],
+            "x down": [[0.0, 0.0], [0.6, 0.5], [0.5, 0.6], [1.0, 1.0]], "y down": [[0.0, 0.0], [0.5, 0.6], [0.7, 0.5], [1.0, 1.0]],
+            "y above 1": [[0.0, 0.0], [1.0, 1.2]], "y below 0": [[0.0, -0.1], [1.0, 1.0]], "x above 1": [[0.0, 0.0], [1.0, 1.0], [1.5, 1.0]],
+            "pair of 3": [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]], "text": [["a", "b"], ["c", "d"]], "bool": [[True, 0], [1, 1]],
+            "nan": [[0.0, 0.0], [1.0, float("nan")]],
+        }
+        for name, m in bad.items():
+            with self.subTest(name):
+                self.assertFalse(cf.valid_p_map(m))
+
+    def test_valid_p_map_accepts(self):
+        self.assertTrue(cf.valid_p_map([[x, x] for x in cf.P_MAP_X]))
+        self.assertTrue(cf.valid_p_map([[0.0, 0.5], [1.0, 0.5]]))           # flat is allowed (non-decreasing)
+        self.assertTrue(cf.valid_p_map([[i / 31.0, i / 31.0] for i in range(32)]))   # 32 points
+
+    def test_map_final_rounding_and_clamp(self):
+        m = [[0, 0], [50, 70], [100, 100]]
+        self.assertEqual(cf.map_final(50, m), 70)
+        self.assertEqual(cf.map_final(25, m), 35)
+        self.assertEqual(cf.map_final(75, m), 85)
+        self.assertEqual(cf.map_final(1, [[0, 0], [100, 50]]), 1)       # 0.5 rounds up (floor(y + 0.5))
+        self.assertEqual(cf.map_final(3, [[0, 0], [100, 50]]), 2)       # 1.5 -> 2
+        self.assertEqual(cf.map_final(150, m), 100)
+        self.assertEqual(cf.map_final(-4, m), 0)
+        self.assertEqual(cf.map_final(60, None), 60)                     # not valid: the score stays
+        self.assertEqual(cf.map_final(160, "x"), 100)
+
+    def test_valid_final_map(self):
+        self.assertTrue(cf.valid_final_map([[0, 0], [100, 100]]))
+        self.assertTrue(cf.valid_final_map([[0, 0], [69, 69], [70, 70], [100, 100]]))
+        for m in (None, [[0, 0]], [[0, 0], [90, 100]], [[5, 0], [100, 100]], [[0, 0], [50, 80], [60, 70], [100, 100]],
+                  [[0, 0], [100, 120]], [[0, 0], [0, 10], [100, 100]]):
+            self.assertFalse(cf.valid_final_map(m), m)
+
+
+# ================================================================================================ fitting
+class Fitting(unittest.TestCase):
+    def test_isotonic_blocks_monotone_on_noisy_data(self):
+        for seed in range(30):
+            rng = random.Random(seed)
+            pts = [(rng.uniform(0, 1), rng.uniform(0, 1), 1.0) for _ in range(60)]
+            blocks = cf.isotonic_blocks(pts)
+            ys = [y for _x, y in blocks]
+            xs = [x for x, _y in blocks]
+            self.assertEqual(ys, sorted(ys), "seed %d: y not non-decreasing" % seed)
+            self.assertEqual(xs, sorted(xs))
+
+    def test_isotonic_exact_on_monotone_data_and_pools_a_violation(self):
+        pts = [(0.1, 0.1, 1.0), (0.4, 0.5, 1.0), (0.8, 0.9, 1.0)]
+        self.assertEqual([(round(x, 6), round(y, 6)) for x, y in cf.isotonic_blocks(pts)], [(0.1, 0.1), (0.4, 0.5), (0.8, 0.9)])
+        out = cf.isotonic_blocks([(1.0, 5.0, 1.0), (2.0, 1.0, 1.0)])
+        self.assertEqual(len(out), 1)
+        self.assertAlmostEqual(out[0][0], 1.5)
+        self.assertAlmostEqual(out[0][1], 3.0)
+
+    def test_selfcheck_isotonic_checker_sees_a_decreasing_fit(self):
+        self.assertNotEqual([3.0, 1.0], sorted([3.0, 1.0]))   # the check used above (ys == sorted(ys)) fails on a decreasing list
+
+    def test_fit_p_map_recovers_a_known_curve(self):
+        rng = random.Random(4)
+        pairs = []
+        for _ in range(600):
+            pc_p = rng.uniform(0.2, 1.0)
+            pairs.append((pc_p ** 2, pc_p))   # the phone scale is the square: the map must be the square root
+        m = cf.fit_p_map(pairs)
+        self.assertTrue(cf.valid_p_map(m))
+        self.assertEqual([x for x, _y in m], cf.P_MAP_X)
+        for x, y in m:
+            if 0.1 <= x <= 0.9:
+                self.assertAlmostEqual(y, math.sqrt(x), delta=0.05, msg="x=%s" % x)
+
+    def test_fit_p_map_always_valid_for_random_pairs(self):
+        for seed in range(25):
+            rng = random.Random(seed)
+            pairs = [(rng.uniform(0, 1), rng.uniform(0, 1)) for _ in range(rng.randint(10, 80))]
+            self.assertTrue(cf.valid_p_map(cf.fit_p_map(pairs)), "seed %d" % seed)
+
+    def test_fit_p_map_needs_data(self):
+        with self.assertRaises(cf.CalibError) as cm:
+            cf.fit_p_map([(0.5, 0.5)] * 3)
+        self.assertEqual(cm.exception.code, "data")
+
+    def test_fit_ok_prob_finds_the_threshold(self):
+        ident = [[0.0, 0.0], [1.0, 1.0]]
+        ps = [i / 20.0 for i in range(1, 21)]
+        wrows = [([p >= 0.55 for p in ps], list(ps))]
+        t = cf.fit_ok_prob(wrows, ident)
+        self.assertTrue(0.51 <= t <= 0.55, t)
+        self.assertEqual(cf.ok_agreement([(a, p >= t) for a, p in zip(wrows[0][0], ps)]), 1.0)
+
+    def test_fit_ok_prob_tie_goes_to_045_and_missing_words_count_as_not_ok(self):
+        ident = [[0.0, 0.0], [1.0, 1.0]]
+        self.assertEqual(cf.fit_ok_prob([([True, True], [1.0, 0.99])], ident), 0.45)
+        # a word the phone did not match (None) is not ok on the phone side: PC ok=False agrees, PC ok=True does not
+        t = cf.fit_ok_prob([([False, False, True], [None, 0.2, 0.9])], ident)
+        self.assertTrue(0.21 <= t <= 0.79)
+        self.assertEqual(cf.fit_ok_prob([([False, False], [None, None])], ident), 0.45)
+
+    def test_ok_agreement_definition(self):
+        self.assertEqual(cf.ok_agreement([(True, True), (True, False), (False, False), (False, True)]), 0.5)
+        self.assertEqual(cf.ok_agreement([(True, True)] * 3), 1.0)
+        self.assertEqual(cf.ok_agreement([]), 0.0)
+        self.assertEqual(cf.ok_agreement([(True, False)] * 4), 0.0)   # selfcheck: a checker that only says 1.0 would fail here
+
+    def test_wilson_and_percentile(self):
+        lo, hi = cf.wilson(85, 100)
+        self.assertTrue(0.76 < lo < 0.80 and 0.89 < hi < 0.93, (lo, hi))
+        self.assertEqual(cf.wilson(0, 0), [0.0, 1.0])
+        self.assertEqual(cf.percentile90(list(range(1, 11))), 9)    # rank ceil(0.9 * 10) = 9
+        self.assertEqual(cf.percentile90([5]), 5)
+        self.assertIsNone(cf.percentile90([]))
+
+    def test_model_id_from_file(self):
+        self.assertEqual(cf.model_id_from_file("ggml-base.en-q5_1.bin"), "whisper-base.en-q5_1")
+        self.assertEqual(cf.model_id_from_file("C:\\x\\ggml-tiny.en-q5_1.bin"), "whisper-tiny.en-q5_1")
+        self.assertEqual(cf.model_id_from_file(""), "")
+
+
+# ================================================================================================ split, join, files
+class SplitAndJoin(unittest.TestCase):
+    def rows(self, doc=None):
+        pc, ph = doc or FIX["good"]
+        pcm = {c["id"]: dict(c, sentence_id=str(c["sentence_id"])) for c in pc["clips"]}
+        phm = {c["id"]: c for c in ph["clips"]}
+        return cf.join_clips(pcm, phm)
+
+    def test_split_no_sentence_on_both_sides(self):
+        rows = self.rows()
+        train, held = cf.split_sentences(rows, 7, 0.3)
+        a = {r[0]["sentence_id"] for r in train}
+        b = {r[0]["sentence_id"] for r in held}
+        self.assertTrue(a and b)
+        self.assertEqual(a & b, set())
+        self.assertEqual(len(train) + len(held), len(rows))
+
+    def test_split_is_by_sentence_across_groups(self):
+        rows = self.rows()
+        train, held = cf.split_sentences(rows, 7, 0.3)
+        for side in (train, held):
+            for sid in {r[0]["sentence_id"] for r in side}:
+                same = [r for r in rows if r[0]["sentence_id"] == sid]
+                self.assertTrue(all(r in side for r in same), "sentence %s is on both sides" % sid)
+
+    def test_split_deterministic_and_seed_dependent(self):
+        rows = self.rows()
+        a = cf.split_sentences(rows, 7, 0.3)
+        b = cf.split_sentences(rows, 7, 0.3)
+        c = cf.split_sentences(rows, 8, 0.3)
+        ids = lambda x: sorted(r[0]["id"] for r in x[1])
+        self.assertEqual(ids(a), ids(b))
+        self.assertNotEqual(ids(a), ids(c))
+
+    def test_split_fraction(self):
+        rows = self.rows()
+        sents = {r[0]["sentence_id"] for r in rows}
+        _t, held = cf.split_sentences(rows, 7, 0.3)
+        self.assertEqual(len({r[0]["sentence_id"] for r in held}), int(round(len(sents) * 0.3)))
+
+    def test_split_needs_two_sentences(self):
+        rows = [r for r in self.rows() if r[0]["sentence_id"] == "s001"]
+        with self.assertRaises(cf.CalibError):
+            cf.split_sentences(rows, 7, 0.3)
+
+    def test_join_is_by_id_not_by_position(self):
+        pc, ph = FIX["good"]
+        pcm = {c["id"]: dict(c, sentence_id=str(c["sentence_id"])) for c in pc["clips"]}
+        phm = {c["id"]: c for c in reversed(ph["clips"])}   # the file order is reversed; the ids still match
+        rows = cf.join_clips(pcm, phm)
+        self.assertTrue(all(a["id"] == b["id"] for a, b in rows))
+        self.assertEqual(len(rows), len(pc["clips"]))
+
+    def test_join_one_side_only_is_an_error(self):
+        pc, ph = FIX["good"]
+        pcm = {c["id"]: dict(c) for c in pc["clips"]}
+        phm = {c["id"]: c for c in ph["clips"][1:]}
+        with self.assertRaises(cf.CalibError) as cm:
+            cf.join_clips(pcm, phm)
+        self.assertEqual(cm.exception.code, "pairing")
+
+    def test_read_run_rejects_bad_files(self):
+        pc, ph = FIX["good"]
+        cases = {
+            "broken json": "{not json",
+            "no clips": json.dumps({"v": 1}),
+            "clips not a list": json.dumps({"clips": 3}),
+        }
+        for name, txt in cases.items():
+            p = os.path.join(TMP, "bad_%s.json" % name.replace(" ", "_"))
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(txt)
+            with self.subTest(name), self.assertRaises(cf.CalibError):
+                cf.read_run(p, "phone")
+        dup = copy.deepcopy(ph)
+        dup["clips"].append(copy.deepcopy(dup["clips"][0]))
+        badword = copy.deepcopy(ph)
+        badword["clips"][0]["words"][0].pop("p")
+        for name, doc in (("duplicate id", dup), ("word without p", badword)):
+            with self.subTest(name), self.assertRaises(cf.CalibError):
+                cf.read_run(dump(doc, "bad2.json"), "phone")
+        badunit = copy.deepcopy(pc)
+        badunit["clips"][0]["score"]["units"][0].pop("ok")
+        with self.assertRaises(cf.CalibError):
+            cf.read_run(dump(badunit, "bad3.json"), "pc")
+
+    def test_pair_agreement_high_for_the_same_clips_and_low_for_shuffled(self):
+        pc, ph = FIX["good"]
+        pcm = {c["id"]: dict(c, sentence_id=str(c["sentence_id"])) for c in pc["clips"]}
+        good = cf.join_clips(pcm, {c["id"]: c for c in ph["clips"]})
+        bad = cf.join_clips(pcm, {c["id"]: c for c in shuffled_phone(ph)["clips"]})
+        a, b = cf.pair_agreement(S, good), cf.pair_agreement(S, bad)
+        self.assertGreater(a, 0.9)
+        self.assertLess(b, cf.MIN_PAIR_AGREEMENT)
+        self.assertEqual(cf.pair_agreement(S, []), 0.0)
+
+
+# ================================================================================================ gates
+class Gates(unittest.TestCase):
+    GOOD = {"ok_agree_synth": 0.9, "ok_agree_user": 0.85, "score_mae": 5.0, "score_p90": 12.0, "fluency_mae": 8.0,
+            "wrong_lower_pairs": 0.97, "wrong_pass_rate": 0.05, "clean_fail_rate": 0.04}
+    BAD = {"ok_agree_synth": 0.84, "ok_agree_user": 0.79, "score_mae": 10.5, "score_p90": 20.5, "fluency_mae": 15.5,
+           "wrong_lower_pairs": 0.94, "wrong_pass_rate": 0.11, "clean_fail_rate": 0.11}
+
+    def test_all_good_passes(self):
+        r = cf.judge(self.GOOD, {"synth", "user"})
+        self.assertEqual([g["result"] for g in r], ["OK"] * 8)
+
+    def test_each_gate_fails_alone(self):
+        for name, bad in self.BAD.items():
+            m = dict(self.GOOD)
+            m[name] = bad
+            r = {g["name"]: g["result"] for g in cf.judge(m, {"synth", "user"})}
+            self.assertEqual([k for k, v in r.items() if v == "FAIL"], [name])
+
+    def test_the_limits_themselves_pass(self):
+        m = {"ok_agree_synth": 0.85, "ok_agree_user": 0.80, "score_mae": 10.0, "score_p90": 20.0, "fluency_mae": 15.0,
+             "wrong_lower_pairs": 0.95, "wrong_pass_rate": 0.10, "clean_fail_rate": 0.10}
+        self.assertEqual([g["result"] for g in cf.judge(m, {"synth", "user"})], ["OK"] * 8)
+
+    def test_no_gate_can_be_waived(self):
+        import inspect
+        self.assertEqual(list(inspect.signature(cf.judge).parameters), ["metrics", "groups_present"])   # D-2: no waiver argument
+        self.assertFalse(hasattr(cf, "FINAL_MAP_WAIVES"))
+        m = dict(self.GOOD, score_mae=99.0, score_p90=99.0)
+        r = {g["name"]: g["result"] for g in cf.judge(m, {"synth", "user"})}
+        self.assertEqual((r["score_mae"], r["score_p90"]), ("FAIL", "FAIL"))
+        self.assertNotIn("WAIVED", open(os.path.join(HERE, "calib_fit.py"), encoding="utf-8").read().split("def judge")[1].split("def model_id")[0])
+
+    def test_missing_group_is_skipped_but_missing_data_in_a_present_group_fails(self):
+        m = dict(self.GOOD, ok_agree_user=None)
+        r = {g["name"]: g["result"] for g in cf.judge(m, {"synth"})}
+        self.assertEqual(r["ok_agree_user"], "SKIP")
+        r = {g["name"]: g["result"] for g in cf.judge(m, {"synth", "user"})}
+        self.assertEqual(r["ok_agree_user"], "FAIL")
+        r = {g["name"]: g["result"] for g in cf.judge(dict(self.GOOD, wrong_lower_pairs=None), {"synth", "user"})}
+        self.assertEqual(r["wrong_lower_pairs"], "FAIL")   # not measured is not passed
+
+
+# ================================================================================================ final_map (the last fallback)
+class FinalMap(unittest.TestCase):
+    def rows(self, doc):
+        pc, ph = doc
+        pcm = {c["id"]: dict(c, sentence_id=str(c["sentence_id"])) for c in pc["clips"]}
+        return cf.join_clips(pcm, {c["id"]: c for c in ph["clips"]})
+
+    def test_fit_final_map_separates_clean_from_wrong_and_is_monotone(self):
+        rows = self.rows(FIX["one_word"])
+        pairs = cf.matched_pairs(S, rows)
+        p_map = cf.fit_p_map(pairs)
+        ok_prob = cf.fit_ok_prob(cf.word_rows(S, rows), p_map)
+        base = cf.evaluate(S, rows, p_map, ok_prob, None)
+        self.assertGreater(base["wrong_pass_rate"], 0.5, "the fixture must need the fallback")
+        m = cf.fit_final_map(S, rows, p_map, ok_prob)
+        self.assertIsNotNone(m)
+        self.assertTrue(cf.valid_final_map(m))
+        ys = [y for _x, y in m]
+        self.assertEqual(ys, sorted(ys))
+        after = cf.evaluate(S, rows, p_map, ok_prob, m)
+        self.assertLessEqual(after["wrong_pass_rate"], 0.10)
+        self.assertLessEqual(after["clean_fail_rate"], 0.10)
+
+    def test_fit_final_map_none_when_clean_and_wrong_cannot_be_separated(self):
+        pc, ph = copy.deepcopy(FIX["one_word"])
+        pcb = {c["id"]: c for c in pc["clips"]}
+        phb = {c["id"]: c for c in ph["clips"]}
+        # every "wrong" clip becomes a copy of its clean twin (same words, same score): no step can split them
+        for cid in list(pcb):
+            if pcb[cid]["variant"].endswith("wrong"):
+                twin = cid[:-5] + "clean"
+                pcb[cid] = dict(copy.deepcopy(pcb[twin]), id=cid, variant=pcb[cid]["variant"])
+                phb[cid] = dict(copy.deepcopy(phb[twin]), id=cid)
+        pc["clips"], ph["clips"] = list(pcb.values()), list(phb.values())
+        rows = self.rows((pc, ph))
+        self.assertIsNone(cf.fit_final_map(S, rows, [[0.0, 0.0], [1.0, 1.0]], 0.45))
+
+
+# ================================================================================================ the whole tool
+class WholeTool(unittest.TestCase):
+    def test_success_writes_valid_params_and_a_numbers_only_report(self):
+        code, out, params, report = run_cli(*FIX["good"], "good")
+        self.assertEqual(code, 0, out)
+        self.assertIn("CALIB_OK", out)
+        p = json.load(open(params, encoding="utf-8"))
+        self.assertEqual(p["v"], 1)
+        self.assertEqual(p["model_id"], "whisper-base.en-q5_1")
+        self.assertIs(p["calibrated"], True)
+        self.assertIn(p["beam"], (1, 2, 3))
+        self.assertTrue(0.2 < p["ok_prob"] < 0.8)
+        self.assertTrue(cf.valid_p_map(p["p_map"]))
+        self.assertTrue(cf.valid_final_map(p["final_map"]))
+        self.assertEqual(p["date"], "2026-11-19")
+        for k in ("synth_clips", "user_clips", "ok_agree_synth", "ok_agree_user", "score_mae", "score_p90", "fluency_mae",
+                  "wrong_lower_pairs", "wrong_pass_rate", "clean_fail_rate", "fallback"):
+            self.assertIn(k, p["report"])
+        self.assertEqual(p["report"]["fallback"], "none")
+        r = json.load(open(report, encoding="utf-8"))
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["failed"], [])
+        self.assertEqual(r["clips"]["total"], len(FIX["good"][0]["clips"]))
+        self.assertTrue(all(g["result"] in ("OK", "SKIP") for g in r["gates"]))
+
+    def test_same_input_same_seed_same_bytes(self):
+        _c, _o, p1, _r = run_cli(*FIX["good"], "rep1")
+        _c, _o, p2, _r = run_cli(*FIX["good"], "rep2")
+        self.assertEqual(open(p1, "rb").read(), open(p2, "rb").read())
+
+    def test_another_seed_may_split_differently_but_still_runs(self):
+        code, out, params, _r = run_cli(*FIX["good"], "seed9", ("--seed", "9"))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(os.path.exists(params))
+
+    def test_phone_clips_in_another_order_give_the_same_result(self):
+        pc, ph = FIX["good"]
+        rev = copy.deepcopy(ph)
+        rev["clips"] = list(reversed(rev["clips"]))
+        _c, _o, p1, _r = run_cli(pc, ph, "ord1")
+        c2, o2, p2, _r = run_cli(pc, rev, "ord2")
+        self.assertEqual(c2, 0, o2)
+        self.assertEqual(open(p1, "rb").read(), open(p2, "rb").read())   # joined by id: the file order does not matter
+
+    def test_shuffled_phone_clips_fail_with_agreement_and_no_params(self):
+        pc, ph = FIX["good"]
+        code, out, params, report = run_cli(pc, shuffled_phone(ph), "shuf")
+        self.assertEqual(code, 1)
+        self.assertIn("CALIB_FAIL agreement", out)
+        self.assertFalse(os.path.exists(params))
+
+    def test_empty_and_broken_and_one_sided_input_exit_1(self):
+        pc, ph = FIX["good"]
+        e1 = dict(pc, clips=[])
+        e2 = dict(ph, clips=[])
+        for name, (a, b, word) in {
+            "both empty": (e1, e2, "CALIB_FAIL data"),
+            "phone empty": (pc, e2, "CALIB_FAIL pairing"),
+            "pc empty": (e1, ph, "CALIB_FAIL pairing"),
+            "empty object": ({}, {}, "CALIB_FAIL input"),
+            "one clip only on the pc side": (pc, dict(ph, clips=ph["clips"][1:]), "CALIB_FAIL pairing"),
+            "one clip only on the phone side": (dict(pc, clips=pc["clips"][1:]), ph, "CALIB_FAIL pairing"),
+        }.items():
+            with self.subTest(name):
+                code, out, params, report = run_cli(a, b, "emp")
+                self.assertEqual(code, 1, out)
+                self.assertIn(word, out)
+                self.assertFalse(os.path.exists(params))
+
+    def test_broken_json_file_exits_1(self):
+        pcp = os.path.join(TMP, "brk_pc.json")
+        with open(pcp, "w", encoding="utf-8") as f:
+            f.write("{\"clips\": [")
+        php = dump(FIX["good"][1], "brk_phone.json")
+        params = os.path.join(TMP, "brk_params.json")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = cf.main(["--pc", pcp, "--phone", php, "--out-params", params, "--report", os.path.join(TMP, "brk_rep.json")])
+        self.assertEqual(code, 1)
+        self.assertIn("CALIB_FAIL input", buf.getvalue())
+        self.assertFalse(os.path.exists(params))
+
+    def test_a_gate_below_its_limit_fails_and_writes_no_params(self):
+        pc, ph = FIX["good"]
+        bad = copy.deepcopy(ph)
+        for c in bad["clips"]:   # the phone misses two of the five words in every clip (the clips still pair: 3 of 5 words agree)
+            c["words"] = [w for i, w in enumerate(c["words"]) if i not in (1, 3)]
+        code, out, params, report = run_cli(pc, bad, "gatefail")
+        self.assertEqual(code, 1, out)
+        self.assertIn("CALIB_FAIL ", out)
+        self.assertNotIn("CALIB_FAIL agreement", out)
+        self.assertFalse(os.path.exists(params))
+        r = json.load(open(report, encoding="utf-8"))
+        self.assertEqual(r["status"], "fail")
+        self.assertTrue(r["failed"])
+
+    def test_fit_final_is_judged_like_everything_else(self):
+        pc, ph = FIX["one_word"]
+        code, out, params, report = run_cli(pc, ph, "onew")
+        self.assertEqual(code, 1, out)
+        self.assertIn("wrong_pass_rate", out)
+        code, out, params, report = run_cli(pc, ph, "onew_ff", ("--fit-final",))
+        r = json.load(open(report, encoding="utf-8"))
+        self.assertNotIn("WAIVED", open(report, encoding="utf-8").read())
+        self.assertEqual({g["name"]: g["result"] for g in r["gates"]}["wrong_pass_rate"], "OK")
+        self.assertIsNotNone(r["fit"]["final_map"])
+        self.assertTrue(cf.valid_final_map(r["fit"]["final_map"]))
+        if code == 0:   # every gate (the two score distances too) passed on this data
+            p = json.load(open(params, encoding="utf-8"))
+            self.assertEqual(p["report"]["fallback"], "final_map")
+            self.assertNotEqual(p["final_map"], [[0, 0], [100, 100]])
+        else:   # a gate under its limit: CALIB_FAIL and no params file (nothing is excused)
+            self.assertIn("CALIB_FAIL ", out)
+            self.assertFalse(os.path.exists(params))
+
+    def test_fit_final_with_score_distance_over_the_limit_fails(self):
+        # the map must not excuse a score distance: a copy of the data whose PC scores are 15 points higher than the phone's
+        pc, ph = copy.deepcopy(FIX["good"])
+        for c in pc["clips"]:
+            c["score"]["score"] = min(100, c["score"]["score"] + 15) if c["score"]["score"] < 80 else c["score"]["score"] - 15
+        code, out, params, report = run_cli(pc, ph, "dist_ff", ("--fit-final",))
+        self.assertEqual(code, 1, out)
+        self.assertIn("score_mae", out)
+        self.assertFalse(os.path.exists(params))
+        self.assertNotIn("WAIVED", out)
+
+    def test_beam_other_than_one_is_recorded_as_the_beam_fallback(self):
+        pc, ph = FIX["good"]
+        ph2 = dict(ph, beam=2)
+        code, out, params, _r = run_cli(pc, ph2, "beam2")
+        self.assertEqual(code, 0, out)
+        p = json.load(open(params, encoding="utf-8"))
+        self.assertEqual((p["beam"], p["report"]["fallback"]), (2, "beam"))
+        code, out, _p, _r = run_cli(pc, dict(ph, beam=7), "beam7")
+        self.assertEqual(code, 1)
+
+    def test_report_holds_no_sentence_and_no_word_of_one(self):
+        _c, _o, params, report = run_cli(*FIX["good"], "priv")
+        text = open(report, encoding="utf-8").read() + open(params, encoding="utf-8").read()
+        hits = [w for w in VOCAB if re.search(r"\b%s\b" % w, text)]
+        self.assertEqual(hits, [])
+        self.assertFalse(re.search(r"[A-Za-z]{3,} [A-Za-z]{3,} [A-Za-z]{3,}", text))
+        # selfcheck: the same scan finds a sentence when there is one
+        self.assertTrue(re.search(r"[A-Za-z]{3,} [A-Za-z]{3,} [A-Za-z]{3,}", "the quick brown fox"))
+
+    def test_ok_prob_constant_of_the_server_is_put_back(self):
+        before = S.OK_PROB
+        run_cli(*FIX["good"], "okp")
+        self.assertEqual(S.OK_PROB, before)
+        with cf.ok_prob_as(S, 0.3):
+            self.assertEqual(S.OK_PROB, 0.3)
+        self.assertEqual(S.OK_PROB, before)
+
+    def test_usage_errors_exit_2(self):
+        for argv in ([], ["--pc", "a.json"], ["--pc", "a", "--phone", "b", "--out-params", "c", "--report", "d", "--holdout", "1.5"]):
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                    code = cf.main(argv)
+            except SystemExit as e:
+                code = e.code
+            self.assertEqual(code, 2, argv)
+
+    def test_command_line_exit_code_and_missing_output_argument(self):
+        r = subprocess.run([sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "calib_fit.py")], capture_output=True)
+        self.assertEqual(r.returncode, 2)
+        r = subprocess.run([sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "calib_fit.py"), "--pc", os.path.join(TMP, "nope.json"),
+                            "--phone", os.path.join(TMP, "nope2.json"), "--out-params", os.path.join(TMP, "x_params.json"),
+                            "--report", os.path.join(TMP, "x_rep.json")], capture_output=True)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(b"CALIB_FAIL input", r.stdout)
+
+
+# ================================================================================================ calib_record, calib_make_set, calib_pc_run
+class OtherTools(unittest.TestCase):
+    def test_pool_and_choose_wrong_are_deterministic_and_valid(self):
+        pool = ms.load_pool()
+        self.assertGreaterEqual(len(pool), 200)
+        for sid, text in pool[:50]:
+            self.assertTrue(3 <= len(text.split()) <= 10)
+        a = ms.pick_sentences(pool, 20, 7)
+        self.assertEqual(a, ms.pick_sentences(pool, 20, 7))
+        self.assertNotEqual(a, ms.pick_sentences(pool, 20, 8))
+        vocab = ms.vocabulary(pool)
+        for sid, text in a:
+            wrong, spoken = ms.choose_wrong(text, random.Random(5), vocab)
+            toks, stoks = text.split(), spoken.split()
+            self.assertEqual(len(toks), len(stoks))
+            diff = [i for i in range(len(toks)) if toks[i] != stoks[i]]
+            self.assertEqual(diff, [wrong["index"]])
+            self.assertNotEqual(wrong["said"], re.sub(r"[^a-z']", "", toks[wrong["index"]].lower()))
+        w1 = ms.choose_wrong(a[0][1], random.Random(5), vocab)
+        self.assertEqual(w1, ms.choose_wrong(a[0][1], random.Random(5), vocab))
+
+    def test_audio_helpers(self):
+        import numpy as np
+        import soundfile as sf
+        x = np.sin(np.linspace(0, 400 * math.pi, 16000)).astype(np.float32) * 0.5
+        for snr in (20.0, 10.0):
+            y = ms.add_noise(x, snr, 123)
+            noise = y - x
+            got = 10 * math.log10(float(np.mean(x ** 2)) / float(np.mean(noise ** 2)))
+            self.assertAlmostEqual(got, snr, delta=0.3)
+            self.assertTrue(np.array_equal(y, ms.add_noise(x, snr, 123)))
+        self.assertEqual(len(ms.band_limit_8k(x)), len(x))
+        path = os.path.join(TMP, "a.wav")
+        secs = ms.write_wav16(path, x)
+        self.assertAlmostEqual(secs, 1.0)
+        data, sr = sf.read(path, dtype="int16")
+        self.assertEqual((sr, data.ndim), (16000, 1))
+        self.assertEqual(len(ms.add_noise(np.zeros(0, dtype=np.float32), 10.0, 1)), 0)
+
+    def test_pc_run_manifest_checks(self):
+        d = os.path.join(TMP, "mset")
+        os.makedirs(os.path.join(d, "clips"), exist_ok=True)
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            f.write("{bad")
+        with self.assertRaises(pr.PcRunError):
+            pr.read_manifest(d)
+        ok = {"clips": [{"clip": "a", "file": "clips/a.wav", "target": "x y z", "sha256": "00", "sentence_id": "1"}]}
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(ok, f)
+        self.assertEqual(len(pr.read_manifest(d)["clips"]), 1)
+        ok["clips"].append(dict(ok["clips"][0]))   # the same clip id twice
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(ok, f)
+        with self.assertRaises(pr.PcRunError):
+            pr.read_manifest(d)
+        # a clip file that does not match its sha256 stops the run before the model loads
+        ok["clips"] = ok["clips"][:1]
+        with open(os.path.join(d, "clips", "a.wav"), "wb") as f:
+            f.write(b"RIFFxxxx")
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(ok, f)
+        with self.assertRaises(pr.PcRunError) as cm:
+            pr.run(d, os.path.join(TMP, "never.json"), out=lambda *_: None)
+        self.assertEqual(str(cm.exception), "sha256")
+        self.assertFalse(os.path.exists(os.path.join(TMP, "never.json")))
+
+    def test_record_dry_run_shows_consent_and_30_sentences_and_writes_nothing(self):
+        lines = []
+        out_dir = os.path.join(TMP, "rec_dry_unit")
+        code = rec.run(out_dir, True, 11, input_fn=lambda *_: self.fail("a dry run must not ask anything"),
+                       recorder=lambda *_: self.fail("a dry run must not record"), out=lines.append)
+        self.assertEqual(code, 0)
+        text = "\n".join(lines)
+        self.assertIn(rec.CONSENT_TEXT, text)
+        self.assertEqual(len(re.findall(r"^문장 \d\d/30$", text, re.M)), 30)
+        self.assertFalse(os.path.exists(out_dir))
+        for frag in ("영어 문장 30개를", "한 번은 바르게", "화면이 알려 주는 낱말 하나를 바꿔서 읽어요(약 8분)",
+                     "이 PC 의 임시 폴더에만 저장되고 저장소·인터넷으로 나가지 않아요", "보정이 끝나면 지워요(원하면 보관)", "시작할까요? (y/n)"):
+            self.assertIn(frag, rec.CONSENT_TEXT)
+
+    def test_record_needs_y_and_keeps_only_what_the_user_agreed_to(self):
+        import numpy as np
+        out_dir = os.path.join(TMP, "rec_no")
+        lines = []
+        code = rec.run(out_dir, False, 11, input_fn=lambda *_: "n", recorder=lambda *_: self.fail("no recording without consent"),
+                       out=lines.append)
+        self.assertEqual(code, 1)
+        self.assertFalse(os.path.exists(out_dir))
+        for answer in ("", "yes", "no", "ja", "Y", "YES", "Yes", " Y ", "y es", "yy", "\u3161"):
+            d = os.path.join(TMP, "rec_no_%s" % (answer or "empty"))
+            self.assertEqual(rec.run(d, False, 11, input_fn=lambda *_, a=answer: a, recorder=lambda *_: self.fail("x"), out=lambda *_: None), 1)
+            self.assertFalse(os.path.exists(d))
+        # consent given, 'q' after 3 clips: the three clips are kept with a manifest that records the consent
+        out_dir = os.path.join(TMP, "rec_yes")
+        answers = iter(["y"] + ["", ""] * 3 + ["q"])   # consent, three clips (start + next each), then q at the fourth
+        samples = (np.sin(np.linspace(0, 200 * math.pi, 16000 * 6)) * 12000).astype(np.int16)
+        code = rec.run(out_dir, False, 11, input_fn=lambda *_: next(answers), recorder=lambda *_: samples, out=lambda *_: None)
+        self.assertEqual(code, 0)
+        m = json.load(open(os.path.join(out_dir, "manifest.json"), encoding="utf-8"))
+        self.assertEqual(m["kind"], "user")
+        self.assertIs(m["consent"]["given"], True)
+        self.assertEqual(m["consent"]["text_sha256"], hashlib.sha256(rec.CONSENT_TEXT.encode("utf-8")).hexdigest())
+        self.assertEqual(len(m["clips"]), 3)
+        for c in m["clips"]:
+            self.assertEqual(c["sha256"], rec.sha256_file(os.path.join(out_dir, c["file"])))
+            self.assertEqual(c["voice"], "user")
+        self.assertEqual([c["variant"] for c in m["clips"][:2]], ["user_clean", "user_wrong"])
+        self.assertIsNone(m["clips"][0]["wrong"])
+        self.assertIsNotNone(m["clips"][1]["wrong"])
+        # a second session into the same (not empty) folder is refused
+        self.assertEqual(rec.run(out_dir, False, 11, input_fn=lambda *_: "y", recorder=lambda *_: samples, out=lambda *_: None), 1)
+
+    def test_consent_is_exactly_a_lower_case_y(self):
+        import numpy as np
+        calls = []
+        for answer in ("Y", " Y", "yes", "", "n", "YES", "yy"):
+            calls.clear()
+            d = os.path.join(TMP, "cons_%d" % abs(hash(answer)))
+            code = rec.run(d, False, 11, input_fn=lambda *_, a=answer: a, recorder=lambda *_: calls.append(1), out=lambda *_: None)
+            self.assertEqual((code, len(calls)), (1, 0), repr(answer))
+            self.assertFalse(os.path.exists(d))
+        samples = np.zeros(16000, dtype=np.int16) + 800
+        for answer in ("y", " y ", "y\t"):   # spaces around the letter are ignored, the letter itself is not case folded
+            answers = iter([answer, "q"])
+            d = os.path.join(TMP, "cons_ok_%d" % abs(hash(answer)))
+            self.assertEqual(rec.run(d, False, 11, input_fn=lambda *_: next(answers), recorder=lambda *_: samples, out=lambda *_: None), 0)
+
+    def test_record_redo_replaces_the_take(self):
+        import numpy as np
+        out_dir = os.path.join(TMP, "rec_redo")
+        answers = iter(["y", "", "r", "", "", "q"])   # start, then redo once, start again, next, q at the 2nd clip
+        takes = iter([np.zeros(16000, dtype=np.int16) + 5, (np.ones(32000) * 9000).astype(np.int16)])
+        code = rec.run(out_dir, False, 11, input_fn=lambda *_: next(answers), recorder=lambda *_: next(takes), out=lambda *_: None)
+        self.assertEqual(code, 0)
+        m = json.load(open(os.path.join(out_dir, "manifest.json"), encoding="utf-8"))
+        self.assertEqual(len(m["clips"]), 1)
+        self.assertAlmostEqual(m["clips"][0]["seconds"], 2.0)   # the second take, not the first
+
+    def test_record_source_has_no_log_file_and_requires_out(self):
+        src = open(os.path.join(HERE, "calib_record.py"), encoding="utf-8").read()
+        self.assertEqual(len(re.findall(r"logging|\.log", src)), 0)
+        for tool in ("calib_record.py", "calib_make_set.py", "calib_pc_run.py"):
+            r = subprocess.run([sys.executable, "-I", "-X", "utf8", os.path.join(HERE, tool)], capture_output=True)
+            self.assertEqual(r.returncode, 2, tool)
+        # selfcheck: the scan for log files sees one when it is there
+        self.assertEqual(len(re.findall(r"logging|\.log", "import logging")), 1)
+
+    def test_backend_is_untouched(self):
+        self.assertEqual(backend_state(), BACKEND_BEFORE)
+
+
+# ================================================================================================ round 2 (review PA5a_review.md)
+GODOT = r"C:\Users\rtyu6\Desktop\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_console.exe"
+
+
+def make_junction(link, target):
+    r = subprocess.run(["cmd", "/c", "mklink", "/J", link, target], capture_output=True)
+    if r.returncode != 0:
+        raise unittest.SkipTest("cannot make a junction here")
+
+
+def remove_junction(link):
+    """removes only the link (cmd rmdir), never what it points at"""
+    if os.path.lexists(link):
+        subprocess.run(["cmd", "/c", "rmdir", link], capture_output=True)
+
+
+def short_name(path):
+    from ctypes import WinDLL, create_unicode_buffer
+    buf = create_unicode_buffer(32768)
+    n = WinDLL("kernel32", use_last_error=True).GetShortPathNameW(path, buf, len(buf))
+    return buf.value if n else None
+
+
+class FakeRepo:
+    """a disposable stand-in for the repository inside TMP: the forbidden roots are pointed at it, so a test (also a test run with a broken
+    guard) can really write there without ever touching a real repository, worktree or backend"""
+
+    def __init__(self, name="fake_repo"):
+        self.root = os.path.join(TMP, name)
+        for sub in ("backend", "phone_src", "other"):
+            os.makedirs(os.path.join(self.root, sub), exist_ok=True)
+        self.backend = os.path.join(self.root, "backend")
+        self.patches = [mock.patch.object(cf, "FORBIDDEN_ROOTS", (self.root,)), mock.patch.object(cf, "ROOT", self.root),
+                        mock.patch.object(cf, "BACKEND", self.backend)]
+
+    def __enter__(self):
+        for x in self.patches:
+            x.start()
+        return self
+
+    def __exit__(self, *a):
+        for x in reversed(self.patches):
+            x.stop()
+
+    def files(self):
+        return [os.path.join(d, f) for d, _s, fs in os.walk(self.root) for f in fs]
+
+
+def tool_calls(q):
+    """(label, callable) for every tool, all writing to / below q"""
+    return (
+        ("make_set", lambda: ms.main(["--out", q, "--n-sentences", "1", "--voices", "1"])),
+        ("record dry", lambda: rec.main(["--out", q, "--dry-run"])),
+        ("record", lambda: rec.main(["--out", q])),
+        ("pc_run", lambda: pr.main(["--set", TMP, "--out", q + ".json"])),
+        ("fit params", lambda: cf.main(["--pc", "a", "--phone", "b", "--out-params", q + ".json", "--report", os.path.join(TMP, "r.json")])),
+        ("fit report", lambda: cf.main(["--pc", "a", "--phone", "b", "--out-params", os.path.join(TMP, "p.json"), "--report", q + ".json"])),
+    )
+
+
+class OutBoundary(unittest.TestCase):
+    """every tool refuses an output place inside a repository, a worktree or backend, however it is spelled: exit 2 and nothing written.
+    Tests that write use a FakeRepo in the scratch folder; nothing here can write into a real repository."""
+
+    def test_the_checker_refuses_real_repos_and_allows_scratch(self):   # only asks, never writes
+        for pth in (os.path.join(ROOT, "backend", "zz"), os.path.join(ROOT, "phone_src", "zz"), os.path.join(ROOT, "zz"),
+                    r"D:\Ai\언어\app\zz", r"D:\Ai\언어\app_wt\zz", r"D:\Ai\언어\app_wt\v201_other\zz",
+                    os.path.join(ROOT, "docs", "..", "backend", "zz"), ROOT, BACKEND, r"d:\ai\언어\APP\x",
+                    "\\\\?\\" + os.path.join(ROOT, "backend", "zz"), "\\\\.\\" + os.path.join(ROOT, "backend", "zz")):
+            self.assertTrue(cf.out_path_refused(pth), pth)
+        for pth in (os.path.join(TMP, "x"), os.path.join(TMP, "a", "..", "b"), r"C:\Users\someone\scratch\x"):
+            self.assertFalse(cf.out_path_refused(pth), pth)
+        with self.assertRaises(cf.OutPathRefused):
+            cf.require_out_paths(os.path.join(TMP, "ok"), os.path.join(ROOT, "backend", "x"))
+
+    def test_resolve_path_spellings(self):
+        d = os.path.join(TMP, "resolve_dir")
+        os.makedirs(d, exist_ok=True)
+        want = cf.resolve_path(d)
+        self.assertEqual(cf.resolve_path("\\\\?\\" + d), want)
+        self.assertEqual(cf.resolve_path("\\\\.\\" + d), want)
+        self.assertEqual(cf.resolve_path(d.upper()), want)
+        self.assertEqual(cf.resolve_path(os.path.join(d, "a", "..")), want)
+        self.assertEqual(cf.resolve_path(os.path.join(d, "not", "yet", "there")), os.path.join(want, "not", "yet", "there"))
+        self.assertEqual(cf._strip_ext_prefix("\\\\?\\UNC\\srv\\share\\x"), "\\\\srv\\share\\x")
+        self.assertEqual(cf._strip_ext_prefix("\\\\?\\C:\\x"), "C:\\x")
+        self.assertEqual(cf._strip_ext_prefix("C:\\x"), "C:\\x")
+        # a junction is the place it points at
+        link = os.path.join(TMP, "resolve_link")
+        make_junction(link, d)
+        try:
+            self.assertEqual(cf.resolve_path(link), want)
+            self.assertEqual(cf.resolve_path(os.path.join(link, "child")), os.path.join(want, "child"))
+        finally:
+            remove_junction(link)
+
+    def test_every_python_tool_exits_2_and_writes_nothing(self):
+        with FakeRepo() as fr:
+            paths = [os.path.join(fr.backend, "zz_out"), os.path.join(fr.root, "phone_src", "zz_out"), os.path.join(fr.root, "zz_out"),
+                     os.path.join(fr.root, "other", "..", "backend", "zz_out")]
+            for pth in paths:
+                for label, call in tool_calls(pth):
+                    buf = io.StringIO()
+                    with self.subTest(tool=label, path=pth), contextlib.redirect_stdout(buf):
+                        code = call()
+                    self.assertEqual(code, 2, (label, buf.getvalue()))
+                    self.assertNotIn("zz_out", buf.getvalue())   # the message does not repeat the path either
+            self.assertEqual(fr.files(), [])
+            self.assertFalse(any(os.path.exists(p) or os.path.exists(p + ".json") for p in paths))
+
+    def test_an_alternate_data_stream_is_refused(self):
+        with FakeRepo("fake_repo_ads") as fr:
+            for pth in (fr.root + ":s", fr.backend + ":s", os.path.join(TMP, "ok_dir") + ":s", os.path.join(TMP, "f.json:s"),
+                        "\\\\?\\" + fr.root + ":s"):
+                self.assertTrue(cf.out_path_refused(pth), pth)
+            for label, call in tool_calls(fr.root + ":zz"):
+                buf = io.StringIO()
+                with self.subTest(tool=label), contextlib.redirect_stdout(buf):
+                    code = call()
+                self.assertEqual(code, 2, (label, buf.getvalue()))
+            self.assertEqual(fr.files(), [])
+        self.assertFalse(cf.out_path_refused(r"C:\Users\someone\scratch\x"))   # the drive colon alone is fine
+
+    def test_the_temp_folder_is_checked_before_it_is_used(self):
+        with FakeRepo("fake_repo_temp") as fr:
+            before = sorted(os.listdir(fr.root))
+            with mock.patch.object(tempfile, "tempdir", fr.root), mock.patch.dict(cf._SERVER, {"mod": None}):
+                with self.assertRaises(cf.OutPathRefused):
+                    cf.load_server()
+            self.assertEqual(sorted(os.listdir(fr.root)), before)
+            for k in ("TMPDIR", "TEMP", "TMP"):   # an environment variable alone, tempfile not asked yet
+                with self.subTest(var=k), mock.patch.object(tempfile, "tempdir", None), mock.patch.dict(os.environ, {k: fr.root}), \
+                        mock.patch.dict(cf._SERVER, {"mod": None}):
+                    with self.assertRaises(cf.OutPathRefused):
+                        cf.load_server()
+                self.assertEqual(sorted(os.listdir(fr.root)), before)
+
+    def test_junction_short_name_and_extended_paths_to_a_forbidden_place(self):
+        with FakeRepo("fake_repo_alias") as fr:
+            links = os.path.join(TMP, "alias_links")
+            os.makedirs(links, exist_ok=True)
+            top = os.path.join(links, "to_backend")
+            make_junction(top, fr.backend)
+            try:
+                spellings = {"junction": os.path.join(top, "zz_out"), "extended": "\\\\?\\" + os.path.join(fr.backend, "zz_out"),
+                             "device": "\\\\.\\" + os.path.join(fr.backend, "zz_out"), "upper": os.path.join(fr.backend, "zz_out").upper()}
+                sn = short_name(fr.backend)
+                if sn and sn.lower() != fr.backend.lower():
+                    spellings["short83"] = os.path.join(sn, "zz_out")
+                for name, pth in spellings.items():
+                    self.assertTrue(cf.out_path_refused(pth), name)
+                    for label, call in tool_calls(pth):
+                        buf = io.StringIO()
+                        with self.subTest(spelling=name, tool=label), contextlib.redirect_stdout(buf):
+                            code = call()
+                        self.assertEqual(code, 2, (name, label, buf.getvalue()))
+                self.assertEqual(fr.files(), [])
+            finally:
+                remove_junction(top)
+
+    def test_a_junction_below_a_fine_out_folder_is_caught_at_every_file(self):
+        import numpy as np
+        from types import SimpleNamespace
+        with FakeRepo("fake_repo_nested") as fr:
+            out = os.path.join(TMP, "nested_out")
+            os.makedirs(out, exist_ok=True)
+            link = os.path.join(out, "clips")
+            self.assertFalse(cf.out_path_refused(out))              # the top --out is fine ...
+            make_junction(link, os.path.join(fr.root, "other"))      # ... its clips\ folder is a junction into the forbidden place
+            try:
+                self.assertTrue(cf.out_path_refused(os.path.join(link, "x.wav")))
+                server = SimpleNamespace(en_words=lambda t: t.lower().split(), available_voices=lambda *_: ["voice"])
+                buf = io.StringIO()
+                with mock.patch.object(cf, "load_server", lambda **_: server), \
+                        mock.patch.object(ms, "synth16", lambda *_: np.zeros(16000, dtype=np.float32)), contextlib.redirect_stdout(buf):
+                    code = ms.main(["--out", out, "--n-sentences", "1", "--voices", "1"])
+                self.assertEqual(code, 2, buf.getvalue())
+                self.assertEqual(fr.files(), [])
+                self.assertFalse(os.path.exists(os.path.join(out, "manifest.json")))
+                # the same junction hits the other writers too: a recorded clip and the pc json
+                with self.assertRaises(cf.OutPathRefused):
+                    rec.write_wav(os.path.join(link, "u01_clean.wav"), np.zeros(1600, dtype=np.int16))
+                with self.assertRaises(cf.OutPathRefused):
+                    ms.write_wav16(os.path.join(link, "c.wav"), np.zeros(1600, dtype=np.float32))
+                with self.assertRaises(cf.OutPathRefused):
+                    ms.write_json(os.path.join(link, "manifest.json"), {})
+                with self.assertRaises(cf.OutPathRefused):
+                    cf._write_json(os.path.join(link, "report.json"), {})
+                self.assertEqual(fr.files(), [])
+            finally:
+                remove_junction(link)
+
+    def test_selfcheck_scratch_is_not_refused_and_the_guard_lets_it_write(self):
+        import numpy as np
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = rec.main(["--out", os.path.join(TMP, "dry_ok"), "--dry-run"])
+        self.assertEqual(code, 0)
+        p = os.path.join(TMP, "guard_ok", "c.wav")
+        self.assertGreater(ms.write_wav16(p, np.zeros(1600, dtype=np.float32)), 0)
+        self.assertTrue(os.path.exists(p))
+
+    @unittest.skipUnless(os.path.isfile(GODOT) and os.path.isdir(os.path.join(ROOT, "godot", ".godot")), "Godot or the imported project is missing")
+    def test_calib_phone_gd_refuses_res_user_relative_repo_extended_and_short_name_paths(self):
+        env = dict(os.environ, APPDATA=os.path.join(TMP, "gd_appdata"))
+        os.makedirs(env["APPDATA"], exist_ok=True)
+        cases = [("res://zz_probe_out.json", True), ("user://zz_probe_out.json", True), ("zz_probe_out.json", True),
+                 (os.path.join(ROOT, "zz_probe_out.json"), True), (os.path.join(ROOT, "backend", "zz.json"), True),
+                 (r"D:\Ai\언어\app\zz_probe_out.json", True), (r"D:/Ai/언어/app_wt/zz_probe_out.json", True),
+                 (os.path.join(ROOT, "godot", "zz.json"), True),
+                 ("\\\\?\\" + os.path.join(TMP, "gd_ext.json"), True), ("\\\\.\\" + os.path.join(TMP, "gd_dev.json"), True),
+                 ("//?/" + os.path.join(TMP, "gd_ext2.json").replace("\\", "/"), True),
+                 (r"C:\PROGRA~1\zz.json", True), (os.path.join(TMP, "a~b", "gd_tilde.json"), True), (r"D:\Ai\~1\zz.json", True)]
+        if "~" not in TMP:
+            cases.append((os.path.join(TMP, "gd_ok.json"), False))
+        for out, expect_refused in cases:
+            r = subprocess.run([GODOT, "--headless", "--path", os.path.join(ROOT, "godot"), "-s", "res://tools/calib_phone.gd", "--",
+                                "--model=" + os.path.join(TMP, "nomodel.bin"), "--set=" + TMP, "--out=" + out],
+                               capture_output=True, env=env, cwd=TMP)
+            text = r.stdout.decode("utf-8", "replace")
+            with self.subTest(out=out):
+                if expect_refused:
+                    self.assertEqual(r.returncode, 2, text)
+                    self.assertIn("CALIB_PHONE_FAIL out_path", text)
+                else:
+                    self.assertNotIn("out_path", text)
+                self.assertFalse(os.path.exists(os.path.join(ROOT, "zz_probe_out.json")))
+                self.assertFalse(os.path.exists(os.path.join(ROOT, "godot", "zz_probe_out.json")))
+
+    def test_the_junction_limit_of_the_gd_tool_is_written_down(self):
+        gd = open(os.path.join(ROOT, "godot", "tools", "calib_phone.gd"), encoding="utf-8").read()
+        readme = open(os.path.join(ROOT, "phone_src", "calib", "README.txt"), encoding="utf-8").read()
+        for text in (gd.split("const CHUNK_SECONDS")[0], readme):
+            self.assertIn("정션", text)
+            self.assertIn("알려진 한계", text)
+
+
+MARKERS = ("ZQSECRET", "ZQFILE", "ZQMODEL", "ZQDATE", "ZQWORDS")
+
+
+def leaks(text):
+    return [m for m in MARKERS if m in text]
+
+
+class NoInputInOutput(unittest.TestCase):
+    """no file name, clip id, sentence, model name or date of the user's files appears in stdout or in the report"""
+
+    def go(self, pc, ph, tag="ZQFILE_run", extra=()):
+        code, out, params, report = run_cli(pc, ph, tag, extra)
+        rep = open(report, encoding="utf-8").read() if os.path.exists(report) else ""
+        return code, out, rep
+
+    def test_selfcheck_the_leak_scan_sees_a_marker(self):
+        self.assertEqual(leaks("a ZQSECRET b"), ["ZQSECRET"])
+
+    def test_bad_inputs_leave_no_marker(self):
+        pc, ph = FIX["good"]
+        cases = {}
+        a = copy.deepcopy(pc)
+        a["clips"][0]["id"] = "ZQSECRET one two three"
+        a["clips"][0]["words"] = {}
+        cases["words not a list"] = (a, ph)
+        b = copy.deepcopy(ph)
+        b["model"] = "ggml-ZQMODEL secret words.bin"
+        cases["bad model name"] = (pc, b)
+        c = dict(copy.deepcopy(pc), date="2026-ZQDATE")
+        cases["bad date"] = (c, ph)
+        d = copy.deepcopy(ph)
+        d["clips"][0]["id"] = "ZQSECRET dup"
+        d["clips"][1]["id"] = "ZQSECRET dup"
+        cases["duplicate id"] = (pc, d)
+        e = copy.deepcopy(ph)
+        e["clips"][0]["id"] = "ZQSECRET only on the phone side"
+        cases["one sided"] = (pc, e)
+        f = copy.deepcopy(ph)
+        f["clips"][0]["ok"] = False
+        f["clips"][0]["text"] = "ZQSECRET said this"
+        f["clips"][0]["id"] = "ZQSECRET failed"
+        pcf = copy.deepcopy(pc)
+        pcf["clips"][0]["id"] = "ZQSECRET failed"
+        cases["phone clip failed"] = (pcf, f)
+        g = copy.deepcopy(pc)
+        g["clips"][0]["score"]["units"].pop()
+        g["clips"][0]["target"] = "ZQSECRET target words are right here now"
+        cases["units mismatch"] = (g, ph)
+        h = copy.deepcopy(pc)
+        h["clips"][0]["words"][0].pop("p")
+        h["clips"][0]["id"] = "ZQSECRET nop"
+        cases["word without p"] = (h, ph)
+        for name, (x, y) in cases.items():
+            with self.subTest(name):
+                code, out, rep = self.go(x, y)
+                self.assertEqual(code, 1, out)
+                self.assertEqual(leaks(out), [], out)
+                self.assertEqual(leaks(rep), [], rep)
+
+    def test_unreadable_file_name_is_not_repeated(self):
+        buf = io.StringIO()
+        rpt = os.path.join(TMP, "ZQFILE_rep.json")
+        with contextlib.redirect_stdout(buf):
+            code = cf.main(["--pc", os.path.join(TMP, "ZQFILE_nothing.json"), "--phone", os.path.join(TMP, "ZQFILE_nothing2.json"),
+                            "--out-params", os.path.join(TMP, "ZQFILE_p.json"), "--report", rpt])
+        self.assertEqual(code, 1)
+        self.assertEqual(leaks(buf.getvalue()), [])
+        self.assertEqual(leaks(open(rpt, encoding="utf-8").read()), [])
+        self.assertIn("file 1", buf.getvalue())   # named by number
+
+    def test_probe_style_malformed_input(self):
+        pcp = dump({"clips": [{"id": "ZQSECRET private spoken words", "words": {}}]}, "ZQFILE_pc2.json")
+        php = dump({"clips": []}, "ZQFILE_ph2.json")
+        rpt = os.path.join(TMP, "ZQFILE_rep2.json")
+        args = cf.build_parser().parse_args(["--pc", pcp, "--phone", php, "--out-params", os.path.join(TMP, "ZQFILE_never.json"), "--report", rpt])
+        lines = []
+        ret = cf.run(args, S=object(), out=lines.append)
+        self.assertEqual(ret, 1)
+        self.assertEqual(leaks("\n".join(lines) + open(rpt, encoding="utf-8").read()), [])
+
+    def test_allowed_model_name_and_date_do_reach_the_report(self):
+        code, out, rep = self.go(*FIX["good"], tag="ok_names")
+        self.assertEqual(code, 0, out)
+        r = json.loads(rep)
+        self.assertEqual((r["model_id"], r["date"]), ("whisper-base.en-q5_1", "2026-11-19"))
+
+    def test_tool_messages_hold_no_input_text(self):
+        for src in ("calib_make_set.py", "calib_pc_run.py", "calib_fit.py"):
+            text = open(os.path.join(HERE, src), encoding="utf-8").read()
+            self.assertNotRegex(text, r"str\(e\)\[:200\]", src)   # an exception text may carry a file name, a sentence or a transcript
+        self.assertNotIn("basename", open(os.path.join(HERE, "calib_fit.py"), encoding="utf-8").read().split("def read_run")[1].split("def join_clips")[0])
+
+
+class WordTimes(unittest.TestCase):
+    """D-1 (docs/v201_design.md 8.1): the same cases are copied into the GDScript test of PA4"""
+
+    def w(self, *pairs):
+        return [{"w": "w%d" % i, "p": 0.5 + i / 100.0, "start": a, "end": b} for i, (a, b) in enumerate(pairs)]
+
+    def times(self, words, clip):
+        return [(x["start"], x["end"]) for x in cf.clean_word_times(words, clip)]
+
+    def test_rule_cases(self):
+        nan, inf = float("nan"), float("inf")
+        cases = [
+            ("1 not finite -> 0", [(nan, 1.0), (0.5, inf)], 3.0, [(0.0, 0.5), (0.5, 0.5)]),   # w1 end inf = 0 -> 0.5 (its start); w0 end 1.0 -> next start 0.5
+            ("2 cut to [0, clip]", [(-1.0, 5.0)], 3.0, [(0.0, 3.0)]),
+            ("3 start never goes back; end never before start; end <= next start", [(0.5, 1.0), (0.2, 0.4)], 2.0, [(0.5, 0.5), (0.5, 0.5)]),
+            ("5 end cut to the next start", [(0.0, 1.0), (0.6, 1.5)], 3.0, [(0.0, 0.6), (0.6, 1.5)]),
+            ("the real case: whisper.cpp spreads over 30 s, the clip is 2.075 s", [(0.07, 5.52), (5.52, 9.62), (9.62, 15.07)], 2.075,
+             [(0.07, 2.075), (2.075, 2.075), (2.075, 2.075)]),
+            ("6 no rounding", [(0.123456789, 0.987654321)], 5.0, [(0.123456789, 0.987654321)]),
+            ("fine input stays", [(0.0, 0.4), (0.45, 0.85), (0.9, 1.3)], 2.0, [(0.0, 0.4), (0.45, 0.85), (0.9, 1.3)]),
+            ("clip length 0", [(0.1, 0.2)], 0.0, [(0.0, 0.0)]),
+            ("empty", [], 1.0, []),
+        ]
+        for name, pairs, clip, expect in cases:
+            with self.subTest(name):
+                self.assertEqual(self.times(self.w(*pairs), clip), expect)
+
+    def test_none_and_text_count_as_not_finite(self):
+        ws = [{"w": "a", "p": 0.5, "start": None, "end": "x"}, {"w": "b", "p": 0.5, "start": 0.3, "end": 0.6}]
+        self.assertEqual(self.times(ws, 1.0), [(0.0, 0.0), (0.3, 0.6)])
+
+    def test_order_count_words_and_probabilities_are_kept_and_the_input_is_not_changed(self):
+        ws = self.w((0.5, 1.0), (0.2, 0.4), (9.0, 12.0))
+        before = copy.deepcopy(ws)
+        out = cf.clean_word_times(ws, 2.0)
+        self.assertEqual(ws, before)
+        self.assertEqual([(x["w"], x["p"]) for x in out], [(x["w"], x["p"]) for x in ws])
+        starts = [x["start"] for x in out]
+        self.assertEqual(starts, sorted(starts))
+        for x in out:
+            self.assertTrue(0.0 <= x["start"] <= x["end"] <= 2.0)
+
+    def test_selfcheck_a_wrong_rule_would_differ(self):
+        self.assertNotEqual(self.times(self.w((0.5, 1.0), (0.2, 0.4)), 2.0), [(0.5, 1.0), (0.2, 0.4)])   # the raw times are not the cleaned ones
+
+    def test_fluency_is_scored_on_the_cleaned_times(self):
+        pc, ph = FIX["good"]
+        pcc = dict(pc["clips"][0], sentence_id="s")
+        phc = copy.deepcopy(ph["clips"][0])
+        t = 0.0
+        for w in phc["words"]:   # the bridge's habit: the words spread over a 30 s window while the clip lasts 2.5 s
+            w["start"], w["end"], t = t, t + 6.0, t + 6.0
+        ident = [[0.0, 0.0], [1.0, 1.0]]
+        try:
+            cf.RETIME = False
+            raw = cf.phone_result(S, pcc, phc, ident, 0.45)["fluency"]
+            cf.RETIME = True
+            clean = cf.phone_result(S, pcc, phc, ident, 0.45)["fluency"]
+        finally:
+            cf.RETIME = True
+        self.assertLess(raw, 60)
+        self.assertGreater(clean, raw)
+        self.assertGreaterEqual(clean, 90)
+
+
+class WordTimesAtTheEntry(unittest.TestCase):
+    """D-1 step 1 at the CLI entry: a start / end that is NaN, infinite, null or missing is 0, not an error; w and p are still checked"""
+
+    def test_read_run_turns_unusable_times_into_zero(self):
+        doc = {"clips": [{"id": "a", "ok": True, "duration": 2.0, "text": "",
+                          "words": [{"w": "x", "p": 0.5, "start": float("nan"), "end": float("inf")},
+                                    {"w": "y", "p": 0.5, "start": None, "end": "soon"}, {"w": "z", "p": 0.5}]}]}
+        _h, clips = cf.read_run(dump(doc, "d1_entry.json"), "phone")
+        self.assertEqual([(w["start"], w["end"]) for w in clips["a"]["words"]], [(0.0, 0.0)] * 3)
+
+    def test_w_and_p_are_still_checked(self):
+        for bad in ({"w": "x", "start": 0.0, "end": 1.0}, {"w": 5, "p": 0.5, "start": 0.0, "end": 1.0},
+                    {"w": "x", "p": float("nan"), "start": 0.0, "end": 1.0}, {"w": "x", "p": None, "start": 0.0, "end": 1.0}):
+            doc = {"clips": [{"id": "a", "ok": True, "duration": 2.0, "words": [bad]}]}
+            with self.subTest(bad=str(bad)), self.assertRaises(cf.CalibError):
+                cf.read_run(dump(doc, "d1_bad.json"), "phone")
+
+    def test_the_cli_goes_on_to_cleaning_and_fitting(self):
+        pc, ph = FIX["good"]
+        finite = copy.deepcopy(ph)
+        for c in finite["clips"][:6]:
+            c["words"][0]["start"] = 0.0
+        for label, value in (("nan", float("nan")), ("null", None), ("inf", float("inf")), ("minus_inf", float("-inf"))):
+            bad = copy.deepcopy(ph)
+            for c in bad["clips"][:6]:
+                if value is None:
+                    c["words"][0]["start"] = None
+                else:
+                    c["words"][0]["start"] = value
+            code, out, params, report = run_cli(pc, bad, "d1_" + label)
+            with self.subTest(label):
+                self.assertNotIn("CALIB_FAIL input", out)
+                self.assertIn("score_mae", out)   # the run reached the judging
+                self.assertIn(code, (0, 1))
+            code0, out0, _p0, report0 = run_cli(pc, finite, "d1_zero_" + label)
+            with self.subTest(label + " equals 0.0"):   # the same result as a file that has a 0 there
+                self.assertEqual(open(report, encoding="utf-8").read(), open(report0, encoding="utf-8").read())
+        # a missing start key is the same
+        miss = copy.deepcopy(ph)
+        for c in miss["clips"][:6]:
+            c["words"][0].pop("start")
+        code, out, _p, _r = run_cli(pc, miss, "d1_missing")
+        self.assertNotIn("CALIB_FAIL input", out)
+
+    def test_selfcheck_a_non_number_that_is_not_a_time_problem_still_fails(self):
+        pc, ph = FIX["good"]
+        bad = copy.deepcopy(ph)
+        bad["clips"][0]["words"][0]["p"] = None
+        code, out, _p, _r = run_cli(pc, bad, "d1_pnull")
+        self.assertEqual((code, "CALIB_FAIL input" in out), (1, True))
+
+
+class SentenceGroups(unittest.TestCase):
+    def test_same_normalized_target_is_one_group_whatever_the_id(self):
+        rows = [({"sentence_id": "a", "target": "We can walk home."}, {}), ({"sentence_id": "b", "target": "we can WALK home"}, {}),
+                ({"sentence_id": "c", "target": "Something else entirely."}, {}), ({"sentence_id": "d", "target": "Another sentence here."}, {})]
+        for seed in range(1, 40):
+            train, held = cf.split_sentences(rows, seed, 0.5, S)
+            side = [{r[0]["sentence_id"] for r in train}, {r[0]["sentence_id"] for r in held}]
+            self.assertTrue(any({"a", "b"} <= x for x in side), "seed %d split a and b" % seed)
+
+    def test_selfcheck_by_id_alone_would_split_them(self):
+        keys = {"a": 1, "b": 2}
+        self.assertNotEqual(keys["a"], keys["b"])   # the old key (the id) puts the two on different sides for some seed
+        crossed = 0
+        for seed in range(1, 40):
+            ids = ["a", "b", "c", "d"]
+            random.Random(seed).shuffle(ids)
+            hold = set(ids[:2])
+            crossed += ("a" in hold) != ("b" in hold)
+        self.assertGreater(crossed, 0)
+
+    def test_pool_has_one_entry_per_normalized_sentence(self):
+        pool = ms.load_pool()
+        self.assertEqual(len({ms.norm_key(t) for _i, t in pool}), len(pool))
+        lowered = {t.lower() for _i, t in pool}
+        self.assertLessEqual(len(lowered), len(pool))
+
+    def test_seed_45_plan_has_no_normalized_target_on_both_sides(self):
+        pool = ms.load_pool(3, 10, 200)
+        chosen = ms.pick_sentences(pool, 200, 45)
+        user = [(sid, text) for sid, text, _w, _s in rec.plan(11)]
+        rows = [({"sentence_id": sid, "target": text}, None) for sid, text in chosen + user]
+        for seed in (45, 7, 11):
+            train, held = cf.split_sentences(rows, seed, 0.3, S)
+            a = {ms.norm_key(r[0]["target"]) for r in train}
+            b = {ms.norm_key(r[0]["target"]) for r in held}
+            self.assertTrue(a and b)
+            self.assertEqual(a & b, set(), "seed %d" % seed)
+        # a chosen sentence and a user sentence with the same words are in the same group (they come from one deduplicated pool)
+        both = {ms.norm_key(t) for _i, t in chosen} & {ms.norm_key(t) for _i, t in user}
+        for key in both:
+            ids = {r[0]["sentence_id"] for r in rows if ms.norm_key(r[0]["target"]) == key}
+            self.assertEqual(len(ids), 1)
+
+    def test_course_sentences_only_when_practice_is_short(self):
+        base = ms.load_pool(3, 10, 0)
+        self.assertEqual(ms.load_pool(3, 10, 200), base)
+        self.assertEqual(ms.load_pool(3, 10, len(base)), base)
+        more = ms.load_pool(3, 10, len(base) + 1)
+        self.assertGreaterEqual(len(more), len(base))
+        practice_ids = {str(x["id"]) for x in ms._read_json(ms.PRACTICE_PATH)["sentences"]}
+        self.assertTrue(all(i in practice_ids for i, _t in base))
+
+
+class PhoneFailures(unittest.TestCase):
+    def test_a_phone_clip_that_failed_is_a_data_error(self):
+        pc, ph = FIX["good"]
+        bad = copy.deepcopy(ph)
+        bad["clips"][3]["ok"] = False
+        bad["clips"][3]["error"] = "engine"
+        bad["clips"][3]["words"] = []
+        code, out, params, _r = run_cli(pc, bad, "phfail")
+        self.assertEqual(code, 1, out)
+        self.assertIn("CALIB_FAIL data", out)
+        self.assertFalse(os.path.exists(params))
+        noflag = copy.deepcopy(ph)
+        noflag["clips"][3].pop("ok")
+        code, out, params, _r = run_cli(pc, noflag, "phnoflag")
+        self.assertEqual((code, "CALIB_FAIL data" in out), (1, True))
+        marked = dict(copy.deepcopy(ph), status="fail")
+        code, out, params, _r = run_cli(pc, marked, "phmarked")
+        self.assertEqual((code, "CALIB_FAIL data" in out), (1, True))
+        nolen = copy.deepcopy(ph)
+        nolen["clips"][0].pop("duration")
+        code, out, params, _r = run_cli(pc, nolen, "phnolen")
+        self.assertEqual((code, "CALIB_FAIL input" in out), (1, True))
+
+    def test_selfcheck_the_good_phone_file_passes(self):
+        code, out, params, _r = run_cli(*FIX["good"], "phok")
+        self.assertEqual(code, 0, out)
+
+    @unittest.skipUnless(os.path.isfile(GODOT) and os.path.isdir(os.path.join(ROOT, "godot", ".godot"))
+                         and os.path.isfile(os.path.join(ROOT, "godot", "whisper_bridge.gdextension")), "needs the native bridge (N0)")
+    def test_calib_phone_gd_fails_on_a_clip_it_cannot_transcribe(self):
+        model = os.path.join(r"C:\Users\rtyu6\AppData\Local\Temp\claude\D--Ai----app\c5535f7a-0e1a-4bb6-bdc3-5597b7f84c22\scratchpad", "w_v200pa1", "models", "ggml-base.en-q5_1.bin")
+        if not os.path.isfile(model):
+            self.skipTest("model file missing")
+        d = os.path.join(TMP, "gd_bad_set")
+        os.makedirs(os.path.join(d, "clips"), exist_ok=True)
+        with open(os.path.join(d, "clips", "a.wav"), "wb") as f:
+            f.write(b"\x00\x01\x02\x03")
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"clips": [{"clip": "a", "file": "clips/a.wav"}]}, f)
+        env = dict(os.environ, APPDATA=os.path.join(TMP, "gd_appdata2"))
+        os.makedirs(env["APPDATA"], exist_ok=True)
+        outp = os.path.join(TMP, "gd_bad_out.json")
+        r = subprocess.run([GODOT, "--headless", "--path", os.path.join(ROOT, "godot"), "-s", "res://tools/calib_phone.gd", "--",
+                            "--model=" + model, "--set=" + d, "--out=" + outp], capture_output=True, env=env, cwd=TMP)
+        text = r.stdout.decode("utf-8", "replace")
+        self.assertEqual(r.returncode, 1, text)
+        self.assertIn("CALIB_PHONE_FAIL transcribe", text)
+        self.assertEqual(json.load(open(outp, encoding="utf-8"))["status"], "fail")
+
+
+class FinalMapBoundary(unittest.TestCase):
+    def rows(self, clean, wrong):
+        return [({"variant": "clean"}, {"score": clean}), ({"variant": "wrong"}, {"score": wrong})]
+
+    def test_every_step_is_a_valid_monotone_map_with_the_step_at_a(self):
+        for a in range(0, 101):
+            m = cf.final_map_step(a)
+            with self.subTest(a=a):
+                self.assertTrue(cf.valid_final_map(m), m)
+                xs = [x for x, _y in m]
+                self.assertEqual(len(xs), len(set(xs)), "x twice: %r" % (m,))
+                if a >= 1:
+                    self.assertLess(cf.map_final(a - 1, m), 70)
+                self.assertGreaterEqual(cf.map_final(a, m), 70)
+                ys = [cf.map_final(v, m) for v in range(0, 101)]
+                self.assertEqual(ys, sorted(ys))
+
+    def test_threshold_100_with_clean_100_and_wrong_99(self):
+        with mock.patch.object(cf, "phone_result", lambda _S, _pc, ph, *a: ph):
+            m = cf.fit_final_map(None, self.rows(100, 99), [], 0.45)
+        self.assertIsNotNone(m)
+        self.assertTrue(cf.valid_final_map(m))
+        self.assertEqual(len({x for x, _y in m}), len(m))
+        self.assertGreaterEqual(cf.map_final(100, m), 70)
+        self.assertLess(cf.map_final(99, m), 70)
+
+    def test_threshold_0_and_1_and_the_old_example_shape(self):
+        with mock.patch.object(cf, "phone_result", lambda _S, _pc, ph, *a: ph):
+            m0 = cf.fit_final_map(None, self.rows(100, 100)[:1] + [({"variant": "wrong"}, {"score": 0})], [], 0.45)
+            self.assertIsNotNone(m0)
+            self.assertLess(cf.map_final(0, m0), 70)
+        self.assertEqual(cf.final_map_step(70), [[0, 0], [100, 100]])
+        self.assertTrue(cf.valid_final_map([[0, 0], [99, 69], [100, 70]]))
+
+    def test_no_step_when_clean_equals_wrong(self):
+        with mock.patch.object(cf, "phone_result", lambda _S, _pc, ph, *a: ph):
+            self.assertIsNone(cf.fit_final_map(None, self.rows(90, 90), [], 0.45))
+
+
+class OfflineModels(unittest.TestCase):
+    def test_models_are_loaded_from_local_files_only(self):
+        self.assertEqual(S._load_whisper.__name__, "_load_whisper_local")
+        self.assertEqual(os.environ.get("HF_HUB_OFFLINE"), "1")
+        src = open(os.path.join(HERE, "calib_fit.py"), encoding="utf-8").read()
+        self.assertEqual(src.count("local_files_only=True)"), 1)
+
+
+def _shuffle_cli(argv):
+    with open(argv[0], "r", encoding="utf-8") as f:
+        doc = json.load(f)
+    out = shuffled_phone(doc)
+    with open(argv[1], "w", encoding="utf-8", newline="\n") as f:
+        json.dump(out, f, ensure_ascii=False)
+    print("SHUFFLED clips=%d" % len(out["clips"]))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) >= 4 and sys.argv[1] == "--shuffle-phone":
+        _shuffle_cli(sys.argv[2:4])
+        sys.exit(0)
+    unittest.main()
