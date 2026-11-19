@@ -22,6 +22,7 @@ const TEXT_START_BODY := "0부터 72주 코스예요. 이미 아는 주는 [점�
 const TEXT_LOCKED := "앞 단계를 먼저 하면 길이 순서대로 열려요. 그래도 미리 해 볼까요?"
 const TEXT_SOON := "아직 준비 중인 주예요. 앱을 업데이트하면 열려요."
 const TEXT_NO_DATA := "코스 내용을 읽지 못했어요."
+const RE_NOTE_ID := "^cn_[a-z0-9_]+$"
 const AHEAD_NOTE := "미리 해 보는 칸이에요. 진도는 지금 칸을 끝내야 넘어가요."
 const TEXT_AHEAD := "준비된 주를 모두 마쳤어요. 다음 주는 준비 중이에요. 마친 주는 다시 할 수 있어요."
 
@@ -301,6 +302,15 @@ func _host() -> Node:
 	return sheet_host if sheet_host != null and is_instance_valid(sheet_host) else self
 
 
+## 데이터 id 모양(cn_zed 같은 노트 id)인가: 화면에 그대로 보이면 안 되는 줄을 걸러낸다.
+static func is_note_id(line: Variant) -> bool:
+	if not (line is String):
+		return false
+	var rx := RegEx.new()
+	rx.compile(RE_NOTE_ID)
+	return rx.search(line) != null
+
+
 ## 주 상세 시트: 제목·할 수 있게 되는 말·낱말·문형·장면·요일 칸 7개·[이 주 시작]·[점검으로 건너뛰기].
 func open_week_sheet(w: int, state: String) -> Sheet:
 	var done: bool = state == "done"
@@ -363,6 +373,15 @@ func week_body(w: int, state: String) -> Control:
 		var pt: String = UI.plain(CourseData.pattern(pid).get("title_ko", ""))
 		if pt != "":
 			col.add_child(UI.label("· %s" % pt, "Small"))
+	if CourseSoundNotes.count_speakable(w) > 0: # v2.0.1 F1: 1주의 알파벳·짧은 모음 소리 노트
+		var snb := UI.button("알파벳·모음 소리 듣기", "soft", Pal.PRIMARY, 48.0)
+		snb.name = "SoundNotesBtn"
+		snb.custom_minimum_size.y = maxf(snb.custom_minimum_size.y, 48.0)
+		snb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		snb.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		snb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		snb.pressed.connect(func() -> void: SoundNotesSheet.open(_host(), w))
+		col.add_child(snb)
 	# 장면·캐나다 노트
 	var scene: Variant = rec.get("scene", {})
 	if scene is Dictionary:
@@ -373,6 +392,8 @@ func week_body(w: int, state: String) -> Control:
 			var ca: Variant = (scene as Dictionary).get("canada", [])
 			if ca is Array:
 				for line in ca:
+					if is_note_id(line): # 노트 id(cn_zed 등)를 글로 보이지 않는다(O-4)
+						continue
 					col.add_child(UI.label("· %s" % UI.plain(line), "Small"))
 	# 요일 칸 7개
 	col.add_child(UI.label("요일 칸", "Eyebrow", false))
