@@ -23,8 +23,42 @@ $only = @(); if ($env:MODEL_ONLY) { $only = $env:MODEL_ONLY.Split(',') | ForEach
 $server = Join-Path $root 'phone_src\tools\fake_model_server.py'
 $ports = 18791..18799
 
-# Allowed `ERROR:` lines (exact list): what Godot reports about its own resources when the process exits.
-$allowedEngine = '^\s*ERROR: \d+ RID allocations of type .* were leaked at exit\.$|^\s*ERROR: \d+ resources still in use at exit|^\s*ERROR: \d+ ObjectDB instances leaked'
+# Allowed `ERROR:` lines: ONLY the three resource-leak reports Godot prints when the process exits, each matched as a
+# whole line (only the numbers and the resource type name vary). A line that merely starts like one of them does not pass.
+$allowedEngine = '^\s*ERROR: \d+ RID allocations of type ''[^'']+'' were leaked at exit\.\z' +
+    '|^\s*ERROR: \d+ resources still in use at exit \(run with --verbose for details\)\.\z' +
+    '|^\s*ERROR: (\d+ )?ObjectDB instances leaked at exit \(run with --verbose for details\)\.\z'
+
+function Get-EngineErrorLines([string]$text) {
+    return @($text -split "`r?`n" | Where-Object { $_ -match '^\s*(USER )?ERROR:' -and $_ -notmatch $allowedEngine })
+}
+
+# The gate checks itself first: made-up lines that only start like the allowed ones must be caught, the real ones must pass.
+$gateFake = @(
+    "ERROR: 1 resources still in use at exit; review test error",
+    "ERROR: 1 resources still in use at exit (run with --verbose for details). extra",
+    "ERROR: 4 RID allocations of type 'X' were leaked at exit. and something else",
+    "ERROR: 4 RID allocations of type 'X' were leaked at exit",
+    "ERROR: ObjectDB instances leaked at exit (run with --verbose for details). plus",
+    "ERROR: Condition `"status != STATUS_BODY`" is true.",
+    "USER ERROR: something"
+)
+$gateReal = @(
+    "ERROR: 4 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.",
+    "ERROR: 1 resources still in use at exit (run with --verbose for details).",
+    "ERROR: 12 ObjectDB instances leaked at exit (run with --verbose for details).",
+    "ERROR: ObjectDB instances leaked at exit (run with --verbose for details)."
+)
+$gateBad = @()
+foreach ($l in $gateFake) { if ((Get-EngineErrorLines $l).Count -ne 1) { $gateBad += "not caught: $l" } }
+foreach ($l in $gateReal) { if ((Get-EngineErrorLines $l).Count -ne 0) { $gateBad += "wrongly caught: $l" } }
+if ($gateBad.Count -gt 0) {
+    Write-Host 'engine error gate selfcheck FAILED:'
+    $gateBad | ForEach-Object { Write-Host ("  " + $_) }
+    Write-Host 'MODEL_TESTS_RESULT FAIL'
+    exit 1
+}
+Write-Host ("selfcheck FAIL-as-expected engine gate ({0} made-up lines caught, {1} real leak lines allowed)" -f $gateFake.Count, $gateReal.Count)
 
 $plan = @(
     @{ name = 'model_store_test'; mode = 'pc'; min = 90 },
@@ -123,7 +157,7 @@ try {
         $se = ([regex]::Matches($text, 'SCRIPT ERROR:')).Count
         $tg = ([regex]::Matches($text, 'TEST_GUARD on')).Count
         # engine errors (`ERROR:` lines) count as failures, except the known leak report Godot prints when it exits
-        $eng = @($text -split "`r?`n" | Where-Object { $_ -match '^\s*(USER )?ERROR:' -and $_ -notmatch $allowedEngine }).Count
+        $eng = (Get-EngineErrorLines $text).Count
         $why = @()
         if ($code -eq -999) { $why += 'timeout' } elseif ($code -ne 0) { $why += "exit $code" }
         if ($null -eq $np) { $why += 'no result line' } else {

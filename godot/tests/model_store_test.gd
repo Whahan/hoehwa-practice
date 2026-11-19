@@ -265,7 +265,7 @@ func _leaks(s: String) -> bool:
 
 
 func _hex64(s: String) -> bool:
-	return RegEx.create_from_string("^[0-9a-f]{64}$").search(s) != null
+	return RegEx.create_from_string("^[0-9a-f]{64}\\z").search(s) != null
 
 
 # ---------------------------------------------------------------- self checks (the checkers can fail)
@@ -839,6 +839,22 @@ func _d_hardening() -> void:
 	_refuses("license is a number", "license", 5)
 	_refuses("id is a number", "id", 5)
 	_refuses("file is an object", "file", {})
+	# whole-string checks: a line break or space at an end must not be forgiven
+	for tail in ["\n", "\r\n", "\r", "\t", " "]:
+		var tn: String = tail.replace("\r", "CR").replace("\n", "LF").replace("\t", "TAB").replace(" ", "SPACE")
+		_refuses("id ends with " + tn, "id", "ma" + tail)
+		_refuses("file ends with " + tn, "file", "ma.bin" + tail)
+		_refuses("sha256 ends with " + tn, "sha256", "a".repeat(64) + tail)
+		_refuses("url ends with " + tn, "urls", ["https://github.com/x" + tail])
+		_refuses("id starts with " + tn, "id", tail + "ma")
+		_refuses("file starts with " + tn, "file", tail + "ma.bin")
+		_refuses("sha256 starts with " + tn, "sha256", tail + "a".repeat(64))
+		_refuses("url starts with " + tn, "urls", [tail + "https://github.com/x"])
+	_refuses("host ends with LF", "hosts", ["github.com\n"], true)
+	_refuses("host has a space", "hosts", [" github.com"], true)
+	print("selfcheck FAIL-as-expected manifest_line_breaks (a line break or space at an end of id, file, sha256, url or host is refused)")
+	ok(not ModelStore.printable_ascii("a\n") and not ModelStore.printable_ascii("a b") and ModelStore.printable_ascii("a.b-c_1"), "printable_ascii")
+	ok(not bool(ModelStore.parse_url("https://github.com/x\n").get("ok", false)) and not bool(ModelStore.parse_url(" https://github.com/x").get("ok", false)) and not bool(ModelStore.parse_url("https://github.com/a b").get("ok", false)), "parse_url takes the text as written (no trimming)")
 	for junk in [null, 5, "text", [], [1, 2]]:
 		ok(not bool(ModelStore.validate_manifest(junk)["ok"]), "bad_manifest: top level is %s" % str(junk))
 	print("selfcheck FAIL-as-expected manifest_types (all of the above end as bad_manifest)")
@@ -883,6 +899,12 @@ func _d_hardening() -> void:
 	ok(ModelStore.in_store(dir.path_join("ma.bin")) and ModelStore.in_store(dir.path_join("ma.bin.part.json")), "in_store: a file directly in the folder")
 	ok(not ModelStore.in_store(dir.path_join("sub/ma.bin")) and not ModelStore.in_store(dir.path_join("../ma.bin")) and not ModelStore.in_store(dir.trim_suffix("/").get_base_dir().path_join("ma.bin")), "in_store: sub-folder and parent paths are refused")
 	ok(not ModelStore.in_store(dir) and not ModelStore.in_store("") and not ModelStore.in_store(dir.path_join("..") + "/x"), "in_store: the folder itself, empty and '..' are refused")
+	var dn: String = dir.trim_suffix("/")
+	ok(not ModelStore.in_store("ma.bin") and not ModelStore.in_store("store/ma.bin") and not ModelStore.in_store("./ma.bin"), "in_store: relative paths are refused")
+	ok(not ModelStore.in_store(dn + "/ma.bin/") and not ModelStore.in_store(dn + "/sub/../ma.bin") and not ModelStore.in_store(dn + "/./ma.bin"), "in_store: trailing slash, middle '..' and '.' are refused")
+	ok(not ModelStore.in_store("/" + dn) and not ModelStore.in_store("/" + dn + "/ma.bin") and not ModelStore.in_store(dn + "/ma\n.bin") and not ModelStore.in_store(dn + "/ma.bin", "relative/dir"), "in_store: UNC-like, control character and relative folder are refused")
+	ok(ModelStore.in_store(dn.replace("/", "\\") + "\\ma.bin", dn) and ModelStore.store_path(dn + "//ma.bin") == dn + "/ma.bin", "in_store: back-slashes and doubled slashes are normalised, store_path returns the normalised text")
+	ok(ModelStore.store_path(dn + "/ma.bin", dn + "/") == dn + "/ma.bin", "store_path: a folder given with a trailing slash")
 	print("selfcheck FAIL-as-expected in_store (a path outside the model folder is refused)")
 	var outside: String = _g(DIR).path_join("outside.txt")
 	var fo := FileAccess.open(outside, FileAccess.WRITE)
@@ -909,6 +931,7 @@ func _d_hardening() -> void:
 		ok(ModelStore.resolve_location(base, loc) == loc, "resolve_location keeps an explicit scheme as written (%s)" % loc)
 	ok(not bool(ModelStore.parse_url("ftp://x/y").get("ok", false)) and not bool(ModelStore.parse_url("javascript:alert(1)").get("ok", false)), "parse_url refuses other schemes")
 	ok(ModelStore.location_clean("/a/b?x=1") and not ModelStore.location_clean("/a b") and not ModelStore.location_clean("/a\r\nX: y") and not ModelStore.location_clean("") and not ModelStore.location_clean("/한글"), "location_clean: printable ASCII only")
+	ok(not ModelStore.location_clean("/a/b ") and not ModelStore.location_clean(" /a/b") and not ModelStore.location_clean("/a/b\r\n") and not ModelStore.location_clean("/a/b\n") and not ModelStore.location_clean("/a\tb"), "location_clean: nothing is trimmed first, an end space or end CRLF is refused")
 	print("selfcheck FAIL-as-expected location_clean (space, line break and non-ASCII are refused)")
 	# 4. an answer without a body leaves nothing behind
 	var cn: Dictionary = _single("nobody", ["?nobody=1"])

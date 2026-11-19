@@ -23,6 +23,7 @@ var _host: Control = null
 var _card: SttModelCard = null
 var _old_prefs: String = ""
 var _sha: String = ""
+var _cap: LogCap = null
 
 
 func ok(cond: bool, name: String) -> void:
@@ -53,6 +54,8 @@ func _g(p: String) -> String:
 
 
 func _ready() -> void:
+	_cap = LogCap.new()
+	OS.add_logger(_cap)
 	_phone = Platform.is_phone()
 	for a in OS.get_cmdline_user_args():
 		var s: String = String(a)
@@ -109,6 +112,11 @@ func _ready() -> void:
 
 
 func _finish() -> void:
+	if _cap != null:
+		OS.remove_logger(_cap)
+		ok(_cap.count() == 0, "no engine ERROR line during the run (%d)" % _cap.count())
+		for l in _cap.snapshot().slice(0, 5):
+			print("engine error: ", l)
 	for id in ["card_base", "card_tiny"]:
 		ModelStore.remove(id)
 	ModelStore.free_space_hook = Callable()
@@ -524,3 +532,26 @@ func _source_checks() -> void:
 	ok(src != "" and not src.contains("%d/%d") and not src.contains("%d / %d"), "card source has no progress text of its own")
 	ok(src.contains("ModelStore.progress_label"), "card source builds progress texts with ModelStore.progress_label")
 	ok(not src.contains("Color(\"#"), "card source has no hard-coded colour")
+
+
+class LogCap:
+	extends Logger
+	var lines: Array = []
+	var mu := Mutex.new()
+
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String, _editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		mu.lock()
+		lines.append("%s %s:%d %s %s" % [function, file, line, code, rationale])
+		mu.unlock()
+
+	func count() -> int:
+		mu.lock()
+		var n: int = lines.size()
+		mu.unlock()
+		return n
+
+	func snapshot() -> Array:
+		mu.lock()
+		var c: Array = lines.duplicate()
+		mu.unlock()
+		return c

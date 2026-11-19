@@ -85,7 +85,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, b"ok")
             return
         q = {k: v[0] for k, v in parse_qs(sp.query, keep_blank_values=True).items()}
-        m = re.match(r"^/f/([^/]+)/([^/]+)$", sp.path)
+        m = re.fullmatch(r"/f/([^/\s]+)/([^/\s]+)", sp.path)
         rng = self.headers.get("Range")
         rec = {"token": m.group(1) if m else "", "path": sp.path, "range": rng or "", "sent": 0,
                "status": 0, "host": self.headers.get("Host", ""), "redir": q.get("redir", "")}
@@ -169,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(416, b"", {"Content-Range": "bytes */%d" % total})
             return
         if rng and q.get("norange") != "1":
-            mm = re.match(r"^bytes=(\d+)-$", rng.strip())
+            mm = re.fullmatch(r"bytes=(\d+)-", rng.strip())
             if mm:
                 start = int(mm.group(1))
                 if start >= total:

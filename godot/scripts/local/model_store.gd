@@ -100,17 +100,29 @@ class Runner extends Node:
 # ---------------------------------------------------------------- manifest
 
 ## File and id names: a short allow-list, so no name can reach outside the model folder or name a device / special file.
-const NAME_RX := "^[a-z0-9][a-z0-9._-]{0,63}$"
+## Whole-string matches end with \z: in this regex engine `$` also matches before a final line break.
+const NAME_RX := "^[a-z0-9][a-z0-9._-]{0,63}\\z"
 const RESERVED_STEMS := ["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
 	"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]
 const SIDE_SUFFIXES := [".part", ".part.json", ".ok"]
 const MAX_BYTES := 8000000000 ## 8 GB: far above any speech model, far below int overflow games
 
 
+## True for a text made only of printable ASCII (no space, line break, tab or other control character, no non-ASCII).
+static func printable_ascii(s: String) -> bool:
+	for i in s.length():
+		var c: int = s.unicode_at(i)
+		if c <= 32 or c >= 127:
+			return false
+	return true
+
+
 static func valid_name(n: Variant) -> bool:
 	if typeof(n) != TYPE_STRING:
 		return false
 	var s: String = n
+	if not printable_ascii(s):
+		return false
 	if RegEx.create_from_string(NAME_RX).search(s) == null or s.contains("..") or s.ends_with("."):
 		return false
 	if RESERVED_STEMS.has(s.split(".")[0]):
@@ -140,7 +152,7 @@ static func validate_manifest(d: Variant) -> Dictionary:
 		return bad
 	var hosts: Array = []
 	for h in dd["hosts"]:
-		if typeof(h) != TYPE_STRING or String(h).strip_edges() == "" or String(h) != String(h).to_lower() or String(h).contains("/"):
+		if typeof(h) != TYPE_STRING or String(h) == "" or not printable_ascii(String(h)) or String(h) != String(h).to_lower() or String(h).contains("/"):
 			return bad
 		hosts.append(String(h))
 	if hosts.is_empty() or (dd["models"] as Array).is_empty():
@@ -149,7 +161,7 @@ static func validate_manifest(d: Variant) -> Dictionary:
 	var ids := {}
 	var files := {} ## every file name any model may touch -> true
 	var defaults := 0
-	var sha_rx := RegEx.create_from_string("^[0-9a-f]{64}$")
+	var sha_rx := RegEx.create_from_string("^[0-9a-f]{64}\\z")
 	for m in dd["models"]:
 		if not (m is Dictionary):
 			return bad
@@ -169,12 +181,12 @@ static func validate_manifest(d: Variant) -> Dictionary:
 			files[file + suf] = true
 		if not _is_whole(md.get("bytes")) or int(md["bytes"]) <= 0 or int(md["bytes"]) > MAX_BYTES:
 			return bad
-		if typeof(md.get("sha256")) != TYPE_STRING or sha_rx.search(String(md["sha256"])) == null:
+		if typeof(md.get("sha256")) != TYPE_STRING or not printable_ascii(String(md["sha256"])) or sha_rx.search(String(md["sha256"])) == null:
 			return bad
 		if not _str_array(md.get("urls")) or (md["urls"] as Array).is_empty():
 			return bad
 		for u in md["urls"]:
-			if not bool(parse_url(String(u)).get("ok", false)):
+			if not printable_ascii(String(u)) or not bool(parse_url(String(u)).get("ok", false)):
 				return bad
 		var minf: Variant = md.get("min_free_mb", 0)
 		if not _is_whole(minf) or int(minf) < 0 or int(minf) > 1000000:
@@ -270,17 +282,39 @@ static func _file_abs(m: Dictionary, suffix: String = "") -> String:
 	return ProjectSettings.globalize_path(base_dir).path_join(str(m["file"]) + suffix)
 
 
-## True when `abs_path` sits directly in the model folder (no sub-folder, no `..`, no other drive or parent).
+static func _is_abs(p: String) -> bool:
+	return RegEx.create_from_string("^([A-Za-z]:/|/[^/])").search(p) != null
+
+
+## The normalised path of a file that sits directly in the model folder, or "" when `abs_path` is anything else: a relative
+## path, one with a `.` or `..` segment, a folder (trailing slash), a sub-folder file, another folder, an empty name, or a
+## path with a control character. Both paths must be absolute. Deleting uses the returned text, never the original.
+static func store_path(abs_path: String, dir_abs: String = "") -> String:
+	var raw: String = abs_path.replace("\\", "/")
+	var dir: String = (dir_abs if dir_abs != "" else ProjectSettings.globalize_path(base_dir)).replace("\\", "/")
+	for t in [raw, dir]:
+		if not _is_abs(t) or t.contains("\n") or t.contains("\r") or t.contains("\t"):
+			return ""
+		for seg in t.split("/"):
+			if seg == ".." or seg == ".":
+				return ""
+	if raw.ends_with("/"):
+		return ""
+	var p: String = raw.simplify_path()
+	if p.get_file() == "" or p.get_base_dir().trim_suffix("/") != dir.simplify_path().trim_suffix("/"):
+		return ""
+	return p
+
+
 static func in_store(abs_path: String, dir_abs: String = "") -> bool:
-	var dir: String = (dir_abs if dir_abs != "" else ProjectSettings.globalize_path(base_dir)).replace("\\", "/").simplify_path()
-	var p: String = abs_path.replace("\\", "/").simplify_path()
-	return dir != "" and p.get_base_dir().trim_suffix("/") == dir.trim_suffix("/") and p.get_file() != ""
+	return store_path(abs_path, dir_abs) != ""
 
 
-## Deletes one model file, but only when it is directly in the model folder.
+## Deletes one model file, but only when it is directly in the model folder; the normalised path is the one deleted.
 static func _rm(abs_path: String, dir_abs: String = "") -> void:
-	if in_store(abs_path, dir_abs):
-		DirAccess.remove_absolute(abs_path)
+	var n: String = store_path(abs_path, dir_abs)
+	if n != "":
+		DirAccess.remove_absolute(n)
 
 
 static func path_of(id: String) -> String:
@@ -582,8 +616,10 @@ static func _drain(r: Runner) -> void:
 
 static func parse_url(url: String) -> Dictionary:
 	if _url_rx == null:
-		_url_rx = RegEx.create_from_string("^(?i)(https?)://([A-Za-z0-9.-]+)(?::([0-9]{1,5}))?([/?#].*)?$")
-	var mm: RegExMatch = _url_rx.search(url.strip_edges())
+		_url_rx = RegEx.create_from_string("^(?i)(https?)://([A-Za-z0-9.-]+)(?::([0-9]{1,5}))?([/?#]\\S*)?\\z")
+	if not printable_ascii(url): ## the text is taken as written: spaces, line breaks and other control characters are not trimmed away
+		return {"ok": false}
+	var mm: RegExMatch = _url_rx.search(url)
 	if mm == null:
 		return {"ok": false}
 	var scheme: String = mm.get_string(1).to_lower()
@@ -606,7 +642,7 @@ static func _origin(u: Dictionary) -> String:
 
 ## Resolves a Location header against the address it came from (absolute, //host, /path, ?query, relative).
 static func resolve_location(base: Dictionary, loc: String) -> String:
-	var l: String = loc.strip_edges()
+	var l: String = loc
 	# any explicit scheme (https:, http:, ftp:, file:, javascript:, data:, in any letter case) is kept as written: it is
 	# never read as a relative path, so the address check that follows sees it and refuses what is not allowed
 	if RegEx.create_from_string("^[A-Za-z][A-Za-z0-9+.-]*:").search(l) != null:
@@ -767,7 +803,7 @@ static func _attempt(job: Job, idx: int) -> Dictionary:
 		var append: bool = false
 		if code == 206:
 			var cr: String = str(hd.get("content-range", ""))
-			var rx := RegEx.create_from_string("^bytes (\\d+)-(\\d+)/(\\d+)$")
+			var rx := RegEx.create_from_string("^bytes (\\d+)-(\\d+)/(\\d+)\\z")
 			var mm: RegExMatch = rx.search(cr.strip_edges())
 			if mm == null or int(mm.get_string(1)) != range_from or int(mm.get_string(3)) != bytes or int(mm.get_string(2)) != bytes - 1:
 				c.close()
@@ -950,12 +986,7 @@ static func _verify(job: Job) -> Dictionary:
 	return {"ok": true, "err": ""}
 
 
-## A Location value must be plain printable ASCII (no space, control character or non-ASCII), or it is refused.
+## A Location value, taken exactly as received (nothing is trimmed first), must be plain printable ASCII: no space,
+## control character, line break or non-ASCII anywhere, including at its ends.
 static func location_clean(loc: String) -> bool:
-	if loc.strip_edges() == "":
-		return false
-	for i in loc.strip_edges().length():
-		var c: int = loc.strip_edges().unicode_at(i)
-		if c <= 32 or c >= 127:
-			return false
-	return true
+	return loc != "" and printable_ascii(loc)
