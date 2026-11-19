@@ -570,13 +570,13 @@ git -C $W grep -I -n -E "(^|[^A-Za-z0-9_])sk-(ant-|proj-)?[A-Za-z0-9_-]{20,}|AIz
 git -C $W ls-files | Select-String -Pattern '(^godot/bin/|\.gdextension$|^native/_deps/|\.bin$|\.gguf$|\.onnx$|\.so$|\.dll$|\.wav$|\.mp3$|\.ogg$|\.m4a$)'
 ```
   기대: `godot/tests/fixtures/song/tone_8s.mp3` 한 줄뿐(기존 허용 파일).
-- **X-4 공개 검사**: `powershell -ExecutionPolicy Bypass -File "$W\packaging\publish_release.ps1" -ScanOnly; "exit=$LASTEXITCODE"` → `exit=0`, `powershell -ExecutionPolicy Bypass -File "$W\packaging\check_no_media.ps1"; "exit=$LASTEXITCODE"` → `exit=0`.
+- **X-4 공개 검사**: `powershell -ExecutionPolicy Bypass -File "$W\packaging\publish_release.ps1" -Version 2.0.1 -ScanOnly; "exit=$LASTEXITCODE"` → `exit=0`, `powershell -ExecutionPolicy Bypass -File "$W\packaging\check_no_media.ps1"; "exit=$LASTEXITCODE"` → `exit=0`.
 - **X-5 서버·금지 파일 무변경**: `git -C $W diff --name-only $BASE -- backend godot/project.godot godot/scripts/autoload native godot/scripts/sync` → 출력 없음. 파이썬 도구가 서버를 불러 쓰는 작업은 전후 `Get-FileHash "$W\backend\*.py"` 가 같다.
 - **X-6 네트워크 코드 위치**: `Select-String -Path (git -C $W diff --name-only $BASE | Where-Object { $_ -like '*.gd' } | ForEach-Object { "$W\$_" }) -Pattern 'HTTPRequest','HTTPClient','shell_open','request_permission' -SimpleMatch` → `model_store.gd` 의 `HTTPClient` 줄 밖에서 0줄.
 - **X-7 로그 정적 검사**: `Select-String -Path "$W\godot\scripts\local\local_stt.gd","$W\godot\scripts\local\stt_engine.gd","$W\godot\scripts\local\model_store.gd","$W\godot\scripts\ui\stt_diag_sheet.gd" -Pattern '(print|push_warning|push_error|printerr)\(.*(text|target|transcript|words|url|path)'` → 0줄(파일이 아직 없으면 그 파일은 건너뜀).
 - **X-8 소유 밖 수정 0**: `Own-Diff <작업>` → 출력 없음.
 - **X-9 소유권 검사**: §3.3 명령에 그 파의 작업을 `only` 로 넘겨 `OK`.
-- **X-10 프로세스**: 시작한 프로세스는 받은 PID 로만 종료. 보고에 "남은 프로세스·열린 포트 없음"(`Get-NetTCPConnection -State Listen -LocalPort 18791..18799 -ErrorAction SilentlyContinue` 결과 없음).
+- **X-10 프로세스**: 시작한 프로세스는 받은 PID 로만 종료. 보고에 "남은 프로세스·열린 포트 없음"(`Get-NetTCPConnection -State Listen -LocalPort (18791..18799) -ErrorAction SilentlyContinue` 결과 없음).
 - **X-11 실제 사용자 폴더 무변경**: 시험 전후 `Get-ChildItem "$env:USERPROFILE\AppData\Roaming\Godot\app_userdata" -Recurse -File | Select FullName,Length,LastWriteTime` 목록이 같다(`$env:APPDATA` 를 바꿨으므로 시험은 거기에 쓰지 않는다).
 
 ### 5.2 PA2 — `ScoreCore`
