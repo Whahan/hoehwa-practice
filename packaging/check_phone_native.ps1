@@ -8,11 +8,12 @@
 #                little endian, ET_DYN and e_machine AArch64 (183) - the folder name alone proves nothing
 #   (b) align    every LOAD segment of every lib/*/*.so has p_align >= 2**14 (llvm-objdump from the NDK) - 16 KB pages
 #   (c) zipalign zipalign -c -P 16 -v 4 ends with "Verification successful"
-#   (d) backup   aapt2 dump xmltree --file AndroidManifest.xml shows allowBackup=false (a missing attribute counts as true = fail)
+#   (d) backup   aapt2 dump xmltree --file AndroidManifest.xml: the android:allowBackup attribute of the <application> element (child of <manifest>)
+#                is false; a missing attribute counts as true = fail; a false on <activity> or <manifest> does not count
 #   (e) needed   the bridge library needs at least one library and only libc.so libm.so libdl.so liblog.so libandroid.so
 #   (f) files    no .dll and no ggml-*.bin anywhere in the APK
 #   (g) size     APK <= 100,000,000 bytes and growth over the baseline APK <= $MaxGrowBytes (no default baseline APK found = "unverified" line;
-#                a -BaselineApk that is missing or smaller than 1,000,000 bytes fails)
+#                a -BaselineApk that is missing, smaller than 1,000,000 bytes, or not a ZIP with AndroidManifest.xml fails)
 # Last line: PHONE_NATIVE_OK or PHONE_NATIVE_FAIL <items>; exit code 0 / 1.  -SelfTest ends with SELFTEST_OK (exit 0) or SELFTEST_FAIL (exit 1).
 param(
     [string]$Apk,
@@ -34,6 +35,10 @@ $ExpectedMachine = 183          # EM_AARCH64
 $CheckElfMachine = $true        # (a): ELF header of every lib/**.so
 $CheckAbiFolders = $true        # (a): every entry under lib/ is inside arm64-v8a
 $MinBaselineBytes = 1000000
+# ZIP entry names, folder names, library names are CASE SENSITIVE on Android. PowerShell hashtables, -eq, -like, -match, -contains,
+# Sort-Object -Unique and friends ignore case, so every such comparison below uses an Ordinal comparer or a -c operator.
+$NameComparer = [StringComparer]::Ordinal
+$BackupApplicationOnly = $true  # (d): read allowBackup from the <application> element only, not the first match anywhere
 
 # run a native tool; returns @(output lines, exit code). Never prints anything itself.
 function Native([string]$exe, [string[]]$a) {
@@ -70,15 +75,16 @@ function New-Ctx([string]$apk, $tools) {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ("cpn-" + [guid]::NewGuid().ToString("N").Substring(0, 10))
     New-Item -ItemType Directory -Force $tmp | Out-Null
     $names = New-Object System.Collections.Generic.List[string]
-    $so = @{}
-    $seen = @{}; $dups = @()
+    $so = New-Object 'System.Collections.Generic.Dictionary[string,string]' $NameComparer
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' $NameComparer
+    $dups = @()
     $zip = [IO.Compression.ZipFile]::OpenRead($apk)
     try {
         $i = 0
         foreach ($e in $zip.Entries) {
             $names.Add($e.FullName)
-            if ($seen.ContainsKey($e.FullName)) { $dups += $e.FullName } else { $seen[$e.FullName] = 1 }
-            if ($e.FullName -match '(?i)^lib/.+\.so$' -and -not $so.ContainsKey($e.FullName)) {
+            if (-not $seen.Add($e.FullName)) { $dups += $e.FullName }
+            if ($e.FullName -cmatch '^lib/.+\.[sS][oO]$' -and -not $so.ContainsKey($e.FullName)) {
                 $i++
                 $dst = Join-Path $tmp ("so$i.so")
                 $in = $e.Open(); $outS = [IO.File]::Create($dst)
@@ -125,13 +131,12 @@ function Check-Abi($ctx) {
     if ($CheckAbiFolders) {
         $abis = @(); $stray = @()
         foreach ($n in $ctx.Names) {
-            if ($n -notlike "lib/*" -or $n -eq "lib/") { continue }
+            if ($n -cnotlike "lib/*" -or $n -ceq "lib/") { continue }
             $parts = $n -split "/"
             if ($parts.Count -lt 3) { $stray += $n; continue }     # a file straight under lib/ has no ABI folder
             $abis += $parts[1]
         }
-        $abis = @($abis | Sort-Object -Unique)
-        $other = @($abis | Where-Object { $_ -ne "arm64-v8a" })
+        $other = @($abis | Where-Object { $_ -cne "arm64-v8a" } | Select-Object -Unique)
         if ($other.Count -gt 0) { $problems += "ABI folder(s) other than arm64-v8a under lib/: [" + ($other -join ",") + "]" }
         if ($stray.Count -gt 0) { $problems += "entries straight under lib/ (no ABI folder): " + (($stray | Select-Object -First 3) -join ", ") }
     }
@@ -143,7 +148,8 @@ function Check-Abi($ctx) {
     }
     if ($problems.Count -gt 0) { return @{ ok = $false; text = ($problems -join "; ") } }
     return @{ ok = $true; text = "$BridgeSo present; every lib/ entry is under arm64-v8a; $($ctx.So.Count) .so file(s), all ELF64 little-endian AArch64 shared objects" }
-}function Check-Align($ctx) {
+}
+function Check-Align($ctx) {
     if ($ctx.So.Count -eq 0) { return @{ ok = $false; text = "no lib/*/*.so in the APK" } }
     $bad = @(); $lines = @()
     foreach ($k in ($ctx.So.Keys | Sort-Object)) {
@@ -159,18 +165,44 @@ function Check-Abi($ctx) {
 function Check-ZipAlign($ctx) {
     $r = Native $ctx.Tools.Zipalign @("-c", "-P", "16", "-v", "4", $ctx.Apk)
     $last = ($r[0] | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 1)
-    if ($r[1] -eq 0 -and $last -match 'Verification successful') { return @{ ok = $true; text = "zipalign -c -P 16 -v 4: $last" } }
+    if ($r[1] -eq 0 -and $last -cmatch 'Verification successful') { return @{ ok = $true; text = "zipalign -c -P 16 -v 4: $last" } }
     return @{ ok = $false; text = "zipalign -c -P 16 -v 4 did not pass (exit $($r[1])): $last" }
 }
 function Test-BackupText([string]$txt) {
-    if ($txt -notmatch '(?m)^\s*E: manifest\b') { return @{ ok = $false; text = "no manifest element in the aapt2 output" } }
-    $m = [regex]::Match($txt, 'allowBackup\(0x[0-9a-fA-F]+\)=(\S+)')
-    if (-not $m.Success) { return @{ ok = $false; text = "no allowBackup attribute (a missing attribute means true)" } }
-    $v = $m.Groups[1].Value
-    if ($v -eq "false" -or $v -match '^\(type 0x12\)0x0$') { return @{ ok = $true; text = "allowBackup=false" } }
-    return @{ ok = $false; text = "allowBackup=$v (must be false)" }
-}
-function Check-Backup($ctx) {
+    $lines = @($txt -split "`r?`n")
+    $mi = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -cmatch '^(\s*)E: manifest\b') { $mi += $i } }
+    if ($mi.Count -ne 1) { return @{ ok = $false; text = "expected exactly one manifest element in the aapt2 output, found $($mi.Count)" } }
+    if (-not $BackupApplicationOnly) {   # old behaviour, kept only so the self test can prove the new one is needed
+        $m0 = [regex]::Match($txt, 'allowBackup\(0x[0-9a-fA-F]+\)=(\S+)')
+        if (-not $m0.Success) { return @{ ok = $false; text = "no allowBackup attribute" } }
+        return @{ ok = ($m0.Groups[1].Value -ceq "false"); text = "allowBackup=$($m0.Groups[1].Value) (first match anywhere)" }
+    }
+    $mIndent = ([regex]::Match($lines[$mi[0]], '^(\s*)')).Groups[1].Length
+    $appIdx = @()
+    for ($i = $mi[0] + 1; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '\S') { continue }
+        $ind = ([regex]::Match($lines[$i], '^(\s*)')).Groups[1].Length
+        if ($ind -le $mIndent) { break }
+        if ($ind -eq $mIndent + 4 -and $lines[$i] -cmatch '^\s*E: application\b') { $appIdx += $i }
+    }
+    if ($appIdx.Count -ne 1) { return @{ ok = $false; text = "expected exactly one application element under manifest, found $($appIdx.Count)" } }
+    $aIndent = $mIndent + 4      # aapt2 xmltree: an element's attributes are indented 2 more than the element, its child elements 4 more
+    $vals = @()
+    for ($i = $appIdx[0] + 1; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '\S') { continue }
+        $ind = ([regex]::Match($lines[$i], '^(\s*)')).Groups[1].Length
+        if ($ind -le $aIndent) { break }
+        if ($ind -eq $aIndent + 2) {
+            $m = [regex]::Match($lines[$i], '^\s*A: http://schemas\.android\.com/apk/res/android:allowBackup\(0x[0-9a-fA-F]+\)=(\S+)')
+            if ($m.Success) { $vals += $m.Groups[1].Value }
+        }
+    }
+    if ($vals.Count -eq 0) { return @{ ok = $false; text = "the application element has no android:allowBackup attribute (a missing attribute means true)" } }
+    if ($vals.Count -gt 1) { return @{ ok = $false; text = "the application element has several allowBackup attributes" } }
+    $v = $vals[0]
+    if ($v -ceq "false" -or $v -cmatch '^\(type 0x12\)0x0$') { return @{ ok = $true; text = "application allowBackup=false" } }
+    return @{ ok = $false; text = "application allowBackup=$v (must be false)" }
+}function Check-Backup($ctx) {
     $r = Native $ctx.Tools.Aapt2 @("dump", "xmltree", "--file", "AndroidManifest.xml", $ctx.Apk)
     if ($r[1] -ne 0) { return @{ ok = $false; text = "aapt2 dump xmltree failed (exit $($r[1]))" } }
     return Test-BackupText ($r[0] -join "`n")
@@ -180,7 +212,7 @@ function Check-Needed($ctx) {
     $e = Read-Elf $ctx $ctx.So[$BridgeSo]
     if ($null -eq $e) { return @{ ok = $false; text = "llvm-objdump could not read the bridge library" } }
     if ($e.Needed.Count -eq 0) { return @{ ok = $false; text = "no NEEDED entry could be read from the bridge library" } }
-    $extra = @($e.Needed | Where-Object { $AllowedNeeded -notcontains $_ })
+    $extra = @($e.Needed | Where-Object { $AllowedNeeded -cnotcontains $_ })
     if ($extra.Count -gt 0) { return @{ ok = $false; text = "NEEDED outside the allowed list: " + ($extra -join ", ") + " (all: " + ($e.Needed -join ",") + ")" } }
     return @{ ok = $true; text = "NEEDED = [" + ($e.Needed -join ",") + "] all in the allowed list" }
 }
@@ -196,6 +228,19 @@ function Test-Size([long]$len, $baseLen) {
     $grow = $len - [long]$baseLen
     if ($grow -gt $MaxGrowBytes) { return @{ ok = $false; text = ("growth over the baseline APK {0:N0} B is over the limit {1:N0} B (total {2:N0} B)" -f $grow, $MaxGrowBytes, $len) } }
     return @{ ok = $true; text = ("total {0:N0} B (limit {1:N0}); growth over the baseline {2:N0} B (limit {3:N0})" -f $len, $MaxTotalBytes, $grow, $MaxGrowBytes) }
+}
+
+# a usable baseline is an APK: a ZIP that can be opened and has AndroidManifest.xml (exact name)
+function Test-Baseline([string]$path) {
+    $zip = $null
+    try {
+        $zip = [IO.Compression.ZipFile]::OpenRead($path)
+        $has = $false
+        foreach ($e in $zip.Entries) { if ($e.FullName -ceq "AndroidManifest.xml") { $has = $true; break } }
+        if (-not $has) { return @{ ok = $false; text = "baseline file is a ZIP but has no AndroidManifest.xml (not an APK): $path" } }
+        return @{ ok = $true; text = "baseline is an APK" }
+    } catch { return @{ ok = $false; text = "baseline file is not a readable ZIP/APK: $path" } }
+    finally { if ($zip) { $zip.Dispose() } }
 }
 
 function Find-Baseline([string]$given) {
@@ -223,9 +268,12 @@ function Invoke-Checks([string]$apk, [string]$baseline) {
     $ctx = New-Ctx $apk $tools
     $failed = New-Object System.Collections.Generic.List[string]
     try {
-        $baseLen = $null; $baseMissing = $false
+        $baseLen = $null; $baseMissing = $false; $baseBad = $null
         $bp = Find-Baseline $baseline
-        if ($bp) { $baseLen = (Get-Item -LiteralPath $bp).Length; Write-Host "    baseline APK: $bp ($baseLen B)" }
+        if ($bp) {
+            $baseLen = (Get-Item -LiteralPath $bp).Length; Write-Host "    baseline APK: $bp ($baseLen B)"
+            $bv = Test-Baseline $bp; if (-not $bv.ok) { $baseBad = $bv.text }
+        }
         elseif ($baseline) { $baseMissing = $true; Write-Host "    baseline APK not found: $baseline" }
         $list = @(
             @("a", "abi", { Check-Abi $ctx }),
@@ -234,7 +282,7 @@ function Invoke-Checks([string]$apk, [string]$baseline) {
             @("d", "backup", { Check-Backup $ctx }),
             @("e", "needed", { Check-Needed $ctx }),
             @("f", "files", { Check-Files $ctx }),
-            @("g", "size", { if ($baseMissing) { @{ ok = $false; text = "the baseline APK given with -BaselineApk was not found: $baseline" } } else { Test-Size $ctx.Length $baseLen } })
+            @("g", "size", { if ($baseMissing) { @{ ok = $false; text = "the baseline APK given with -BaselineApk was not found: $baseline" } } elseif ($baseBad) { @{ ok = $false; text = $baseBad } } else { Test-Size $ctx.Length $baseLen } })
         )
         foreach ($c in $list) {
             $r = & $c[2]
@@ -363,16 +411,16 @@ function Invoke-SelfTest {
             Expect "abi" $null (Check-Abi $c); Expect "align" $null (Check-Align $c); Expect "zipalign" $null (Check-ZipAlign $c)
             Expect "needed" $null (Check-Needed $c); Expect "files" $null (Check-Files $c)
         }
-        $mf = "N: android=http://schemas.android.com/apk/res/android`n  E: manifest (line=2)`n    E: application (line=5)`n"
-        Expect "backup false" $null (Test-BackupText ($mf + "      A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false"))
+        $mf = "N: android=http://schemas.android.com/apk/res/android`n  E: manifest (line=2)`n    A: package=`"x`"`n      E: application (line=5)`n"
+        Expect "backup false" $null (Test-BackupText ($mf + "        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false"))
         Expect "size" $null (Test-Size 20000000 10000000)
         # wrong inputs
         $f2 = [ordered]@{ $BridgeSo = (New-FakeElf 12 @("libc.so")) }
         With-Ctx (Zip-Of "align4k" $f2 $true) { param($c) Expect "4 KB LOAD align" "align" (Check-Align $c) }
         With-Ctx (Zip-Of "unaligned" $files $false) { param($c) Expect "zip entry not 16 KB aligned" "zipalign" (Check-ZipAlign $c) }
-        Expect "allowBackup=true" "backup" (Test-BackupText ($mf + "      A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true"))
+        Expect "allowBackup=true" "backup" (Test-BackupText ($mf + "        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true"))
         Expect "allowBackup=false but no manifest element" "backup" (Test-BackupText "A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false")
-        Expect "allowBackup missing" "backup" (Test-BackupText ($mf + "      A: http://schemas.android.com/apk/res/android:label(0x01010001)=`"x`""))
+        Expect "allowBackup missing" "backup" (Test-BackupText ($mf + "        A: http://schemas.android.com/apk/res/android:label(0x01010001)=`"x`""))
         $f3 = [ordered]@{ $BridgeSo = $good; "assets/whisper_bridge.windows.x86_64.dll" = [byte[]](1, 2, 3) }
         With-Ctx (Zip-Of "dll" $f3 $true) { param($c) Expect ".dll inside" "files" (Check-Files $c) }
         $f4 = [ordered]@{ $BridgeSo = $good; "assets/models/ggml-base.en-q5_1.bin" = [byte[]](1, 2, 3) }
@@ -407,6 +455,32 @@ function Invoke-SelfTest {
         With-Ctx (Zip-Of "dupname" $f15 $true @(, @($BridgeSo, $x86))) { param($c) Expect "duplicate entry name" "abi" (Check-Abi $c) }
         $f16 = [ordered]@{ $BridgeSo = (New-FakeElf 14 @()) }
         With-Ctx (Zip-Of "noneeded" $f16 $true) { param($c) Expect "bridge with no NEEDED at all" "needed" (Check-Needed $c) }
+        # case sensitivity: names that differ only by case are different ZIP paths / folders / libraries
+        $A = "http://schemas.android.com/apk/res/android"
+        $f17 = [ordered]@{ $BridgeSo = $good }     # a hashtable literal cannot hold two keys that differ only by case, so they go in as extra pairs
+        With-Ctx (Zip-Of "casepair" $f17 $true @(@("assets/TestCase.txt", [byte[]](65)), @("assets/testcase.txt", [byte[]](66)))) { param($c) Expect "assets/TestCase.txt + assets/testcase.txt are two valid paths" $null (Check-Abi $c); Expect "case pair, files" $null (Check-Files $c) }
+        $f18 = [ordered]@{ "LIB/ARM64-V8A/LIBWHISPER_BRIDGE.ANDROID.ARM64.SO" = $good }
+        With-Ctx (Zip-Of "upperpath" $f18 $true) { param($c) Expect "bridge path all upper case" "abi" (Check-Abi $c) }
+        $f19 = [ordered]@{ "lib/arm64-v8a/LIBWHISPER_BRIDGE.ANDROID.ARM64.SO" = $good }
+        With-Ctx (Zip-Of "upperfile" $f19 $true) { param($c) Expect "bridge file name upper case" "abi" (Check-Abi $c) }
+        $f20 = [ordered]@{ $BridgeSo = $good; "lib/ARM64-V8A/libother.so" = $good }
+        With-Ctx (Zip-Of "upperabi" $f20 $true) { param($c) Expect "ABI folder ARM64-V8A is not arm64-v8a" "abi" (Check-Abi $c) }
+        $f21 = [ordered]@{ $BridgeSo = (New-FakeElf 14 @("LIBC.SO", "libm.so")) }
+        With-Ctx (Zip-Of "upperneeded" $f21 $true) { param($c) Expect "NEEDED LIBC.SO" "needed" (Check-Needed $c) }
+        # allowBackup must come from the application element
+        $mAct = "N: android=$A`n  E: manifest (line=2)`n    A: ${A}:package=`"x`"`n      E: application (line=5)`n        A: ${A}:label(0x01010001)=`"x`"`n        E: activity (line=9)`n          A: ${A}:allowBackup(0x01010280)=false"
+        Expect "allowBackup=false only on an activity" "backup" (Test-BackupText $mAct)
+        $mMan = "N: android=$A`n  E: manifest (line=2)`n    A: ${A}:allowBackup(0x01010280)=false`n      E: application (line=5)`n        A: ${A}:label(0x01010001)=`"x`""
+        Expect "allowBackup=false only on the manifest" "backup" (Test-BackupText $mMan)
+        $mTrueAct = "N: android=$A`n  E: manifest (line=2)`n      E: application (line=5)`n        A: ${A}:allowBackup(0x01010280)=false`n          E: activity (line=9)`n            A: ${A}:allowBackup(0x01010280)=true"
+        Expect "application false, activity true" $null (Test-BackupText $mTrueAct)
+        $mTrueApp = "N: android=$A`n  E: manifest (line=2)`n      E: application (line=5)`n        A: ${A}:allowBackup(0x01010280)=true`n          E: activity (line=9)`n            A: ${A}:allowBackup(0x01010280)=false"
+        Expect "application true, activity false" "backup" (Test-BackupText $mTrueApp)        # baseline file must be an APK
+        $txtBase = Join-Path $dir "base.txt"; [IO.File]::WriteAllText($txtBase, ("this is not a zip file " * 100))
+        Expect "baseline is a text file" "size" (Test-Baseline $txtBase)
+        $noMan = Zip-Of "nomanifest" ([ordered]@{ "assets/a.txt" = [byte[]](1) }) $false
+        Expect "baseline ZIP without AndroidManifest.xml" "size" (Test-Baseline $noMan)
+        Expect "baseline APK-like ZIP" $null (Test-Baseline $okZip)
         Expect "baseline far too small" "size" (Test-Size 20000000 5)
         Expect "growth over limit" "size" (Test-Size 30000000 10000000)
         Expect "total over limit" "size" (Test-Size 100000001 $null)
