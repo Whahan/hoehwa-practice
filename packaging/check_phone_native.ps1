@@ -3,13 +3,16 @@
 #   powershell -ExecutionPolicy Bypass -File packaging\check_phone_native.ps1 -Apk <file.apk> [-BaselineApk <older.apk>] [-AndroidSdk <sdk folder>]
 #   powershell -ExecutionPolicy Bypass -File packaging\check_phone_native.ps1 -SelfTest
 # Checks (everything is read from the APK; the .so files are copied to a temporary folder that is deleted at the end):
-#   (a) abi      lib/arm64-v8a/libwhisper_bridge.android.arm64.so exists and arm64-v8a is the only ABI folder under lib/
+#   (a) abi      lib/arm64-v8a/libwhisper_bridge.android.arm64.so exists; EVERY entry under lib/ is in the folder arm64-v8a (no other ABI folder, no
+#                file straight under lib/, no duplicate entry names); EVERY lib/**.so (Godot's own too) has an ELF header that says ELFCLASS64,
+#                little endian, ET_DYN and e_machine AArch64 (183) - the folder name alone proves nothing
 #   (b) align    every LOAD segment of every lib/*/*.so has p_align >= 2**14 (llvm-objdump from the NDK) - 16 KB pages
 #   (c) zipalign zipalign -c -P 16 -v 4 ends with "Verification successful"
 #   (d) backup   aapt2 dump xmltree --file AndroidManifest.xml shows allowBackup=false (a missing attribute counts as true = fail)
-#   (e) needed   the bridge library needs only libc.so libm.so libdl.so liblog.so libandroid.so
+#   (e) needed   the bridge library needs at least one library and only libc.so libm.so libdl.so liblog.so libandroid.so
 #   (f) files    no .dll and no ggml-*.bin anywhere in the APK
-#   (g) size     APK <= 100,000,000 bytes and growth over the baseline APK <= $MaxGrowBytes (no baseline APK found = "unverified" line)
+#   (g) size     APK <= 100,000,000 bytes and growth over the baseline APK <= $MaxGrowBytes (no default baseline APK found = "unverified" line;
+#                a -BaselineApk that is missing or smaller than 1,000,000 bytes fails)
 # Last line: PHONE_NATIVE_OK or PHONE_NATIVE_FAIL <items>; exit code 0 / 1.  -SelfTest ends with SELFTEST_OK (exit 0) or SELFTEST_FAIL (exit 1).
 param(
     [string]$Apk,
@@ -27,6 +30,10 @@ $MaxTotalBytes = 100000000
 $BridgeSo = "lib/arm64-v8a/libwhisper_bridge.android.arm64.so"
 $AllowedNeeded = @("libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so")
 $MinAlignLog2 = 14
+$ExpectedMachine = 183          # EM_AARCH64
+$CheckElfMachine = $true        # (a): ELF header of every lib/**.so
+$CheckAbiFolders = $true        # (a): every entry under lib/ is inside arm64-v8a
+$MinBaselineBytes = 1000000
 
 # run a native tool; returns @(output lines, exit code). Never prints anything itself.
 function Native([string]$exe, [string[]]$a) {
@@ -64,12 +71,14 @@ function New-Ctx([string]$apk, $tools) {
     New-Item -ItemType Directory -Force $tmp | Out-Null
     $names = New-Object System.Collections.Generic.List[string]
     $so = @{}
+    $seen = @{}; $dups = @()
     $zip = [IO.Compression.ZipFile]::OpenRead($apk)
     try {
         $i = 0
         foreach ($e in $zip.Entries) {
             $names.Add($e.FullName)
-            if ($e.FullName -match '^lib/[^/]+/[^/]+\.so$') {
+            if ($seen.ContainsKey($e.FullName)) { $dups += $e.FullName } else { $seen[$e.FullName] = 1 }
+            if ($e.FullName -match '(?i)^lib/.+\.so$' -and -not $so.ContainsKey($e.FullName)) {
                 $i++
                 $dst = Join-Path $tmp ("so$i.so")
                 $in = $e.Open(); $outS = [IO.File]::Create($dst)
@@ -78,7 +87,7 @@ function New-Ctx([string]$apk, $tools) {
             }
         }
     } finally { $zip.Dispose() }
-    return @{ Apk = $apk; Tools = $tools; Names = $names; So = $so; Tmp = $tmp; Length = (Get-Item -LiteralPath $apk).Length }
+    return @{ Apk = $apk; Tools = $tools; Names = $names; So = $so; Dups = $dups; Tmp = $tmp; Length = (Get-Item -LiteralPath $apk).Length }
 }
 function Remove-Ctx($ctx) { if ($ctx -and $ctx.Tmp -and (Test-Path -LiteralPath $ctx.Tmp)) { Remove-Item -LiteralPath $ctx.Tmp -Recurse -Force -ErrorAction SilentlyContinue } }
 
@@ -95,13 +104,46 @@ function Read-Elf($ctx, [string]$file) {
 }
 
 # ------------------------------------------------------------ checks: each returns @{ ok = bool; text = string }
-function Check-Abi($ctx) {
-    $abis = @($ctx.So.Keys | ForEach-Object { ($_ -split '/')[1] } | Sort-Object -Unique)
-    if (-not $ctx.So.ContainsKey($BridgeSo)) { return @{ ok = $false; text = "$BridgeSo is not in the APK (ABI folders under lib/: [" + ($abis -join ",") + "])" } }
-    if ($abis.Count -ne 1 -or $abis[0] -ne "arm64-v8a") { return @{ ok = $false; text = "ABI folders under lib/ are not exactly arm64-v8a: [" + ($abis -join ",") + "]" } }
-    return @{ ok = $true; text = "$BridgeSo present, arm64-v8a is the only ABI folder, $($ctx.So.Count) .so file(s)" }
+# $null when the file is a 64-bit little-endian shared object for AArch64, else the reason
+function Test-ElfHeader([string]$file) {
+    $buf = New-Object byte[] 20
+    $fs = [IO.File]::OpenRead($file)
+    try { $n = $fs.Read($buf, 0, 20) } finally { $fs.Dispose() }
+    if ($n -lt 20) { return "file too short for an ELF header" }
+    if ($buf[0] -ne 0x7f -or $buf[1] -ne 0x45 -or $buf[2] -ne 0x4c -or $buf[3] -ne 0x46) { return "not an ELF file" }
+    if ($buf[4] -ne 2) { return "not ELFCLASS64" }
+    if ($buf[5] -ne 1) { return "not little endian" }
+    $type = [BitConverter]::ToUInt16($buf, 16); $mach = [BitConverter]::ToUInt16($buf, 18)
+    if ($type -ne 3) { return "e_type $type (shared object 3 needed)" }
+    if ($mach -ne $ExpectedMachine) { return "e_machine $mach (AArch64 $ExpectedMachine needed)" }
+    return $null
 }
-function Check-Align($ctx) {
+function Check-Abi($ctx) {
+    $problems = @()
+    if ($ctx.Dups.Count -gt 0) { $problems += "duplicate APK entry names: " + (($ctx.Dups | Select-Object -First 3) -join ", ") }
+    if (-not $ctx.So.ContainsKey($BridgeSo)) { $problems += "$BridgeSo is not in the APK" }
+    if ($CheckAbiFolders) {
+        $abis = @(); $stray = @()
+        foreach ($n in $ctx.Names) {
+            if ($n -notlike "lib/*" -or $n -eq "lib/") { continue }
+            $parts = $n -split "/"
+            if ($parts.Count -lt 3) { $stray += $n; continue }     # a file straight under lib/ has no ABI folder
+            $abis += $parts[1]
+        }
+        $abis = @($abis | Sort-Object -Unique)
+        $other = @($abis | Where-Object { $_ -ne "arm64-v8a" })
+        if ($other.Count -gt 0) { $problems += "ABI folder(s) other than arm64-v8a under lib/: [" + ($other -join ",") + "]" }
+        if ($stray.Count -gt 0) { $problems += "entries straight under lib/ (no ABI folder): " + (($stray | Select-Object -First 3) -join ", ") }
+    }
+    if ($CheckElfMachine) {
+        foreach ($k in ($ctx.So.Keys | Sort-Object)) {
+            $why = Test-ElfHeader $ctx.So[$k]
+            if ($why) { $problems += "$k : $why" }
+        }
+    }
+    if ($problems.Count -gt 0) { return @{ ok = $false; text = ($problems -join "; ") } }
+    return @{ ok = $true; text = "$BridgeSo present; every lib/ entry is under arm64-v8a; $($ctx.So.Count) .so file(s), all ELF64 little-endian AArch64 shared objects" }
+}function Check-Align($ctx) {
     if ($ctx.So.Count -eq 0) { return @{ ok = $false; text = "no lib/*/*.so in the APK" } }
     $bad = @(); $lines = @()
     foreach ($k in ($ctx.So.Keys | Sort-Object)) {
@@ -121,6 +163,7 @@ function Check-ZipAlign($ctx) {
     return @{ ok = $false; text = "zipalign -c -P 16 -v 4 did not pass (exit $($r[1])): $last" }
 }
 function Test-BackupText([string]$txt) {
+    if ($txt -notmatch '(?m)^\s*E: manifest\b') { return @{ ok = $false; text = "no manifest element in the aapt2 output" } }
     $m = [regex]::Match($txt, 'allowBackup\(0x[0-9a-fA-F]+\)=(\S+)')
     if (-not $m.Success) { return @{ ok = $false; text = "no allowBackup attribute (a missing attribute means true)" } }
     $v = $m.Groups[1].Value
@@ -136,6 +179,7 @@ function Check-Needed($ctx) {
     if (-not $ctx.So.ContainsKey($BridgeSo)) { return @{ ok = $false; text = "$BridgeSo missing, NEEDED not readable" } }
     $e = Read-Elf $ctx $ctx.So[$BridgeSo]
     if ($null -eq $e) { return @{ ok = $false; text = "llvm-objdump could not read the bridge library" } }
+    if ($e.Needed.Count -eq 0) { return @{ ok = $false; text = "no NEEDED entry could be read from the bridge library" } }
     $extra = @($e.Needed | Where-Object { $AllowedNeeded -notcontains $_ })
     if ($extra.Count -gt 0) { return @{ ok = $false; text = "NEEDED outside the allowed list: " + ($extra -join ", ") + " (all: " + ($e.Needed -join ",") + ")" } }
     return @{ ok = $true; text = "NEEDED = [" + ($e.Needed -join ",") + "] all in the allowed list" }
@@ -147,6 +191,7 @@ function Check-Files($ctx) {
 }
 function Test-Size([long]$len, $baseLen) {
     if ($len -gt $MaxTotalBytes) { return @{ ok = $false; text = ("APK {0:N0} B is over the limit {1:N0} B" -f $len, $MaxTotalBytes) } }
+    if ($null -ne $baseLen -and [long]$baseLen -lt $MinBaselineBytes) { return @{ ok = $false; text = ("baseline APK is only {0:N0} B, not a usable baseline" -f [long]$baseLen) } }
     if ($null -eq $baseLen) { return @{ ok = $true; text = ("total {0:N0} B (limit {1:N0}); growth: UNVERIFIED (no baseline APK found)" -f $len, $MaxTotalBytes) } }
     $grow = $len - [long]$baseLen
     if ($grow -gt $MaxGrowBytes) { return @{ ok = $false; text = ("growth over the baseline APK {0:N0} B is over the limit {1:N0} B (total {2:N0} B)" -f $grow, $MaxGrowBytes, $len) } }
@@ -178,10 +223,10 @@ function Invoke-Checks([string]$apk, [string]$baseline) {
     $ctx = New-Ctx $apk $tools
     $failed = New-Object System.Collections.Generic.List[string]
     try {
-        $baseLen = $null
+        $baseLen = $null; $baseMissing = $false
         $bp = Find-Baseline $baseline
         if ($bp) { $baseLen = (Get-Item -LiteralPath $bp).Length; Write-Host "    baseline APK: $bp ($baseLen B)" }
-        elseif ($baseline) { Write-Host "    baseline APK not found: $baseline" }
+        elseif ($baseline) { $baseMissing = $true; Write-Host "    baseline APK not found: $baseline" }
         $list = @(
             @("a", "abi", { Check-Abi $ctx }),
             @("b", "align", { Check-Align $ctx }),
@@ -189,7 +234,7 @@ function Invoke-Checks([string]$apk, [string]$baseline) {
             @("d", "backup", { Check-Backup $ctx }),
             @("e", "needed", { Check-Needed $ctx }),
             @("f", "files", { Check-Files $ctx }),
-            @("g", "size", { Test-Size $ctx.Length $baseLen })
+            @("g", "size", { if ($baseMissing) { @{ ok = $false; text = "the baseline APK given with -BaselineApk was not found: $baseline" } } else { Test-Size $ctx.Length $baseLen } })
         )
         foreach ($c in $list) {
             $r = & $c[2]
@@ -201,7 +246,7 @@ function Invoke-Checks([string]$apk, [string]$baseline) {
 }
 
 # ------------------------------------------------------------ self test: fake inputs that must fail, and one that must pass
-function New-FakeElf([int]$alignLog2, [string[]]$needed) {
+function New-FakeElf([int]$alignLog2, [string[]]$needed, [int]$machine = 183) {
     $str = New-Object System.IO.MemoryStream
     $str.WriteByte(0)
     $offs = @()
@@ -216,7 +261,7 @@ function New-FakeElf([int]$alignLog2, [string[]]$needed) {
     $ms = New-Object System.IO.MemoryStream
     $w = New-Object System.IO.BinaryWriter($ms)
     $w.Write([byte[]](0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0))
-    $w.Write([uint16]3); $w.Write([uint16]183); $w.Write([uint32]1)
+    $w.Write([uint16]3); $w.Write([uint16]$machine); $w.Write([uint32]1)
     $w.Write([uint64]0); $w.Write([uint64]64); $w.Write([uint64]0)
     $w.Write([uint32]0); $w.Write([uint16]64); $w.Write([uint16]56); $w.Write([uint16]2); $w.Write([uint16]64); $w.Write([uint16]0); $w.Write([uint16]0)
     $w.Write([uint32]1); $w.Write([uint32]7); $w.Write([uint64]0); $w.Write([uint64]0); $w.Write([uint64]0)
@@ -248,12 +293,15 @@ function Get-Crc32([byte[]]$data) {
     return [uint32]($crc -bxor 4294967295)
 }
 # minimal ZIP writer, every entry stored (method 0), no alignment padding: so a .so is NOT 16 KB aligned until zipalign fixes it
-function New-FakeZip([string]$path, [System.Collections.Specialized.OrderedDictionary]$files) {
+function New-FakeZip([string]$path, [System.Collections.Specialized.OrderedDictionary]$files, [object[]]$extraPairs = @()) {
     $ms = New-Object System.IO.MemoryStream
     $w = New-Object System.IO.BinaryWriter($ms)
     $central = @()
-    foreach ($name in $files.Keys) {
-        $data = [byte[]]$files[$name]
+    $all = @()
+    foreach ($k in $files.Keys) { $all += , @($k, [byte[]]$files[$k]) }
+    foreach ($p in $extraPairs) { $all += , @($p[0], [byte[]]$p[1]) }
+    foreach ($pair in $all) {
+        $name = [string]$pair[0]; $data = [byte[]]$pair[1]
         $nb = [Text.Encoding]::UTF8.GetBytes($name)
         $crc = Get-Crc32 $data
         $off = [uint32]$ms.Length
@@ -290,9 +338,9 @@ function Invoke-SelfTest {
             else { Write-Host "SELFTEST BROKEN ($label): a good input failed: $($r.text)"; $bad.Add("pass/$label") }
         }
     }
-    function Zip-Of([string]$name, $files, [bool]$align) {
+    function Zip-Of([string]$name, $files, [bool]$align, [object[]]$extra = @()) {
         $p = Join-Path $dir "$name.zip"
-        New-FakeZip $p $files
+        New-FakeZip $p $files $extra
         if ($align) {
             $q = Join-Path $dir "$name.aligned.zip"
             $r = Native $tools.Zipalign @("-f", "-P", "16", "4", $p, $q)
@@ -315,14 +363,16 @@ function Invoke-SelfTest {
             Expect "abi" $null (Check-Abi $c); Expect "align" $null (Check-Align $c); Expect "zipalign" $null (Check-ZipAlign $c)
             Expect "needed" $null (Check-Needed $c); Expect "files" $null (Check-Files $c)
         }
-        Expect "backup false" $null (Test-BackupText "A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false")
+        $mf = "N: android=http://schemas.android.com/apk/res/android`n  E: manifest (line=2)`n    E: application (line=5)`n"
+        Expect "backup false" $null (Test-BackupText ($mf + "      A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false"))
         Expect "size" $null (Test-Size 20000000 10000000)
         # wrong inputs
         $f2 = [ordered]@{ $BridgeSo = (New-FakeElf 12 @("libc.so")) }
         With-Ctx (Zip-Of "align4k" $f2 $true) { param($c) Expect "4 KB LOAD align" "align" (Check-Align $c) }
         With-Ctx (Zip-Of "unaligned" $files $false) { param($c) Expect "zip entry not 16 KB aligned" "zipalign" (Check-ZipAlign $c) }
-        Expect "allowBackup=true" "backup" (Test-BackupText "A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true")
-        Expect "allowBackup missing" "backup" (Test-BackupText "E: application (line=5)`n A: http://schemas.android.com/apk/res/android:label(0x01010001)=`"x`"")
+        Expect "allowBackup=true" "backup" (Test-BackupText ($mf + "      A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true"))
+        Expect "allowBackup=false but no manifest element" "backup" (Test-BackupText "A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false")
+        Expect "allowBackup missing" "backup" (Test-BackupText ($mf + "      A: http://schemas.android.com/apk/res/android:label(0x01010001)=`"x`""))
         $f3 = [ordered]@{ $BridgeSo = $good; "assets/whisper_bridge.windows.x86_64.dll" = [byte[]](1, 2, 3) }
         With-Ctx (Zip-Of "dll" $f3 $true) { param($c) Expect ".dll inside" "files" (Check-Files $c) }
         $f4 = [ordered]@{ $BridgeSo = $good; "assets/models/ggml-base.en-q5_1.bin" = [byte[]](1, 2, 3) }
@@ -333,6 +383,31 @@ function Invoke-SelfTest {
         With-Ctx (Zip-Of "abi" $f6 $true) { param($c) Expect "bridge library missing / wrong ABI folder" "abi" (Check-Abi $c) }
         $f7 = [ordered]@{ $BridgeSo = $good; "lib/x86_64/libother.so" = $good }
         With-Ctx (Zip-Of "abi2" $f7 $true) { param($c) Expect "second ABI folder" "abi" (Check-Abi $c) }
+        # ELF header / ABI folder holes: the folder name and the LOAD/NEEDED text alone must not be enough
+        $x86 = New-FakeElf 14 @("libc.so", "libm.so", "libdl.so") 62
+        $e32 = [byte[]]$good.Clone(); $e32[4] = 1
+        $beBig = [byte[]]$good.Clone(); $beBig[5] = 2
+        $f8 = [ordered]@{ $BridgeSo = $x86 }
+        With-Ctx (Zip-Of "x86elf" $f8 $true) { param($c) Expect "bridge ELF says x86-64 (e_machine 62) in arm64-v8a" "abi" (Check-Abi $c) }
+        $f9 = [ordered]@{ $BridgeSo = $good; "lib/arm64-v8a/libgodot_android.so" = $x86 }
+        With-Ctx (Zip-Of "x86godot" $f9 $true) { param($c) Expect "another .so in arm64-v8a is x86-64" "abi" (Check-Abi $c) }
+        $f10 = [ordered]@{ $BridgeSo = $e32 }
+        With-Ctx (Zip-Of "elf32" $f10 $true) { param($c) Expect "bridge ELF is ELFCLASS32" "abi" (Check-Abi $c) }
+        $f10b = [ordered]@{ $BridgeSo = $beBig }
+        With-Ctx (Zip-Of "elfbe" $f10b $true) { param($c) Expect "bridge ELF is big endian" "abi" (Check-Abi $c) }
+        $f11 = [ordered]@{ $BridgeSo = [Text.Encoding]::ASCII.GetBytes("this is not an ELF file at all, only text") }
+        With-Ctx (Zip-Of "notelf" $f11 $true) { param($c) Expect "bridge .so is not an ELF" "abi" (Check-Abi $c) }
+        $f12 = [ordered]@{ $BridgeSo = $good; "lib/x86_64/readme.txt" = [byte[]](65, 66) }
+        With-Ctx (Zip-Of "x86file" $f12 $true) { param($c) Expect "other ABI folder with a plain file in it" "abi" (Check-Abi $c) }
+        $f13 = [ordered]@{ $BridgeSo = $good; "lib/x86_64/" = [byte[]]@() }
+        With-Ctx (Zip-Of "x86dir" $f13 $true) { param($c) Expect "other ABI folder (directory entry only)" "abi" (Check-Abi $c) }
+        $f14 = [ordered]@{ $BridgeSo = $good; "lib/readme.txt" = [byte[]](65, 66) }
+        With-Ctx (Zip-Of "libstray" $f14 $true) { param($c) Expect "file straight under lib/" "abi" (Check-Abi $c) }
+        $f15 = [ordered]@{ $BridgeSo = $good }
+        With-Ctx (Zip-Of "dupname" $f15 $true @(, @($BridgeSo, $x86))) { param($c) Expect "duplicate entry name" "abi" (Check-Abi $c) }
+        $f16 = [ordered]@{ $BridgeSo = (New-FakeElf 14 @()) }
+        With-Ctx (Zip-Of "noneeded" $f16 $true) { param($c) Expect "bridge with no NEEDED at all" "needed" (Check-Needed $c) }
+        Expect "baseline far too small" "size" (Test-Size 20000000 5)
         Expect "growth over limit" "size" (Test-Size 30000000 10000000)
         Expect "total over limit" "size" (Test-Size 100000001 $null)
     } finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
