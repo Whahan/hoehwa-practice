@@ -13,8 +13,11 @@ default is marked, one real microphone is recommended: not a game pad, not a vir
 Nothing starts before the consent text (CONSENT_TEXT, docs 4.1) is shown and `y` is typed. Then the device is chosen (--device, or the
 list and a number; Enter = the recommended one) and a 3 second sound check is shown on the screen (a bar and the size only, kept in
 memory, never saved; too quiet -> choose another device / check again / go on). Per clip: Enter starts a 6 second recording with a
-visible countdown, the size of the take is shown (a warning when it is too quiet or clipped), then Enter = next, `r` = record this clip
-again, `q` = stop here (what is recorded stays).
+visible countdown, the size of the take is shown (a warning when it is too quiet or clipped: an input channel is checked before the
+average and the resampling, the converted samples after), then Enter = next, `r` = record this clip again, `q` = stop here (what is
+recorded stays). The input stream counts the frames that really arrive: fewer frames than asked for, or an overflow / other stream
+status, means "녹음이 끊겼어요 — 다시 녹음": nothing of that take is kept and the same clip is asked again. Two channel devices: a channel
+30 dB under the other one is left out (one microphone in a two channel interface), else the two are averaged.
 --out is required (no default folder, except for --list-devices) and must be empty or new. Everything goes under --out: clips\\<clip>.wav
 and manifest.json ({"v":1,"kind":"user","seed","consent":{"given":true,"text_sha256","date"},"capture_hz","resampled","clips":[...]},
 same clip fields as calib_make_set.py with variant "user_clean" / "user_wrong" and voice "user"; the device is not named there: only the
@@ -33,6 +36,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 
@@ -59,6 +63,8 @@ CLIP_PEAK = 0.99        # a take whose peak reaches this is clipped
 CHECK_SECONDS = 3
 STEP = 0.25             # screen update step while recording
 BAR_WIDTH = 30
+GRACE_SECONDS = 1.0     # how long a stream may be late with its last frames before the take counts as cut
+ONE_CHANNEL_DB = -30    # a channel this far under the other one (rms) is not used: an unplugged or silent channel only costs 6 dB
 
 HIDDEN_WORDS = ("sound mapper", "사운드 매퍼", "주 사운드 캡처", "primary sound capture")   # aliases of the Windows default, not devices
 GAMEPAD_WORDS = ("wireless controller", "gamepad", "game pad", "dualshock", "dualsense", "xbox", "게임패드", "게임 패드", "무선 컨트롤러")
@@ -68,6 +74,10 @@ VIRTUAL_WORDS = ("stereo mix", "스테레오 믹스", "virtual", "가상", "vb-a
 
 class RecError(Exception):
     pass
+
+
+class Incomplete(RecError):
+    """the device delivered fewer frames than asked for, or reported an overflow or another stream problem: nothing is kept"""
 
 
 def plan(seed, n=N_SENTENCES):
@@ -199,10 +209,16 @@ def show_devices(devs, out=print):
     return rec_dev
 
 
+def is_number(text):
+    """a device number: 1 to 4 ASCII digits and nothing else (not `str.isdigit`: superscripts and other scripts pass it, and int() of
+    5000 digits fails)"""
+    return re.fullmatch(r"[0-9]{1,4}", text) is not None
+
+
 def resolve_device(devs, spec):
     """--device: a number of the list, or a part of a name (case ignored; the first match = the lowest number)"""
     spec = str(spec).strip()
-    if spec.isdigit():
+    if is_number(spec):
         for r in devs:
             if r["index"] == int(spec):
                 return r
@@ -228,7 +244,7 @@ def pick_device(sd, spec, input_fn, out):
             if ans == "" and rec_dev:
                 chosen = rec_dev
                 break
-            if ans.isdigit():
+            if is_number(ans):
                 found = [r for r in devs if r["index"] == int(ans)]
                 if found:
                     chosen = found[0]
@@ -291,49 +307,112 @@ def to_int16(x):
 
 
 def capture(sd, dev, seconds, tick=None, live=None, sleep=time.sleep):
-    """record `seconds` from the device at its own sample rate: mono float32 (stereo averaged), in memory only.
-    tick(remaining whole seconds) once per second, live(rms of the last step) every STEP seconds"""
+    """record `seconds` from the device at its own sample rate with an input stream: the float32 frames as received, shape (frames,
+    channels), in memory only. The callback counts the frames that really arrive and notes any status (overflow ...). The buffer is
+    zero filled first. Fewer frames than asked for, or any status -> Incomplete (the caller keeps nothing and records again).
+    tick(remaining whole seconds) once per second, live(rms of the frames that arrived in the last step) every STEP seconds."""
     import numpy as np
     rate, ch = dev["rate"], max(1, min(2, dev["channels"]))
+    n = int(seconds * rate)
+    buf = np.zeros((n, ch), dtype="float32")
+    state = {"got": 0, "bad": False}
+
+    def callback(indata, frames, time_info, status):
+        if status:
+            state["bad"] = True
+        k = min(int(frames), n - state["got"])
+        if k > 0:
+            buf[state["got"]:state["got"] + k] = np.asarray(indata)[:k].reshape(k, -1)[:, :ch]
+        state["got"] += int(frames)
+
     try:
-        buf = sd.rec(int(seconds * rate), samplerate=rate, channels=ch, dtype="float32", device=dev["index"])
-        steps = max(1, int(round(seconds / STEP)))
-        per_sec = max(1, int(round(1.0 / STEP)))
-        for k in range(steps):
-            if tick and k % per_sec == 0:
-                tick(int(seconds) - k // per_sec)
-            sleep(STEP)
-            if live:
-                a, b = int(k * STEP * rate), int((k + 1) * STEP * rate)
-                live(level_of(np.asarray(buf)[a:b].reshape(-1))[0])
-        sd.wait()
+        stream = sd.InputStream(samplerate=rate, channels=ch, dtype="float32", device=dev["index"], callback=callback)
+        try:
+            stream.start()
+            steps = max(1, int(round(seconds / STEP)))
+            per_sec = max(1, int(round(1.0 / STEP)))
+            seen = 0
+            for k in range(steps):
+                if tick and k % per_sec == 0:
+                    tick(int(seconds) - k // per_sec)
+                sleep(STEP)
+                got = min(state["got"], n)
+                if live and got > seen:
+                    live(level_of(buf[seen:got].reshape(-1))[0])
+                seen = got
+            for _ in range(int(GRACE_SECONDS / STEP)):   # the last frames may come a little late
+                if state["got"] >= n:
+                    break
+                sleep(STEP)
+        finally:
+            stream.stop()
+            stream.close()
     except Exception as e:
         raise RecError("microphone (%s)" % type(e).__name__)
-    x = np.asarray(buf, dtype="float32")
-    return x.reshape(len(x), -1).mean(axis=1) if x.size else x.reshape(-1)
+    if state["got"] < n or state["bad"]:
+        raise Incomplete("cut")
+    return buf
+
+
+def mixdown(x):
+    """(mono float32, note) from the frames of capture(). Two channels: if one is at least 30 dB under the other (a single microphone
+    in a two channel interface) only the loud one is used, else they are averaged. Checked BEFORE any average or resampling:
+    `clipped` = any input channel reached the limit."""
+    import numpy as np
+    x = np.asarray(x, dtype="float32")
+    if x.ndim == 1:
+        x = x.reshape(-1, 1)
+    clipped = bool(x.size) and float(np.max(np.abs(x))) >= CLIP_PEAK
+    if x.shape[1] == 1 or not x.size:
+        return x.reshape(-1), clipped, ""
+    rms = [level_of(x[:, c])[0] for c in range(x.shape[1])]
+    hi = int(np.argmax(rms))
+    lo = 1 - hi if x.shape[1] == 2 else None
+    if lo is not None and rms[hi] > 0 and rms[lo] <= rms[hi] * (10.0 ** (ONE_CHANNEL_DB / 20.0)):
+        return x[:, hi].copy(), clipped, "한 채널만 소리가 들려서 그 채널만 써요."
+    return x.mean(axis=1).astype("float32"), clipped, ""
 
 
 class DeviceRecorder:
-    """recorder(seconds, tick) -> 16 kHz mono int16 samples from the chosen device (resampled when its rate is not 16 kHz)"""
+    """recorder(seconds, tick) -> 16 kHz mono int16 samples from the chosen device (resampled when its rate is not 16 kHz).
+    After a call: .clipped = an input channel reached the limit before the average and the resampling, .note = what was mixed."""
 
     def __init__(self, sd, dev, sleep=time.sleep):
         self.sd, self.dev, self.sleep = sd, dev, sleep
         self.rate = dev["rate"]
         self.resampled = int(self.rate != RATE)
+        self.clipped, self.note = False, ""
 
     def __call__(self, seconds, tick=None):
-        return to_int16(to_16k(capture(self.sd, self.dev, seconds, tick=tick, sleep=self.sleep), self.rate))
+        mono, self.clipped, self.note = mixdown(capture(self.sd, self.dev, seconds, tick=tick, sleep=self.sleep))
+        return to_int16(to_16k(mono, self.rate))
 
 
 def sound_check(sd, dev, input_fn, out, live=None, sleep=time.sleep):
     """3 seconds on the screen, kept in memory only and thrown away (never written). Returns the device to use (it may be changed)."""
     while True:
         out("소리 확인: %d초 동안 아무 말이나 해 보세요 (저장하지 않아요)" % CHECK_SECONDS)
-        x = capture(sd, dev, CHECK_SECONDS, live=live, sleep=sleep)
-        rms, peak = level_of(x)
-        del x
+        try:
+            x = capture(sd, dev, CHECK_SECONDS, live=live, sleep=sleep)
+        except Incomplete:
+            out("")
+            out("  소리 확인이 끊겼어요.")
+            while True:
+                ans = input_fn("  d = 다른 장치 고르기, Enter = 다시 확인 > ").strip().lower()
+                if ans in ("d", ""):
+                    break
+            if ans == "d":
+                dev = pick_device(sd, None, input_fn, out)
+            continue
+        mono, clipped, note = mixdown(x)
+        rms, peak = level_of(mono)
+        del x, mono
         out("")
         out("  %s 크기 rms %.4f, peak %.3f" % (bar(rms), rms, peak))
+        if note:
+            out("  " + note)
+        if clipped:
+            out("  소리가 너무 커서 잘려요. 마이크에서 조금 떨어지세요.")
         if not too_quiet(rms, peak):
             return dev
         out("  소리가 거의 안 들려요.")
@@ -362,13 +441,16 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def take_report(samples, out):
-    """show the size of a take; warn (never force) when it is too quiet or clipped"""
+def take_report(samples, out, input_clipped=False, note=""):
+    """show the size of a take; warn (never force) when it is too quiet or clipped (an input channel before the average and the
+    resampling, or the saturation of the converted samples)"""
     rms, peak = level_of(samples)
     out("  %s 크기 rms %.4f, peak %.3f" % (bar(rms), rms, peak))
+    if note:
+        out("  " + note)
     if too_quiet(rms, peak):
         out("  소리가 너무 작아요. 마이크를 확인하고 r 로 다시 녹음해 보세요.")
-    if peak >= CLIP_PEAK:
+    if input_clipped or peak >= CLIP_PEAK:
         out("  소리가 너무 커서 잘렸어요. 마이크에서 조금 떨어져서 r 로 다시 녹음해 보세요.")
 
 
@@ -418,9 +500,14 @@ def run(out_dir, dry_run, seed, input_fn=input, recorder=None, out=print, wav_wr
                     if ans == "q":
                         stopped = True
                         break
-                    samples = recorder(RECORD_SECONDS, lambda s: print("\r  녹음 중... %d " % s, end="", flush=True))
+                    try:
+                        samples = recorder(RECORD_SECONDS, lambda s: print("\r  녹음 중... %d " % s, end="", flush=True))
+                    except Incomplete:   # cut off or an overflow: nothing of it is kept, the same clip is asked again
+                        out("")
+                        out("  녹음이 끊겼어요 — 다시 녹음")
+                        continue
                     out("")
-                    take_report(samples, out)
+                    take_report(samples, out, bool(getattr(recorder, "clipped", False)), str(getattr(recorder, "note", "")))
                     ans = input_fn("  Enter = 다음, r = 다시 녹음 > ").strip().lower()
                     if ans == "r":
                         continue

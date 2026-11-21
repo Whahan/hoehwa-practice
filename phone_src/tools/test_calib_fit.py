@@ -1415,12 +1415,18 @@ class FakeSd:
     """a stand-in for the sounddevice module: a device list like this PC's (a game pad is the Windows default and comes first, WDM-KS
     entries exist, MME cuts a name at 31 letters). It records what is opened: `calls` has one entry per rec / InputStream call."""
 
-    def __init__(self, signal=None, default=(1, 5)):
+    def __init__(self, signal=None, default=(1, 5), supply=None, flag_block=None):
+        """supply(open_number, rate) -> how many frames the stream delivers before it goes quiet (default 10 s: more than any clip);
+        flag_block(open_number, block_number) -> True makes that callback carry a status (an overflow)"""
         import types
         self.default = types.SimpleNamespace(device=default)
         self.calls = []
         self.queries = 0
+        self.opened = 0
+        self.closed = 0
         self.signal = signal or sine_signal()
+        self.supply = supply or (lambda n, rate: 10 * rate)
+        self.flag_block = flag_block or (lambda n, b: False)
         self.hostapis = [{"name": "MME"}, {"name": "Windows DirectSound"}, {"name": "Windows WASAPI"}, {"name": "Windows WDM-KS"}]
         zoom_full = "마이크(ZOOM H and F Series Async Audio)"
         pad = "헤드셋 마이크(Wireless Controller)"
@@ -1453,16 +1459,37 @@ class FakeSd:
         self.queries += 1
         return self.devices
 
-    def rec(self, frames, samplerate=None, channels=None, dtype=None, device=None):
-        self.calls.append({"kind": "rec", "frames": frames, "rate": samplerate, "channels": channels, "device": device})
-        return self.signal(frames, samplerate, channels, device)
+    def InputStream(self, samplerate=None, channels=None, dtype=None, device=None, callback=None, **k):
+        self.calls.append({"kind": "InputStream", "rate": samplerate, "channels": channels, "device": device})
+        self.opened += 1
+        return FakeStream(self, self.opened, samplerate, channels, device, callback)
 
-    def wait(self):
-        pass
 
-    def InputStream(self, *a, **k):
-        self.calls.append({"kind": "InputStream"})
-        raise AssertionError("InputStream")
+class FakeStatus:
+    def __bool__(self):
+        return True
+
+
+class FakeStream:
+    """start() hands the signal to the callback in blocks of 1024 frames, like the audio thread, then stays quiet"""
+
+    def __init__(self, sd, number, rate, channels, device, callback):
+        self.sd, self.number, self.rate, self.channels, self.device, self.callback = sd, number, rate, channels, device, callback
+        self.stopped = self.is_closed = False
+
+    def start(self):
+        total = int(self.sd.supply(self.number, self.rate))
+        data = self.sd.signal(total, self.rate, self.channels, self.device)
+        for b, i in enumerate(range(0, total, 1024)):
+            block = data[i:i + 1024]
+            self.callback(block, len(block), None, FakeStatus() if self.sd.flag_block(self.number, b) else None)
+
+    def stop(self):
+        self.stopped = True
+
+    def close(self):
+        self.is_closed = True
+        self.sd.closed += 1
 
 
 def sine_signal(freq=1000.0, amp=0.5, per_device=None):
@@ -1632,28 +1659,141 @@ class RecordDevices(unittest.TestCase):
         self.assertAlmostEqual(len(w) / 16000.0, 1.0, delta=0.02)
         self.assertEqual(len(rec.to_16k(x[:16000], 16000)), 16000)
 
-    def test_stereo_is_averaged(self):
+    def test_stereo_is_averaged_and_a_silent_channel_is_left_out(self):
         import numpy as np
         dev = {"index": 2, "rate": 16000, "channels": 2}
 
-        def two(frames, rate, channels, device):
-            t = np.arange(frames) / float(rate)
-            s = (0.6 * np.sin(2 * math.pi * 500 * t)).astype("float32")
-            return np.stack([s, np.zeros_like(s)], axis=1)
-        sd = FakeSd(signal=two)
-        x = rec.capture(sd, dev, 1, sleep=lambda s: None)
-        self.assertEqual(x.ndim, 1)
-        self.assertAlmostEqual(float(np.abs(x).max()), 0.3, delta=0.01)   # (0.6 + 0) / 2
-        self.assertEqual(sd.calls[0]["channels"], 2)
-
-        def opposite(frames, rate, channels, device):
-            s = (0.6 * np.sin(2 * math.pi * 500 * np.arange(frames) / float(rate))).astype("float32")
-            return np.stack([s, -s], axis=1)
-        x = rec.capture(FakeSd(signal=opposite), dev, 1, sleep=lambda s: None)
-        self.assertLess(float(np.abs(x).max()), 0.001)   # an average, not "the left channel"
+        def pair(left, right):
+            def f(frames, rate, channels, device):
+                t = np.arange(frames) / float(rate)
+                s = np.sin(2 * math.pi * 500 * t).astype("float32")
+                return np.stack([left * s, right * s], axis=1).astype("float32")
+            return f
+        # both channels audible: the average
+        sd = FakeSd(signal=pair(0.6, 0.3))
+        frames = rec.capture(sd, dev, 1, sleep=lambda s: None)
+        self.assertEqual(frames.shape, (16000, 2))
+        mono, clipped, note = rec.mixdown(frames)
+        self.assertEqual(mono.ndim, 1)
+        self.assertAlmostEqual(float(np.abs(mono).max()), 0.45, delta=0.01)   # (0.6 + 0.3) / 2
+        self.assertEqual((sd.calls[0]["channels"], clipped, note), (2, False, ""))
+        mono, _, _ = rec.mixdown(rec.capture(FakeSd(signal=pair(0.6, -0.6)), dev, 1, sleep=lambda s: None))
+        self.assertLess(float(np.abs(mono).max()), 0.001)   # an average, not "the left channel"
+        # one channel more than 30 dB under the other (one microphone in a two channel interface): only the loud one, no 6 dB loss
+        for l, r in ((0.6, 0.0), (0.0, 0.6), (0.6, 0.6 * 10 ** (-31 / 20.0))):
+            mono, _, note = rec.mixdown(rec.capture(FakeSd(signal=pair(l, r)), dev, 1, sleep=lambda s: None))
+            self.assertAlmostEqual(float(np.abs(mono).max()), 0.6, delta=0.01, msg=(l, r))
+            self.assertIn("한 채널", note)
+        mono, _, note = rec.mixdown(rec.capture(FakeSd(signal=pair(0.6, 0.6 * 10 ** (-29 / 20.0))), dev, 1, sleep=lambda s: None))
+        self.assertEqual(note, "")   # only 29 dB under: still averaged
+        # two silent channels: nothing to choose, no crash
+        mono, _, note = rec.mixdown(np.zeros((1000, 2), dtype="float32"))
+        self.assertEqual((len(mono), note), (1000, ""))
         sd = FakeSd()   # a mono device is asked for one channel
-        rec.capture(sd, {"index": 1, "rate": 44100, "channels": 1}, 1, sleep=lambda s: None)
-        self.assertEqual(sd.calls[0]["channels"], 1)
+        mono, _, _ = rec.mixdown(rec.capture(sd, {"index": 1, "rate": 44100, "channels": 1}, 1, sleep=lambda s: None))
+        self.assertEqual((sd.calls[0]["channels"], mono.ndim), (1, 1))
+        self.assertEqual((sd.opened, sd.closed), (1, 1))   # the stream is always closed
+
+    def test_a_cut_or_flagged_capture_is_refused_and_never_saved(self):
+        import soundfile as sf
+        dev = {"index": 2, "rate": 16000, "channels": 2}
+        # fewer frames than asked for (the first half only), then an overflow: both raise, the stream is closed
+        sd = FakeSd(supply=lambda n, rate: 8000)
+        with self.assertRaises(rec.Incomplete):
+            rec.capture(sd, dev, 1, sleep=lambda s: None)
+        self.assertEqual((sd.opened, sd.closed), (1, 1))
+        sd = FakeSd(flag_block=lambda n, b: b == 3)   # all frames arrive but one callback carried a status
+        with self.assertRaises(rec.Incomplete):
+            rec.capture(sd, dev, 1, sleep=lambda s: None)
+        sd = FakeSd(supply=lambda n, rate: 8000, flag_block=lambda n, b: b == 2)   # the reviewer's case: half filled + overflow
+        with self.assertRaises(rec.Incomplete):
+            rec.capture(sd, dev, 1, sleep=lambda s: None)
+        self.assertEqual(rec.capture(FakeSd(), dev, 1, sleep=lambda s: None).shape, (16000, 2))   # selfcheck: a good stream passes
+        # the whole run: open #1 = the sound check (good), #2 = clip 1 cut short, #3 = clip 1 again (good), then q at clip 2
+        writes = []
+        real = sf.write
+
+        def counting(*a, **k):
+            writes.append(a[0])
+            return real(*a, **k)
+        sd = FakeSd(supply=lambda n, rate: 10 * rate if n != 2 else 3 * rate)
+        with mock.patch.object(sf, "write", counting):
+            code, text = quiet_run(self.out_dir, False, 11, input_fn=self.answers(["y", "", "", "", "", "q"]), sd=sd)
+        self.assertEqual(code, 0)
+        self.assertEqual(text.count("녹음이 끊겼어요 — 다시 녹음"), 1)
+        self.assertEqual(len(writes), 1)   # only the good take was written
+        m = json.load(open(os.path.join(self.out_dir, "manifest.json"), encoding="utf-8"))
+        self.assertEqual([c["clip"] for c in m["clips"]], ["u01_clean"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.out_dir, "clips"))), ["u01_clean.wav"])
+        self.assertEqual(sd.opened, 3)
+        self.assertEqual(sd.closed, 3)
+        # the same with an overflow flag instead of a short stream: the clip is asked again, nothing saved for it
+        d2 = self.out_dir + "_flag"
+        sd = FakeSd(flag_block=lambda n, b: n == 2 and b == 5)
+        with mock.patch.object(sf, "write", counting):
+            writes.clear()
+            code, text = quiet_run(d2, False, 11, input_fn=self.answers(["y", "", "", "q"]), sd=sd)   # the take is refused, then q
+        self.assertEqual((code, writes, text.count("녹음이 끊겼어요 — 다시 녹음")), (0, [], 1))
+        self.assertFalse(os.path.exists(d2))
+        # a cut sound check is shown as cut (not as "quiet"), nothing is saved, and the check is asked again
+        d3 = self.out_dir + "_check"
+        sd = FakeSd(supply=lambda n, rate: 10 * rate if n != 1 else 2 * rate)
+        with mock.patch.object(sf, "write", counting):
+            code, text = quiet_run(d3, False, 11, input_fn=self.answers(["y", "", "", "q"]), sd=sd)   # pick, "check again", q
+        self.assertEqual(code, 0)
+        self.assertIn("소리 확인이 끊겼어요", text)
+        self.assertEqual(writes, [])
+        self.assertEqual((sd.opened, sd.closed), (2, 2))
+
+    def test_clipping_is_checked_per_input_channel_before_the_average(self):
+        import numpy as np
+        import soundfile as sf
+
+        def two(left, right):
+            def f(frames, rate, channels, device):
+                t = np.arange(frames) / float(rate)
+                s = np.sin(2 * math.pi * 500 * t).astype("float32")
+                return np.stack([np.clip(left * s, -1, 1), np.clip(right * s, -1, 1)], axis=1).astype("float32")
+            return f
+        # a clipped left channel (+-1) with a quiet right one: the average would hide it (peak 0.7 after averaging), the warning must not
+        for name, sig, want in (("avg_hides", two(3.0, 0.4), True), ("silent_other", two(3.0, 0.0), True), ("fine", two(0.5, 0.4), False),
+                                ("right_only", two(0.4, 3.0), True)):
+            sd = FakeSd(signal=sig)
+            d = os.path.join(TMP, "recdev_clip_%s" % name)
+            code, text = quiet_run(d, False, 11, input_fn=self.answers(["y", "", "", "q"]), sd=sd, device="8")
+            self.assertEqual(code, 0, name)
+            self.assertEqual("잘렸어요" in text, want, name)
+            if name == "avg_hides":
+                data, _ = sf.read(os.path.join(d, "clips", "u01_clean.wav"), dtype="int16")
+                self.assertLess(float(np.abs(data).max()) / 32767.0, 0.99)   # the saved clip itself looks fine: only the channel check sees it
+        # the converted samples are checked too (a full scale tone that overshoots when resampled is saturated)
+        x = np.sign(np.sin(np.linspace(0, 100 * math.pi, 48000))).astype("float32") * 0.995
+        out = []
+        rec.take_report(rec.to_int16(rec.to_16k(x, 48000)), out.append)
+        self.assertTrue(any("잘렸어요" in l for l in out))
+        # mixdown reports the input channel peak itself
+        self.assertTrue(rec.mixdown(np.stack([x, x * 0.0], axis=1))[1])
+        self.assertFalse(rec.mixdown(np.stack([x * 0.5, x * 0.4], axis=1))[1])
+
+    def test_device_numbers_are_ascii_digits_only(self):
+        for text, ok in (("2", True), ("0012", True), ("9999", True), ("12345", False), ("", False), ("\u00b2", False), ("\u0662", False),
+                         ("\uff12", False), ("1" * 5000, False), ("2\n", False), ("-1", False), ("2.0", False), ("0x2", False)):
+            self.assertEqual(rec.is_number(text), ok, repr(text[:10]))
+        devs = rec.list_input_devices(FakeSd())
+        for odd in ("\u00b2", "\u0662", "\uff12", "1" * 5000, "9" * 5000, "2\n²", "\x00", "-1"):
+            with self.assertRaises(rec.RecError) as cm:   # --device: never another kind of exception
+                rec.resolve_device(devs, odd)
+            self.assertEqual(str(cm.exception), "device")
+            sd = FakeSd()   # the list: asked again, then the real answer is taken
+            code, text = quiet_run(self.out_dir, False, 11, input_fn=self.answers(["y", odd, "8", "q"]), sd=sd)
+            self.assertEqual((code, {c["device"] for c in sd.calls}), (0, {8}), repr(odd[:5]))
+            self.assertIn("목록에 없는 번호예요", text)
+            sd = FakeSd()
+            with self.assertRaises(rec.RecError):
+                quiet_run(self.out_dir, False, 11, input_fn=self.answers(["y"]), sd=sd, device=odd)
+            self.assertEqual(sd.calls, [])
+        # a name that contains such a character still works as a part of a name
+        self.assertEqual(rec.resolve_device([dict(devs[0], name="Mic\u00b2 pro")], "\u00b2")["name"], "Mic\u00b2 pro")
 
     def test_quiet_and_clipped_clips_get_a_warning_and_the_size_is_shown(self):
         import numpy as np
@@ -1689,7 +1829,7 @@ class RecordDevices(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(writes, [])
             self.assertFalse(os.path.exists(self.out_dir))
-            self.assertEqual(sd.calls[0]["frames"], rec.CHECK_SECONDS * 44100)
+            self.assertEqual((sd.calls[0]["kind"], sd.calls[0]["rate"], sd.calls[0]["device"]), ("InputStream", 44100, 2))
             self.assertIn("소리 확인", text)
             self.assertIn("저장하지 않아요", text)
             self.assertRegex(text, r"\[#+\.*\] 크기 rms \d\.\d{4}, peak \d\.\d{3}")
@@ -1721,6 +1861,35 @@ class RecordDevices(unittest.TestCase):
         code, text = quiet_run(self.out_dir + "_c", False, 11, input_fn=self.answers(["y", "", "q"]), sd=sd)
         self.assertNotIn("소리가 거의 안 들려요", text)
 
+    def test_readme_has_no_control_characters_and_its_commands_run(self):
+        path = os.path.join(ROOT, "phone_src", "calib", "README.txt")
+        raw = open(path, "rb").read()
+        bad = [(i, hex(c)) for i, c in enumerate(raw) if c < 32 and c not in (10, 13)]   # 0x07 \a, 0x09 \t, 0x0b \v ... all of them
+        self.assertEqual(bad, [])
+        self.assertIn(b"docs\\v201_design.md", raw)
+        # selfcheck: the scan sees a tab and a bell
+        self.assertEqual(len([c for c in b"a\tb\x07" if c < 32 and c not in (10, 13)]), 2)
+        text = raw.decode("utf-8")
+        cmds = [l.strip() for l in text.splitlines() if re.match(r"^\s+& \$PY .*calib_record\.py", l)]
+        self.assertEqual(len(cmds), 3)   # list, record, record with --device 2
+        self.assertEqual([("--device 2" in c, "--list-devices" in c) for c in cmds], [(False, True), (False, False), (True, False)])
+        for c in cmds:
+            for ch in "<>[]":
+                self.assertNotIn(ch, c)   # no placeholders
+            m = re.search(r'"\$W\\([^"]+)"', c)
+            self.assertIsNotNone(m, c)
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, m.group(1))), m.group(1))   # the tool path is a real file
+            self.assertEqual(m.group(1), "phone_src\\tools\\calib_record.py")
+            self.assertIn('-I -X utf8', c)
+        outs = [re.search(r'--out "\$T\\([^"]+)"', c) for c in cmds[1:]]
+        self.assertTrue(all(outs))
+        # the first command a user pastes really runs (the list; nothing is opened)
+        r = subprocess.run([sys.executable, "-I", "-X", "utf8", os.path.join(ROOT, "phone_src", "tools", "calib_record.py"), "--help"],
+                           capture_output=True)
+        self.assertEqual(r.returncode, 0)
+        for need in (b"$PY = ", b"$W  = ", b"$T  = "):
+            self.assertIn(need, raw)
+
     def test_cli_options_and_source_rules(self):
         py = [sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "calib_record.py")]
         r = subprocess.run(py + ["--dry-run"], capture_output=True)
@@ -1730,7 +1899,8 @@ class RecordDevices(unittest.TestCase):
             self.assertIn(opt, r.stdout)
         src = open(os.path.join(HERE, "calib_record.py"), encoding="utf-8").read()
         self.assertEqual(len(re.findall(r"logging|\.log", src)), 0)
-        self.assertNotIn("InputStream(", src)
+        self.assertNotIn("sd.rec(", src)   # a stream with a callback: the frames that really arrive are counted
+        self.assertIn("sd.InputStream(", src)
         self.assertNotIn("urllib", src)
 
 

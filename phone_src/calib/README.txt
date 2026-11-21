@@ -46,13 +46,19 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
 
 2) 사용자 녹음 (사용자가 직접, 마이크 앞)
    0. 마이크 목록 보기 (마이크를 열지 않는다):
-        & $PY -I -X utf8 $W\phone_src	ools\calib_record.py --list-devices
+        $PY = 'D:\Ai\언어\app\backend\.venv\Scripts\python.exe'
+        $W  = 'D:\Ai\언어\app'
+        $T  = "$env:TEMP\calib_rec"
+        & $PY -I -X utf8 "$W\phone_src\tools\calib_record.py" --list-devices
       번호, 읽을 수 있는 이름, API, 채널, 기본 샘플레이트가 나온다. WDM-KS 장치는 불안정해서 뺀다. Windows 기본 입력에는 "Windows 기본 입력"이,
       쓸 만한 마이크 하나에는 "추천"이 붙는다(게임 패드·"Wireless Controller"·가상 장치·스테레오 믹스는 추천하지 않는다.
       Windows 기본 입력이 게임 패드 마이크여서 거의 무음이 녹음되는 PC 가 있다). 같은 마이크가 MME·DirectSound·WASAPI 로 세 번 나올 수 있다.
       MME 가 31자에서 자른 이름은 같은 장치의 다른 API 이름으로 채우고, 한글이 깨진 이름은 cp949 복원을 시도한다. 사운드 매퍼·"주 사운드 캡처"는 목록에서 뺀다.
-   1. 녹음:
-        & $PY -I -X utf8 $W\phone_src	ools\calib_record.py --out $T\calib_user [--device <번호 또는 이름 일부>]
+   1. 녹음 (위 세 줄로 $PY, $W, $T 를 정해 둔 PowerShell 에서; 그대로 붙여 넣으면 된다. $T 안의 폴더는 새 폴더여야 하고 저장소 밖이어야 한다):
+        & $PY -I -X utf8 "$W\phone_src\tools\calib_record.py" --out "$T\calib_user"
+      마이크를 번호로 정하려면(번호는 --list-devices 에 나온 것, 아래는 2번을 쓰는 예. 먼저 쓴 폴더는 비우거나 다른 이름을 쓴다):
+        & $PY -I -X utf8 "$W\phone_src\tools\calib_record.py" --out "$T\calib_user2" --device 2
+      이름 일부로도 된다(예: --device zoom). 번호 없이 하면 동의(y) 뒤에 목록이 나오고 번호를 묻는다.
       (--dry-run 은 문구·문장만 보이고 아무것도 안 쓴다. 장치 목록도 보지 않는다.)
    먼저 동의 문구를 그대로 보이고 소문자 y 한 글자(앞뒤 공백만 무시)를 입력해야 시작한다. Y·yes·빈 입력은 녹음기를 열지 않고 종료 1:
      "영어 문장 30개를 한 번은 바르게, 한 번은 화면이 알려 주는 낱말 하나를 바꿔서 읽어요(약 8분). 녹음은 이 PC 의 임시 폴더에만
@@ -81,7 +87,7 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
      & $PY -I -X utf8 $W\phone_src\tools\calib_fit.py --pc $T\pc_synth.json $T\pc_user.json --phone $T\phone_synth.json $T\phone_user.json `
          --out-params $T\score_params.json --report $T\report.json [--holdout 0.3] [--seed 7] [--fit-final]
    - 클립은 id 로 짝짓는다(순서가 아니다). 한쪽에만 있는 클립, 빈 입력, 깨진 JSON, 전사에 실패한 폰 클립(ok:false, 또는 status "fail" 파일)은 종료 코드 1.
-   - 폰 낱말 시각은 채점 전에 D-1 규칙(docs201_design.md 8.1: 시각을 [0, 클립 길이]로 자르고 start 단조, end 는 start 이상·다음 start 이하)으로
+   - 폰 낱말 시각은 채점 전에 D-1 규칙(docs\v201_design.md 8.1: 시각을 [0, 클립 길이]로 자르고 start 단조, end 는 start 이상·다음 start 이하)으로
      정리한다(앱과 같은 규칙, calib_fit.clean_word_times). 오류·보고서에는 파일 이름·클립 id·문장·모델 이름 원문을 넣지 않고 번호·개수·코드만 쓴다.
      모델 이름은 ggml-*.bin 형식, 날짜는 YYYY-MM-DD 일 때만 받는다.
    - 문장 단위 분할의 "같은 문장"은 서버 en_words 정규화가 같은 타깃이다(id 가 달라도 한쪽에만 간다).
