@@ -132,12 +132,12 @@ func start_session(src: String) -> void:
 	_load_week()
 
 
-## 내 복습 카드에서 최대 SESSION_N 문장 (복습할 차례가 된 것 먼저).
 ## 점수를 낼 수 없을 때 시작 화면에 붙는 안내 글: 영어에서 모델이 없으면 받으라는 글, 그 밖에는 기존 글.
 static func self_note(l: String) -> String:
 	return SELF_NOTE_MODEL if SelfRatePanel.none_reason(l) == "model_missing" else SELF_NOTE
 
 
+## 내 복습 카드에서 최대 SESSION_N 문장 (복습할 차례가 된 것 먼저).
 static func review_sentences(l: String) -> Array:
 	var cards: Array = Store.due_for(l, SESSION_N)
 	if cards.size() < SESSION_N:
