@@ -10,7 +10,7 @@
 
 도구 (모두 phone_src\tools\, 파이썬은 backend\.venv)
   calib_make_set.py   합성 음성 세트 만들기 (서버 synth_wav = Kokoro, 이미 설치된 음성만)
-  calib_record.py     사용자 녹음 (동의 문구 -> y -> 60클립)
+  calib_record.py     사용자 녹음 (동의 문구 -> y -> 장치 고르기 -> 소리 확인 -> 60클립), --list-devices 로 마이크 목록
   calib_pc_run.py     PC 쪽 결과 (서버 transcribe + score_en, 같은 프로세스 안, 서버·포트 없음)
   godot\tools\calib_phone.gd   폰 쪽 결과 (Windows 용 WhisperBridge DLL + 같은 모델 파일)
   calib_fit.py        맞추기 + 합격선 판정 + score_params.json / 보고서 쓰기
@@ -45,13 +45,36 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
    variant, voice, wrong(null 또는 {index, said}; index 는 target.split() 의 몇 번째 낱말), spoken, seconds, sha256.
 
 2) 사용자 녹음 (사용자가 직접, 마이크 앞)
-     & $PY -I -X utf8 $W\phone_src\tools\calib_record.py --out $T\calib_user        (--dry-run 은 문구·문장만 보이고 아무것도 안 씀)
+   0. 마이크 목록 보기 (마이크를 열지 않는다):
+        $PY = 'D:\Ai\언어\app\backend\.venv\Scripts\python.exe'
+        $W  = 'D:\Ai\언어\app'
+        $T  = "$env:TEMP\calib_rec"
+        & $PY -I -X utf8 "$W\phone_src\tools\calib_record.py" --list-devices
+      번호, 읽을 수 있는 이름, API, 채널, 기본 샘플레이트가 나온다. WDM-KS 장치는 불안정해서 뺀다. Windows 기본 입력에는 "Windows 기본 입력"이,
+      쓸 만한 마이크 하나에는 "추천"이 붙는다(게임 패드·"Wireless Controller"·가상 장치·스테레오 믹스는 추천하지 않는다.
+      Windows 기본 입력이 게임 패드 마이크여서 거의 무음이 녹음되는 PC 가 있다). 같은 마이크가 MME·DirectSound·WASAPI 로 세 번 나올 수 있다.
+      MME 가 31자에서 자른 이름은 같은 장치의 다른 API 이름으로 채우고, 한글이 깨진 이름은 cp949 복원을 시도한다. 사운드 매퍼·"주 사운드 캡처"는 목록에서 뺀다.
+   1. 녹음 (위 세 줄로 $PY, $W, $T 를 정해 둔 PowerShell 에서; 그대로 붙여 넣으면 된다. $T 안의 폴더는 새 폴더여야 하고 저장소 밖이어야 한다):
+        & $PY -I -X utf8 "$W\phone_src\tools\calib_record.py" --out "$T\calib_user"
+      마이크를 번호로 정하려면(번호는 --list-devices 에 나온 것, 아래는 2번을 쓰는 예. 먼저 쓴 폴더는 비우거나 다른 이름을 쓴다):
+        & $PY -I -X utf8 "$W\phone_src\tools\calib_record.py" --out "$T\calib_user2" --device 2
+      이름 일부로도 된다(예: --device zoom). 번호 없이 하면 동의(y) 뒤에 목록이 나오고 번호를 묻는다.
+      (--dry-run 은 문구·문장만 보이고 아무것도 안 쓴다. 장치 목록도 보지 않는다.)
    먼저 동의 문구를 그대로 보이고 소문자 y 한 글자(앞뒤 공백만 무시)를 입력해야 시작한다. Y·yes·빈 입력은 녹음기를 열지 않고 종료 1:
      "영어 문장 30개를 한 번은 바르게, 한 번은 화면이 알려 주는 낱말 하나를 바꿔서 읽어요(약 8분). 녹음은 이 PC 의 임시 폴더에만
       저장되고 저장소·인터넷으로 나가지 않아요. 보정이 끝나면 지워요(원하면 보관). 시작할까요? (y/n)"
-   문장 30개 x (바르게, 낱말 하나 바꿔) = 60클립. 클립마다 Enter 로 6초 녹음(카운트다운 표시), Enter = 다음, r = 다시, q = 여기서 그만.
-   --out 은 필수(없으면 종료 코드 2)이고 비어 있거나 없는 폴더여야 한다. 끝나면 클립 수와 총 길이만 출력한다.
-   manifest.json 에 동의 기록(consent.given, 문구 sha256, 날짜)이 들어간다.
+   동의(y) 뒤에 장치를 고른다: --device 가 있으면 그 번호(또는 이름 일부, 대소문자 무시, 첫 일치)를 쓰고, 없으면 목록을 보여 주고 번호를 묻는다
+   (Enter = 추천 장치; 목록에 없는 번호는 다시 묻고, 5번 틀리면 종료 1).
+   소리 확인(녹음 시작 전): 고른 장치로 3초 동안 "아무 말이나 해 보세요"가 나오고 소리 막대와 크기(rms, peak)만 화면에 보인다. 이 소리는 메모리에만
+   있다가 버려진다(파일로 저장하지 않는다). 너무 조용하면(rms < 0.003 또는 peak < 0.02) "소리가 거의 안 들려요"와 함께 d = 다른 장치 고르기,
+   r = 다시 확인, Enter = 그대로 진행 중에서 고른다.
+   녹음은 장치의 기본 샘플레이트로 하고(WASAPI 처럼 16 kHz 를 못 받는 장치가 있다), 저장 전에 soxr(없으면 scipy resample_poly)로 16 kHz 모노 16비트로
+   바꾼다. 스테레오는 두 채널의 평균이다.
+   문장 30개 x (바르게, 낱말 하나 바꿔) = 60클립. 클립마다 Enter 로 6초 녹음(카운트다운 표시), 끝나면 소리 크기를 보여 주고 너무 조용하거나(위와 같은 기준)
+   소리가 잘렸으면(peak >= 0.99) 경고와 함께 r 로 다시 녹음하라고 알려 준다(강제는 아니다). Enter = 다음, r = 다시, q = 여기서 그만.
+   --out 은 필수(--list-devices 만 예외; 없으면 종료 코드 2)이고 비어 있거나 없는 폴더여야 한다. 끝나면 클립 수와 총 길이만 출력한다.
+   manifest.json 에 동의 기록(consent.given, 문구 sha256, 날짜)이 들어간다. 장치 이름은 manifest 에 넣지 않는다(개인 장치 이름 노출 방지).
+   샘플레이트 변환은 숫자로만 남는다: capture_hz(녹음 때 장치 샘플레이트), resampled(0 = 변환 없음, 1 = 16 kHz 로 변환).
 
 3) PC 쪽과 폰 쪽 결과 (세트마다)
      & $PY -I -X utf8 $W\phone_src\tools\calib_pc_run.py --set $T\set_synth --out $T\pc_synth.json
@@ -64,7 +87,7 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
      & $PY -I -X utf8 $W\phone_src\tools\calib_fit.py --pc $T\pc_synth.json $T\pc_user.json --phone $T\phone_synth.json $T\phone_user.json `
          --out-params $T\score_params.json --report $T\report.json [--holdout 0.3] [--seed 7] [--fit-final]
    - 클립은 id 로 짝짓는다(순서가 아니다). 한쪽에만 있는 클립, 빈 입력, 깨진 JSON, 전사에 실패한 폰 클립(ok:false, 또는 status "fail" 파일)은 종료 코드 1.
-   - 폰 낱말 시각은 채점 전에 D-1 규칙(docs201_design.md 8.1: 시각을 [0, 클립 길이]로 자르고 start 단조, end 는 start 이상·다음 start 이하)으로
+   - 폰 낱말 시각은 채점 전에 D-1 규칙(docs\v201_design.md 8.1: 시각을 [0, 클립 길이]로 자르고 start 단조, end 는 start 이상·다음 start 이하)으로
      정리한다(앱과 같은 규칙, calib_fit.clean_word_times). 오류·보고서에는 파일 이름·클립 id·문장·모델 이름 원문을 넣지 않고 번호·개수·코드만 쓴다.
      모델 이름은 ggml-*.bin 형식, 날짜는 YYYY-MM-DD 일 때만 받는다.
    - 문장 단위 분할의 "같은 문장"은 서버 en_words 정규화가 같은 타깃이다(id 가 달라도 한쪽에만 간다).
