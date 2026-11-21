@@ -1694,6 +1694,20 @@ class RecordDevices(unittest.TestCase):
         self.assertEqual((sd.calls[0]["channels"], mono.ndim), (1, 1))
         self.assertEqual((sd.opened, sd.closed), (1, 1))   # the stream is always closed
 
+    def test_the_stream_is_closed_even_when_stop_fails(self):
+        dev = {"index": 2, "rate": 16000, "channels": 2}
+        for exc in (RuntimeError("stop failed"), KeyboardInterrupt()):
+            with self.subTest(exc=type(exc).__name__):
+                sd = FakeSd()
+
+                def bad_stop(self, e=exc):
+                    self.stopped = True
+                    raise e
+                with mock.patch.object(FakeStream, "stop", bad_stop):
+                    with self.assertRaises((rec.RecError, KeyboardInterrupt)):
+                        rec.capture(sd, dev, 1, sleep=lambda s: None)
+                self.assertEqual((sd.opened, sd.closed), (1, 1))
+
     def test_a_cut_or_flagged_capture_is_refused_and_never_saved(self):
         import soundfile as sf
         dev = {"index": 2, "rate": 16000, "channels": 2}

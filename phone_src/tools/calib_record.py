@@ -345,8 +345,10 @@ def capture(sd, dev, seconds, tick=None, live=None, sleep=time.sleep):
                     break
                 sleep(STEP)
         finally:
-            stream.stop()
-            stream.close()
+            try:
+                stream.stop()
+            finally:
+                stream.close()   # tried even when stop() raises or Ctrl+C lands in it
     except Exception as e:
         raise RecError("microphone (%s)" % type(e).__name__)
     if state["got"] < n or state["bad"]:
