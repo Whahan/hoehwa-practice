@@ -1,0 +1,75 @@
+{
+ "v": 1,
+ "model_id": "whisper-base.en-q5_1",
+ "calibrated": true,
+ "date": "2026-11-21",
+ "ok_prob": 0.45,
+ "beam": 1,
+ "p_map": [
+  [
+   0.0,
+   0.5746
+  ],
+  [
+   0.05,
+   0.5746
+  ],
+  [
+   0.1,
+   0.5746
+  ],
+  [
+   0.2,
+   0.5746
+  ],
+  [
+   0.3,
+   0.6296
+  ],
+  [
+   0.45,
+   0.7008
+  ],
+  [
+   0.6,
+   0.7657
+  ],
+  [
+   0.75,
+   0.8268
+  ],
+  [
+   0.9,
+   0.8955
+  ],
+  [
+   1.0,
+   0.9996
+  ]
+ ],
+ "final_map": [
+  [
+   0,
+   0
+  ],
+  [
+   100,
+   100
+  ]
+ ],
+ "report": {
+  "synth_clips": 6400,
+  "user_clips": 42,
+  "ok_agree_synth": 0.9855,
+  "ok_agree_user": 0.8281,
+  "score_mae": 2.2607,
+  "score_p90": 4.0,
+  "fluency_mae": 5.696,
+  "wrong_lower_pairs": 0.984,
+  "wrong_pass_rate": 0.952,
+  "wrong_pass_rate_pc": 0.94,
+  "wrong_pass_gap": 0.012,
+  "clean_fail_rate": 0.004,
+  "fallback": "none"
+ }
+}

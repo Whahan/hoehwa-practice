@@ -21,7 +21,8 @@ What it does: split the SENTENCES (not the clips) 70 / 30 with --seed, fit on th
   ok_prob   the word threshold that makes the phone's per-word `ok` agree most with the PC's `ok` (ties: closest to 0.45)
   judging   the server's `score_en` is called in this process on the mapped phone words (nothing is copied here)
 Gates (GATES below, holdout only): word ok agreement synth >= 0.85 / user >= 0.80, final score MAE <= 10 and p90 <= 20, fluency
-MAE <= 15, wrong clip below its clean clip in >= 95 % of the pairs, wrong clips scoring 70+ <= 10 %, clean clips under 70 <= 10 %.
+MAE <= 15, wrong clip below its clean clip in >= 95 % of the pairs, |phone share of wrong clips scoring 70+ - PC share| <= 0.10
+(D-4: the PC's own score gives most one-word-wrong clips 70+, so the phone is asked to follow the PC), clean clips under 70 <= 10 %.
 Below a gate (none is waived): "CALIB_FAIL <metric> ..." and exit 1 and --out-params is NOT written (--report is). Bad data (not one agreed pair of
 files, empty, a clip on one side only, pairing agreement < 0.6): "CALIB_FAIL <input|pairing|data|agreement>" and exit 1.
 Exit code: 0 fitted and every gate passed, 1 failed, 2 usage error (argparse) or an --out-params / --report path inside a repository, a
@@ -71,7 +72,7 @@ GATES = (
     ("score_p90", "<=", 20.0, None),
     ("fluency_mae", "<=", 15.0, None),
     ("wrong_lower_pairs", ">=", 0.95, None),
-    ("wrong_pass_rate", "<=", 0.10, None),
+    ("wrong_pass_gap", "<=", 0.10, None),   # D-4: |phone wrong-70+ share - PC wrong-70+ share|
     ("clean_fail_rate", "<=", 0.10, None),
 )
 
@@ -685,7 +686,7 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
     word_items = {"synth": [], "user": [], "all": []}
     diffs, fl_diffs = [], []
     by_key = {}   # (sentence, voice) -> {"clean": score, "wrong": score}
-    wrong_scores, clean_scores = [], []
+    wrong_scores, clean_scores, pc_wrong_scores = [], [], []
     for n, (pc, ph) in enumerate(rows, 1):
         r = phone_result(S, pc, ph, p_map, ok_prob, final_map)
         units = pc["score"]["units"]
@@ -703,6 +704,7 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
         elif pc["variant"] in WRONG_VARIANTS:
             slot["wrong"] = r["score"]
             wrong_scores.append(r["score"])
+            pc_wrong_scores.append(pc["score"]["score"])
     pairs = [s for s in by_key.values() if "clean" in s and "wrong" in s]
     m = {
         "clips": len(rows),
@@ -717,9 +719,11 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
         "wrong_lower_pairs": (sum(1 for s in pairs if s["wrong"] < s["clean"]) / float(len(pairs))) if pairs else None,
         "wrong_clips": len(wrong_scores),
         "wrong_pass_rate": (sum(1 for s in wrong_scores if s >= PASS_SCORE) / float(len(wrong_scores))) if wrong_scores else None,
+        "wrong_pass_rate_pc": (sum(1 for s in pc_wrong_scores if s >= PASS_SCORE) / float(len(pc_wrong_scores))) if pc_wrong_scores else None,
         "clean_clips": len(clean_scores),
         "clean_fail_rate": (sum(1 for s in clean_scores if s < PASS_SCORE) / float(len(clean_scores))) if clean_scores else None,
     }
+    m["wrong_pass_gap"] = round(abs(m["wrong_pass_rate"] - m["wrong_pass_rate_pc"]), 9) if wrong_scores else None   # rounded: 0.60 - 0.50 must not come out as 0.1000000000000001
     m["ci95"] = {}
     for g in ("synth", "user"):
         v = word_items[g]
@@ -822,6 +826,14 @@ def run(args, S=None, out=print):
             final_map = fit_final_map(S, train, p_map, ok_prob)
             fallback = "final_map"
         metrics = evaluate(S, held, p_map, ok_prob, final_map)
+        by_group = {}   # the same numbers per group (informative only, not gates: the gates judge the pooled holdout)
+        for g in ("synth", "user"):
+            hg = [r for r in held if r[0]["group"] == g]
+            if hg:
+                mg = evaluate(S, hg, p_map, ok_prob, final_map)
+                by_group[g] = {k: mg[k] for k in ("clips", "score_mae", "score_p90", "fluency_mae", "pair_count", "wrong_lower_pairs", "wrong_clips",
+                                                   "wrong_pass_rate", "wrong_pass_rate_pc", "wrong_pass_gap", "clean_clips", "clean_fail_rate")}
+                by_group[g]["ok_agree"] = mg["ok_agree_" + g]
         groups = {pc_clip["group"] for pc_clip, _p in rows}
         gates = judge(metrics, groups)
     except CalibError as e:
@@ -845,6 +857,7 @@ def run(args, S=None, out=print):
         "pair_agreement": _round(agree),
         "fit": {"matched_word_pairs": len(pairs), "ok_prob": ok_prob, "p_map": p_map, "final_map": final_map},
         "holdout_metrics": {k: (_round(v) if isinstance(v, float) else v) for k, v in metrics.items()},
+        "holdout_by_group": {g: {k: (_round(v) if isinstance(v, float) else v) for k, v in m.items()} for g, m in by_group.items()},
         "gates": [dict(g, value=_round(g["value"])) for g in gates],
     }
     if args.report:
@@ -861,7 +874,8 @@ def run(args, S=None, out=print):
             "ok_agree_synth": _round(metrics["ok_agree_synth"]), "ok_agree_user": _round(metrics["ok_agree_user"]),
             "score_mae": _round(metrics["score_mae"]), "score_p90": _round(metrics["score_p90"]),
             "fluency_mae": _round(metrics["fluency_mae"]), "wrong_lower_pairs": _round(metrics["wrong_lower_pairs"]),
-            "wrong_pass_rate": _round(metrics["wrong_pass_rate"]), "clean_fail_rate": _round(metrics["clean_fail_rate"]),
+            "wrong_pass_rate": _round(metrics["wrong_pass_rate"]), "wrong_pass_rate_pc": _round(metrics["wrong_pass_rate_pc"]),
+            "wrong_pass_gap": _round(metrics["wrong_pass_gap"]), "clean_fail_rate": _round(metrics["clean_fail_rate"]),
             "fallback": fallback,
         },
     }
