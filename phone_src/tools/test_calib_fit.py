@@ -412,9 +412,9 @@ class SplitAndJoin(unittest.TestCase):
 # ================================================================================================ gates
 class Gates(unittest.TestCase):
     GOOD = {"ok_agree_synth": 0.9, "ok_agree_user": 0.85, "score_mae": 5.0, "score_p90": 12.0, "fluency_mae": 8.0,
-            "wrong_lower_pairs": 0.97, "wrong_pass_rate": 0.05, "clean_fail_rate": 0.04}
+            "wrong_lower_pairs": 0.97, "wrong_pass_gap": 0.05, "clean_fail_rate": 0.04}
     BAD = {"ok_agree_synth": 0.84, "ok_agree_user": 0.79, "score_mae": 10.5, "score_p90": 20.5, "fluency_mae": 15.5,
-           "wrong_lower_pairs": 0.94, "wrong_pass_rate": 0.11, "clean_fail_rate": 0.11}
+           "wrong_lower_pairs": 0.94, "wrong_pass_gap": 0.11, "clean_fail_rate": 0.11}
 
     def test_all_good_passes(self):
         r = cf.judge(self.GOOD, {"synth", "user"})
@@ -429,8 +429,28 @@ class Gates(unittest.TestCase):
 
     def test_the_limits_themselves_pass(self):
         m = {"ok_agree_synth": 0.85, "ok_agree_user": 0.80, "score_mae": 10.0, "score_p90": 20.0, "fluency_mae": 15.0,
-             "wrong_lower_pairs": 0.95, "wrong_pass_rate": 0.10, "clean_fail_rate": 0.10}
+             "wrong_lower_pairs": 0.95, "wrong_pass_gap": 0.10, "clean_fail_rate": 0.10}
         self.assertEqual([g["result"] for g in cf.judge(m, {"synth", "user"})], ["OK"] * 8)
+
+    def test_wrong_pass_gap_boundary_d4(self):
+        # D-4: |phone wrong-70+ share - PC share| <= 0.10 : a gap of 0.10 passes, 0.11 fails (and nothing else changes)
+        for gap, want in ((0.10, "OK"), (0.11, "FAIL"), (0.0, "OK"), (0.101, "FAIL")):
+            r = {g["name"]: g["result"] for g in cf.judge(dict(self.GOOD, wrong_pass_gap=gap), {"synth", "user"})}
+            self.assertEqual(r["wrong_pass_gap"], want, gap)
+            self.assertEqual([k for k, v in r.items() if v == "FAIL"], [] if want == "OK" else ["wrong_pass_gap"])
+        self.assertNotIn("wrong_pass_rate", [g[0] for g in cf.GATES])   # the old "<= 0.10 on the phone alone" gate is gone
+        self.assertEqual([g for g in cf.GATES if g[0] == "wrong_pass_gap"], [("wrong_pass_gap", "<=", 0.10, None)])
+
+    def test_evaluate_reports_both_shares_and_their_gap(self):
+        pc, ph = FIX["one_word"]
+        pcm = {c["id"]: dict(c, sentence_id=str(c["sentence_id"])) for c in pc["clips"]}
+        rows = cf.join_clips(pcm, {c["id"]: c for c in ph["clips"]})
+        p_map = cf.fit_p_map(cf.matched_pairs(S, rows))
+        m = cf.evaluate(S, rows, p_map, cf.fit_ok_prob(cf.word_rows(S, rows), p_map), None)
+        want_pc = sum(1 for a, _b in rows if a["variant"] in cf.WRONG_VARIANTS and a["score"]["score"] >= 70) / float(m["wrong_clips"])
+        self.assertAlmostEqual(m["wrong_pass_rate_pc"], want_pc)
+        self.assertAlmostEqual(m["wrong_pass_gap"], abs(m["wrong_pass_rate"] - m["wrong_pass_rate_pc"]))
+        self.assertGreater(m["wrong_pass_rate_pc"], 0.5)   # the fixture: the PC itself passes most one-word-wrong clips
 
     def test_no_gate_can_be_waived(self):
         import inspect
@@ -571,6 +591,16 @@ class WholeTool(unittest.TestCase):
         self.assertIn("CALIB_FAIL input", buf.getvalue())
         self.assertFalse(os.path.exists(params))
 
+    def test_report_has_the_per_group_numbers_and_the_wrong_pass_gap(self):
+        _c, _o, params, report = run_cli(*FIX["good"], "bygroup")
+        r = json.load(open(report, encoding="utf-8"))
+        for g in ("synth", "user"):
+            for k in ("clips", "ok_agree", "score_mae", "wrong_pass_rate", "wrong_pass_rate_pc", "wrong_pass_gap", "clean_fail_rate"):
+                self.assertIn(k, r["holdout_by_group"][g])
+        hm = r["holdout_metrics"]
+        self.assertAlmostEqual(hm["wrong_pass_gap"], abs(hm["wrong_pass_rate"] - hm["wrong_pass_rate_pc"]), places=3)
+        self.assertEqual(r["holdout_by_group"]["synth"]["clips"] + r["holdout_by_group"]["user"]["clips"], r["clips"]["holdout"])
+
     def test_a_gate_below_its_limit_fails_and_writes_no_params(self):
         pc, ph = FIX["good"]
         bad = copy.deepcopy(ph)
@@ -586,23 +616,23 @@ class WholeTool(unittest.TestCase):
         self.assertTrue(r["failed"])
 
     def test_fit_final_is_judged_like_everything_else(self):
+        # D-4: the default fit follows the PC (gap gate OK); --fit-final crushes the phone's wrong-70+ share, so the same gap gate fails it
         pc, ph = FIX["one_word"]
         code, out, params, report = run_cli(pc, ph, "onew")
-        self.assertEqual(code, 1, out)
-        self.assertIn("wrong_pass_rate", out)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("wrong_pass_rate", out)
+        r = json.load(open(report, encoding="utf-8"))
+        self.assertEqual({g["name"]: g["result"] for g in r["gates"]}["wrong_pass_gap"], "OK")
+        self.assertIn("wrong_pass_rate_pc", r["holdout_metrics"])
         code, out, params, report = run_cli(pc, ph, "onew_ff", ("--fit-final",))
         r = json.load(open(report, encoding="utf-8"))
         self.assertNotIn("WAIVED", open(report, encoding="utf-8").read())
-        self.assertEqual({g["name"]: g["result"] for g in r["gates"]}["wrong_pass_rate"], "OK")
+        self.assertEqual(code, 1, out)
+        self.assertIn("wrong_pass_gap", out)
+        self.assertEqual({g["name"]: g["result"] for g in r["gates"]}["wrong_pass_gap"], "FAIL")
         self.assertIsNotNone(r["fit"]["final_map"])
         self.assertTrue(cf.valid_final_map(r["fit"]["final_map"]))
-        if code == 0:   # every gate (the two score distances too) passed on this data
-            p = json.load(open(params, encoding="utf-8"))
-            self.assertEqual(p["report"]["fallback"], "final_map")
-            self.assertNotEqual(p["final_map"], [[0, 0], [100, 100]])
-        else:   # a gate under its limit: CALIB_FAIL and no params file (nothing is excused)
-            self.assertIn("CALIB_FAIL ", out)
-            self.assertFalse(os.path.exists(params))
+        self.assertFalse(os.path.exists(params))   # a gate under its limit: CALIB_FAIL and no params file (nothing is excused)
 
     def test_fit_final_with_score_distance_over_the_limit_fails(self):
         # the map must not excuse a score distance: a copy of the data whose PC scores are 15 points higher than the phone's
