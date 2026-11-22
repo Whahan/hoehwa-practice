@@ -42,6 +42,8 @@ class Fake:
 	var abort_gen: int = 0
 	var load_delay_ms: int = 0
 	var unload_delay_ms: int = 0
+	var unload_started: int = 0
+	var gap_release: Semaphore = null ## abort() lets a thread that waits before the bridge call go on (race 8)
 	var tr_delay_ms: int = 0
 	var hang_count: int = 0 ## the next N transcribe calls block until aborted / released
 	var release: bool = false
@@ -106,14 +108,17 @@ class Fake:
 
 	func unload() -> void:
 		_main_check()
-		unload_calls += 1
+		unload_started += 1
 		_sleep(unload_delay_ms)
 		loaded_path = ""
-		_note("unload")
+		_note("unload") ## the event first: a test that sees unload_calls == 1 finds it in events()
+		unload_calls += 1
 
 	func abort() -> void:
 		abort_calls += 1
 		abort_gen += 1
+		if gap_release != null:
+			gap_release.post()
 
 	func _sleep(msec: int) -> void:
 		var t0: int = Time.get_ticks_msec()
@@ -156,6 +161,13 @@ class Fake:
 			"words_missing":
 				return {"ok": true, "error": "", "text": text, "duration": duration, "ms": ms, "model": "fake"}
 		return {"ok": true, "error": "", "text": text, "words": words.duplicate(true), "duration": duration, "ms": ms, "model": "fake"}
+
+
+## A bridge object that has none of load_model / unload / transcribe (a broken injected bridge).
+class BareBridge:
+	extends RefCounted
+	func abort() -> void:
+		pass
 
 
 # ================================================================================================ logger, checks, helpers
@@ -1281,7 +1293,7 @@ func _engine_race() -> void:
 	await _until(func() -> bool: return e5.loaded_path() == "user://a.bin", 5.0)
 	f5.unload_delay_ms = 400
 	e5.request_unload()
-	await _until(func() -> bool: return f5.unload_calls == 1, 5.0)
+	await _until(func() -> bool: return f5.unload_started == 1, 5.0)
 	e5.request_load("user://a.bin")
 	await _until(func() -> bool: return f5.load_calls == 2 and e5.loaded_path() == "user://a.bin", 5.0)
 	ok(f5.load_calls == 2 and f5.loaded_path == "user://a.bin", "race (5): a load asked while the unload runs loads again (%d loads)" % f5.load_calls)
@@ -1328,6 +1340,73 @@ func _engine_race() -> void:
 	SttEngine.main_thread_calls = 0 ## the white box above called the fake on the main thread on purpose
 	e7.free()
 	await _frames(2)
+	# (8) abort / cancel / pause / shutdown that FINISH between the engine thread's last check and the bridge call (the reviewer's order,
+	# forced with two semaphores: the thread waits in _before_bridge_hook, the action runs and its bridge.abort() lets the thread go on).
+	# The fake bridge snapshots the abort number when transcribe() is entered, like the native one: it misses the abort and succeeds.
+	# The engine must still not hand a success out, and must go on with the next job.
+	for action in ["abort", "cancel_job", "pause", "shutdown"]:
+		var f8 := Fake.new()
+		var e8: SttEngine = await _race_engine(f8)
+		var entered := Semaphore.new()
+		var release := Semaphore.new()
+		f8.gap_release = release
+		e8._before_bridge_hook = func(job: SttEngine.Job) -> void:
+			if job.opts.get("gap", false):
+				entered.post()
+				release.wait()
+		e8.request_load("user://a.bin")
+		await _until(func() -> bool: return e8.loaded_path() == "user://a.bin", 5.0)
+		var jg: SttEngine.Job = e8.submit(_wav_of("2s", 2.0), {"gap": true})
+		var at_gap: bool = false
+		var t_gap: int = Time.get_ticks_msec()
+		while not at_gap and Time.get_ticks_msec() - t_gap < 5000:
+			at_gap = entered.try_wait()
+			if not at_gap:
+				await get_tree().process_frame
+		var want_err: String = "aborted"
+		match action:
+			"abort":
+				e8.abort()
+			"cancel_job":
+				e8.cancel_job(jg)
+			"pause":
+				e8.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+				want_err = "paused"
+			"shutdown":
+				e8.shutdown()
+				want_err = "shutdown"
+		await _until(func() -> bool: return jg.done, 10.0)
+		ok(at_gap and jg.done and not bool(jg.result.get("ok", false)) and str(jg.result.get("error", "")) == want_err, "race (8) %s: the job that missed the abort at the bridge entry ends '%s', not ok (%s)" % [action, want_err, str(jg.result.get("error", "?"))])
+		ok(f8.transcribe_calls == 1, "race (8) %s: the bridge ran that one call to its end (the known limit), once" % action)
+		# the thread goes on with the next work
+		var e8b: SttEngine = e8
+		if action == "shutdown":
+			ok(e8._thread == null, "race (8) shutdown: the engine thread is joined")
+			e8b = SttEngine.get_or_create()
+			e8b.bridge_factory = func() -> Object: return f8
+			await _frames(3)
+		e8b._before_bridge_hook = Callable()
+		e8b.request_load("user://a.bin")
+		var jn: SttEngine.Job = e8b.submit(_wav_of("2s", 2.0), {})
+		await _until(func() -> bool: return jn.done, 10.0)
+		ok(jn.done and bool(jn.result.get("ok", false)), "race (8) %s: the next job is processed normally (%s)" % [action, str(jn.result.get("error", "ok"))])
+	# (9) an injected bridge without load_model / unload / transcribe ends the call with an error code and leaves nothing in flight
+	var bare := BareBridge.new()
+	await _setup(Fake.new())
+	var e9: SttEngine = SttEngine.get_or_create()
+	e9.bridge_factory = func() -> Object: return bare
+	e9.request_load("user://a.bin")
+	var jbare: SttEngine.Job = e9.submit(_wav_of("2s", 2.0), {})
+	await _until(func() -> bool: return jbare.done, 5.0)
+	ok(jbare.done and str(jbare.result.get("error", "")) == "load_failed", "race (9): a bridge without load_model: the load is a failure (load_failed)")
+	ok(not e9.busy() and e9.loaded_path() == "", "race (9): nothing stays in flight (busy() false)")
+	e9._mx.lock()
+	e9._loaded_path = "user://a.bin" ## as if a model were loaded: only then an unload is queued
+	e9._mx.unlock()
+	e9.request_unload()
+	await _until(func() -> bool: return not e9.busy(), 5.0)
+	await _frames(3)
+	ok(not e9.busy() and e9.loaded_path() == "", "race (9): a bridge without unload does not leave the unload in flight (busy() false, nothing loaded)")
 
 
 # ================================================================================================ PA4-14 abort patch marker

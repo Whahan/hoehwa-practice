@@ -21,6 +21,11 @@ extends Node
 ## Job results ({ok, error, text, words, duration, ms, model}) are what the bridge returned, or {ok:false, error} with error one of
 ## "no_engine" (no bridge), "no_model" (nothing loaded), "load_failed" (the last load_model call failed), "aborted", "paused",
 ## "cancelled" (cancel_job), "shutdown". This file writes no log lines.
+##
+## Known limit (the native bridge is not rebuilt): the native abort() reaches only a transcribe() call that has already started. When
+## abort()/cancel/pause/shutdown completes in the moment between the engine thread's last check and the bridge call, that ONE
+## transcription runs to its end (the engine thread is busy, shutdown() waits for it); its result is thrown away after the call
+## returns (the check is repeated under the mutex), so a success never leaves the engine for an aborted job.
 
 ## Tests: the fake bridge adds 1 here when one of its load_model / unload / transcribe is called on the main thread.
 static var main_thread_calls: int = 0
@@ -63,6 +68,8 @@ var _load_err: int = 0
 var _epoch: int = 0
 var _abort_seq: int = 0 ## +1 for every abort() / cancel of a running job (mutex); the native abort only reaches calls that already started
 var _stopped: bool = false
+## Tests only: (job) -> void, called on the engine thread right before the bridge's transcribe() call (forces the abort-before-entry order).
+var _before_bridge_hook: Callable = Callable()
 var _exiting: bool = false ## the node leaves the tree / is being deleted: shutdown() must not queue_free it again
 var _last_use: float = 0.0
 var _jobs_open: Array = [] ## main thread only
@@ -416,16 +423,21 @@ func _thread_main() -> void:
 			_mx.lock()
 			_running = null
 			var late_epoch: bool = job.epoch != _epoch
+			var late_abort: bool = job.abandoned or job.abort_seq != _abort_seq ## the same check as before the call, repeated now that the call is over
 			_mx.unlock()
 			if late_epoch:
 				res = {"ok": false, "error": "paused"}
+			elif late_abort and bool(res.get("ok", false)):
+				res = {"ok": false, "error": "aborted"} ## the abort came after the last check but the bridge had already started without it
 			_job_done.call_deferred(job, res)
 
 
 func _do_load(path: String, threads: int) -> void:
 	var before: Dictionary = _memory(_bridge)
 	var t0: int = Time.get_ticks_msec()
-	var raw: Variant = _bridge.load_model(path, threads)
+	var raw: Variant = FAILED
+	if _bridge != null and _bridge.has_method("load_model"): ## an injected bridge without the method is a failed load, not a script error
+		raw = _bridge.load_model(path, threads)
 	var ms: int = Time.get_ticks_msec() - t0
 	var err: int = int(raw) if (typeof(raw) == TYPE_INT) else FAILED
 	var after: Dictionary = _memory(_bridge)
@@ -451,7 +463,7 @@ func _do_unload() -> void:
 	_loaded_path = ""
 	_load_err = 0
 	_mx.unlock()
-	if had and _bridge != null:
+	if had and _bridge != null and _bridge.has_method("unload"):
 		_bridge.unload()
 		_mx.lock()
 		_stat["unload_calls"] = int(_stat["unload_calls"]) + 1
@@ -473,6 +485,10 @@ func _do_transcribe(job: Job) -> Dictionary:
 		return {"ok": false, "error": "aborted"} ## abort() / cancel came after the pop but before the bridge call: the bridge's own flag would miss it
 	if not loaded:
 		return {"ok": false, "error": "load_failed" if lerr != 0 else "no_model"}
+	if not _bridge.has_method("transcribe"):
+		return {"ok": false, "error": "engine"}
+	if _before_bridge_hook.is_valid():
+		_before_bridge_hook.call(job)
 	var r: Variant = _bridge.transcribe(job.wav, "en", job.opts)
 	if r is Dictionary:
 		return r
