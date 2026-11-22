@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fake model server for the ModelStore tests (docs/v201_design.md 2.2, 5.3 PA3-1..PA3-11).
 
-Usage:   python -I -X utf8 fake_model_server.py --port 18791 --root <dir> [--ttl 900]
+Usage:   python -I -X utf8 fake_model_server.py --port 18791 --root <dir> [--ttl 900] [--logdelay MS]
+         --logdelay MS  test aid: every log line is written MS ms late (a slow log, like a connection that ends late)
          (--port 0 lets the OS choose the port; the chosen port is written to <root>/port.txt)
 
 It listens on 127.0.0.1 only, serves payload files from <root> and appends one JSON line per request to
@@ -54,6 +55,16 @@ ARGS = None
 
 
 def log_line(rec):
+    d = ARGS.logdelay if ARGS is not None else 0
+    if d > 0:
+        t = threading.Timer(d / 1000.0, _write_line, args=(dict(rec),))
+        t.daemon = True
+        t.start()
+    else:
+        _write_line(rec)
+
+
+def _write_line(rec):
     with STATE_LOCK:
         SEQ[0] += 1
         rec["seq"] = SEQ[0]
@@ -242,6 +253,7 @@ def main():
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--root", required=True)
     ap.add_argument("--ttl", type=int, default=900, help="stop by itself after this many seconds")
+    ap.add_argument("--logdelay", type=int, default=0, help="test aid: write every log line this many ms late")
     ARGS = ap.parse_args()
     os.makedirs(ARGS.root, exist_ok=True)
     srv = ThreadingHTTPServer(("127.0.0.1", ARGS.port), Handler)

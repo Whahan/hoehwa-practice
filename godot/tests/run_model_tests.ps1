@@ -113,10 +113,12 @@ if ($port -eq 0) {
 }
 
 $srvProc = $null
+# MODEL_SRV_LOGDELAY (ms): make the fake server write its log lines late, to prove the tests do not depend on log timing
+$srvExtra = @(); if ($env:MODEL_SRV_LOGDELAY) { $srvExtra = @('--logdelay', [string][int]$env:MODEL_SRV_LOGDELAY) }
 $rows = @()
 $exitCode = 0
 try {
-    $srvProc = Start-Process -FilePath $py -ArgumentList @('-I', '-X', 'utf8', $server, '--port', $port, '--root', $srv, '--ttl', '1500') -RedirectStandardOutput (Join-Path $work 'server.log') -RedirectStandardError (Join-Path $work 'server.err') -PassThru -NoNewWindow
+    $srvProc = Start-Process -FilePath $py -ArgumentList (@('-I', '-X', 'utf8', $server, '--port', $port, '--root', $srv, '--ttl', '1500') + $srvExtra) -RedirectStandardOutput (Join-Path $work 'server.log') -RedirectStandardError (Join-Path $work 'server.err') -PassThru -NoNewWindow
     $srvPid = $srvProc.Id
     Write-Host ("fake model server pid {0} on 127.0.0.1:{1}" -f $srvPid, $port)
     $up = $false
@@ -138,6 +140,8 @@ try {
         if ($t.mode -like '*dark') { $u += '--dark' }
         $a += '--'
         $a += $u
+        # every test starts with an empty request log (the server opens it per write, so truncating is safe)
+        try { [IO.File]::WriteAllText((Join-Path $srv 'requests.jsonl'), '') } catch { }
         $log = Join-Path $work ("{0}_{1}.log" -f $t.name, $t.mode)
         Write-Host ("running {0} ..." -f $label)
         $env:APPDATA = $fakeAppData
