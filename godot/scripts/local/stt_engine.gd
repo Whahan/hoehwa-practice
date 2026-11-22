@@ -47,6 +47,7 @@ class Job:
 	## Guarded by the engine mutex:
 	var t_run: float = -1.0 ## clock() when the engine thread started this job, -1 while it waits in the queue
 	var abandoned: bool = false
+	var abort_seq: int = 0 ## the engine's abort count when the thread took the job: a later abort() means "do not start / stop"
 
 
 var _bridge: Object = null
@@ -56,9 +57,11 @@ var _mx: Mutex = Mutex.new()
 var _sem: Semaphore = Semaphore.new()
 var _queue: Array = [] ## of Dictionary {kind: "load"|"unload"|"transcribe"|"quit", ...}
 var _running: Job = null
+var _inflight: Dictionary = {} ## the load / unload item the engine thread has taken from the queue and not finished yet ({} = none)
 var _loaded_path: String = ""
 var _load_err: int = 0
 var _epoch: int = 0
+var _abort_seq: int = 0 ## +1 for every abort() / cancel of a running job (mutex); the native abort only reaches calls that already started
 var _stopped: bool = false
 var _exiting: bool = false ## the node leaves the tree / is being deleted: shutdown() must not queue_free it again
 var _last_use: float = 0.0
@@ -111,14 +114,15 @@ func _process(_delta: float) -> void:
 	if idle_unload_sec <= 0.0 or _stopped:
 		return
 	_mx.lock()
-	var idle: bool = _running == null and _queue.is_empty() and _loaded_path != ""
+	var idle: bool = _running == null and _inflight.is_empty() and _queue.is_empty() and _loaded_path != ""
 	_mx.unlock()
 	if idle and _now() - _last_use >= idle_unload_sec:
 		request_unload()
 
 
 # ================================================================================================ public API (main thread)
-## Queue a model load; returns at once. Nothing happens when the model that the queue will have loaded is this file already.
+## Queue a model load; returns at once. Nothing happens when the model that the engine will have loaded is this file already: the
+## loaded one, a load / unload the thread is running right now, and the queued items are all looked at (under the mutex).
 func request_load(path: String, threads: int = 0) -> void:
 	if _stopped or path == "" or not _ensure_bridge():
 		return
@@ -198,6 +202,7 @@ func cancel_job(job: Job) -> void:
 			break
 	if not removed and _running == job:
 		job.abandoned = true
+		_abort_seq += 1
 		if _bridge != null:
 			_bridge.abort()
 	_mx.unlock()
@@ -207,6 +212,9 @@ func cancel_job(job: Job) -> void:
 
 ## bridge.abort() right now (an atomic flag; never blocks).
 func abort() -> void:
+	_mx.lock()
+	_abort_seq += 1 ## a job the thread took a moment ago but has not handed to the bridge yet sees this and does not start
+	_mx.unlock()
 	if _bridge != null:
 		_bridge.abort()
 
@@ -220,7 +228,7 @@ func loaded_path() -> String:
 
 func busy() -> bool:
 	_mx.lock()
-	var b: bool = _running != null or not _queue.is_empty()
+	var b: bool = _running != null or not _inflight.is_empty() or not _queue.is_empty()
 	_mx.unlock()
 	return b
 
@@ -314,9 +322,16 @@ func _ensure_thread() -> void:
 		_thread = null
 
 
-## What the queue will have loaded when every queued item has run (mutex held).
+## What the engine will have loaded when the item in flight and every queued item have run (mutex held). The item in flight is
+## already out of the queue but `_loaded_path` changes only when it ends: without it a second request for the same file (or an
+## unload) would not see the first one.
 func _effective_path_locked() -> String:
 	var p: String = _loaded_path
+	if not _inflight.is_empty():
+		if _inflight["kind"] == "load":
+			p = str(_inflight["path"])
+		elif _inflight["kind"] == "unload":
+			p = ""
 	for it in _queue:
 		var d: Dictionary = it
 		if d["kind"] == "load":
@@ -384,7 +399,10 @@ func _thread_main() -> void:
 		if kind == "transcribe":
 			job = item["job"]
 			job.t_run = _now()
+			job.abort_seq = _abort_seq
 			_running = job
+		else:
+			_inflight = item ## in the same critical section as the pop: request_load() / request_unload() never see a gap
 		_mx.unlock()
 		if kind == "quit":
 			_do_unload()
@@ -423,6 +441,7 @@ func _do_load(path: String, threads: int) -> void:
 	else:
 		_loaded_path = ""
 		_load_err = err
+	_inflight = {}
 	_mx.unlock()
 
 
@@ -437,15 +456,21 @@ func _do_unload() -> void:
 		_mx.lock()
 		_stat["unload_calls"] = int(_stat["unload_calls"]) + 1
 		_mx.unlock()
+	_mx.lock()
+	_inflight = {}
+	_mx.unlock()
 
 
 func _do_transcribe(job: Job) -> Dictionary:
 	_mx.lock()
 	var loaded: bool = _loaded_path != ""
 	var lerr: int = _load_err
+	var stale: bool = job.abandoned or job.abort_seq != _abort_seq
 	_mx.unlock()
 	if _bridge == null:
 		return {"ok": false, "error": "no_engine"}
+	if stale:
+		return {"ok": false, "error": "aborted"} ## abort() / cancel came after the pop but before the bridge call: the bridge's own flag would miss it
 	if not loaded:
 		return {"ok": false, "error": "load_failed" if lerr != 0 else "no_model"}
 	var r: Variant = _bridge.transcribe(job.wav, "en", job.opts)

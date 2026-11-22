@@ -41,6 +41,7 @@ class Fake:
 	var abort_calls: int = 0
 	var abort_gen: int = 0
 	var load_delay_ms: int = 0
+	var unload_delay_ms: int = 0
 	var tr_delay_ms: int = 0
 	var hang_count: int = 0 ## the next N transcribe calls block until aborted / released
 	var release: bool = false
@@ -106,6 +107,7 @@ class Fake:
 	func unload() -> void:
 		_main_check()
 		unload_calls += 1
+		_sleep(unload_delay_ms)
 		loaded_path = ""
 		_note("unload")
 
@@ -396,6 +398,7 @@ func _ready() -> void:
 	await _bad_bridge()
 	await _timeouts()
 	await _async_engine()
+	await _engine_race()
 	await _patch_marker()
 	await _auto_off()
 	await _bench()
@@ -1202,6 +1205,129 @@ func _async_engine() -> void:
 	e10.bridge_factory = func() -> Object: return null
 	var jx: SttEngine.Job = e10.submit(PackedByteArray(), {})
 	ok(jx.done and str(jx.result["error"]) == "no_engine", "engine: without a bridge a job ends no_engine at once")
+
+
+# ================================================================================================ the engine's load / unload / abort races
+## A request that arrives while the thread is in the middle of an item (taken from the queue, `_loaded_path` not yet changed) must see
+## that item: the same file is loaded once, a load that is running can be unloaded, an unload that is running can be followed by a load.
+func _race_engine(f: Fake) -> SttEngine:
+	await _setup(f)
+	var e: SttEngine = SttEngine.get_or_create()
+	e.bridge_factory = func() -> Object: return f
+	await _frames(3)
+	return e
+
+
+func _engine_race() -> void:
+	# (1) the same path asked again while the first load is running: one load_model call
+	var f1 := Fake.new()
+	f1.load_delay_ms = 500
+	var e1: SttEngine = await _race_engine(f1)
+	e1.request_load("user://a.bin")
+	var started: bool = await _until(func() -> bool: return f1.load_calls == 1, 5.0)
+	var mid_loaded: String = e1.loaded_path()
+	e1.request_load("user://a.bin")
+	e1.request_load("user://a.bin")
+	var done1: bool = await _until(func() -> bool: return e1.loaded_path() == "user://a.bin", 5.0)
+	OS.delay_msec(300) ## a wrongly queued second load would start (and count) now
+	await _frames(5)
+	ok(started and mid_loaded == "" and done1, "race (1): the first load was in flight (nothing loaded yet) when the same path was asked again")
+	ok(f1.load_calls == 1 and int(e1.info()["load_calls"]) == 1, "race (1): the same path asked twice while its load runs is loaded once (%d calls)" % f1.load_calls)
+	# (2) load A, unload, load A again: the second load is real
+	var f2 := Fake.new()
+	var e2: SttEngine = await _race_engine(f2)
+	e2.request_load("user://a.bin")
+	await _until(func() -> bool: return e2.loaded_path() == "user://a.bin", 5.0)
+	e2.request_unload()
+	await _until(func() -> bool: return f2.unload_calls == 1 and e2.loaded_path() == "", 5.0)
+	e2.request_load("user://a.bin")
+	await _until(func() -> bool: return e2.loaded_path() == "user://a.bin", 5.0)
+	ok(f2.load_calls == 2 and f2.unload_calls == 1 and f2.loaded_path == "user://a.bin", "race (2): load A, unload, load A loads twice (%d loads, %d unloads)" % [f2.load_calls, f2.unload_calls])
+	# (2b) the same, but unload and the second load are asked while the first load still runs
+	var f2b := Fake.new()
+	f2b.load_delay_ms = 400
+	var e2b: SttEngine = await _race_engine(f2b)
+	e2b.request_load("user://a.bin")
+	await _until(func() -> bool: return f2b.load_calls == 1, 5.0)
+	e2b.request_unload()
+	e2b.request_load("user://a.bin")
+	e2b.request_load("user://a.bin")
+	await _until(func() -> bool: return f2b.load_calls == 2 and e2b.loaded_path() == "user://a.bin", 5.0)
+	OS.delay_msec(300)
+	ok(f2b.load_calls == 2 and f2b.unload_calls == 1 and f2b.loaded_path == "user://a.bin", "race (2b): load A (running), unload, load A, load A -> 2 loads, 1 unload (%d, %d)" % [f2b.load_calls, f2b.unload_calls])
+	# (3) another path while the first load runs: both are loaded, in order
+	var f3 := Fake.new()
+	f3.load_delay_ms = 400
+	var e3: SttEngine = await _race_engine(f3)
+	e3.request_load("user://a.bin")
+	await _until(func() -> bool: return f3.load_calls == 1, 5.0)
+	e3.request_load("user://b.bin")
+	await _until(func() -> bool: return e3.loaded_path() == "user://b.bin", 5.0)
+	ok(f3.load_calls == 2 and f3.loaded_path == "user://b.bin", "race (3): another path B asked while A loads is loaded once, after A (%d loads)" % f3.load_calls)
+	# (4) an unload asked while a load runs is not dropped (the model is not loaded yet, but it will be)
+	var f4 := Fake.new()
+	f4.load_delay_ms = 400
+	var e4: SttEngine = await _race_engine(f4)
+	e4.request_load("user://a.bin")
+	await _until(func() -> bool: return f4.load_calls == 1, 5.0)
+	e4.request_unload()
+	await _until(func() -> bool: return f4.unload_calls == 1, 5.0)
+	await _frames(3)
+	ok(f4.unload_calls == 1 and f4.loaded_path == "" and e4.loaded_path() == "", "race (4): an unload asked during a load runs after it (model freed)")
+	# (5) a load asked while an unload runs is not dropped
+	var f5 := Fake.new()
+	var e5: SttEngine = await _race_engine(f5)
+	e5.request_load("user://a.bin")
+	await _until(func() -> bool: return e5.loaded_path() == "user://a.bin", 5.0)
+	f5.unload_delay_ms = 400
+	e5.request_unload()
+	await _until(func() -> bool: return f5.unload_calls == 1, 5.0)
+	e5.request_load("user://a.bin")
+	await _until(func() -> bool: return f5.load_calls == 2 and e5.loaded_path() == "user://a.bin", 5.0)
+	ok(f5.load_calls == 2 and f5.loaded_path == "user://a.bin", "race (5): a load asked while the unload runs loads again (%d loads)" % f5.load_calls)
+	# (6) abort + next work: the running transcription is aborted, the model is freed and loaded again, and the NEXT job is not aborted
+	var f6 := Fake.new()
+	var e6: SttEngine = await _race_engine(f6)
+	e6.request_load("user://a.bin")
+	await _until(func() -> bool: return e6.loaded_path() == "user://a.bin", 5.0)
+	f6.tr_delay_ms = 15000
+	var j1: SttEngine.Job = e6.submit(_wav_of("2s", 2.0), {})
+	await _until(func() -> bool: return f6.events().has("t_start"), 5.0)
+	e6.request_unload()
+	e6.request_load("user://a.bin")
+	f6.tr_delay_ms = 0
+	var j2: SttEngine.Job = e6.submit(_wav_of("2s", 2.0), {})
+	await _until(func() -> bool: return j1.done and j2.done, 10.0)
+	ok(j1.done and str(j1.result["error"]) == "aborted" and j2.done and bool(j2.result["ok"]), "race (6): unload aborts the running job, the job after the reload is not aborted")
+	ok(f6.unload_calls == 1 and f6.load_calls == 2, "race (6): one unload and one reload (%d, %d)" % [f6.unload_calls, f6.load_calls])
+	# (7) a job the thread took but has not given to the bridge yet: abort() / cancel after the pop must stop it (white box, no thread)
+	var f7 := Fake.new()
+	await _setup(f7)
+	var e7 := SttEngine.new()
+	e7.bridge_factory = func() -> Object: return f7
+	e7._ensure_bridge()
+	e7._loaded_path = "user://a.bin"
+	var ja := SttEngine.Job.new()
+	ja.abort_seq = e7._abort_seq
+	var r0: Dictionary = e7._do_transcribe(ja)
+	ok(bool(r0["ok"]) and f7.transcribe_calls == 1, "race (7): a job nobody aborted reaches the bridge (control)")
+	var jb := SttEngine.Job.new()
+	jb.abort_seq = e7._abort_seq
+	e7.abort()
+	var r1: Dictionary = e7._do_transcribe(jb)
+	ok(not bool(r1["ok"]) and str(r1["error"]) == "aborted" and f7.transcribe_calls == 1, "race (7): abort() between the pop and the bridge call: aborted, the bridge is not called")
+	var jc := SttEngine.Job.new()
+	jc.abort_seq = e7._abort_seq
+	jc.abandoned = true
+	var r2: Dictionary = e7._do_transcribe(jc)
+	ok(str(r2["error"]) == "aborted" and f7.transcribe_calls == 1, "race (7): a cancelled (abandoned) job is not started either")
+	var jd := SttEngine.Job.new()
+	jd.abort_seq = e7._abort_seq
+	var r3: Dictionary = e7._do_transcribe(jd)
+	ok(bool(r3["ok"]) and f7.transcribe_calls == 2, "race (7): a job taken after the abort runs normally")
+	SttEngine.main_thread_calls = 0 ## the white box above called the fake on the main thread on purpose
+	e7.free()
+	await _frames(2)
 
 
 # ================================================================================================ PA4-14 abort patch marker
