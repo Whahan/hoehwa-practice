@@ -198,8 +198,11 @@ class ScoreGoldenTests(unittest.TestCase):
     def test_11_backend_is_untouched(self):
         with G.no_network():
             G.build()
-        self.assertEqual(backend_state(), self.before, "backend\\ (every .py, and the list of files) is the same after generating")
-        self.assertFalse([k for k in self.before if k.endswith(".pyc") or k == "__pycache__"], "no bytecode under backend\\")
+        after = backend_state()
+        self.assertEqual(after, self.before, "backend\\ (every .py, and the list of files) is the same after generating")
+        # bytecode a dev tree already had (from running the server) is not ours; the generator must not add any
+        self.assertFalse([k for k in after if (k.endswith(".pyc") or k == "__pycache__") and k not in self.before],
+                         "no new bytecode under backend\\")
 
     def test_12_build_is_deterministic(self):
         with G.no_network():
