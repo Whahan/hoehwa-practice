@@ -642,7 +642,7 @@ foreach ($x in $m.models) { "{0} {1} {2} default={3}" -f $x.id, $x.bytes, $x.sha
 - **PA5a-6 개인정보**: `calib_record.py` 소스에 로그 파일 쓰기 0(`Select-String -Path "$W\phone_src\tools\calib_record.py" -Pattern 'logging','\.log'` 0줄), 기본 출력 폴더 인자 필수(없으면 종료 2), X-3.
 - **PA5b-1 데이터 규모(보고)**: 합성 클립 ≥ 1,000(문장 ≥ 200, 음성 ≥ 4, 틀린 단어 ≥ 250), 사용자 클립 ≥ 40(동의 기록 있음, 없으면 사용자 열 "미검증").
 - **PA5b-2 지표**: `Get-Content "$W\phone_src\calib\report_v201.json" -Raw | ConvertFrom-Json` 의 값이 §2.4 합격선을 모두 만족하면 `fallback:"none"|"beam"`. 미달 항목이 있으면 그 이름·값과 폴백 단계(§2.4)를 보고하고 **오케스트레이터 판정**(자동 X 아님, 결정 7).
-- **PA5b-3 형식**: `score_params.json` 이 §2.3 읽기 규칙을 모두 통과(`model_id == "whisper-base.en-q5_1"`, `calibrated:true`, `beam ∈ {1,2,3}`, `p_map` 단조·0과 1 포함). 확인: `Run-GT local_stt_test pc -More @("--params=$W\godot\data\score_params.json")` 의 `params: calibrated` 줄과 `score_uncalibrated` 없음.
+- **PA5b-3 형식**: `score_params.json` 이 §2.3 읽기 규칙을 모두 통과(`model_id == "whisper-base.en-q5_1"`, `calibrated:true`, `beam ∈ {1,2,3}`, `p_map` 단조·0과 1 포함). 확인: ~~`Run-GT local_stt_test pc -More @("--params=…")`~~(이 시험은 `--params=` 를 읽지 않고 고정 fixture 만 쓴다, 2026-11-22 보정) → 실제 파일을 둔 상태에서 Godot 스크립트로 `LocalStt.params()` 를 불러 `calibrated=true`, `degraded` 에 `score_uncalibrated` 없음, `beam` 값을 출력해 확인한다.
 - **PA5b-4 재현**: `calib_fit.py` 를 같은 입력·시드로 다시 돌린 `score_params.json` 이 저장된 파일과 바이트 동일.
 - **PA5b-5 개인정보**: 저장소·보고에 사용자 WAV·전사 글 0(`git -C $W ls-files phone_src` 에 `.wav` 0, `report_v201.json` 에 영어 문장 0 — `Select-String -Pattern '[A-Za-z]{3,} [A-Za-z]{3,} [A-Za-z]{3,}'` 0줄), 녹음 폴더 삭제 여부를 사용자 선택대로 기록.
 - **금지**: 서버 프로세스·포트(프로세스 안 호출만), `secrets.json` 접근, 네트워크, X-8. q8 모델 내려받기는 ★재승인 뒤 별도 지시.
