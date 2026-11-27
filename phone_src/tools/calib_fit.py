@@ -422,7 +422,7 @@ def read_run(path, kind, file_no=1):
         if cid in clips:
             raise CalibError("input", "%s: its id is used twice" % where)
         rec = {"id": cid, "words": _clean_words(c.get("words"), where), "text": c.get("text") if isinstance(c.get("text"), str) else ""}
-        if c.get("set") is not None:   # the recording set (calib_record.py manifest "set"): kept, and it must agree with the id's own tag
+        if "set" in c:   # the recording set (calib_record.py manifest "set"): kept, and it must agree with the id's own tag; an explicit null is refused too
             if not valid_set_tag(c["set"]):
                 raise CalibError("input", "%s: the set is not a valid set tag" % where)
             if id_set_tag(cid) not in ("", c["set"]):
