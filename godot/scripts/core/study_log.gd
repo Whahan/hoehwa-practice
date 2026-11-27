@@ -45,7 +45,7 @@ const MAX_SPEED_COUNT := 1000 ## best.correct / best.total / best.combo, and the
 const PATH_VIEWS := ["lesson", "review", "talk", "practice", "reading", "song"] ## screens that note_resume() accepts
 const MAX_PATH_DONE := 9999 ## finished lessons counted per path cell
 const TXT_REST_CHIP := "쉬는 날 %d일 남음" ## 연속 카드·목표 카드 칩
-const TXT_REST_USED := "이번 주 쉬는 날 %d일을 써서 연속 기록이 이어졌어요"
+const TXT_REST_USED := "쉬는 날 %d일을 써서 연속 기록이 이어졌어요" ## 주를 가로질러도 맞는 문구(주 한도와 어긋나지 않게 "이번 주" 를 쓰지 않는다)
 const RESUME_SAME_SEC := 60 ## note_resume(): the same view + language again within this many seconds changes nothing
 
 static var path := "user://studylog.json"
@@ -1169,7 +1169,20 @@ static func rest_per_week() -> int:
 
 
 ## Days (day number -> true) bridged as rest days for `lang` (freeze.<lang>.rest; always also in frozen). {} when none.
+## A day that was studied since (a sync can bring one in) is not a rest day any more, even before the next settle() cleans the file.
 static func rest_days(lang: String) -> Dictionary:
+	var out := _stored_rest(lang)
+	if out.is_empty():
+		return out
+	var done: Dictionary = _done_days(lang)
+	for d in out.keys():
+		if done.has(d):
+			out.erase(d)
+	return out
+
+
+## The rest days as stored (freeze.<lang>.rest), studied days included. settle() needs them to free the week's quota.
+static func _stored_rest(lang: String) -> Dictionary:
 	var out := {}
 	if not _valid_lang(lang):
 		return out
@@ -1268,13 +1281,13 @@ static func settle(lang: String) -> Dictionary:
 		var fd: int = _iso_days(str(iso))
 		if fd >= 0:
 			frozen[fd] = true
-	var rest := rest_days(lang)
+	var rest := _stored_rest(lang)
 	var rpw: int = rest_per_week()
 	var t: int = today()
 	var res: Dictionary = StreakCalc.settle(_done_days(lang), frozen, int(fz["tokens"]), int(fz["awarded"]), t, rest, rpw)
 	if t < int(fz["last"]):
 		return {"streak": int(res["streak"]), "tokens": int(fz["tokens"]), "used": 0, "gained": 0,
-			"rest_used": 0, "rest_left": StreakCalc.rest_left(rest, t, rpw)}
+			"rest_used": 0, "rest_left": rest_left(lang)}
 	var list: Array = []
 	for d in (res["frozen"] as Dictionary).keys():
 		list.append(Plan.days_to_iso(int(d)))
@@ -1284,7 +1297,8 @@ static func settle(lang: String) -> Dictionary:
 		rest_list.append(Plan.days_to_iso(int(d)))
 	rest_list.sort()
 	fz["last"] = t ## saved together with the next real change (advancing it alone does not make the log dirty)
-	if int(res["tokens"]) != int(fz["tokens"]) or int(res["awarded"]) != int(fz["awarded"]) or list != fz["frozen"] 			or rest_list != fz.get("rest", []):
+	if int(res["tokens"]) != int(fz["tokens"]) or int(res["awarded"]) != int(fz["awarded"]) or list != fz["frozen"] \
+			or rest_list != fz.get("rest", []):
 		fz["tokens"] = int(res["tokens"])
 		fz["awarded"] = int(res["awarded"])
 		fz["frozen"] = list

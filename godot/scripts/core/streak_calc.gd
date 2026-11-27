@@ -58,20 +58,51 @@ static func settle(done: Dictionary, frozen: Dictionary, tokens: int, awarded: i
 		var d: int = int(k)
 		if d < today and d > prev:
 			prev = d
+
+	# Days that were bridged but are studied now (e.g. a day that came in with a sync) need no bridge any more.
+	# A freed rest day gives its week's rest quota back (a later token day of that week becomes a rest day, one token returns),
+	# a freed token day returns its token. Only with rest days on: with rest_per_week 0 the old rule is kept as it was.
+	if rpw > 0:
+		var refund := 0
+		var freed := {}
+		for k in fz.keys():
+			if dn.has(k):
+				fz.erase(k)
+				if rs.has(k):
+					rs.erase(k)
+					freed[week_of(int(k))] = true
+				else:
+					refund += 1
+		if not freed.is_empty():
+			var in_week := {}
+			for k in rs.keys():
+				var w1: int = week_of(int(k))
+				in_week[w1] = int(in_week.get(w1, 0)) + 1
+			var cand: Array = fz.keys()
+			cand.sort()
+			for k in cand:
+				var d2: int = int(k)
+				if rs.has(d2):
+					continue
+				var w2: int = week_of(d2)
+				if freed.has(w2) and int(in_week.get(w2, 0)) < rpw:
+					rs[d2] = true
+					in_week[w2] = int(in_week.get(w2, 0)) + 1
+					refund += 1
+		tokens = mini(MAX_TOKENS, tokens + refund)
+
 	if prev != NONE:
 		var gap: int = today - prev - 1
 		if gap > 0:
-			var per_week := {} # week (Monday day number) -> rest days already in it (kept ones + the ones picked now)
+			# 1) keep what is already marked in this gap, rest days first for the days that are still empty
+			var per_week := {} # week (Monday day number) -> rest days in it (kept ones + the ones picked now)
 			for k in rs.keys():
 				var w0: int = week_of(int(k))
 				per_week[w0] = int(per_week.get(w0, 0)) + 1
-			var in_gap_tok := 0 # days a token already covered in this gap (not rest days)
-			var need_tok := 0 # days that still need a new token
-			var picked: Array = [] # new rest days
+			var need_tok := 0
+			var picked: Array = []
 			for d in range(prev + 1, today):
 				if fz.has(d):
-					if not rs.has(d):
-						in_gap_tok += 1
 					continue
 				var w: int = week_of(d)
 				if int(per_week.get(w, 0)) < rpw:
@@ -88,13 +119,55 @@ static func settle(done: Dictionary, frozen: Dictionary, tokens: int, awarded: i
 				used = need_tok
 				rest_used = picked.size()
 			else:
-				# cannot bridge: give back what was spent on this gap, streak breaks
+				# 2) start this gap over: tokens already spent on it come back, its rest days are free again, and the
+				#    whole gap is given rest days (up to the weekly limit) first. A result of this is the same when settled again.
+				var out_week := {}
+				var in_gap_tok := 0
+				for k in rs.keys():
+					var d3: int = int(k)
+					if d3 > prev and d3 < today:
+						continue
+					var w3: int = week_of(d3)
+					out_week[w3] = int(out_week.get(w3, 0)) + 1
 				for k in fz.keys():
-					var d: int = int(k)
-					if d > prev and d < today:
-						fz.erase(k)
-						rs.erase(k)
-				tokens = mini(MAX_TOKENS, tokens + in_gap_tok)
+					var d4: int = int(k)
+					if d4 > prev and d4 < today and not rs.has(d4):
+						in_gap_tok += 1
+				var need2 := 0
+				var picked2: Array = []
+				for d in range(prev + 1, today):
+					var w5: int = week_of(d)
+					if int(out_week.get(w5, 0)) < rpw:
+						out_week[w5] = int(out_week.get(w5, 0)) + 1
+						picked2.append(d)
+					else:
+						need2 += 1
+				var avail: int = tokens + in_gap_tok
+				if need2 <= avail:
+					var fresh := 0
+					for d in picked2:
+						if not fz.has(d):
+							fresh += 1
+					for k in rs.keys():
+						var d6: int = int(k)
+						if d6 > prev and d6 < today:
+							rs.erase(k)
+					for d in range(prev + 1, today):
+						fz[d] = true
+					for d in picked2:
+						rs[d] = true
+					var left: int = mini(MAX_TOKENS, avail - need2)
+					used = maxi(tokens - left, 0)
+					rest_used = fresh
+					tokens = left
+				else:
+					# cannot bridge: give back what was spent on this gap, streak breaks
+					for k in fz.keys():
+						var d: int = int(k)
+						if d > prev and d < today:
+							fz.erase(k)
+							rs.erase(k)
+					tokens = mini(MAX_TOKENS, avail)
 	var streak: int = _run(dn, fz, today)
 
 	var gained := 0

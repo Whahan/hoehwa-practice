@@ -4,21 +4,33 @@ extends Node
 ## 종료 코드 0 = 전부 통과. 마지막 줄: "== rest_days result: N passed, 0 failed =="
 ## 실제 user://studylog.json / progress.json / prefs.json 은 읽지도 쓰지도 않는다(user://t_rest_* 로 바꿨다가 되돌림).
 
-const LOG_PATH := "user://t_rest_studylog.json"
-const PROG_PATH := "user://t_rest_progress.json"
-const PREFS_PATH := "user://t_rest_prefs.json"
+const LOG_PATH := "user://test_rest_days_studylog.json"
+const PROG_PATH := "user://test_rest_days_progress.json"
+const PREFS_PATH := "user://test_rest_days_prefs.json"
+const COURSE_PATH := "user://test_rest_days_course.json"
 
 var passed: int = 0
 var failed: int = 0
 var D: int = 0 ## "today": a Friday (2026-10-16). -4 Mon, -3 Tue, -2 Wed, -1 Thu, -5 last Sun, -6 last Sat
 var _old_paths: Array = []
 var _toasts: Array = []
+var _scale: float = 1.0
+var _dark: bool = false
 
 
 func _ready() -> void:
-	print("== rest_days start ==")
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--font-scale=") and a.substr(13).is_valid_float():
+			_scale = a.substr(13).to_float()
+		elif a == "--dark":
+			_dark = true
+	print("== rest_days start (%s, scale %s%s) ==" % ["phone" if Platform.is_phone() else "pc", str(_scale), ", dark" if _dark else ""])
 	D = Plan.days_from_civil(2026, 10, 16)
-	_old_paths = [Store.prefs_path, Store.progress_path, StudyLog.path]
+	_old_paths = [Store.prefs_path, Store.progress_path, StudyLog.path, CourseStore.path]
+	CourseStore.path = COURSE_PATH
+	UiBoot.apply(get_window(), "dark" if _dark else "light", _scale)
+	await get_tree().process_frame
+	ok(is_equal_approx(Ds.font_scale, Ds.sanitize_scale(_scale)) and Pal.scheme() == ("dark" if _dark else "light"), "the mode was really applied: Ds.font_scale %s, Pal.scheme %s" % [str(Ds.font_scale), Pal.scheme()])
 	Store.prefs_path = PREFS_PATH
 	Store.progress_path = PROG_PATH
 	Store.progress = Progress.blank()
@@ -31,10 +43,12 @@ func _ready() -> void:
 	_selfcheck()
 	_test_table()
 	_test_equivalence_r0()
-	_test_properties()
+	_test_idempotence()
+	_test_sync_added_day()
 	_test_week_borders()
 	_test_study_log_storage()
 	_test_study_log_settle()
+	_test_old_data_and_sync()
 	await _test_screens()
 	_test_badge()
 	_test_garbage()
@@ -47,6 +61,7 @@ func _ready() -> void:
 	Store.prefs_path = _old_paths[0]
 	Store.progress_path = _old_paths[1]
 	StudyLog.path = _old_paths[2]
+	CourseStore.path = _old_paths[3]
 	print("== rest_days result: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -87,7 +102,7 @@ func rm(p: String) -> void:
 
 
 func _cleanup() -> void:
-	for p in [LOG_PATH, LOG_PATH + ".bad", LOG_PATH + ".bad.1", LOG_PATH + ".bad.2", LOG_PATH + ".tmp", PROG_PATH, PROG_PATH + ".tmp", PREFS_PATH]:
+	for p in [LOG_PATH, LOG_PATH + ".bad", LOG_PATH + ".bad.1", LOG_PATH + ".bad.2", LOG_PATH + ".tmp", PROG_PATH, PROG_PATH + ".tmp", PREFS_PATH, COURSE_PATH]:
 		rm(p)
 
 
@@ -295,14 +310,17 @@ func _test_table() -> void:
 # ---------------------------------------------------------------- RD-2 R=0 equals the old result
 
 func _test_equivalence_r0() -> void:
-	print("[RD-2 R=0 equals the 2.0.1 result, 2000 seeded cases]")
+	print("[RD-2 R=0 equals the 2.0.1 result, 2000 seeded cases, today random]")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261127
 	var same := 0
 	var diff_r2 := 0
 	var future_cases := 0
+	var days_seen := {}
 	var n := 2000
 	for i in n:
+		var today: int = D + rng.randi_range(-40, 40) # any weekday, any week
+		days_seen[Plan.weekday(today)] = true
 		var hi: int = 4 if rng.randf() < 0.25 else 0
 		var done := {}
 		var frozen := {}
@@ -310,24 +328,25 @@ func _test_equivalence_r0() -> void:
 		var p_fz: float = rng.randf_range(0.0, 0.3)
 		for off in range(-25, hi + 1):
 			if rng.randf() < p_done:
-				done[D + off] = true
+				done[today + off] = true
 			if rng.randf() < p_fz:
-				frozen[D + off] = true
+				frozen[today + off] = true
 		var tokens: int = rng.randi_range(-1, 4)
 		var awarded: int = rng.randi_range(-1, 5)
 		for k in done.keys():
-			if int(k) > D:
+			if int(k) > today:
 				future_cases += 1
 				break
-		var old: Dictionary = old_settle(done, frozen, tokens, awarded, D)
-		var neu: Dictionary = StreakCalc.settle(done, frozen, tokens, awarded, D, {}, 0)
+		var old: Dictionary = old_settle(done, frozen, tokens, awarded, today)
+		var neu: Dictionary = StreakCalc.settle(done, frozen, tokens, awarded, today, {}, 0)
 		if six(old) == six(neu) and int(neu["rest_used"]) == 0 and (neu["rest"] as Dictionary).is_empty():
 			same += 1
-		var with_rest: Dictionary = StreakCalc.settle(done, frozen, tokens, awarded, D, {}, 2)
+		var with_rest: Dictionary = StreakCalc.settle(done, frozen, tokens, awarded, today, {}, 2)
 		if six(old) != six(with_rest):
 			diff_r2 += 1
 	print("RD_EQUIV_R0 cases=%d same=%d" % [n, same])
 	ok(same == n, "R=0: all %d random cases give the old result (future days in %d of them)" % [n, future_cases])
+	ok(days_seen.size() == 7, "today was every weekday (%d of 7)" % days_seen.size())
 	ok(future_cases > 100, "the random cases include records from the future (%d)" % future_cases)
 	ok(diff_r2 > 100, "the same cases with R=2 differ often (%d), so the comparison can fail" % diff_r2)
 	# the omitted arguments mean R = 0, too
@@ -336,92 +355,212 @@ func _test_equivalence_r0() -> void:
 	ok(six(o1) == six(o2) and int(o1["rest_used"]) == 0, "the old 5-argument call keeps its result")
 
 
-# ---------------------------------------------------------------- invariants with random inputs
+# ---------------------------------------------------------------- idempotence and sync (the properties)
 
-func _test_properties() -> void:
-	print("[invariants: random inputs and day-by-day runs]")
+## the whole state the app keeps for one language
+func state_text(st: Dictionary) -> String:
+	return "frozen=%s rest=%s tokens=%d awarded=%d" % [str(offs_of(st["frozen"])), str(offs_of(st["rest"])), st["tokens"], st["awarded"]]
+
+
+func step(done: Dictionary, st: Dictionary, today: int, rpw: int) -> Dictionary:
+	var r: Dictionary = StreakCalc.settle(done, st["frozen"], int(st["tokens"]), int(st["awarded"]), today, st["rest"], rpw)
+	st["frozen"] = r["frozen"]
+	st["rest"] = r["rest"]
+	st["tokens"] = int(r["tokens"])
+	st["awarded"] = int(r["awarded"])
+	return r
+
+
+## settle every day from `first` to `today`, the way the app does when it is opened every day
+func simulate(done: Dictionary, first: int, today: int, rpw: int) -> Dictionary:
+	var st := {"frozen": {}, "rest": {}, "tokens": 1, "awarded": 0}
+	var last: Dictionary = {}
+	var top := 1
+	for t in range(first, today + 1):
+		var seen := {}
+		for k in done.keys():
+			if int(k) <= t:
+				seen[k] = true
+		last = step(seen, st, t, rpw)
+		top = maxi(top, int(st["tokens"]))
+	st["streak"] = int(last.get("streak", 0))
+	st["top"] = top ## the most tokens held on any day (the cap of 2 loses tokens, which makes the order matter)
+	return st
+
+
+func _test_idempotence() -> void:
+	print("[property (a): settling twice is the same as once, 1500 random states]")
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	var subset := 0
-	var week_ok := 0
-	var tokens_ok := 0
-	var n := 600
+	rng.seed = 11
+	var n := 1500
+	var good := 0
+	var first_bad := ""
+	var changed_by_first := 0
 	for i in n:
+		var today: int = D + rng.randi_range(-20, 20)
+		var rpw: int = rng.randi_range(0, 7) if rng.randf() < 0.85 else 2
 		var done := {}
 		var frozen := {}
+		var p_done: float = rng.randf_range(0.1, 0.9)
 		for off in range(-30, 1):
-			if rng.randf() < 0.35:
-				done[D + off] = true
-			if rng.randf() < 0.1:
-				frozen[D + off] = true
+			if rng.randf() < p_done:
+				done[today + off] = true
+			if rng.randf() < 0.12:
+				frozen[today + off] = true # includes days that are studied now, and token days without a rest mark (2.0.1 data)
 		var rest := {}
 		for k in frozen.keys():
 			if rng.randf() < 0.5:
 				rest[k] = true
 		var tokens: int = rng.randi_range(0, 2)
-		var rpw: int = rng.randi_range(0, 7)
-		var r1: Dictionary = StreakCalc.settle(done, frozen, tokens, 0, D, rest, rpw)
-		var sub := true
-		for k in (r1["rest"] as Dictionary).keys():
-			sub = sub and (r1["frozen"] as Dictionary).has(k)
-		if sub:
-			subset += 1
-		# per week: the rest days after settling never exceed max(R, what the (cleaned) input already had in that week)
-		var before := {}
-		for k in rest.keys():
-			if frozen.has(k):
-				before[StreakCalc.week_of(int(k))] = int(before.get(StreakCalc.week_of(int(k)), 0)) + 1
-		var after := {}
-		for k in (r1["rest"] as Dictionary).keys():
-			after[StreakCalc.week_of(int(k))] = int(after.get(StreakCalc.week_of(int(k)), 0)) + 1
-		var wk := true
-		for w in after.keys():
-			wk = wk and int(after[w]) <= maxi(rpw, int(before.get(w, 0)))
-		if wk:
-			week_ok += 1
-		if int(r1["tokens"]) >= 0 and int(r1["tokens"]) <= 2:
-			tokens_ok += 1
-	ok(subset == n, "rest days are always frozen days (%d/%d)" % [subset, n])
-	ok(week_ok == n, "no calendar week gets more rest days than R (or than it already had) (%d/%d)" % [week_ok, n])
-	ok(tokens_ok == n, "tokens stay within 0..2 (%d/%d)" % [tokens_ok, n])
-	# day by day, the way the app uses it: settle every day, studying on random days. Settling a result again changes nothing.
+		var awarded: int = rng.randi_range(0, 3)
+		var r1: Dictionary = StreakCalc.settle(done, frozen, tokens, awarded, today, rest, rpw)
+		var r2: Dictionary = StreakCalc.settle(done, r1["frozen"], int(r1["tokens"]), int(r1["awarded"]), today, r1["rest"], rpw)
+		var same: bool = offs_of(r1["frozen"]) == offs_of(r2["frozen"]) and offs_of(r1["rest"]) == offs_of(r2["rest"]) \
+			and int(r1["tokens"]) == int(r2["tokens"]) and int(r1["awarded"]) == int(r2["awarded"]) and int(r1["streak"]) == int(r2["streak"]) \
+			and int(r2["used"]) == 0 and int(r2["rest_used"]) == 0 and int(r2["gained"]) == 0
+		if same:
+			good += 1
+		elif first_bad == "":
+			first_bad = "today %d R %d done %s frozen %s rest %s tokens %d awarded %d -> %s then %s" % [today - D, rpw, str(offs_of(done)), str(offs_of(frozen)), str(offs_of(rest)), tokens, awarded, res_text(r1), res_text(r2)]
+		if offs_of(r1["frozen"]) != offs_of(frozen) or int(r1["tokens"]) != tokens:
+			changed_by_first += 1
+	print("RD_IDEMPOTENT cases=%d same=%d" % [n, good])
+	ok(good == n, "settle twice = settle once in %d/%d random states %s" % [good, n, first_bad])
+	ok(changed_by_first > 300, "the first call really changed many of the states (%d), so the test can fail" % changed_by_first)
+	# the day-by-day runs the app makes
 	var runs := 300
-	var idem := 0
-	var never_more := 0
+	var run_ok := 0
+	var week_ok := 0
 	for r in runs:
 		var rpw2: int = rng.randi_range(0, 7)
 		var p_study: float = rng.randf_range(0.2, 0.9)
 		var done2 := {}
-		var fz2 := {}
-		var rs2 := {}
-		var tok := 1
-		var awd := 0
-		var good := true
-		var weeks_ok := true
+		var st := {"frozen": {}, "rest": {}, "tokens": 1, "awarded": 0}
+		var good2 := true
+		var weeks := true
 		for day in range(-60, 1):
 			var t: int = D + day
 			if rng.randf() < p_study:
 				done2[t] = true
-			var a: Dictionary = StreakCalc.settle(done2, fz2, tok, awd, t, rs2, rpw2)
-			var b: Dictionary = StreakCalc.settle(done2, a["frozen"], int(a["tokens"]), int(a["awarded"]), t, a["rest"], rpw2)
-			if not (offs_of(a["frozen"]) == offs_of(b["frozen"]) and offs_of(a["rest"]) == offs_of(b["rest"]) and int(b["used"]) == 0 and int(b["rest_used"]) == 0 and int(a["streak"]) == int(b["streak"]) and int(a["tokens"]) == int(b["tokens"])):
-				good = false
+			var a: Dictionary = step(done2, st, t, rpw2)
+			var before: String = state_text(st)
+			var b: Dictionary = step(done2, st, t, rpw2)
+			if state_text(st) != before or int(b["used"]) != 0 or int(b["rest_used"]) != 0 or int(a["streak"]) != int(b["streak"]):
+				good2 = false
 			var per := {}
-			for k in (a["rest"] as Dictionary).keys():
+			for k in (st["rest"] as Dictionary).keys():
 				per[StreakCalc.week_of(int(k))] = int(per.get(StreakCalc.week_of(int(k)), 0)) + 1
 			for w in per.keys():
 				if int(per[w]) > rpw2:
-					weeks_ok = false
-			fz2 = a["frozen"]
-			rs2 = a["rest"]
-			tok = int(a["tokens"])
-			awd = int(a["awarded"])
-		if good:
-			idem += 1
-		if weeks_ok:
-			never_more += 1
-	ok(idem == runs, "day-by-day runs: settling a result again changes nothing (%d/%d runs)" % [idem, runs])
-	ok(never_more == runs, "day-by-day runs: no week ever holds more than R rest days (%d/%d runs)" % [never_more, runs])
+					weeks = false
+		if good2:
+			run_ok += 1
+		if weeks:
+			week_ok += 1
+	ok(run_ok == runs, "day-by-day runs: settling again every day changes nothing (%d/%d runs)" % [run_ok, runs])
+	ok(week_ok == runs, "day-by-day runs: no week ever holds more than R rest days (%d/%d runs)" % [week_ok, runs])
+	# rest is part of frozen, tokens stay 0..2
+	var sub := 0
+	var tok := 0
+	for i in 600:
+		var done3 := {}
+		var fz3 := {}
+		for off in range(-30, 1):
+			if rng.randf() < 0.35:
+				done3[D + off] = true
+			if rng.randf() < 0.1:
+				fz3[D + off] = true
+		var rs3 := {}
+		for k in fz3.keys():
+			if rng.randf() < 0.5:
+				rs3[k] = true
+		var r3: Dictionary = StreakCalc.settle(done3, fz3, rng.randi_range(0, 2), 0, D, rs3, rng.randi_range(0, 7))
+		var ok_sub := true
+		for k in (r3["rest"] as Dictionary).keys():
+			ok_sub = ok_sub and (r3["frozen"] as Dictionary).has(k)
+		if ok_sub:
+			sub += 1
+		if int(r3["tokens"]) >= 0 and int(r3["tokens"]) <= 2:
+			tok += 1
+	ok(sub == 600 and tok == 600, "rest is always part of frozen, tokens stay 0..2 (%d, %d of 600)" % [sub, tok])
+
+
+func _test_sync_added_day() -> void:
+	print("[property (b): a study day that arrives later gives the same state as when it was there from the start]")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 29
+	var accepted := 0
+	var tried := 0
+	var same := 0
+	var first_bad := ""
+	var by_rest := 0
+	while accepted < 1200 and tried < 120000:
+		tried += 1
+		var rpw: int = rng.randi_range(1, 7)
+		var span: int = rng.randi_range(10, 30)
+		var today: int = D + rng.randi_range(-10, 10)
+		var first: int = today - span
+		var p: float = rng.randf_range(0.45, 0.9)
+		var base := {}
+		for t in range(first, today + 1):
+			if rng.randf() < p:
+				base[t] = true
+		if base.size() < 3:
+			continue
+		var first_done: int = 100000000
+		for k in base.keys():
+			first_done = mini(first_done, int(k))
+		var cands: Array = []
+		for t in range(first_done + 1, today + 1):
+			if not base.has(t):
+				cands.append(t)
+		if cands.is_empty():
+			continue
+		var x: int = cands[rng.randi_range(0, cands.size() - 1)]
+		var with_x: Dictionary = base.duplicate()
+		with_x[x] = true
+		var a_state: Dictionary = simulate(base, first, today, rpw)
+		var b_state: Dictionary = simulate(with_x, first, today, rpw)
+		if not _no_break(base, a_state, today) or not _no_break(with_x, b_state, today):
+			continue # a gap that could not be bridged: days before it are not given back later (no retroactive rule)
+		if int(a_state["top"]) >= StreakCalc.MAX_TOKENS or int(b_state["top"]) >= StreakCalc.MAX_TOKENS:
+			continue # the cap of 2 tokens throws tokens away, so then the order of the days changes the count
+		accepted += 1
+		if (a_state["rest"] as Dictionary).has(x):
+			by_rest += 1
+		var st := {"frozen": (a_state["frozen"] as Dictionary).duplicate(), "rest": (a_state["rest"] as Dictionary).duplicate(), "tokens": a_state["tokens"], "awarded": a_state["awarded"]}
+		var res: Dictionary = step(with_x, st, today, rpw)
+		if int(st["tokens"]) >= StreakCalc.MAX_TOKENS:
+			accepted -= 1
+			continue
+		var got: String = "%s streak=%d" % [state_text(st), res["streak"]]
+		var want: String = "%s streak=%d" % [state_text(b_state), b_state["streak"]]
+		if got == want:
+			same += 1
+		elif first_bad == "":
+			first_bad = "R %d today %d x %d base %s -> got [%s] want [%s]" % [rpw, today - D, x - D, str(offs_of(base)), got, want]
+	print("RD_SYNC_ADDED accepted=%d same=%d (tried %d, x was a rest day in %d)" % [accepted, same, tried, by_rest])
+	ok(accepted >= 1000, "at least 1000 random runs without an unbridged gap (%d)" % accepted)
+	ok(same == accepted, "the added study day gives the from-the-start state: %d/%d %s" % [same, accepted, first_bad])
+	ok(by_rest > 100, "in many of them the added day was a rest day (%d), so the freed week quota is exercised" % by_rest)
+	# the checker can fail: before the new day is settled the state is not the from-the-start one
+	var base2: Dictionary = days([-4, -1, 0])
+	var wx: Dictionary = days([-4, -2, -1, 0])
+	var sa: Dictionary = simulate(base2, D - 4, D, 2)
+	var sb: Dictionary = simulate(wx, D - 4, D, 2)
+	print("selfcheck %s sync property checker on a state that was not settled again" % ("FAIL-as-expected" if state_text(sa) != state_text(sb) else "UNEXPECTED-PASS"))
+	ok(state_text(sa) != state_text(sb), "selfcheck: before the new day is settled the state is not the from-the-start one")
+
+
+## true when every empty day between the first study day and yesterday is bridged (nothing was given up)
+func _no_break(done: Dictionary, st: Dictionary, today: int) -> bool:
+	var first_done: int = 100000000
+	for k in done.keys():
+		first_done = mini(first_done, int(k))
+	for t in range(first_done, today):
+		if not done.has(t) and not (st["frozen"] as Dictionary).has(t):
+			return false
+	return true
 
 
 func _test_week_borders() -> void:
@@ -569,6 +708,72 @@ func _test_study_log_settle() -> void:
 	var en: Dictionary = StudyLog.settle("en")
 	ok(int(ja["rest_used"]) == 1 and int(ja["rest_left"]) == 1 and int(en["rest_used"]) == 0 and int(en["rest_left"]) == 2, "the Japanese record uses its own rest day, English keeps 2")
 	ok(StudyLog.settle("zz")["rest_left"] == 0 and StudyLog.rest_days("zz").is_empty() and StudyLog.rest_left("zz") == 0, "an unknown language: nothing, no crash")
+
+
+# ---------------------------------------------------------------- reviewer repros 1 and 2 through StudyLog
+
+## 2.0.1 data: studied on Sat (10/10), two token days (Sun, Mon) spent by the old rule, no rest key; opened on Friday.
+func _test_old_data_and_sync() -> void:
+	print("[2.0.1 data: the second settle of the same day changes nothing]")
+	_fresh()
+	mark_days([-6])
+	write_text(LOG_PATH, JSON.stringify({"v": 1, "freeze": {"en": {"tokens": 0, "frozen": [iso(-5), iso(-4)], "awarded": 0, "last": D - 3}}}))
+	StudyLog.load_from_disk()
+	_toasts.clear()
+	var a: Dictionary = StudyLog.settle("en")
+	var snap_a: String = JSON.stringify(StudyLog.snapshot()["freeze"]["en"])
+	var toasts_a: int = _toasts.size()
+	StudyLog.flush()
+	var b: Dictionary = StudyLog.settle("en")
+	ok(not StudyLog.is_dirty(), "the second settle does not make the log dirty")
+	var snap_b: String = JSON.stringify(StudyLog.snapshot()["freeze"]["en"])
+	ok(int(a["streak"]) == int(b["streak"]) and int(a["tokens"]) == int(b["tokens"]) and int(b["used"]) == 0 and int(b["rest_used"]) == 0, "same streak and tokens, nothing used again: %s then %s" % [str(a), str(b)])
+	ok(snap_a == snap_b, "the saved state is the same after the second settle")
+	ok(_toasts.size() == toasts_a, "no toast the second time (%d then %d)" % [toasts_a, _toasts.size()])
+	ok(int(a["streak"]) == 1 and int(a["tokens"]) == 0 and int(a["used"]) == 0, "the 2.0.1 token days are kept and the streak holds (Sat + bridged Sun..Thu): %s" % str(a))
+	StudyLog.load_from_disk()
+	var c: Dictionary = StudyLog.settle("en")
+	ok(int(c["streak"]) == 1 and int(c["tokens"]) == 0 and int(c["used"]) == 0 and not StudyLog.is_dirty(), "after saving and loading again: still the same, not dirty")
+	# the same old data when the gap cannot be bridged even with the days given back: the tokens come back once, not twice
+	_fresh()
+	mark_days([-9])
+	write_text(LOG_PATH, JSON.stringify({"v": 1, "freeze": {"en": {"tokens": 0, "frozen": [iso(-8), iso(-7)], "awarded": 0, "last": D - 3}}}))
+	StudyLog.load_from_disk()
+	var d1: Dictionary = StudyLog.settle("en")
+	var d2: Dictionary = StudyLog.settle("en")
+	ok(int(d1["streak"]) == int(d2["streak"]) and int(d1["tokens"]) == int(d2["tokens"]) and int(d2["used"]) == 0, "an unbridgeable old gap: tokens %d then %d, streak %d then %d" % [d1["tokens"], d2["tokens"], d1["streak"], d2["streak"]])
+
+	print("[a study day that arrives with a sync frees its rest day]")
+	# Mon and Thu studied, Tue and Wed were rest days, 1 token; another device sends Wednesday as studied
+	_fresh()
+	mark_days([-4])
+	StudyLog.today_override = D - 1 # Thursday
+	Store.progress["days"][iso(-1)] = {"en": true}
+	StudyLog.settle("en")
+	ok(offs_of(StudyLog.rest_days("en")) == [-3, -2] and StudyLog.rest_left("en") == 0, "(precondition) Tue and Wed are rest days, none left this week")
+	Store.progress["days"][iso(-2)] = {"en": true} # the sync
+	ok(offs_of(StudyLog.rest_days("en")) == [-3] and StudyLog.rest_left("en") == 1, "right after the sync, before any settle: Wednesday is not a rest day, 1 rest day left (%s, %d)" % [str(offs_of(StudyLog.rest_days("en"))), StudyLog.rest_left("en")])
+	var st_before: Array = HomeParts.stone_states("en")
+	ok(st_before[2] == "done" and st_before[1] == "rest", "the Wednesday stone is done, Tuesday stays a rest day -> %s" % str(st_before))
+	StudyLog.today_override = D + 2 # Sunday: Friday and Saturday were empty
+	var sun: Dictionary = StudyLog.settle("en")
+	ok(int(sun["streak"]) == 3 and int(sun["used"]) == 1 and int(sun["tokens"]) == 0 and int(sun["rest_used"]) == 1 and int(sun["rest_left"]) == 0, "Sunday: Friday is the second rest day, Saturday uses the token, the streak holds at 3 -> %s" % str(sun))
+	ok(offs_of(StudyLog.rest_days("en")) == [-3, 0], "the rest days are Tuesday and Friday -> %s" % str(offs_of(StudyLog.rest_days("en"))))
+	var sun2: Dictionary = StudyLog.settle("en")
+	ok(int(sun2["streak"]) == 3 and int(sun2["used"]) == 0 and int(sun2["rest_used"]) == 0, "settling Sunday again changes nothing")
+	# the same through the file: the sync comes while the app is closed
+	_fresh()
+	mark_days([-4])
+	StudyLog.today_override = D - 1
+	Store.progress["days"][iso(-1)] = {"en": true}
+	StudyLog.settle("en")
+	StudyLog.flush()
+	StudyLog.load_from_disk()
+	Store.progress["days"][iso(-2)] = {"en": true}
+	StudyLog.today_override = D + 2
+	var sun3: Dictionary = StudyLog.settle("en")
+	ok(int(sun3["streak"]) == 3 and int(sun3["rest_left"]) == 0, "after save and load: the same Sunday result -> %s" % str(sun3))
+	StudyLog.today_override = D
 
 
 # ---------------------------------------------------------------- screens (RD-5), no backend needed
