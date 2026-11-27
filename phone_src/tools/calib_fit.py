@@ -682,11 +682,25 @@ def percentile90(values):
     return v[min(len(v) - 1, max(0, int(math.ceil(0.9 * len(v))) - 1))]
 
 
+SET_ID_RE = re.compile(r"^([a-z][a-z0-9]{0,11})_u\d+_(?:clean|wrong)$")   # calib_record.py clip ids: <set tag>_uNN_<kind>
+
+
+def clip_set(pc):
+    """the recording set of a clip: its "set" field when the file has one, else the tag in front of a calib_record.py clip id
+    (s8_u01_clean -> "s8"), else "" (synthetic clips and the old untagged recordings). Two sessions that read the same sentence with the
+    same voice are two pairs, not one."""
+    s = pc.get("set")
+    if isinstance(s, str) and s:
+        return s
+    m = SET_ID_RE.match(str(pc.get("id", "")))
+    return m.group(1) if m else ""
+
+
 def evaluate(S, rows, p_map, ok_prob, final_map=None):
     """all the numbers the gates need, over `rows`"""
     word_items = {"synth": [], "user": [], "all": []}
     diffs, fl_diffs = [], []
-    by_key = {}   # (sentence, voice) -> {"clean": score, "wrong": score}
+    by_key = {}   # (set, sentence, voice) -> {"clean": score, "wrong": score}
     wrong_scores, clean_scores, pc_wrong_scores = [], [], []
     for n, (pc, ph) in enumerate(rows, 1):
         r = phone_result(S, pc, ph, p_map, ok_prob, final_map)
@@ -698,7 +712,7 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
             word_items["all"].append((bool(a["ok"]), bool(b["ok"])))
         diffs.append(abs(r["score"] - pc["score"]["score"]))
         fl_diffs.append(abs(r["fluency"] - pc["score"]["fluency"]))
-        slot = by_key.setdefault((pc["sentence_id"], pc["voice"]), {})
+        slot = by_key.setdefault((clip_set(pc), pc["sentence_id"], pc["voice"]), {})
         if pc["variant"] in CLEAN_VARIANTS:
             slot["clean"] = r["score"]
             clean_scores.append(r["score"])

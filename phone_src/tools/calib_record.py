@@ -29,7 +29,7 @@ Consent is exactly the lower case letter `y` (spaces around it are ignored): `Y`
 --out may not be inside a repository, a worktree or backend (exit 2, nothing written, not even for --dry-run).
 Every clip id starts with a set tag (v2.0.2 FXA): "<tag>_u01_clean", file clips\<id>.wav, and manifest.json has "set": "<tag>". --set-tag
 gives the tag (SET_TAG_RE: a lower case letter and up to 11 lower case letters or digits); without it the tag is "s" + the time of the
-start (month day hour minute, e.g. s11271930). Two sessions with different tags never share a clip id, so their sets can go to
+start (month day hour minute second, e.g. s1127193005). Two sessions with different tags never share a clip id, so their sets can go to
 calib_fit.py together. A wrong tag is "CALIB_REC_FAIL set_tag" and exit 2, before the microphone or any folder is touched (also for --dry-run).
 Exit code: 0 ok (also `q` after some clips), 1 consent not given / microphone problem / --out not empty, 2 usage error or a forbidden --out.
 """
@@ -470,9 +470,9 @@ def live_print(rms):
 
 
 def resolve_set_tag(tag=None, now=None):
-    """the tag of this session: the given one (checked) or "s" + month day hour minute of now (e.g. s11271930)"""
+    """the tag of this session: the given one (checked) or "s" + month day hour minute second of now (e.g. s1127193005)"""
     if tag is None:
-        tag = "s" + (now or datetime.datetime.now()).strftime("%m%d%H%M")
+        tag = "s" + (now or datetime.datetime.now()).strftime("%m%d%H%M%S")
     if not isinstance(tag, str) or not SET_TAG_RE.fullmatch(tag):
         raise SetTagRefused()
     return tag
@@ -563,7 +563,7 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--set-tag", default=None, dest="set_tag",
                     help="clip id prefix of this session (a lower case letter and up to 11 lower case letters or digits; "
-                         "default: s + month day hour minute). Use different tags when recording in two sessions")
+                         "default: s + month day hour minute second). Use different tags when recording in two sessions")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):   # a device name or a sentence must not crash the print on a legacy code page
         try:
@@ -571,6 +571,8 @@ def main(argv=None):
         except Exception:
             pass
     try:
+        if args.set_tag is not None:
+            resolve_set_tag(args.set_tag)   # first of all: before any device is listed, before --dry-run, before the microphone
         if args.list_devices:
             return list_devices()
         if not args.out:

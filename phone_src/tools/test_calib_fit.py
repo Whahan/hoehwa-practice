@@ -1990,7 +1990,7 @@ class SetTags(unittest.TestCase):
         self.out_dir = os.path.join(TMP, "settag_%d" % random.randrange(10 ** 9))
 
     def test_tag_rule_accepts_the_good_ones_and_refuses_the_bad_ones(self):
-        for good in ("s8", "a", "s11271930", "abc123", "a" * 12, "z0"):
+        for good in ("s8", "a", "s1127193000", "abc123", "a" * 12, "z0"):
             self.assertEqual(rec.resolve_set_tag(good), good)
         for bad in self.BAD_TAGS:
             with self.assertRaises(rec.SetTagRefused, msg=repr(bad)):
@@ -2027,11 +2027,11 @@ class SetTags(unittest.TestCase):
         self.assertEqual(ids_a & {x["clip"] for x in c["clips"]}, ids_a)
 
     def test_without_a_tag_the_automatic_one_matches_the_rule(self):
-        self.assertEqual(rec.resolve_set_tag(None, now=datetime.datetime(2026, 11, 27, 19, 30)), "s11271930")
+        self.assertEqual(rec.resolve_set_tag(None, now=datetime.datetime(2026, 11, 27, 19, 30, 5)), "s1127193005")
         code, m = record_session(self.out_dir, None)
         self.assertEqual(code, 0)
         self.assertRegex(m["set"], rec.SET_TAG_RE.pattern)
-        self.assertRegex(m["set"], r"^s\d{8}$")
+        self.assertRegex(m["set"], r"^s\d{10}$")
         self.assertTrue(all(c["clip"].startswith(m["set"] + "_u") for c in m["clips"]))
 
     def test_wrong_tags_fail_with_set_tag_and_exit_2_and_touch_nothing(self):
@@ -2068,7 +2068,7 @@ class SetTags(unittest.TestCase):
         self.assertFalse(os.path.exists(out))
         # no tag: the automatic one is on the last line
         r = subprocess.run(py + ["--out", out, "--dry-run"], capture_output=True, text=True, encoding="utf-8")
-        self.assertRegex(r.stdout.strip().splitlines()[-1], r"nothing written\) set=s\d{8}$")
+        self.assertRegex(r.stdout.strip().splitlines()[-1], r"nothing written\) set=s\d{10}$")
         # the consent text is the one of before
         self.assertIn(rec.CONSENT_TEXT, r.stdout)
 
@@ -2112,10 +2112,105 @@ class SetTags(unittest.TestCase):
         self.assertIn("CALIB_FAIL input", out)
         self.assertFalse(os.path.exists(params))
 
+    def test_a_wrong_tag_is_refused_before_any_device_is_listed(self):
+        listed, sd_loaded = [], []
+        for extra in (["--list-devices"], ["--list-devices", "--dry-run"], ["--dry-run"], []):
+            for bad in ("A1", "", "a b", "a" * 13):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf), mock.patch.object(rec, "list_devices", lambda *a, **k: listed.append(1) or 0), \
+                        mock.patch.object(rec, "load_sd", lambda: sd_loaded.append(1)):
+                    code = rec.main(["--set-tag", bad] + extra)
+                self.assertEqual((code, buf.getvalue().strip()), (2, "CALIB_REC_FAIL set_tag"), (bad, extra))
+        self.assertEqual((listed, sd_loaded), ([], []))   # no device enumeration, no microphone module
+        # selfcheck: a good tag with --list-devices does reach the enumeration (the counter is not blind)
+        with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(rec, "list_devices", lambda *a, **k: listed.append(1) or 0):
+            self.assertEqual(rec.main(["--list-devices", "--set-tag", "s8"]), 0)
+        self.assertEqual(listed, [1])
+        # and from the command line (the real entry point): the tag is checked first, so no device is listed
+        py = [sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "calib_record.py")]
+        r = subprocess.run(py + ["--list-devices", "--set-tag", "A1"], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual((r.returncode, r.stdout.strip()), (2, "CALIB_REC_FAIL set_tag"))
+
+    def test_two_sessions_in_the_same_minute_get_different_automatic_tags(self):
+        orig = rec.resolve_set_tag
+        sets = []
+        for sec in (0, 59):
+            moment = datetime.datetime(2026, 11, 27, 19, 30, sec)
+            with mock.patch.object(rec, "resolve_set_tag", side_effect=lambda tag, m=moment: orig(tag, now=m)):
+                _c, m = record_session(self.out_dir + "_auto%d" % sec, None)
+            sets.append(m)
+        self.assertNotEqual(sets[0]["set"], sets[1]["set"])
+        self.assertEqual({c["clip"] for c in sets[0]["clips"]} & {c["clip"] for c in sets[1]["clips"]}, set())
+        for m in sets:
+            self.assertRegex(m["set"], rec.SET_TAG_RE.pattern)
+
+    def two_session_rows(self, tags, scores, same_seed=True):
+        """(pc, phone) rows of two fake recording sessions made with the same seed (the same sentences): the pc side carries the
+        controlled score of each clip; the phone side is the same score (phone_result is replaced below)"""
+        sessions = []
+        for k, tag in enumerate(tags):
+            _c, m = record_session(os.path.join(TMP, "pair_%d_%s_%d" % (random.randrange(10 ** 9), tag, k)), tag, sentences=2)
+            sessions.append(m)
+        if same_seed:
+            self.assertEqual([c["sentence_id"] for c in sessions[0]["clips"]], [c["sentence_id"] for c in sessions[1]["clips"]])
+        rows = []
+        for session, vals in zip(sessions, scores):
+            for c, val in zip(session["clips"], vals):
+                sc = {"units": [], "score": val, "fluency": 0}
+                pc = {"id": c["clip"], "sentence_id": c["sentence_id"], "variant": c["variant"], "voice": c["voice"], "group": "user",
+                      "target": c["target"], "score": sc}
+                rows.append((pc, sc))
+        return rows
+
+    def test_the_same_sentence_in_two_sessions_keeps_every_pair(self):
+        # per session: sentence 1 (clean, wrong) then sentence 2 (clean, wrong). Session A: wrong lower for sentence 1 only,
+        # session B: wrong lower for sentence 2 only -> 4 pairs, exactly 2 of them have the wrong clip lower
+        a, b = (80, 60, 70, 90), (60, 80, 90, 70)
+        rows = self.two_session_rows(("run1", "run2"), (a, b))
+        with mock.patch.object(cf, "phone_result", side_effect=lambda _s, _pc, ph, *_: ph):
+            one = cf.evaluate(None, rows[:4], None, None)
+            two = cf.evaluate(None, rows[4:], None, None)
+            both = cf.evaluate(None, rows, None, None)
+            swapped = cf.evaluate(None, rows[4:] + rows[:4], None, None)
+        self.assertEqual((one["pair_count"], two["pair_count"]), (2, 2))
+        self.assertEqual((both["pair_count"], both["clips"]), (4, 8))   # nothing is overwritten
+        self.assertEqual((swapped["pair_count"], swapped["wrong_lower_pairs"]), (4, both["wrong_lower_pairs"]))   # the order does not matter
+        self.assertAlmostEqual(both["wrong_lower_pairs"], (one["wrong_lower_pairs"] * 2 + two["wrong_lower_pairs"] * 2) / 4.0)
+        self.assertAlmostEqual(both["wrong_lower_pairs"], 0.5)
+        # selfcheck: without the set in the key the same rows collapse to 2 pairs (the key the review reproduced)
+        flat = [(dict(pc, id="x%d" % n), ph) for n, (pc, ph) in enumerate(rows)]
+        with mock.patch.object(cf, "phone_result", side_effect=lambda _s, _pc, ph, *_: ph):
+            self.assertEqual(cf.evaluate(None, flat, None, None)["pair_count"], 2)
+
+    def test_clip_set_comes_from_the_set_field_or_the_clip_id_tag(self):
+        self.assertEqual(cf.clip_set({"id": "s8_u01_clean"}), "s8")
+        self.assertEqual(cf.clip_set({"id": "run2_u12_wrong"}), "run2")
+        self.assertEqual(cf.clip_set({"id": "u01_clean"}), "")   # the old untagged recordings
+        self.assertEqual(cf.clip_set({"id": "c10131872_af_heart_clean"}), "")   # synthetic clips
+        self.assertEqual(cf.clip_set({"id": "u01_clean", "set": "b2"}), "b2")
+        self.assertEqual(cf.clip_set({"id": "A1_u01_clean"}), "")   # not a valid tag: not a set
+        self.assertEqual(cf.clip_set({}), "")
+
+    def test_the_same_sentence_of_two_sessions_stays_in_one_split_group(self):
+        rows = self.two_session_rows(("run1", "run2"), ((80, 60, 70, 90), (60, 80, 90, 70)))
+        # more sentences so a split is possible; the two sessions share their sentences
+        extra = [({"id": "x%d_af_clean" % n, "sentence_id": "x%d" % n, "variant": "clean", "voice": "af", "group": "synth",
+                   "target": "extra sentence number %s here" % "abcdefgh"[n], "score": {"units": [], "score": 70, "fluency": 0}}, {}) for n in range(8)]
+        for seed in range(1, 12):
+            train, held = cf.split_sentences(rows + extra, seed=seed, S=S)
+            ids_train = {pc["id"] for pc, _ in train}
+            ids_held = {pc["id"] for pc, _ in held}
+            for sid in {pc["sentence_id"] for pc, _ in rows}:
+                sides = {("train" if pc["id"] in ids_train else "held") for pc, _ in rows if pc["sentence_id"] == sid}
+                self.assertEqual(len(sides), 1, (seed, sid))   # both sessions of one sentence on one side
+            self.assertEqual(ids_train & ids_held, set())
+
     def test_readme_tells_how_to_record_in_two_sessions(self):
         text = open(os.path.join(ROOT, "phone_src", "calib", "README.txt"), encoding="utf-8").read()
         self.assertIn("--set-tag", text)
         self.assertIn("두 번", text)
+        self.assertIn("--seed 12", text)   # two sessions read different sentences
+        self.assertIn("월일시분초", text)
         # selfcheck: the same scan on text without it finds nothing
         self.assertNotIn("--set-tag", "calib_record.py --out x")
 
