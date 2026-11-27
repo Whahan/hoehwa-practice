@@ -74,13 +74,17 @@ def _publish_inflight(value):
         except OSError as e:
             last = e
             time.sleep(0.01)
-    sys.stderr.write("inflight publish failed: %r\n" % (last,))
-    sys.stderr.flush()
+    why = ascii(last)  # ascii(): the OS message may be Korean; the marker must never raise
+    try:
+        sys.stderr.write("inflight publish failed: %s\n" % why)
+        sys.stderr.flush()
+    except Exception:
+        pass
     try:
         with open(os.path.join(ARGS.root, "inflight.err"), "w", encoding="ascii") as f:
-            f.write("publish failed at %s: %r" % (value, last))
-    except OSError:
-        pass
+            f.write("publish failed at %s: %s" % (value, why))
+    except Exception:
+        os._exit(3)  # neither the number nor the failure marker can be published: stop loudly, never leave a stale number
     return False
 
 
