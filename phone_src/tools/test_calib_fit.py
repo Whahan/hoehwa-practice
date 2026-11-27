@@ -2256,6 +2256,14 @@ class SetTags(unittest.TestCase):
             for bad in ("A1", "a b", "a" * 13, "s8\n", 5, ["s8"], True):
                 with self.assertRaises(cf.CalibError, msg=(kind, bad)):
                     cf.read_run(doc(kind, "x_clean", bad), kind)
+            # an explicit "set": null is a malformed file, not an old file without a set
+            p = doc(kind, "s8_u01_clean", "s8")
+            with open(p, encoding="utf-8") as f:
+                d = json.load(f)
+            d["clips"][0]["set"] = None
+            with self.assertRaises(cf.CalibError, msg=(kind, "null")) as cm:
+                cf.read_run(dump(d, "setnull_%s_%d.json" % (kind, random.randrange(10 ** 9))), kind)
+            self.assertEqual(cm.exception.code, "input")
         # through the tool: CALIB_FAIL input, exit 1, no params
         pc, ph = FIX["good"]
         pc2, ph2 = copy.deepcopy(pc), copy.deepcopy(ph)
