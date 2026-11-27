@@ -15,6 +15,7 @@ Every checker also gets wrong input ("selfcheck" tests).
 """
 import contextlib
 import copy
+import datetime
 import hashlib
 import io
 import json
@@ -1562,6 +1563,7 @@ def quiet_run(*args, **kw):
     """rec.run with a silent screen (no sleeping, no live bar): (exit code, the printed lines as one text)"""
     kw.setdefault("sleep", lambda s: None)
     kw.setdefault("live", None)
+    kw.setdefault("set_tag", "s8")   # a fixed clip id prefix (pass set_tag=None for the automatic one)
     lines = []
     kw.setdefault("out", lines.append)
     with contextlib.redirect_stdout(io.StringIO()):
@@ -1676,7 +1678,7 @@ class RecordDevices(unittest.TestCase):
         code, text = quiet_run(self.out_dir, False, 11, input_fn=self.answers(["y", "", "", "q"]), sd=sd, device="8")
         self.assertEqual(code, 0)
         self.assertEqual({c["rate"] for c in sd.calls}, {48000})   # never asked for 16 kHz from a device that does not take it
-        data, sr = sf.read(os.path.join(self.out_dir, "clips", "u01_clean.wav"), dtype="int16")
+        data, sr = sf.read(os.path.join(self.out_dir, "clips", "s8_u01_clean.wav"), dtype="int16")
         self.assertEqual((sr, data.ndim), (16000, 1))
         self.assertAlmostEqual(len(data) / 16000.0, rec.RECORD_SECONDS, delta=0.06)
         self.assertAlmostEqual(peak_freq(data, 16000), 1000.0, delta=10.0)
@@ -1785,8 +1787,8 @@ class RecordDevices(unittest.TestCase):
         self.assertEqual(text.count("녹음이 끊겼어요 — 다시 녹음"), 1)
         self.assertEqual(len(writes), 1)   # only the good take was written
         m = json.load(open(os.path.join(self.out_dir, "manifest.json"), encoding="utf-8"))
-        self.assertEqual([c["clip"] for c in m["clips"]], ["u01_clean"])
-        self.assertEqual(sorted(os.listdir(os.path.join(self.out_dir, "clips"))), ["u01_clean.wav"])
+        self.assertEqual([c["clip"] for c in m["clips"]], ["s8_u01_clean"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.out_dir, "clips"))), ["s8_u01_clean.wav"])
         self.assertEqual(sd.opened, 3)
         self.assertEqual(sd.closed, 3)
         # the same with an overflow flag instead of a short stream: the clip is asked again, nothing saved for it
@@ -1826,7 +1828,7 @@ class RecordDevices(unittest.TestCase):
             self.assertEqual(code, 0, name)
             self.assertEqual("잘렸어요" in text, want, name)
             if name == "avg_hides":
-                data, _ = sf.read(os.path.join(d, "clips", "u01_clean.wav"), dtype="int16")
+                data, _ = sf.read(os.path.join(d, "clips", "s8_u01_clean.wav"), dtype="int16")
                 self.assertLess(float(np.abs(data).max()) / 32767.0, 0.99)   # the saved clip itself looks fine: only the channel check sees it
         # the converted samples are checked too (a full scale tone that overshoots when resampled is saturated)
         x = np.sign(np.sin(np.linspace(0, 100 * math.pi, 48000))).astype("float32") * 0.995
@@ -1899,8 +1901,8 @@ class RecordDevices(unittest.TestCase):
             writes.clear()
             code, text = quiet_run(self.out_dir, False, 11, input_fn=self.answers(["y", "", "", "", "q"]), sd=sd)
             self.assertEqual(len(writes), 1)
-            self.assertTrue(writes[0].endswith("u01_clean.wav"))
-            self.assertEqual(sorted(os.listdir(os.path.join(self.out_dir, "clips"))), ["u01_clean.wav"])
+            self.assertTrue(writes[0].endswith("s8_u01_clean.wav"))
+            self.assertEqual(sorted(os.listdir(os.path.join(self.out_dir, "clips"))), ["s8_u01_clean.wav"])
             self.assertEqual(sorted(os.listdir(self.out_dir)), ["clips", "manifest.json"])
 
     def test_quiet_sound_check_offers_another_device_a_new_check_or_going_on(self):
@@ -1964,6 +1966,158 @@ class RecordDevices(unittest.TestCase):
         self.assertNotIn("sd.rec(", src)   # a stream with a callback: the frames that really arrive are counted
         self.assertIn("sd.InputStream(", src)
         self.assertNotIn("urllib", src)
+
+
+# ================================================================================================ FXA (v2.0.2): clip id prefix of a recording session
+def good_recorder(*_a):
+    import numpy as np
+    return (np.sin(np.linspace(0, 400 * math.pi, 16000 * 6)) * 0.3 * 32767).astype(np.int16)
+
+
+def record_session(out_dir, tag, sentences=2):
+    """a whole fake session (no microphone): `sentences` sentences = 2 x sentences clips, then q. -> (code, manifest or None)"""
+    answers = ["y"] + ["", ""] * (2 * sentences) + ["q"]
+    it = iter(answers)
+    code, text = quiet_run(out_dir, False, 11, input_fn=lambda *_: next(it), recorder=good_recorder, set_tag=tag)
+    mp = os.path.join(out_dir, "manifest.json")
+    return code, (json.load(open(mp, encoding="utf-8")) if os.path.exists(mp) else None)
+
+
+class SetTags(unittest.TestCase):
+    BAD_TAGS = ("", "A1", "1a", "a b", "a" * 13, "../x", "s-8", "s8\n", " s8", "S8", "éa", "a_b", "s8.", "١a")
+
+    def setUp(self):
+        self.out_dir = os.path.join(TMP, "settag_%d" % random.randrange(10 ** 9))
+
+    def test_tag_rule_accepts_the_good_ones_and_refuses_the_bad_ones(self):
+        for good in ("s8", "a", "s11271930", "abc123", "a" * 12, "z0"):
+            self.assertEqual(rec.resolve_set_tag(good), good)
+        for bad in self.BAD_TAGS:
+            with self.assertRaises(rec.SetTagRefused, msg=repr(bad)):
+                rec.resolve_set_tag(bad)
+        for odd in (5, b"s8", ["s8"]):
+            with self.assertRaises(rec.SetTagRefused):
+                rec.resolve_set_tag(odd)
+        # selfcheck: the rule really is the one that refuses (a pattern that accepts everything would let the table through)
+        self.assertIsNone(rec.SET_TAG_RE.fullmatch("A1"))
+        self.assertIsNotNone(rec.SET_TAG_RE.fullmatch("s8"))
+
+    def test_every_clip_id_starts_with_the_tag_and_the_manifest_names_the_set(self):
+        code, m = record_session(self.out_dir, "s8")
+        self.assertEqual(code, 0)
+        ids = [c["clip"] for c in m["clips"]]
+        self.assertEqual(len(ids), 4)
+        self.assertTrue(all(i.startswith("s8_u") for i in ids), ids)
+        self.assertEqual(ids, ["s8_u01_clean", "s8_u01_wrong", "s8_u02_clean", "s8_u02_wrong"])
+        self.assertEqual(m["set"], "s8")
+        self.assertEqual([c["file"] for c in m["clips"]], ["clips/%s.wav" % i for i in ids])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.out_dir, "clips"))), sorted(i + ".wav" for i in ids))
+        # selfcheck: a clip id without the prefix is not what the check above looks for
+        self.assertFalse("u01_clean".startswith("s8_u"))
+
+    def test_two_sessions_with_different_tags_share_no_id_and_the_same_tag_does(self):
+        _c, a = record_session(self.out_dir + "_a", "a1")
+        _c, b = record_session(self.out_dir + "_b", "b2")
+        ids_a, ids_b = {c["clip"] for c in a["clips"]}, {c["clip"] for c in b["clips"]}
+        self.assertEqual(len(ids_a), 4)
+        self.assertEqual(ids_a & ids_b, set())
+        self.assertEqual((a["set"], b["set"]), ("a1", "b2"))
+        # selfcheck: the same tag twice does overlap, so the empty intersection above means something
+        _c, c = record_session(self.out_dir + "_c", "a1")
+        self.assertEqual(ids_a & {x["clip"] for x in c["clips"]}, ids_a)
+
+    def test_without_a_tag_the_automatic_one_matches_the_rule(self):
+        self.assertEqual(rec.resolve_set_tag(None, now=datetime.datetime(2026, 11, 27, 19, 30)), "s11271930")
+        code, m = record_session(self.out_dir, None)
+        self.assertEqual(code, 0)
+        self.assertRegex(m["set"], rec.SET_TAG_RE.pattern)
+        self.assertRegex(m["set"], r"^s\d{8}$")
+        self.assertTrue(all(c["clip"].startswith(m["set"] + "_u") for c in m["clips"]))
+
+    def test_wrong_tags_fail_with_set_tag_and_exit_2_and_touch_nothing(self):
+        sd_calls = []
+        for bad in self.BAD_TAGS:
+            for dry in (False, True):
+                out = os.path.join(TMP, "settag_bad_%d" % random.randrange(10 ** 9))
+                argv = ["--out", out, "--set-tag", bad] + (["--dry-run"] if dry else [])
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf), mock.patch.object(rec, "load_sd", lambda: sd_calls.append(1)), \
+                        mock.patch("builtins.input", lambda *_: self.fail("asked")):
+                    code = rec.main(argv)
+                self.assertEqual((code, buf.getvalue().strip()), (2, "CALIB_REC_FAIL set_tag"), (bad, dry))
+                self.assertFalse(os.path.exists(out), (bad, dry))   # no folder, no manifest
+        self.assertEqual(sd_calls, [])   # the microphone module was never loaded
+        # selfcheck: a good tag does not fail the same way
+        out = os.path.join(TMP, "settag_good_%d" % random.randrange(10 ** 9))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = rec.main(["--out", out, "--set-tag", "s8", "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("set_tag", buf.getvalue())
+
+    def test_the_command_line_refuses_a_wrong_tag_and_the_dry_run_ends_with_the_tag(self):
+        py = [sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "calib_record.py")]
+        out = os.path.join(TMP, "settag_cli_%d" % random.randrange(10 ** 9))
+        r = subprocess.run(py + ["--out", out, "--dry-run", "--set-tag", "A1"], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual((r.returncode, r.stdout.strip()), (2, "CALIB_REC_FAIL set_tag"))
+        self.assertFalse(os.path.exists(out))
+        r = subprocess.run(py + ["--out", out, "--dry-run", "--set-tag", "s8"], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0)
+        last = r.stdout.strip().splitlines()[-1]
+        self.assertEqual(last, "CALIB_REC_DRY_RUN sentences=30 clips=60 (no microphone opened, nothing written) set=s8")
+        self.assertFalse(os.path.exists(out))
+        # no tag: the automatic one is on the last line
+        r = subprocess.run(py + ["--out", out, "--dry-run"], capture_output=True, text=True, encoding="utf-8")
+        self.assertRegex(r.stdout.strip().splitlines()[-1], r"nothing written\) set=s\d{8}$")
+        # the consent text is the one of before
+        self.assertIn(rec.CONSENT_TEXT, r.stdout)
+
+    def test_calib_fit_takes_two_sets_recorded_in_two_sessions(self):
+        pc, ph = FIX["good"]
+        user = [i for i, c in enumerate(pc["clips"]) if c["group"] == "user"]
+        self.assertEqual(len(user), 24)
+        half = len(user) // 2
+
+        def build(tag_a, tag_b):
+            _c, a = record_session(os.path.join(TMP, "fit_a_%s_%s" % (tag_a, tag_b)), tag_a, sentences=6)
+            _c, b = record_session(os.path.join(TMP, "fit_b_%s_%s" % (tag_a, tag_b)), tag_b, sentences=6)
+            ids_a, ids_b = [c["clip"] for c in a["clips"]], [c["clip"] for c in b["clips"]]
+            self.assertEqual((len(ids_a), len(ids_b)), (half, half))
+            new = {}
+            for idx, cid in zip(user[:half], ids_a):
+                new[pc["clips"][idx]["id"]] = cid
+            for idx, cid in zip(user[half:], ids_b):
+                new[pc["clips"][idx]["id"]] = cid
+            files = {}
+            for kind, doc in (("pc", pc), ("phone", ph)):
+                clips = [dict(c, id=new.get(c["id"], c["id"])) for c in doc["clips"]]
+                synth = [c for c in clips if c["id"] not in new.values()]
+                set_a = [c for c in clips if c["id"] in ids_a]
+                set_b = [c for c in clips if c["id"] in ids_b]
+                name = "two_%s_%s_%s" % (kind, tag_a, tag_b)
+                files[kind] = [dump(dict(doc, clips=synth + set_a), name + "_1.json"), dump(dict(doc, clips=set_b), name + "_2.json")]
+            params = os.path.join(TMP, "two_%s_%s_params.json" % (tag_a, tag_b))
+            report = os.path.join(TMP, "two_%s_%s_report.json" % (tag_a, tag_b))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = cf.main(["--pc"] + files["pc"] + ["--phone"] + files["phone"] + ["--out-params", params, "--report", report])
+            return code, buf.getvalue(), params
+
+        code, out, params = build("s8", "s9")   # different tags: the two files join, every clip is used
+        self.assertEqual(code, 0, out)
+        self.assertIn("CALIB_OK", out)
+        self.assertTrue(os.path.exists(params))
+        code, out, params = build("s8", "s8")   # selfcheck: the same tag in both sessions = the same ids = refused
+        self.assertEqual(code, 1)
+        self.assertIn("CALIB_FAIL input", out)
+        self.assertFalse(os.path.exists(params))
+
+    def test_readme_tells_how_to_record_in_two_sessions(self):
+        text = open(os.path.join(ROOT, "phone_src", "calib", "README.txt"), encoding="utf-8").read()
+        self.assertIn("--set-tag", text)
+        self.assertIn("두 번", text)
+        # selfcheck: the same scan on text without it finds nothing
+        self.assertNotIn("--set-tag", "calib_record.py --out x")
 
 
 def _shuffle_cli(argv):

@@ -75,6 +75,11 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
    --out 은 필수(--list-devices 만 예외; 없으면 종료 코드 2)이고 비어 있거나 없는 폴더여야 한다. 끝나면 클립 수와 총 길이만 출력한다.
    manifest.json 에 동의 기록(consent.given, 문구 sha256, 날짜)이 들어간다. 장치 이름은 manifest 에 넣지 않는다(개인 장치 이름 노출 방지).
    샘플레이트 변환은 숫자로만 남는다: capture_hz(녹음 때 장치 샘플레이트), resampled(0 = 변환 없음, 1 = 16 kHz 로 변환).
+   두 번 나눠 녹음할 때(v2.0.2): 클립 id 는 세트 이름(태그)으로 시작한다("s8_u01_clean", manifest.json 에도 "set": "s8"). 태그를 안 주면 시작 시각
+   (s + 월일시분, 예 s11271930)이 자동으로 붙어서 두 번 녹음해도 id 가 겹치지 않는다. 직접 정하려면 --set-tag 를 다르게 준다(소문자로 시작하는
+   소문자·숫자 12자 이하; 틀리면 CALIB_REC_FAIL set_tag, 종료 2, 폴더·마이크는 건드리지 않는다). 예: 첫 번째 세션에는 위 녹음 명령 끝에 --set-tag a1,
+   두 번째 세션에는 --out 을 다른 새 폴더로 바꾸고 --set-tag b2 를 붙인다.
+   두 세트는 calib_fit.py 에 함께 넘긴다(--pc 와 --phone 에 파일을 여러 개: 같은 id 가 두 파일에 있으면 CALIB_FAIL input).
 
 3) PC 쪽과 폰 쪽 결과 (세트마다)
      & $PY -I -X utf8 $W\phone_src\tools\calib_pc_run.py --set $T\set_synth --out $T\pc_synth.json

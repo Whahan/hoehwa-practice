@@ -2,7 +2,7 @@
 """PA5a: record the user's calibration clips (docs/v201_design.md 2.4 and 4.1, docs/v200_phone_design.md 1.6).
 
   calib_record.py --list-devices
-  calib_record.py --out <dir> [--device <number or part of a name>] [--dry-run] [--seed 11]
+  calib_record.py --out <dir> [--device <number or part of a name>] [--dry-run] [--seed 11] [--set-tag <tag>]
 
 The user reads 30 English sentences twice: once correctly, once with the one word the screen names replaced by another (60 clips,
 about 8 minutes). Microphone: `sounddevice` of backend\\.venv (already installed; nothing is installed or downloaded). A clip is
@@ -27,6 +27,10 @@ clips and the total length are printed. Deleting the folder after the calibratio
 --dry-run opens no microphone, does not even list devices, writes nothing (not even --out) and prints the consent text and the 30 sentences.
 Consent is exactly the lower case letter `y` (spaces around it are ignored): `Y`, `yes`, `n`, an empty line all mean no.
 --out may not be inside a repository, a worktree or backend (exit 2, nothing written, not even for --dry-run).
+Every clip id starts with a set tag (v2.0.2 FXA): "<tag>_u01_clean", file clips\<id>.wav, and manifest.json has "set": "<tag>". --set-tag
+gives the tag (SET_TAG_RE: a lower case letter and up to 11 lower case letters or digits); without it the tag is "s" + the time of the
+start (month day hour minute, e.g. s11271930). Two sessions with different tags never share a clip id, so their sets can go to
+calib_fit.py together. A wrong tag is "CALIB_REC_FAIL set_tag" and exit 2, before the microphone or any folder is touched (also for --dry-run).
 Exit code: 0 ok (also `q` after some clips), 1 consent not given / microphone problem / --out not empty, 2 usage error or a forbidden --out.
 """
 import argparse
@@ -52,6 +56,7 @@ import calib_make_set as ms   # noqa: E402  (sentence pool and the word replacem
 CONSENT_TEXT = ("영어 문장 30개를 한 번은 바르게, 한 번은 화면이 알려 주는 낱말 하나를 바꿔서 읽어요(약 8분). "
                 "녹음은 이 PC 의 임시 폴더에만 저장되고 저장소·인터넷으로 나가지 않아요. 보정이 끝나면 지워요(원하면 보관). "
                 "시작할까요? (y/n)")
+SET_TAG_RE = re.compile(r"^[a-z][a-z0-9]{0,11}$")   # clip id prefix of one recording session (v2.0.2 FXA)
 N_SENTENCES = 30
 RECORD_SECONDS = 6
 RATE = 16000
@@ -74,6 +79,10 @@ VIRTUAL_WORDS = ("stereo mix", "스테레오 믹스", "virtual", "가상", "vb-a
 
 class RecError(Exception):
     pass
+
+
+class SetTagRefused(Exception):
+    """--set-tag is not a lower case letter followed by up to 11 lower case letters or digits (the value is never repeated)"""
 
 
 class Incomplete(RecError):
@@ -460,10 +469,20 @@ def live_print(rms):
     print("\r  %s " % bar(rms), end="", flush=True)
 
 
+def resolve_set_tag(tag=None, now=None):
+    """the tag of this session: the given one (checked) or "s" + month day hour minute of now (e.g. s11271930)"""
+    if tag is None:
+        tag = "s" + (now or datetime.datetime.now()).strftime("%m%d%H%M")
+    if not isinstance(tag, str) or not SET_TAG_RE.fullmatch(tag):
+        raise SetTagRefused()
+    return tag
+
+
 def run(out_dir, dry_run, seed, input_fn=input, recorder=None, out=print, wav_writer=write_wav, device=None, sd=None,
-        sleep=time.sleep, live=live_print):
+        sleep=time.sleep, live=live_print, set_tag=None):
     """recorder: a function (seconds, tick) -> 16 kHz int16 samples. Without one, the microphone path is used: the device is chosen
     (`device` = number or part of a name, else the list) and a sound check is shown, after the consent only."""
+    tag = resolve_set_tag(set_tag)   # before the folder or the microphone is touched
     cf.require_out_paths(out_dir)
     items = plan(seed)
     if dry_run:
@@ -471,7 +490,7 @@ def run(out_dir, dry_run, seed, input_fn=input, recorder=None, out=print, wav_wr
         out("")
         for k, item in enumerate(items, 1):
             describe(k, len(items), item, out)
-        out("CALIB_REC_DRY_RUN sentences=%d clips=%d (no microphone opened, nothing written)" % (len(items), 2 * len(items)))
+        out("CALIB_REC_DRY_RUN sentences=%d clips=%d (no microphone opened, nothing written) set=%s" % (len(items), 2 * len(items), tag))
         return 0
     if os.path.isdir(out_dir) and os.listdir(out_dir):
         out("CALIB_REC_FAIL --out folder is not empty")
@@ -513,7 +532,7 @@ def run(out_dir, dry_run, seed, input_fn=input, recorder=None, out=print, wav_wr
                     ans = input_fn("  Enter = 다음, r = 다시 녹음 > ").strip().lower()
                     if ans == "r":
                         continue
-                    clip = "u%02d_%s" % (k, kind)
+                    clip = "%s_u%02d_%s" % (tag, k, kind)
                     rel = "clips/%s.wav" % clip
                     wav_writer(os.path.join(out_dir, rel), samples)
                     seconds = len(samples) / float(RATE)
@@ -529,7 +548,7 @@ def run(out_dir, dry_run, seed, input_fn=input, recorder=None, out=print, wav_wr
     finally:   # an interrupted session keeps the clips that were already recorded
         if clips:
             ms.write_json(os.path.join(out_dir, "manifest.json"),
-                          {"v": 1, "kind": "user", "seed": seed, "consent": consent, "capture_hz": capture_hz,
+                          {"v": 1, "kind": "user", "set": tag, "seed": seed, "consent": consent, "capture_hz": capture_hz,
                            "resampled": resampled, "clips": clips})
     out("CALIB_REC_OK clips=%d seconds=%.1f" % (len(clips), total_seconds))
     return 0
@@ -542,6 +561,9 @@ def main(argv=None):
     ap.add_argument("--list-devices", action="store_true", help="print the input devices and exit (no microphone is opened)")
     ap.add_argument("--device", help="input device: a number of --list-devices, or a part of its name (default: ask after the consent)")
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--set-tag", default=None, dest="set_tag",
+                    help="clip id prefix of this session (a lower case letter and up to 11 lower case letters or digits; "
+                         "default: s + month day hour minute). Use different tags when recording in two sessions")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):   # a device name or a sentence must not crash the print on a legacy code page
         try:
@@ -553,7 +575,10 @@ def main(argv=None):
             return list_devices()
         if not args.out:
             ap.error("--out is required")   # exit code 2
-        return run(os.path.abspath(args.out), args.dry_run, args.seed, device=args.device)
+        return run(os.path.abspath(args.out), args.dry_run, args.seed, device=args.device, set_tag=args.set_tag)
+    except SetTagRefused:
+        print("CALIB_REC_FAIL set_tag")
+        return 2
     except cf.OutPathRefused:
         print("CALIB_REC_FAIL out_path")
         return 2
