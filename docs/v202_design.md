@@ -888,3 +888,5 @@ git -C $R grep -I -l 'FAKEKEY_ZZ_' -- ':!godot/tests' ':!phone_src/tools/test_*'
 - 2.1.0 기획(`docs/v210_plan.md`)의 D6(PI-L 을 2.1.0 에 포함)에 따라 2.0.2 의 PI1·PI2b 공개 API 는 2.1.0 이 확장할 수 있게 둔다(이름·인자를 2.0.2 안에서 바꾸지 않음).
 - **D-18 소유권 예외(2026-11-27)**: FXA 2·3라운드에서 오케스트레이터 지시로 `phone_src/tools/calib_fit.py`(평가·짝 키에 세트 구분 `(set, sentence_id, voice)`, `read_run` 의 `set` 보존·접두사 대조), `phone_src/tools/calib_pc_run.py`·`godot/tools/calib_phone.gd`(manifest 의 `set` 을 결과 클립에 옮김)를 고친다. OWN 블록은 검사기 형식 때문에 바꾸지 않고 여기에 적는다(v201 D-6 과 같은 방식).
 - **D-19 소유권 예외(2026-11-27)**: FXCD 2라운드에서 오케스트레이터 지시로 `godot/tests/menu_view_test.gd` 를 고친다(실제 main.tscn 이 기본 `user://reading` 을 남기는 시험 격리 누수).
+- **D-20 4xx 분류(2026-11-27)**: PI2a 황금 계약(PI1-5, 418 → ai_overload)을 따른다. 400·422 → `bad_request`, 401·403·429 등 앞의 분류에 이미 있는 것 외의 그 밖 4xx → `ai_overload`. §2.1 본문의 "나머지 4xx → bad_request" 는 이 결정으로 대체한다.
+- **D-21 앱 종료 때 AI 요청(2026-11-27)**: 앱이 끝날 때 AiClient 는 진행 중 요청을 모두 버리고 기다리지 않는다. 응답 없는 서버에 요청 중이어도 종료는 3초 안을 목표로 측정한다. 엔진 HTTP 스레드 때문에 못 지키면 측정값과 함께 알려진 한계로 기록할지 오케스트레이터가 정한다.
