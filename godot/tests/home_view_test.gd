@@ -596,6 +596,7 @@ func _test_streak() -> void:
 
 func _test_day_change() -> void:
 	print("[T4-10 the day changes while the home is open]")
+	StudyLog.rest_per_week_override = 0 # v2.0.2: this section checks the old rule (no rest days)
 	_reset()
 	StudyLog.today_override = FRI
 	for d in [FRI - 3, FRI - 2, FRI - 1]:
@@ -622,6 +623,7 @@ func _test_day_change() -> void:
 	await _frames(6)
 	ok(tv._built_day == FRI + 2, "the tick handler redraws after a date change")
 	await _drop(tv)
+	StudyLog.rest_per_week_override = -1
 
 
 # ---------------------------------------------------------------- T4-11 start button

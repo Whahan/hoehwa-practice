@@ -19,6 +19,7 @@ func _ready() -> void:
 	_tables()
 	_leap_and_long()
 	_robustness()
+	_rest_days()
 	Store.prefs_path = _old_paths[0]
 	StudyLog.path = _old_paths[1]
 	print("== streak result: %d passed, %d failed ==" % [passed, failed])
@@ -168,3 +169,55 @@ func _robustness() -> void:
 	ok(int(g2["tokens"]) == 1 and int(g2["used"]) == 1, "tokens above the cap are clamped to 2 first (2 - 1 used = 1)")
 	var g3: Dictionary = StreakCalc.settle({T + 0.0: true, NAN: true}, {}, 1, 0, T)
 	ok(int(g3["streak"]) == 1, "float day keys work, NaN key ignored")
+
+
+# ---------------------------------------------------------------- rest days (v2.0.2)
+
+## T = a Friday: -1 Thu, -2 Wed, -3 Tue, -4 Mon (this week), -5 Sun and -6 Sat (last week).
+## args: done offsets, frozen offsets, rest offsets, tokens, rest_per_week; want: frozen, rest, tokens, used, rest_used, streak.
+func expect_rest(name: String, done: Array, frozen: Array, rest: Array, tokens: int, rpw: int, want_frozen: Array, want_rest: Array, want_tokens: int, want_used: int, want_rest_used: int, want_streak: int) -> void:
+	var res: Dictionary = StreakCalc.settle(days(done), days(frozen), tokens, 0, T, days(rest), rpw)
+	var got := "frozen=%s rest=%s tokens=%d used=%d rest_used=%d streak=%d" % [str(offs_of(res["frozen"])), str(offs_of(res["rest"])), res["tokens"], res["used"], res["rest_used"], res["streak"]]
+	var want := "frozen=%s rest=%s tokens=%d used=%d rest_used=%d streak=%d" % [str(want_frozen), str(want_rest), want_tokens, want_used, want_rest_used, want_streak]
+	ok(got == want, "rest table: %s  [%s]%s" % [name, got, "" if got == want else "  EXPECTED [%s]" % want])
+	var ro: Dictionary = res["rest"]
+	var subset := true
+	for k in ro.keys():
+		subset = subset and (res["frozen"] as Dictionary).has(k)
+	ok(subset, "rest table: %s -> every rest day is also a frozen day" % name)
+
+
+func _rest_days() -> void:
+	print("[rest days]")
+	ok(StreakCalc.REST_PER_WEEK == 2, "the rest days per week are 2")
+	expect_rest("1: one empty day is a rest day, the token stays", [-3, -2], [], [], 1, 2, [-1], [-1], 1, 0, 1, 2)
+	expect_rest("2: Mon done, Tue-Thu empty: 2 rest days then 1 token", [-4], [], [], 1, 2, [-3, -2, -1], [-3, -2], 0, 1, 2, 1)
+	expect_rest("3: same but no token: cannot bridge, nothing is used", [-4], [], [], 0, 2, [], [], 0, 0, 0, 0)
+	expect_rest("4: gap across the week border: 2 rest days per calendar week", [-6], [], [], 2, 2, [-5, -4, -3, -2, -1], [-5, -4, -3], 0, 2, 3, 1)
+	expect_rest("5: the same gap with 1 token: cannot bridge, token kept", [-6], [], [], 1, 2, [], [], 1, 0, 0, 0)
+	expect_rest("6: the result of 2 fed back in: same state, nothing used again", [-4], [-3, -2, -1], [-3, -2], 0, 2, [-3, -2, -1], [-3, -2], 0, 0, 0, 1)
+	expect_rest("7: earlier rest days count against their own week", [-6, -3], [-5, -4], [-5, -4], 1, 2, [-5, -4, -2, -1], [-5, -4, -2], 0, 1, 1, 2)
+	expect_rest("8: one rest day a week only: the 3-day gap cannot be bridged with 1 token", [-4], [], [], 1, 1, [], [], 1, 0, 0, 0)
+	expect_rest("9: the clock went back (a record from the future): state unchanged", [-4, 1], [], [], 1, 2, [], [], 1, 0, 0, 0)
+	expect_rest("10: an old token day in the gap stays a token day", [-3], [-2], [], 0, 2, [-2, -1], [-1], 0, 0, 1, 1)
+	expect_rest("11: rest_per_week 0 returns the token spent on the gap", [-4], [-3], [], 0, 0, [], [], 1, 0, 0, 0)
+	expect_rest("12: a token day in the gap, rest days fill the rest", [-4], [-3], [], 0, 2, [-3, -2, -1], [-2, -1], 0, 0, 2, 1)
+	expect_rest("13: a rest day that is not frozen is dropped, then the gap is bridged", [-3], [], [-2], 1, 2, [-2, -1], [-2, -1], 1, 0, 2, 1)
+	# a bridged gap does not count the rest days in the streak, and the streak keeps going
+	var r: Dictionary = StreakCalc.settle(days([-4, -3, 0]), {}, 0, 0, T, {}, 2)
+	ok(int(r["streak"]) == 3 and int(r["rest_used"]) == 2 and int(r["tokens"]) == 0, "studied after 2 rest days: streak 3 (rest days not counted), no token used")
+	# week helpers
+	ok(StreakCalc.week_of(T) == T - 4 and StreakCalc.week_of(T - 4) == T - 4 and StreakCalc.week_of(T - 5) == T - 11, "week_of: Monday of the calendar week (Fri -> Mon, Mon -> Mon, Sun -> last Mon)")
+	ok(StreakCalc.rest_left({}, T, 2) == 2 and StreakCalc.rest_left(days([-4]), T, 2) == 1 and StreakCalc.rest_left(days([-4, -3]), T, 2) == 0, "rest_left: 2 - the rest days of this week")
+	ok(StreakCalc.rest_left(days([-5, -6]), T, 2) == 2, "rest_left: last week's rest days do not count")
+	ok(StreakCalc.rest_left(days([-4, -3, -2]), T, 2) == 0, "rest_left never goes below 0")
+	# bad arguments
+	ok(int(StreakCalc.settle(days([-4]), {}, 1, 0, T, {}, -3)["rest_used"]) == 0, "rest_per_week -3 is read as 0")
+	var big: Dictionary = StreakCalc.settle(days([-9]), {}, 2, 0, T, {}, 99)
+	ok(int(big["rest_used"]) == 8 and int(big["used"]) == 0 and int(big["tokens"]) == 2, "rest_per_week 99 is read as 7: the 8 empty days are all rest days, no token used")
+	ok(StreakCalc.rest_left({}, T, 99) == 7 and StreakCalc.rest_left({}, T, -1) == 0, "rest_left clamps rest_per_week to 0..7")
+	# inputs are not modified
+	var rest_in: Dictionary = days([-3])
+	var fz_in: Dictionary = days([-3])
+	StreakCalc.settle(days([-4]), fz_in, 1, 0, T, rest_in, 2)
+	ok(rest_in.size() == 1 and fz_in.size() == 1, "rest and frozen inputs are never modified")

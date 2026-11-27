@@ -18,6 +18,7 @@ static var _rp_day: int = -1
 ## 오늘 칸 기록(Store.prefs 키, 이 기기 전용·동기화 밖): {"date": "2026-11-18", "w": 1, "d": 1}. 새 내용을 끝내면 진도(pos)가 다음 칸으로
 ## 넘어가도 그날 홈 줄(제목·듣기·말하기 단위)은 오늘 칸으로 남아야 하므로, 새 내용을 끝내기 전에 칸을 저장해 두고 앱을 다시 켜도 쓴다.
 const CELL_PREF := "course_today_cell"
+const TXT_REST_CHIP := StudyLog.TXT_REST_CHIP ## "쉬는 날 %d일 남음" (연속 카드 머리 칩)
 
 
 # ---------------------------------------------------------------- snapshot (HomeModel.snapshot 의 본문)
@@ -251,7 +252,7 @@ class Mark extends Control:
 				draw_arc(c, r, 0.0, TAU, 40, Pal.PRIMARY, 2.5, true)
 
 
-## 주간 돌 하나(표시만, 터치 아님). state: done / today / frozen / missed / future.
+## 주간 돌 하나(표시만, 터치 아님). state: done / today / rest / frozen / missed / future.
 class Stone extends Control:
 	var state: String = "future"
 
@@ -272,6 +273,10 @@ class Stone extends Control:
 				draw_polyline(pts, Pal.ON_ACCENT, maxf(2.0, d * 0.1), true)
 			"today":
 				draw_arc(c, r, 0.0, TAU, 40, Pal.REWARD, 3.0, true)
+			"rest": # 쉬는 날: 채움 없는 점선 고리(짧은 호 8개)
+				for i in 8:
+					var a0: float = TAU * float(i) / 8.0
+					draw_arc(c, r, a0, a0 + TAU / 16.0, 6, Pal.REWARD, 2.0, true)
 			"frozen":
 				draw_circle(c, r, Pal.REWARD_SOFT)
 				draw_arc(c, r, 0.0, TAU, 40, Pal.REWARD, 2.0, true)
@@ -426,6 +431,7 @@ static func stone_states(lang: String) -> Array:
 	var today: int = StudyLog.today()
 	var mon: int = Plan.monday_of(today)
 	var frozen: Dictionary = StudyLog.frozen_days(lang)
+	var rest: Dictionary = StudyLog.rest_days(lang)
 	var out: Array = []
 	for i in 7:
 		var d: int = mon + i
@@ -437,6 +443,8 @@ static func stone_states(lang: String) -> Array:
 			s = "done" if did else "today"
 		elif did:
 			s = "done"
+		elif rest.has(d):
+			s = "rest"
 		elif frozen.has(d):
 			s = "frozen"
 		else:
@@ -459,7 +467,7 @@ static func stones(lang: String) -> Control:
 		var st := Stone.new(str(states[i]))
 		st.name = "Stone%d" % i
 		st.set_meta("stone_state", str(states[i]))
-		st.accessibility_name = "%s요일 %s" % [WD[Plan.weekday(d)], {"done": "공부함", "today": "오늘", "frozen": "보호권으로 지킴", "missed": "쉼", "future": "앞으로"}.get(str(states[i]), "")]
+		st.accessibility_name = "%s요일 %s" % [WD[Plan.weekday(d)], {"done": "공부함", "today": "오늘", "rest": "쉬는 날", "frozen": "보호권으로 지킴", "missed": "쉼", "future": "앞으로"}.get(str(states[i]), "")]
 		col.add_child(st)
 		var wl := Label.new()
 		wl.text = WD[Plan.weekday(d)]
@@ -482,6 +490,8 @@ static func streak_card(lang: String, snap: Dictionary, on_toggle: Callable) -> 
 	var tokens: int = int(snap.get("tokens", 0))
 	if tokens > 0:
 		head.add_child(UI.chip("보호권 %d" % tokens, Pal.REWARD_ON, Pal.REWARD_SOFT))
+	if StudyLog.rest_per_week() > 0: # 0 일 때(시험에서 옛 규칙)는 칩을 숨긴다. 남은 날이 0 이어도 보인다
+		head.add_child(UI.chip(TXT_REST_CHIP % StudyLog.rest_left(lang), Pal.REWARD_ON, Pal.REWARD_SOFT))
 	card.body.add_child(head)
 	card.body.add_child(stones(lang))
 	var stars: int = 0
