@@ -481,8 +481,10 @@ func _settle_selfcheck() -> void:
 	var n_old: int = _log(c["tok"]).size()
 	var n_new: int = (await _settled_log(c["tok"])).size()
 	ok(n_new == 1, "selfcheck: the settled wait sees the probe request's log line (old way saw %d, settled saw %d)" % [n_old, n_new])
-	if n_old == 0:
+	if n_old == 0 and n_new == 1:
 		print("selfcheck FAIL-as-expected late_line (a few frames missed a log line that the settled wait found)")
+	elif n_old == 0:
+		print("selfcheck late_line NOT confirmed: a few frames saw 0 and the settled wait saw %d" % n_new)
 	ModelStore.remove(c["id"])
 
 

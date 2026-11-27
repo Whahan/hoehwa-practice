@@ -13,7 +13,7 @@ const READING_DIR := "user://test_lifecycle_reading"
 var passed: int = 0
 var failed: int = 0
 var _toasts: Array = []
-var _reading_existed: bool = false
+var _reading_sig_before: String = ""
 
 
 func ok(cond: bool, name: String) -> void:
@@ -32,7 +32,7 @@ func _frames(n: int) -> void:
 
 func _ready() -> void:
 	print("== lifecycle start ==")
-	_reading_existed = DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("user://reading"))
+	_reading_sig_before = _tree_sig("user://reading") # "absent", or the list of what is already there (a shared APPDATA)
 	Toast.message.connect(func(t: String, k: String) -> void: _toasts.append([t, k]))
 	await _test_api_cancel_same_frame()
 	await _test_recorder_end_once()
@@ -255,11 +255,43 @@ func _test_reading_scroll() -> void:
 	rv.selected = -1
 	rv.queue_free()
 	await _frames(2)
+	# the view really worked in the test folder (its _ready made <storage_dir>/cache there), and the real folder is the
+	# same as before: absent stays absent; a folder that was already there has the same names, sizes and times
+	var used_test_folder: bool = DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(READING_DIR.path_join("cache")))
 	_rm_rf(READING_DIR) # only the test folder
-	if _reading_existed:
-		print("precondition: user://reading existed before the test")
-	else:
-		ok(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("user://reading")), "user://reading was not made")
+	var sig_after: String = _tree_sig("user://reading")
+	var existed: bool = _reading_sig_before != "absent"
+	if not used_test_folder or sig_after != _reading_sig_before:
+		print("reading isolation: test folder used=%s, before=%s, after=%s" % [used_test_folder, _reading_sig_before.left(300), sig_after.left(300)])
+	ok(used_test_folder and sig_after == _reading_sig_before,
+		"user://reading was not changed (it already existed: same names, sizes and times)" if existed else "user://reading was not made")
+
+
+## A text that changes when anything below `path` is added, removed or rewritten: folder names, file names, sizes and
+## modified times. "absent" when the folder does not exist. Used to show a shared folder was not touched.
+func _tree_sig(path: String) -> String:
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(path)):
+		return "absent"
+	var out: Array = []
+	_tree_walk(path, "", out)
+	out.sort()
+	return "present " + JSON.stringify(out)
+
+
+func _tree_walk(path: String, rel: String, out: Array) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		out.append("unreadable:" + rel)
+		return
+	for f in d.get_files():
+		var fa := FileAccess.open(path.path_join(f), FileAccess.READ)
+		var size: int = fa.get_length() if fa != null else -1
+		if fa != null:
+			fa.close()
+		out.append("f:%s:%d:%d" % [rel + f, size, FileAccess.get_modified_time(path.path_join(f))])
+	for s in d.get_directories():
+		out.append("d:" + rel + s)
+		_tree_walk(path.path_join(s), rel + s + "/", out)
 
 
 ## Deletes a folder tree below user:// (the test's own folder only).
