@@ -2,7 +2,7 @@
 # 안정 채널은 앱 태그가 아니면 업데이트 대신 안내와 함께 멈춘다.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File test_update_channel.ps1 [-UpdatePs1 <update.ps1 경로>]
 # 마지막 줄: UPDATE_CHANNEL_TEST_OK cases=N (종료 0) 또는 UPDATE_CHANNEL_TEST_FAIL failed=K cases=N (종료 1).
-# 방법: update.ps1 을 Parser 로 읽어 Test-AppTag / Select-UpdateRelease / Get-LatestRelease 세 함수 정의만 꺼내 이 시험 안에 정의한다
+# 방법: update.ps1 을 Parser 로 읽어 Parse-Ver / Test-AppTag / Test-TagVersion / Select-UpdateRelease / Get-LatestRelease 다섯 함수 정의만 꺼내 이 시험 안에 정의한다
 # (update.ps1 본문은 실행하지 않는다). Get-LatestRelease 는 Invoke-WebRequest 를 가짜 함수로 바꿔서 부른다: 실제 GitHub 접속·파일 쓰기 없음.
 param([string]$UpdatePs1 = "")
 $ErrorActionPreference = "Stop"
@@ -33,14 +33,25 @@ function Run-SelectCases([scriptblock]$select, [scriptblock]$isApp, [string]$pre
         @{ n = "2.0.1 다음의 v2.0.1 을 고름";        list = @((Rel "2.0.1"), (Rel "v2.0.1"));                                 want = "v2.0.1" },
         @{ n = "대문자 V2.0.1 은 앱 태그";           list = @((Rel "models-1"), (Rel "2.0.1"), (Rel "V2.0.1"));               want = "V2.0.1" },
         @{ n = "draft 만 있으면 없음";               list = @((Rel "v2.0.9" $true));                                          want = "" },
-        @{ n = "앞의 앱 태그를 먼저 고름";           list = @((Rel "v2.0.2"), (Rel "v2.0.1"), (Rel "models-1"));              want = "v2.0.2" }
+        @{ n = "앞의 앱 태그를 먼저 고름";           list = @((Rel "v2.0.2"), (Rel "v2.0.1"), (Rel "models-1"));              want = "v2.0.2" },
+        @{ n = "v2docs 가 v2.0.2 를 가리지 않음";    list = @((Rel "v2docs"), (Rel "v2.0.2"));                                want = "v2.0.2" },
+        @{ n = "아라비아 숫자 v١ 를 건너뜀";         list = @((Rel ("v" + [char]0x0661)), (Rel "v2.0.2"));                    want = "v2.0.2" },
+        @{ n = "범위 밖 v2147483648 을 건너뜀";      list = @((Rel "v2147483648"), (Rel "v2.0.2"));                           want = "v2.0.2" },
+        @{ n = "범위 밖 v2147483648.0 을 건너뜀";    list = @((Rel "v2147483648.0"), (Rel "v2.0.2"));                         want = "v2.0.2" },
+        @{ n = "v2docs·v١·v2147483648 뒤의 v2.0.2";  list = @((Rel "v2docs"), (Rel ("v" + [char]0x0661)), (Rel "v2147483648"), (Rel "v2.0.2")); want = "v2.0.2" },
+        @{ n = "정상 후보가 없으면 없음(전부 비정상)"; list = @((Rel "v2docs"), (Rel "v2147483648"), (Rel "models-1"));       want = "" },
+        @{ n = "v2.0.2-rc1.5 처럼 - 뒤 점도 허용";   list = @((Rel "v2.0.2-rc1.5"));                                          want = "v2.0.2-rc1.5" },
+        @{ n = "점 없는 v2 는 앱 태그가 아님";       list = @((Rel "v2"), (Rel "v2.0.2"));                                    want = "v2.0.2" }
     )
     foreach ($c in $tbl) {
         $got = Tag-Of (& $select $c.list)
         Check ("{0}select: {1} (got '{2}')" -f $prefix, $c.n, $got) ($got -eq $c.want)
     }
     $tags = @(
-        @{ t = "v2.0.1"; want = $true }, @{ t = "V2.0.1"; want = $true }, @{ t = "v2.0.2-rc1"; want = $true }, @{ t = "v1"; want = $true },
+        @{ t = "v2.0.1"; want = $true }, @{ t = "V2.0.1"; want = $true }, @{ t = "v2.0.2-rc1"; want = $true }, @{ t = "v1.9"; want = $true }, @{ t = "v2.0.1.4"; want = $true }, @{ t = "v2.0.1-rc.1"; want = $true },
+        @{ t = "v1"; want = $false }, @{ t = "v2docs"; want = $false }, @{ t = "v2.0docs"; want = $false }, @{ t = "v2.0.1.2.3"; want = $false },
+        @{ t = "v2.0.1-"; want = $false }, @{ t = "v2.0.1-rc 1"; want = $false }, @{ t = "v2.0.1`n"; want = $false },
+        @{ t = ("v" + [char]0x0661); want = $false }, @{ t = ("v2." + [char]0x0662); want = $false }, @{ t = "v2..1"; want = $false },
         @{ t = "2.0.1"; want = $false }, @{ t = "models-1"; want = $false }, @{ t = "v"; want = $false }, @{ t = "release-2"; want = $false },
         @{ t = ""; want = $false }, @{ t = " v2"; want = $false }, @{ t = "vx1"; want = $false }
     )
@@ -56,14 +67,14 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile($UpdatePs1, [re
 Check "update.ps1 문법 오류 0" ($errs.Count -eq 0)
 $defs = @{}
 foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
-    if (@("Test-AppTag", "Select-UpdateRelease", "Get-LatestRelease") -contains $f.Name) { $defs[$f.Name] = $f.Extent.Text }
+    if (@("Parse-Ver", "Test-AppTag", "Test-TagVersion", "Select-UpdateRelease", "Get-LatestRelease") -contains $f.Name) { $defs[$f.Name] = $f.Extent.Text }
 }
-foreach ($n in @("Test-AppTag", "Select-UpdateRelease", "Get-LatestRelease")) { Check "함수 $n 이 update.ps1 에 있다" ($defs.ContainsKey($n)) }
+foreach ($n in @("Parse-Ver", "Test-AppTag", "Test-TagVersion", "Select-UpdateRelease", "Get-LatestRelease")) { Check "함수 $n 이 update.ps1 에 있다" ($defs.ContainsKey($n)) }
 if ($script:failed -gt 0) {
     "UPDATE_CHANNEL_TEST_FAIL failed=$($script:failed) cases=$($script:cases)"
     exit 1
 }
-foreach ($n in @("Test-AppTag", "Select-UpdateRelease")) { . ([scriptblock]::Create($defs[$n])) }
+foreach ($n in @("Parse-Ver", "Test-AppTag", "Test-TagVersion", "Select-UpdateRelease")) { . ([scriptblock]::Create($defs[$n])) }
 
 # ---- 2. 두 함수: 비안정 채널 선택 표와 태그 표
 Run-SelectCases { param($l) Select-UpdateRelease $l } { param($t) Test-AppTag $t } ""
@@ -72,6 +83,8 @@ Run-SelectCases { param($l) Select-UpdateRelease $l } { param($t) Test-AppTag $t
 $body = $defs["Get-LatestRelease"]
 Check "안정 분기 안내 문구에 '앱 버전이 아니에요'" ($body.Contains("앱 버전이 아니에요"))
 Check "비안정 분기가 Select-UpdateRelease 를 부른다" ($body.Contains("Select-UpdateRelease"))
+Check "Select-UpdateRelease 가 버전 변환 검사(Test-TagVersion)를 쓴다" ($defs["Select-UpdateRelease"].Contains("Test-TagVersion"))
+Check "Test-TagVersion 이 try 로 변환을 감싼다" ($defs["Test-TagVersion"].Contains("try") -and $defs["Test-TagVersion"].Contains("catch"))
 Check "옛 Select-Object -First 1 선택이 없다" (-not $body.Contains("Select-Object -First 1"))
 Check "-Source 분기가 그대로 latest.json 을 읽는다" ($body.Contains('Join-Path $Source "latest.json"'))
 
@@ -119,6 +132,15 @@ $r = Fake-Latest '[]' "beta"
 Check "비안정: 빈 목록이면 null" ($null -eq $r)
 $r = Fake-Latest '[{"tag_name":"v2.0.2-rc1","draft":false},{"tag_name":"v2.0.1","draft":false}]' "beta"
 Check "비안정: v2.0.2-rc1 이 앞이면 rc1" ($r.tag_name -eq "v2.0.2-rc1")
+$bad = '[{"tag_name":"v2docs","draft":false},{"tag_name":"v' + [char]0x0661 + '","draft":false},{"tag_name":"v2147483648","draft":false},{"tag_name":"v2.0.2","draft":false}]'
+$r = Fake-Latest $bad "beta"
+Check "비안정: v2docs·v١·v2147483648 뒤의 v2.0.2 를 고름(예외 없음)" ($r.tag_name -eq "v2.0.2")
+$r = Fake-Latest '[{"tag_name":"v2147483648","draft":false}]' "beta"
+Check "비안정: 변환 안 되는 태그뿐이면 예외 없이 null" ($null -eq $r)
+$msg = Fake-Throws '{"tag_name":"v2147483648","draft":false}' "stable"
+Check "안정: 변환 안 되는 태그도 안내와 함께 멈춤(시스템 예외 문구 아님)" ($msg.Contains("앱 버전이 아니에요"))
+$msg = Fake-Throws '{"tag_name":"v2docs","draft":false}' "stable"
+Check "안정: v2docs 도 멈춤" ($msg.Contains("앱 버전이 아니에요"))
 
 # -Source(로컬 시험 원본)는 그대로: latest.json 의 내용을 걸러내지 않고 돌려준다
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("hoehwa-channel-test-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
