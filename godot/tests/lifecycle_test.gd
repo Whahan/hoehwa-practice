@@ -7,9 +7,13 @@ extends Node
 ## Exit code 0 = all passed. The network is never used: Api.base_url is "" (every request fails at once), the recorder is
 ## driven in its "pc" mode against that empty address, so /mic/start is never sent anywhere.
 
+## ReadingView is pointed at this folder (storage_dir) so the test never makes the real user://reading; it is deleted at the end.
+const READING_DIR := "user://test_lifecycle_reading"
+
 var passed: int = 0
 var failed: int = 0
 var _toasts: Array = []
+var _reading_existed: bool = false
 
 
 func ok(cond: bool, name: String) -> void:
@@ -28,6 +32,7 @@ func _frames(n: int) -> void:
 
 func _ready() -> void:
 	print("== lifecycle start ==")
+	_reading_existed = DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("user://reading"))
 	Toast.message.connect(func(t: String, k: String) -> void: _toasts.append([t, k]))
 	await _test_api_cancel_same_frame()
 	await _test_recorder_end_once()
@@ -238,6 +243,7 @@ func _test_lesson_review_back() -> void:
 func _test_reading_scroll() -> void:
 	print("[ReadingView._scroll_to_selected after the text changed]")
 	var rv := ReadingView.new()
+	rv.storage_dir = READING_DIR # before add_child: its _ready makes <storage_dir>/cache
 	add_child(rv)
 	await _frames(3)
 	rv.tokens = [{"t": "a", "key": "a"}, {"t": "b", "key": "b"}, {"t": "c", "key": "c"}]
@@ -249,6 +255,24 @@ func _test_reading_scroll() -> void:
 	rv.selected = -1
 	rv.queue_free()
 	await _frames(2)
+	_rm_rf(READING_DIR) # only the test folder
+	if _reading_existed:
+		print("precondition: user://reading existed before the test")
+	else:
+		ok(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("user://reading")), "user://reading was not made")
+
+
+## Deletes a folder tree below user:// (the test's own folder only).
+func _rm_rf(path: String) -> void:
+	var gp: String = ProjectSettings.globalize_path(path)
+	var d := DirAccess.open(gp)
+	if d == null:
+		return
+	for f in d.get_files():
+		DirAccess.remove_absolute(gp.path_join(f))
+	for sub in d.get_directories():
+		_rm_rf(path.path_join(sub))
+	DirAccess.remove_absolute(gp)
 
 
 # ---------------------------------------------------------------- drill nodes
