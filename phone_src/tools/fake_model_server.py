@@ -57,16 +57,39 @@ ARGS = None
 ACTIVE = [0]  # requests being handled + log lines not written yet (the number in <root>/inflight.txt)
 
 
+def _publish_inflight(value):
+    """Publish the number atomically: write inflight.txt.tmp, then os.replace it over inflight.txt, so a reader sees the old
+    or the new complete number and never a half-written one. A failed replace (e.g. a reader holds the file without delete
+    sharing on Windows) is retried briefly. If it still fails, <root>/inflight.err is written and stays: a test must then
+    treat the log as NOT settled (it must never trust a stale number)."""
+    final = os.path.join(ARGS.root, "inflight.txt")
+    tmp = final + ".tmp"
+    last = None
+    for _ in range(10):
+        try:
+            with open(tmp, "w", encoding="ascii") as f:
+                f.write(str(value))
+            os.replace(tmp, final)
+            return True
+        except OSError as e:
+            last = e
+            time.sleep(0.01)
+    sys.stderr.write("inflight publish failed: %r\n" % (last,))
+    sys.stderr.flush()
+    try:
+        with open(os.path.join(ARGS.root, "inflight.err"), "w", encoding="ascii") as f:
+            f.write("publish failed at %s: %r" % (value, last))
+    except OSError:
+        pass
+    return False
+
+
 def _bump(d):
     """Keep <root>/inflight.txt = handlers running + delayed log lines still pending. A test that wants to know
     'has every request I made reached the log?' waits for 0 here instead of guessing a sleep."""
     with STATE_LOCK:
         ACTIVE[0] += d
-        try:
-            with open(os.path.join(ARGS.root, "inflight.txt"), "w", encoding="ascii") as f:
-                f.write(str(ACTIVE[0]))
-        except OSError:
-            pass
+        _publish_inflight(ACTIVE[0])
 
 
 def _write_line(rec):

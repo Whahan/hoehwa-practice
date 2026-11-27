@@ -102,9 +102,17 @@ function Find-FreePort {
     return 0
 }
 
-$work = Join-Path $env:TEMP ('model_tests_' + $PID)
+# The run root is new every time: PID + time + GUID. An existing folder is never accepted (no -Force): a leftover of an
+# earlier run (even one with the same PID) must not leak its request logs into this run. A taken name gets another name.
+$work = $null
+for ($try = 0; $try -lt 5 -and $null -eq $work; $try++) {
+    $cand = Join-Path $env:TEMP ('model_tests_{0}_{1}_{2}' -f $PID, (Get-Date -Format 'yyyyMMddHHmmssfff'), ([guid]::NewGuid().ToString('N').Substring(0, 12)))
+    if (Test-Path -LiteralPath $cand) { continue }
+    try { $null = New-Item -ItemType Directory -Path $cand -ErrorAction Stop; $work = $cand } catch { }
+}
+if ($null -eq $work) { Write-Host 'could not make a fresh run folder'; Write-Host 'MODEL_TESTS_RESULT FAIL'; exit 1 }
 $fakeAppData = Join-Path $work 'appdata'
-New-Item -ItemType Directory -Force -Path $work, $fakeAppData | Out-Null
+$null = New-Item -ItemType Directory -Path $fakeAppData -ErrorAction Stop
 $realAppData = $env:APPDATA
 
 $logDelay = 0; if ($env:MODEL_SRV_LOGDELAY) { $logDelay = [int]$env:MODEL_SRV_LOGDELAY }
@@ -113,7 +121,9 @@ $script:srvPids = @()
 
 # One fake server per test: its own folder (payloads + requests.jsonl), its own log files. Returns the port.
 function Start-FakeServer([string]$dir, [string]$tag, [int]$delayMs) {
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    if (Test-Path -LiteralPath $dir) { throw "server folder already exists: $dir" }
+    $null = New-Item -ItemType Directory -Path $dir -ErrorAction Stop
+    if (@(Get-ChildItem -LiteralPath $dir -Force).Count -ne 0) { throw "server folder is not empty: $dir" }
     $p = Find-FreePort
     if ($p -eq 0) { throw 'no free port in 18791..18799' }
     $extra = @(); if ($delayMs -gt 0) { $extra = @('--logdelay', [string]$delayMs) }
@@ -126,6 +136,16 @@ function Start-FakeServer([string]$dir, [string]$tag, [int]$delayMs) {
         Start-Sleep -Milliseconds 200
     }
     if (-not $up) { throw 'the fake server did not start' }
+    # the server publishes inflight.txt = 0 right after it starts; without it the card test cannot tell when its log is settled
+    $pub = $false
+    for ($i = 0; $i -lt 25; $i++) {
+        $ip = Join-Path $dir 'inflight.txt'
+        if ((Test-Path -LiteralPath $ip) -and -not (Test-Path -LiteralPath (Join-Path $dir 'inflight.err'))) {
+            try { if (([IO.File]::ReadAllText($ip)).Trim() -eq '0') { $pub = $true; break } } catch { }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    if (-not $pub) { throw 'the fake server did not publish inflight.txt = 0' }
     return $p
 }
 
@@ -137,7 +157,9 @@ function Stop-FakeServer {
             if ($null -eq (Get-Process -Id $script:srvProc.Id -ErrorAction SilentlyContinue)) { break }
             Start-Sleep -Milliseconds 200
         }
+        $stillUp = $null -ne (Get-Process -Id $script:srvProc.Id -ErrorAction SilentlyContinue)
         $script:srvProc = $null
+        if ($stillUp) { throw 'the fake server did not stop' }
     }
 }
 

@@ -9,6 +9,7 @@
 const DIR := "user://test_models_card"
 const SIZE := 3000000
 const SETTLE_MS := 400
+const SETTLE_LIMIT_MS := 10000
 const WIFI_FMT := "음성 인식 모델(%s)을 받아요. 와이파이에 연결돼 있나요?"
 
 var passed: int = 0
@@ -299,19 +300,26 @@ func _log_count() -> int:
 
 
 ## The fake server writes a request's log line when that connection ENDS (and the runner may delay it on purpose),
-## so a line can arrive well after the client has moved on. The server also keeps <srv-root>/inflight.txt = requests
-## still being handled + log lines not yet written. A baseline or a "nothing new" check therefore waits until that
-## number is 0 and the count has not changed for SETTLE_MS, then returns the count: no guessed sleep.
+## so a line can arrive well after the client has moved on. The server also publishes <srv-root>/inflight.txt (atomic
+## replace) = requests still being handled + log lines not yet written, and <srv-root>/inflight.err if publishing failed.
+## A baseline or a "nothing new" check therefore waits until that number is 0 and the count has not changed for
+## SETTLE_MS, then returns the count: no guessed sleep. Anything else is NOT settled: no file, a file that cannot be
+## read, not a plain number, a negative number, or inflight.err present. Such a wait ends only by the time limit,
+## which counts in _settle_timeouts and fails the run.
 func _inflight() -> int:
+	if FileAccess.file_exists(_root.path_join("inflight.err")):
+		return -1
 	var p: String = _root.path_join("inflight.txt")
 	if not FileAccess.file_exists(p):
-		return 0
+		return -1
 	var f := FileAccess.open(p, FileAccess.READ)
 	if f == null:
 		return -1
 	var t: String = f.get_as_text().strip_edges()
 	f.close()
-	return int(t) if t.is_valid_int() else -1 # -1: being rewritten right now, ask again next frame
+	if not t.is_valid_int():
+		return -1
+	return maxi(int(t), -1) # a negative number is a server bug: -1 keeps it "not settled"
 
 
 func _settled_count() -> int:
@@ -328,7 +336,7 @@ func _settled_count() -> int:
 			t_change = Time.get_ticks_msec()
 		if Time.get_ticks_msec() - t_change >= SETTLE_MS:
 			break
-		if Time.get_ticks_msec() - t0 > 20000:
+		if Time.get_ticks_msec() - t0 > SETTLE_LIMIT_MS:
 			_settle_timeouts += 1
 			break
 	return last
