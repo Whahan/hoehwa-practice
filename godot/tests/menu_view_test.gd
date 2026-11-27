@@ -10,6 +10,8 @@ extends Node
 ## Last line: "== menu_view_test result: N passed, M failed ==", exit code 1 on any failure.
 
 const DIR := "user://test_t3_menu"
+## main.tscn builds a ReadingView; it is pointed here (storage_dir) so the real user://reading is never made. Deleted at the end.
+const READING_DIR := "user://test_t3_reading"
 const SCREEN_W := 412.0
 
 var passed: int = 0
@@ -18,6 +20,7 @@ var _phone: bool = false
 var _scale: float = 1.0
 var _before: Array = []
 var _saved := {}
+var _reading_sig_before: String = ""
 
 
 func ok(cond: bool, name: String) -> void:
@@ -41,6 +44,7 @@ func _ready() -> void:
 			_scale = a.substr(13).to_float()
 	print("== menu_view_test start (%s, font scale %s) ==" % ["phone" if _phone else "pc", _scale])
 	_before = _user_listing()
+	_reading_sig_before = _tree_sig("user://reading")
 	_saved = {"prefs_path": Store.prefs_path, "progress_path": Store.progress_path, "log_path": StudyLog.path,
 		"status": Backend.status, "health": Backend.health.duplicate(true), "starting": Backend._starting,
 		"prefs": Store.prefs.duplicate(true), "progress": Store.progress.duplicate(true), "provider": HomeAi.provider}
@@ -85,7 +89,12 @@ func _ready() -> void:
 	Backend.set_process(true)
 	HomeAi.provider = _saved["provider"]
 	_rm_dir(DIR)
+	_rm_dir(READING_DIR)
 	ok(JSON.stringify(_before) == JSON.stringify(_user_listing()), "no file of the real user:// folder was added or changed by this test")
+	var reading_after: String = _tree_sig("user://reading")
+	if reading_after != _reading_sig_before:
+		print("reading isolation: before=%s, after=%s" % [_reading_sig_before.left(300), reading_after.left(300)])
+	ok(reading_after == _reading_sig_before, "user://reading was not made or changed by this test (main.tscn stored under the test folder)")
 	print("== menu_view_test result: %d passed, %d failed ==" % [passed, failed])
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -102,6 +111,33 @@ func _user_listing() -> Array:
 			out.append([f, FileAccess.get_modified_time("user://" + f)])
 	out.sort() # files only: the views make their own empty folders (user://reading) when they are built
 	return out
+
+
+## A text that changes when anything below `path` is added, removed or rewritten: folder names, file names, sizes and
+## modified times. "absent" when the folder does not exist. Used to show a shared folder was not touched.
+func _tree_sig(path: String) -> String:
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(path)):
+		return "absent"
+	var out: Array = []
+	_tree_walk(path, "", out)
+	out.sort()
+	return "present " + JSON.stringify(out)
+
+
+func _tree_walk(path: String, rel: String, out: Array) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		out.append("unreadable:" + rel)
+		return
+	for f in d.get_files():
+		var fa := FileAccess.open(path.path_join(f), FileAccess.READ)
+		var size: int = fa.get_length() if fa != null else -1
+		if fa != null:
+			fa.close()
+		out.append("f:%s:%d:%d" % [rel + f, size, FileAccess.get_modified_time(path.path_join(f))])
+	for s in d.get_directories():
+		out.append("d:" + rel + s)
+		_tree_walk(path.path_join(s), rel + s + "/", out)
 
 
 func _rm_dir(path: String) -> void:
@@ -310,11 +346,21 @@ func _test_overflow() -> void:
 
 # ---------------------------------------------------------------- the shell around it
 
+## main.tscn makes its ReadingView when it is built (its _ready makes the storage folder), so the storage path is turned
+## to the test folder as the view enters the tree, before its _ready.
+func _on_node_added(n: Node) -> void:
+	if n is ReadingView:
+		(n as ReadingView).storage_dir = READING_DIR
+
+
 func _new_main() -> Control:
 	var m: Control = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	m.set("quit_on_exit", false)
+	get_tree().node_added.connect(_on_node_added)
 	add_child(m)
+	get_tree().node_added.disconnect(_on_node_added)
 	await _frames(6)
+	ok((m.views["reading"] as ReadingView).storage_dir == READING_DIR, "the reading screen of main.tscn stores under the test folder")
 	return m
 
 

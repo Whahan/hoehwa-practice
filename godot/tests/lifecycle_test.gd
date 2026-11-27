@@ -7,9 +7,13 @@ extends Node
 ## Exit code 0 = all passed. The network is never used: Api.base_url is "" (every request fails at once), the recorder is
 ## driven in its "pc" mode against that empty address, so /mic/start is never sent anywhere.
 
+## ReadingView is pointed at this folder (storage_dir) so the test never makes the real user://reading; it is deleted at the end.
+const READING_DIR := "user://test_lifecycle_reading"
+
 var passed: int = 0
 var failed: int = 0
 var _toasts: Array = []
+var _reading_sig_before: String = ""
 
 
 func ok(cond: bool, name: String) -> void:
@@ -28,6 +32,7 @@ func _frames(n: int) -> void:
 
 func _ready() -> void:
 	print("== lifecycle start ==")
+	_reading_sig_before = _tree_sig("user://reading") # "absent", or the list of what is already there (a shared APPDATA)
 	Toast.message.connect(func(t: String, k: String) -> void: _toasts.append([t, k]))
 	await _test_api_cancel_same_frame()
 	await _test_recorder_end_once()
@@ -237,7 +242,9 @@ func _test_lesson_review_back() -> void:
 
 func _test_reading_scroll() -> void:
 	print("[ReadingView._scroll_to_selected after the text changed]")
+	_rm_rf(READING_DIR) # start from nothing: a folder left by an earlier (aborted) run must not stand in for this run's
 	var rv := ReadingView.new()
+	rv.storage_dir = READING_DIR # before add_child: its _ready makes <storage_dir>/cache
 	add_child(rv)
 	await _frames(3)
 	rv.tokens = [{"t": "a", "key": "a"}, {"t": "b", "key": "b"}, {"t": "c", "key": "c"}]
@@ -247,8 +254,60 @@ func _test_reading_scroll() -> void:
 	await _frames(4)
 	ok(true, "selected is past the new token list: returns quietly (no SCRIPT ERROR in the output)")
 	rv.selected = -1
+	# read from the instance itself, not guessed from folders: the view that ran really is pointed at the test folder
+	var dir_set: bool = rv.storage_dir == READING_DIR
 	rv.queue_free()
 	await _frames(2)
+	# and it worked there (its _ready made <storage_dir>/cache in the folder cleared above), and the real folder is the
+	# same as before: absent stays absent; a folder that was already there has the same names, sizes and times
+	var used_test_folder: bool = DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(READING_DIR.path_join("cache")))
+	_rm_rf(READING_DIR) # only the test folder
+	var sig_after: String = _tree_sig("user://reading")
+	var existed: bool = _reading_sig_before != "absent"
+	if not dir_set or not used_test_folder or sig_after != _reading_sig_before:
+		print("reading isolation: storage_dir set=%s, test folder used=%s, before=%s, after=%s" % [dir_set, used_test_folder, _reading_sig_before.left(300), sig_after.left(300)])
+	ok(dir_set and used_test_folder and sig_after == _reading_sig_before,
+		"user://reading was not changed (it already existed: same names, sizes and times)" if existed else "user://reading was not made")
+
+
+## A text that changes when anything below `path` is added, removed or rewritten: folder names, file names, sizes and
+## modified times. "absent" when the folder does not exist. Used to show a shared folder was not touched.
+func _tree_sig(path: String) -> String:
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(path)):
+		return "absent"
+	var out: Array = []
+	_tree_walk(path, "", out)
+	out.sort()
+	return "present " + JSON.stringify(out)
+
+
+func _tree_walk(path: String, rel: String, out: Array) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		out.append("unreadable:" + rel)
+		return
+	for f in d.get_files():
+		var fa := FileAccess.open(path.path_join(f), FileAccess.READ)
+		var size: int = fa.get_length() if fa != null else -1
+		if fa != null:
+			fa.close()
+		out.append("f:%s:%d:%d" % [rel + f, size, FileAccess.get_modified_time(path.path_join(f))])
+	for s in d.get_directories():
+		out.append("d:" + rel + s)
+		_tree_walk(path.path_join(s), rel + s + "/", out)
+
+
+## Deletes a folder tree below user:// (the test's own folder only).
+func _rm_rf(path: String) -> void:
+	var gp: String = ProjectSettings.globalize_path(path)
+	var d := DirAccess.open(gp)
+	if d == null:
+		return
+	for f in d.get_files():
+		DirAccess.remove_absolute(gp.path_join(f))
+	for sub in d.get_directories():
+		_rm_rf(path.path_join(sub))
+	DirAccess.remove_absolute(gp)
 
 
 # ---------------------------------------------------------------- drill nodes
