@@ -6,7 +6,7 @@ Usage:   python -I -X utf8 fake_model_server.py --port 18791 --root <dir> [--ttl
          (--port 0 lets the OS choose the port; the chosen port is written to <root>/port.txt)
 
 It listens on 127.0.0.1 only, serves payload files from <root> and appends one JSON line per request to
-<root>/requests.jsonl. Nothing here talks to the network. The Godot test writes the payload files itself and
+<root>/requests.jsonl (and keeps <root>/inflight.txt = running requests + unwritten log lines). Nothing here talks to the network. The Godot test writes the payload files itself and
 reads the log file (the test code has no HTTP client of its own).
 
 Request path:   /f/<token>/<payload file name>?<behaviour switches>
@@ -54,14 +54,19 @@ SEQ = [0]
 ARGS = None
 
 
-def log_line(rec):
-    d = ARGS.logdelay if ARGS is not None else 0
-    if d > 0:
-        t = threading.Timer(d / 1000.0, _write_line, args=(dict(rec),))
-        t.daemon = True
-        t.start()
-    else:
-        _write_line(rec)
+ACTIVE = [0]  # requests being handled + log lines not written yet (the number in <root>/inflight.txt)
+
+
+def _bump(d):
+    """Keep <root>/inflight.txt = handlers running + delayed log lines still pending. A test that wants to know
+    'has every request I made reached the log?' waits for 0 here instead of guessing a sleep."""
+    with STATE_LOCK:
+        ACTIVE[0] += d
+        try:
+            with open(os.path.join(ARGS.root, "inflight.txt"), "w", encoding="ascii") as f:
+                f.write(str(ACTIVE[0]))
+        except OSError:
+            pass
 
 
 def _write_line(rec):
@@ -70,6 +75,24 @@ def _write_line(rec):
         rec["seq"] = SEQ[0]
         with open(os.path.join(ARGS.root, "requests.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _late_line(rec):
+    try:
+        _write_line(rec)
+    finally:
+        _bump(-1)
+
+
+def log_line(rec):
+    d = ARGS.logdelay if ARGS is not None else 0
+    if d > 0:
+        _bump(1)  # counted as pending until the timer has written the line
+        t = threading.Timer(d / 1000.0, _late_line, args=(dict(rec),))
+        t.daemon = True
+        t.start()
+    else:
+        _write_line(rec)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -91,6 +114,13 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def do_GET(self):
+        _bump(1)
+        try:
+            self._do_get()
+        finally:
+            _bump(-1)
+
+    def _do_get(self):
         sp = urlsplit(self.path)
         if sp.path == "/_ping":
             self._send(200, b"ok")
@@ -256,6 +286,7 @@ def main():
     ap.add_argument("--logdelay", type=int, default=0, help="test aid: write every log line this many ms late")
     ARGS = ap.parse_args()
     os.makedirs(ARGS.root, exist_ok=True)
+    _bump(0)
     srv = ThreadingHTTPServer(("127.0.0.1", ARGS.port), Handler)
     srv.daemon_threads = True
     with open(os.path.join(ARGS.root, "port.txt"), "w", encoding="utf-8") as f:
