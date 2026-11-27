@@ -152,7 +152,10 @@ function Start-FakeServer([string]$dir, [string]$tag, [int]$delayMs) {
 # Stops our own server (its PID tree) and waits until it is gone, so no late log line can reach the next test.
 function Stop-FakeServer {
     if ($null -ne $script:srvProc) {
-        & taskkill /PID $script:srvProc.Id /T /F 2>$null | Out-Null
+        # a server that already ended on its own (exit 3 = it could not even write inflight.err) is a failure of that test
+        $script:srvEarlyExit = $null
+        if ($script:srvProc.HasExited) { $script:srvEarlyExit = $script:srvProc.ExitCode }
+        else { try { & taskkill /PID $script:srvProc.Id /T /F 2>$null | Out-Null } catch { } }   # an error here must not hide the test result
         for ($i = 0; $i -lt 25; $i++) {
             if ($null -eq (Get-Process -Id $script:srvProc.Id -ErrorAction SilentlyContinue)) { break }
             Start-Sleep -Milliseconds 200
@@ -210,6 +213,9 @@ try {
         if ($se -gt 0) { $why += "$se SCRIPT ERROR" }
         if ($eng -gt 0) { $why += "$eng engine ERROR" }
         if ($tg -ne 1) { $why += "TEST_GUARD x$tg" }
+        # checked after the server is stopped, so a marker written after the test's last settle is still seen
+        if (Test-Path -LiteralPath (Join-Path $srv 'inflight.err')) { $why += 'fake server could not publish inflight.txt' }
+        if ($null -ne $script:srvEarlyExit) { $why += "fake server ended early (exit $($script:srvEarlyExit))" }
         $res = if ($why.Count -eq 0) { 'PASS' } else { 'FAIL (' + ($why -join ', ') + ')' }
         if ($why.Count -gt 0) { $exitCode = 1 }
         $row = [pscustomobject]@{ Name = $t.name; Mode = $t.mode; Passed = $np; Failed = $nf; SE = $se; Guard = $tg; Result = $res; Log = $log }
