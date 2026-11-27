@@ -75,6 +75,15 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
    --out 은 필수(--list-devices 만 예외; 없으면 종료 코드 2)이고 비어 있거나 없는 폴더여야 한다. 끝나면 클립 수와 총 길이만 출력한다.
    manifest.json 에 동의 기록(consent.given, 문구 sha256, 날짜)이 들어간다. 장치 이름은 manifest 에 넣지 않는다(개인 장치 이름 노출 방지).
    샘플레이트 변환은 숫자로만 남는다: capture_hz(녹음 때 장치 샘플레이트), resampled(0 = 변환 없음, 1 = 16 kHz 로 변환).
+   두 번 나눠 녹음할 때(v2.0.2): 클립 id 는 세트 이름(태그)으로 시작한다("s8_u01_clean", manifest.json 에도 "set": "s8"). 태그를 안 주면 시작 시각
+   (s + 월일시분초, 예 s1127193005)이 자동으로 붙는다. 직접 정하려면 --set-tag 를 다르게 준다(소문자로 시작하는 소문자·숫자 12자 이하;
+   틀리면 CALIB_REC_FAIL set_tag, 종료 2, 장치 목록·마이크·폴더는 건드리지 않는다. --list-devices·--dry-run 과 같이 줘도 마찬가지).
+   두 세션은 --seed 도 다르게 준다: 시드가 같으면 같은 문장 30개가 다시 나온다(예: 첫 세션 기본 시드 11, 둘째 세션 --seed 12).
+   예: 첫 번째 세션에는 위 녹음 명령 끝에 --set-tag a1, 두 번째 세션에는 --out 을 다른 새 폴더로 바꾸고 --set-tag b2 --seed 12 를 붙인다.
+   두 세트는 calib_fit.py 에 함께 넘긴다(--pc 와 --phone 에 파일을 여러 개: 같은 id 가 두 파일에 있으면 CALIB_FAIL input). 같은 문장이
+   두 세트에 있어도 calib_fit 은 세트(클립 id 의 태그 또는 manifest 의 set)별로 쌍을 따로 세고, 문장 단위 분할(70 / 30)에서는 같은 문장을 한쪽에만 둔다.
+   calib_pc_run.py 와 calib_phone.gd 는 manifest 의 set 을 결과 JSON 의 모든 클립에 "set" 으로 옮기고, calib_fit.py 가 그것을 읽는다.
+   JSON 의 set 이 소문자 태그 모양이 아니거나 클립 id 앞의 태그와 다르면 CALIB_FAIL input 이다(set 이 없는 옛 파일은 그대로 받는다).
 
 3) PC 쪽과 폰 쪽 결과 (세트마다)
      & $PY -I -X utf8 $W\phone_src\tools\calib_pc_run.py --set $T\set_synth --out $T\pc_synth.json
