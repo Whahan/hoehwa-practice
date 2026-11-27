@@ -388,6 +388,20 @@ def _clean_words(raw, where):
     return out
 
 
+SET_TAG_RE = re.compile(r"[a-z][a-z0-9]{0,11}")   # the same rule as calib_record.SET_TAG_RE (matched with fullmatch: no trailing newline)
+SET_ID_RE = re.compile(r"([a-z][a-z0-9]{0,11})_u[0-9]+_(?:clean|wrong)")   # calib_record.py clip ids: <set tag>_uNN_<kind> (ASCII digits only)
+
+
+def valid_set_tag(s):
+    return isinstance(s, str) and SET_TAG_RE.fullmatch(s) is not None
+
+
+def id_set_tag(cid):
+    """the set tag in front of a calib_record.py clip id, else "" """
+    m = SET_ID_RE.fullmatch(cid) if isinstance(cid, str) else None
+    return m.group(1) if m else ""
+
+
 def read_run(path, kind, file_no=1):
     """one pc.json or phone.json -> (header dict, clips dict id -> clip). Errors name the file and the clip by NUMBER only."""
     try:
@@ -408,6 +422,12 @@ def read_run(path, kind, file_no=1):
         if cid in clips:
             raise CalibError("input", "%s: its id is used twice" % where)
         rec = {"id": cid, "words": _clean_words(c.get("words"), where), "text": c.get("text") if isinstance(c.get("text"), str) else ""}
+        if c.get("set") is not None:   # the recording set (calib_record.py manifest "set"): kept, and it must agree with the id's own tag
+            if not valid_set_tag(c["set"]):
+                raise CalibError("input", "%s: the set is not a valid set tag" % where)
+            if id_set_tag(cid) not in ("", c["set"]):
+                raise CalibError("input", "%s: the set differs from the tag in the clip id" % where)
+            rec["set"] = c["set"]
         if kind == "phone":
             if c.get("ok") is not True:
                 raise CalibError("data", "%s: the phone could not transcribe it" % where)
@@ -449,6 +469,9 @@ def join_clips(pc, phone):
     only_phone = sorted(set(phone) - set(pc))
     if only_pc or only_phone:
         raise CalibError("pairing", "clips on one side only (pc only %d, phone only %d)" % (len(only_pc), len(only_phone)))
+    for i in sorted(pc):
+        if pc[i].get("set") and phone[i].get("set") and pc[i]["set"] != phone[i]["set"]:
+            raise CalibError("input", "a clip has one set in the pc file and another in the phone file")
     return [(pc[i], phone[i]) for i in sorted(pc)]
 
 
@@ -682,18 +705,14 @@ def percentile90(values):
     return v[min(len(v) - 1, max(0, int(math.ceil(0.9 * len(v))) - 1))]
 
 
-SET_ID_RE = re.compile(r"^([a-z][a-z0-9]{0,11})_u\d+_(?:clean|wrong)$")   # calib_record.py clip ids: <set tag>_uNN_<kind>
-
-
 def clip_set(pc):
-    """the recording set of a clip: its "set" field when the file has one, else the tag in front of a calib_record.py clip id
-    (s8_u01_clean -> "s8"), else "" (synthetic clips and the old untagged recordings). Two sessions that read the same sentence with the
-    same voice are two pairs, not one."""
+    """the recording set of a clip: its "set" field (read_run keeps it from the pc / phone json: calib_pc_run.py and calib_phone.gd copy the
+    manifest's "set" into every clip), else the tag in front of a calib_record.py clip id (s8_u01_clean -> "s8"), else "" (synthetic clips
+    and the old untagged recordings). Two sessions that read the same sentence with the same voice are two pairs, not one."""
     s = pc.get("set")
-    if isinstance(s, str) and s:
+    if valid_set_tag(s):
         return s
-    m = SET_ID_RE.match(str(pc.get("id", "")))
-    return m.group(1) if m else ""
+    return id_set_tag(pc.get("id"))
 
 
 def evaluate(S, rows, p_map, ok_prob, final_map=None):

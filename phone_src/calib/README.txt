@@ -81,7 +81,9 @@ PowerShell 에서 쓰는 이름 (docs\v201_design.md 5.0 과 같다)
    두 세션은 --seed 도 다르게 준다: 시드가 같으면 같은 문장 30개가 다시 나온다(예: 첫 세션 기본 시드 11, 둘째 세션 --seed 12).
    예: 첫 번째 세션에는 위 녹음 명령 끝에 --set-tag a1, 두 번째 세션에는 --out 을 다른 새 폴더로 바꾸고 --set-tag b2 --seed 12 를 붙인다.
    두 세트는 calib_fit.py 에 함께 넘긴다(--pc 와 --phone 에 파일을 여러 개: 같은 id 가 두 파일에 있으면 CALIB_FAIL input). 같은 문장이
-   두 세트에 있어도 calib_fit 은 세트(클립 id 의 태그)별로 쌍을 따로 세고, 문장 단위 분할(70 / 30)에서는 같은 문장을 한쪽에만 둔다.
+   두 세트에 있어도 calib_fit 은 세트(클립 id 의 태그 또는 manifest 의 set)별로 쌍을 따로 세고, 문장 단위 분할(70 / 30)에서는 같은 문장을 한쪽에만 둔다.
+   calib_pc_run.py 와 calib_phone.gd 는 manifest 의 set 을 결과 JSON 의 모든 클립에 "set" 으로 옮기고, calib_fit.py 가 그것을 읽는다.
+   JSON 의 set 이 소문자 태그 모양이 아니거나 클립 id 앞의 태그와 다르면 CALIB_FAIL input 이다(set 이 없는 옛 파일은 그대로 받는다).
 
 3) PC 쪽과 폰 쪽 결과 (세트마다)
      & $PY -I -X utf8 $W\phone_src\tools\calib_pc_run.py --set $T\set_synth --out $T\pc_synth.json

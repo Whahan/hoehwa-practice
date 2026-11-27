@@ -2205,12 +2205,131 @@ class SetTags(unittest.TestCase):
                 self.assertEqual(len(sides), 1, (seed, sid))   # both sessions of one sentence on one side
             self.assertEqual(ids_train & ids_held, set())
 
+    def explicit_set_files(self, tag):
+        """pc / phone json files of two sets that carry only an explicit "set" (the ids have no tag in them, so the id cannot help):
+        the same sentence and voice in both sets, controlled scores. -> (pc path, phone path, scores by id)"""
+        pc_clips, ph_clips, scores = [], [], {}
+        for label, vals in (("first", (60, 80)), ("second", (90, 60))):
+            for kind, val in zip(("clean", "wrong"), vals):
+                cid = "old_%s_%s" % (label, kind)
+                sc = {"units": [], "score": val, "fluency": 0}
+                scores[cid] = sc
+                pc_clips.append({"id": cid, "set": label, "words": [], "sentence_id": "fake-same", "variant": "user_" + kind,
+                                 "voice": "user", "group": "user", "target": "fake review sentence", "score": sc})
+                ph_clips.append({"id": cid, "set": label, "words": [], "ok": True, "duration": 1.0})
+        return (dump({"v": 1, "kind": "pc", "clips": pc_clips}, tag + "_pc.json"),
+                dump({"v": 1, "kind": "phone", "clips": ph_clips}, tag + "_phone.json"), scores)
+
+    def test_an_explicit_set_in_the_json_files_keeps_the_pairs_apart(self):
+        pcp, php, scores = self.explicit_set_files("expl")
+        _h, pc = cf.read_runs([pcp], "pc")
+        _h, ph = cf.read_runs([php], "phone")
+        self.assertEqual(sorted(cf.clip_set(c) for c in pc.values()), ["first", "first", "second", "second"])   # kept by read_run
+        self.assertEqual(sorted(c["set"] for c in ph.values()), ["first", "first", "second", "second"])
+        with mock.patch.object(cf, "phone_result", side_effect=lambda _s, c, _ph, *_: scores[c["id"]]):
+            m = cf.evaluate(None, cf.join_clips(pc, ph), None, None)
+            self.assertEqual((m["clips"], m["pair_count"], m["wrong_lower_pairs"]), (4, 2, 0.5))   # the review's reproduction: not 1 pair / 1.0
+            # selfcheck: the same clips without the set (a file from before) are one pair
+            for c in list(pc.values()) + list(ph.values()):
+                c.pop("set")
+            m = cf.evaluate(None, cf.join_clips(pc, ph), None, None)
+            self.assertEqual(m["pair_count"], 1)
+
+    def test_a_set_that_differs_from_the_id_tag_or_is_not_a_tag_is_refused(self):
+        def doc(kind, cid, tag, extra=None):
+            c = {"id": cid, "words": []}
+            if tag is not None:
+                c["set"] = tag
+            if kind == "pc":
+                c.update(sentence_id="s", variant="user_clean", voice="user", group="user", target="a b", score={"units": [], "score": 1, "fluency": 0})
+            else:
+                c.update(ok=True, duration=1.0)
+            return dump({"v": 1, "kind": kind, "clips": [c]}, "setchk_%s_%d.json" % (kind, random.randrange(10 ** 9)))
+        for kind in ("pc", "phone"):
+            cf.read_run(doc(kind, "s8_u01_clean", "s8"), kind)   # the same tag: fine
+            cf.read_run(doc(kind, "u01_clean", "s8"), kind)      # an id without a tag takes the set as it is
+            cf.read_run(doc(kind, "u01_clean", None), kind)      # an old file without a set
+            for cid, tag in (("s8_u01_clean", "s9"), ("run1_u02_wrong", "run2"), ("s8_u01_clean", "")):
+                with self.assertRaises(cf.CalibError, msg=(kind, cid, tag)) as cm:
+                    cf.read_run(doc(kind, cid, tag), kind)
+                self.assertEqual(cm.exception.code, "input")
+            for bad in ("A1", "a b", "a" * 13, "s8\n", 5, ["s8"], True):
+                with self.assertRaises(cf.CalibError, msg=(kind, bad)):
+                    cf.read_run(doc(kind, "x_clean", bad), kind)
+        # through the tool: CALIB_FAIL input, exit 1, no params
+        pc, ph = FIX["good"]
+        pc2, ph2 = copy.deepcopy(pc), copy.deepcopy(ph)
+        user = [i for i, c in enumerate(pc2["clips"]) if c["group"] == "user"]
+        new = "s8_u01_clean"
+        for doc2 in (pc2, ph2):
+            for c in doc2["clips"]:
+                if c["id"] == pc2["clips"][user[0]]["id"]:
+                    c["id"], c["set"] = new, "s9"   # the id says s8, the set says s9
+        code, out, params, _r = run_cli(pc2, ph2, "setclash")
+        self.assertEqual(code, 1, out)
+        self.assertIn("CALIB_FAIL input", out)
+        self.assertFalse(os.path.exists(params))
+        # the pc file and the phone file may not give one clip two different sets
+        pcp, php, scores = self.explicit_set_files("clash2")
+        d = json.load(open(php, encoding="utf-8"))
+        d["clips"][0]["set"] = "second"
+        php2 = dump(d, "clash2_phone2.json")
+        _h, pcm = cf.read_runs([pcp], "pc")
+        _h, phm = cf.read_runs([php2], "phone")
+        with self.assertRaises(cf.CalibError):
+            cf.join_clips(pcm, phm)
+
+    def test_the_tag_in_a_clip_id_is_read_strictly(self):
+        for cid, want in (("run1_u01_clean", "run1"), ("run2_u01_wrong", "run2"), ("run__1_u01_clean", ""), ("run1_u01_extra_clean", ""),
+                          ("u01_clean", ""), ("c10131872_af_heart_clean", ""), ("run1_u01_clean\n", ""), ("run1_u١_wrong", ""),
+                          ("A1_u01_clean", ""), ("a" * 13 + "_u01_clean", "")):
+            self.assertEqual(cf.clip_set({"id": cid}), want, repr(cid))
+        self.assertEqual(cf.clip_set({"id": "x", "set": "first"}), "first")
+        self.assertEqual(cf.clip_set({"id": "x", "set": "Bad Tag"}), "")   # an invalid set is not used
+        self.assertEqual(cf.clip_set({"id": 5}), "")
+
+    def test_pc_run_copies_the_manifest_set_into_every_clip(self):
+        from types import SimpleNamespace
+        set_dir = os.path.join(TMP, "pcrun_set_%d" % random.randrange(10 ** 9))
+        _c, m = record_session(set_dir, "s8", sentences=1)
+        server = SimpleNamespace(transcribe=lambda audio, lang: ("x", [], 1.0), CFG={"stt": {"model": "m", "device": "cpu", "compute_type": "int8"}},
+                                 score_en=lambda target, words, text: {"units": [], "score": 1, "fluency": 0})
+        out_json = os.path.join(TMP, "pcrun_set_out_%d.json" % random.randrange(10 ** 9))
+        with mock.patch.object(cf, "load_server", lambda **_: server):
+            self.assertEqual(pr.run(set_dir, out_json, out=lambda *_: None), 0)
+        doc = json.load(open(out_json, encoding="utf-8"))
+        self.assertEqual([c["set"] for c in doc["clips"]], ["s8", "s8"])
+        self.assertEqual([c["id"] for c in doc["clips"]], [x["clip"] for x in m["clips"]])
+        # a manifest without "set" (every older set) writes clips without it; a manifest with a bad "set" is refused before anything is run
+        mp = os.path.join(set_dir, "manifest.json")
+        man = json.load(open(mp, encoding="utf-8"))
+        del man["set"]
+        json.dump(man, open(mp, "w", encoding="utf-8"))
+        out2 = out_json + ".2"
+        with mock.patch.object(cf, "load_server", lambda **_: server):
+            self.assertEqual(pr.run(set_dir, out2, out=lambda *_: None), 0)
+        self.assertTrue(all("set" not in c for c in json.load(open(out2, encoding="utf-8"))["clips"]))
+        for bad in ("A1", "", 5, None):
+            man["set"] = bad
+            json.dump(man, open(mp, "w", encoding="utf-8"))
+            with self.assertRaises(pr.PcRunError, msg=repr(bad)):
+                pr.read_manifest(set_dir)
+
+    def test_calib_phone_gd_copies_the_manifest_set(self):
+        src = open(os.path.join(ROOT, "godot", "tools", "calib_phone.gd"), encoding="utf-8").read()
+        self.assertIn('manifest.has("set")', src)
+        self.assertIn('rec["set"] = set_tag', src)
+        self.assertIn('tag_re.compile("^[a-z][a-z0-9]{0,11}\\\\z")', src)   # the same rule as the python tools, no trailing newline
+        # selfcheck: a file without the copy does not contain it
+        self.assertNotIn('rec["set"] = set_tag', src.replace('rec["set"] = set_tag', ""))
+
     def test_readme_tells_how_to_record_in_two_sessions(self):
         text = open(os.path.join(ROOT, "phone_src", "calib", "README.txt"), encoding="utf-8").read()
         self.assertIn("--set-tag", text)
         self.assertIn("두 번", text)
         self.assertIn("--seed 12", text)   # two sessions read different sentences
         self.assertIn("월일시분초", text)
+        self.assertIn("세트(클립 id 의 태그 또는 manifest 의 set)", text)
         # selfcheck: the same scan on text without it finds nothing
         self.assertNotIn("--set-tag", "calib_record.py --out x")
 

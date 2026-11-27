@@ -3,8 +3,9 @@ extends SceneTree
 ##   godot --headless --path <project> -s res://tools/calib_phone.gd -- --model=<ggml-base.en-q5_1.bin> --set=<folder> --out=<json> [--beam=1]
 ## 앱에 들어 있는 것과 같은 WhisperBridge(Windows DLL, N0 로 준비)에 같은 모델 파일로 --set 폴더의 클립(manifest.json 의 clip·file)을
 ## 전사해서 낱말(w, p, start, end)을 --out 에 저장한다. 점수는 여기서 만들지 않는다(calib_fit.py 가 서버 score_en 으로 계산).
-## 출력(--out): {"v":1,"kind":"phone","status":"ok"|"fail","model":"<파일 이름>","beam":N,"bridge":"<version>","clips":[{id, ok, error, text, duration, ms, words}]}
-##   id 는 manifest 의 clip. 클립은 manifest 순서대로.
+## 출력(--out): {"v":1,"kind":"phone","status":"ok"|"fail","model":"<파일 이름>","beam":N,"bridge":"<version>","clips":[{id, ok, error, text, duration, ms, words, set}]}
+##   id 는 manifest 의 clip. 클립은 manifest 순서대로. set 은 manifest 에 "set"(calib_record.py 의 세션 태그)이 있을 때만 모든 클립에 들어간다
+##   (소문자로 시작하는 소문자·숫자 12자 이하가 아니면 CALIB_PHONE_FAIL manifest).
 ## 쓰는 곳은 --out 하나뿐이다. 인식 글자·문장은 화면에 찍지 않는다(숫자만). 개인 녹음이 든 폴더는 저장소 밖(scratch)에 둔다.
 ## --out 은 절대 경로여야 하고 res://·user:// 도, 저장소·worktree·backend 안(D:/Ai/언어/app, D:/Ai/언어/app_wt, 이 프로젝트 폴더)도 거절한다
 ##   (CALIB_PHONE_FAIL out_path, 종료 2, 아무것도 쓰지 않음). 전사가 하나라도 실패하면(ok < clips) status "fail" 로 --out 을 쓰고
@@ -87,6 +88,14 @@ func _initialize() -> void:
 	if not (manifest is Dictionary) or not (manifest.get("clips") is Array) or (manifest["clips"] as Array).is_empty():
 		_fail("manifest")
 		return
+	var set_tag: String = ""
+	if manifest.has("set"):
+		set_tag = str(manifest["set"])
+		var tag_re := RegEx.new()
+		tag_re.compile("^[a-z][a-z0-9]{0,11}\\z")
+		if not (manifest["set"] is String) or tag_re.search(set_tag) == null:
+			_fail("manifest")
+			return
 	var bridge: Object = ClassDB.instantiate("WhisperBridge")
 	var err: int = int(bridge.call("load_model", model, 0))
 	if err != OK:
@@ -114,6 +123,8 @@ func _initialize() -> void:
 			"ms": int(r.get("ms", 0)),
 			"words": r.get("words", []),
 		}
+		if set_tag != "":
+			rec["set"] = set_tag
 		if rec["ok"]:
 			n_ok += 1
 		else:

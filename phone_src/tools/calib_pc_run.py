@@ -7,7 +7,8 @@ Runs the clips of a set (manifest.json from calib_make_set.py or calib_record.py
 the CPU, the same settings as `server.py --stt-cpu`) and `score_en`, in THIS process: no server process, no port, no network, nothing
 written under backend\\. Writes only --out:
   {"v":1,"kind":"pc","date":"YYYY-MM-DD","stt":{"model","device","compute_type"},
-   "clips":[{id, sentence_id, group("synth"|"user"), variant, voice, target, text, words:[{w,p,start,end}], duration, score:<score_en result>}]}
+   "clips":[{id, sentence_id, group("synth"|"user"), variant, voice, target, text, words:[{w,p,start,end}], duration, score:<score_en result>,
+             set (only when the manifest has "set": calib_record.py's session tag)}]}
 `id` is the manifest `clip`. The file holds transcripts: keep it in the scratch folder, never in the repository, and never print it.
 Each clip file is checked against its sha256 first (a changed file is "CALIB_PC_FAIL sha256", exit 1).
 --out may not be inside a repository, a worktree or backend (CALIB_PC_FAIL out_path, exit 2, nothing written).
@@ -49,6 +50,9 @@ def read_manifest(set_dir):
         if c["clip"] in seen:
             raise PcRunError("manifest")
         seen.add(c["clip"])
+    import calib_fit
+    if "set" in m and not calib_fit.valid_set_tag(m["set"]):
+        raise PcRunError("manifest")
     return m
 
 
@@ -96,6 +100,8 @@ def run(set_dir, out_path, out=print):
             clips.append({"id": c["clip"], "sentence_id": c["sentence_id"], "group": group, "variant": str(c.get("variant", "")),
                           "voice": str(c.get("voice", "")), "target": c["target"], "text": text, "words": words,
                           "duration": duration, "score": score})
+            if "set" in m:
+                clips[-1]["set"] = m["set"]
         stt = dict(S.CFG["stt"])
     doc = {"v": 1, "kind": "pc", "date": datetime.date.today().isoformat(),
            "stt": {"model": stt.get("model"), "device": stt.get("device"), "compute_type": stt.get("compute_type")}, "clips": clips}
