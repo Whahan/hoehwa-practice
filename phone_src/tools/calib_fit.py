@@ -47,6 +47,7 @@ import shutil
 import socket
 import sys
 import tempfile
+from fractions import Fraction
 
 sys.dont_write_bytecode = True   # no __pycache__ under backend\\ or next to this file
 
@@ -732,6 +733,22 @@ def evaluate(S, rows, p_map, ok_prob, final_map=None):
     return m
 
 
+def _gap_counts(metrics):
+    """(phone 70+ count, PC 70+ count, wrong clips) recovered from the exact shares n / N, or None when they are not all there"""
+    n = metrics.get("wrong_clips")
+    a, b = metrics.get("wrong_pass_rate"), metrics.get("wrong_pass_rate_pc")
+    if not isinstance(n, int) or isinstance(n, bool) or n <= 0 or a is None or b is None:
+        return None
+    return int(round(a * n)), int(round(b * n)), n
+
+
+def _gap_within(counts, limit):
+    """D-4 without float error: |phone - pc| / N <= limit  <=>  den * |phone - pc| <= num * N  (both shares have the same denominator N)"""
+    phone, pc, n = counts
+    lim = Fraction(repr(float(limit)))
+    return lim.denominator * abs(phone - pc) <= lim.numerator * n
+
+
 def judge(metrics, groups_present):
     """[{name, op, limit, value, result}] with result "OK" | "FAIL" | "SKIP" (a group that has no clip at all). No gate is waived (D-2)."""
     out = []
@@ -741,6 +758,8 @@ def judge(metrics, groups_present):
             result = "SKIP"
         elif value is None:
             result = "FAIL"   # the group is there but the holdout has nothing to measure: not proven, not passed
+        elif name == "wrong_pass_gap" and _gap_counts(metrics) is not None:
+            result = "OK" if _gap_within(_gap_counts(metrics), limit) else "FAIL"   # exact integer test, not the rounded number
         elif op == ">=":
             result = "OK" if value >= limit else "FAIL"
         else:

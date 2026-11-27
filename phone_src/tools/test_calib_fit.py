@@ -441,6 +441,24 @@ class Gates(unittest.TestCase):
         self.assertNotIn("wrong_pass_rate", [g[0] for g in cf.GATES])   # the old "<= 0.10 on the phone alone" gate is gone
         self.assertEqual([g for g in cf.GATES if g[0] == "wrong_pass_gap"], [("wrong_pass_gap", "<=", 0.10, None)])
 
+    def test_wrong_pass_gap_is_judged_with_integers_not_a_rounded_share(self):
+        # D-4 exactly: 10 * |phone 70+ count - PC 70+ count| <= wrong clips. A 9-digit rounding of the share would pass the 2nd case.
+        def verdict(phone, pc, n):
+            gap = round(abs(float(phone) / n - float(pc) / n), 9)   # what evaluate() reports
+            m = dict(self.GOOD, wrong_clips=n, wrong_pass_rate=phone / float(n), wrong_pass_rate_pc=pc / float(n), wrong_pass_gap=gap)
+            return {g["name"]: g["result"] for g in cf.judge(m, {"synth", "user"})}["wrong_pass_gap"]
+        self.assertEqual(verdict(60, 50, 100), "OK")                       # exactly 0.10
+        self.assertEqual(verdict(50, 60, 100), "OK")                       # and the other way round
+        self.assertEqual(verdict(61, 50, 100), "FAIL")
+        self.assertEqual(verdict(1, 0, 10), "OK")
+        self.assertEqual(verdict(1, 0, 9), "FAIL")
+        self.assertEqual(verdict(130000000, 100000000, 300000000), "OK")   # exactly 0.10
+        self.assertEqual(verdict(130000001, 100000000, 300000009), "FAIL")  # 0.1000000003: rounds to 0.1 at 9 digits, still over the limit
+        self.assertEqual(verdict(100000000, 130000001, 300000009), "FAIL")
+        self.assertEqual(round(30000001 / 300000009.0, 9), 0.1)             # the premise: the rounded share cannot tell
+        # without the counts (a bare metrics dict) the number itself is compared as before
+        self.assertEqual({g["name"]: g["result"] for g in cf.judge(dict(self.GOOD, wrong_pass_gap=0.10), {"synth", "user"})}["wrong_pass_gap"], "OK")
+
     def test_evaluate_reports_both_shares_and_their_gap(self):
         pc, ph = FIX["one_word"]
         pcm = {c["id"]: dict(c, sentence_id=str(c["sentence_id"])) for c in pc["clips"]}
