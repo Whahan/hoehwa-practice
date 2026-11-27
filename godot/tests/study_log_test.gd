@@ -615,6 +615,7 @@ func _test_path() -> void:
 
 func _test_settle() -> void:
 	print("[settle / streak with progress days]")
+	StudyLog.rest_per_week_override = 0 # v2.0.2: this section checks the old rule (no rest days); rest days are in rest_days_test
 	_fresh()
 	Store.progress = Progress.blank()
 	for off in [-3, -2, -1]:
@@ -704,6 +705,7 @@ func _test_settle() -> void:
 	ok(j6["tokens"] == 1 and j6["gained"] == 0, "once the clock is ahead again settle works normally (no study since: streak %d, tokens 1)" % int(j6["streak"]))
 	StudyLog.today_override = D
 	Store.progress = Progress.blank()
+	StudyLog.rest_per_week_override = -1
 
 
 # ---------------------------------------------------------------- goal, StudyClock

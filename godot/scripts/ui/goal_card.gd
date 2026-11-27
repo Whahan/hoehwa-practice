@@ -7,6 +7,8 @@ signal goal_changed
 
 const CHOICES := [5, 10, 15, 20, 30, 0] ## minutes, 0 = off
 const TOUCH_H := 48.0
+const TXT_REST_CHIP := StudyLog.TXT_REST_CHIP ## "쉬는 날 %d일 남음"
+const EXPLAIN := "주마다(월~일) %d일까지는 보호권 없이 쉬어도 연속 기록이 이어져요. 그보다 더 쉬면 보호권을 써요. 7일 연속할 때마다 보호권 1개를 받고, 최대 2개까지 모아요. 쉬는 날과 보호권 개수보다 많은 날을 놓치면 연속 기록이 이어지지 않고 보호권은 그대로 남아요." % StreakCalc.REST_PER_WEEK
 
 var lang: String = "en"
 var is_compact: bool = false
@@ -58,7 +60,8 @@ func _build() -> void:
 		var v := UI.vbox(6)
 		var goal_txt: String = ("오늘 %s / %d분" % [minutes_text(sec), goal]) if goal > 0 else ("오늘 %s (목표 꺼짐)" % minutes_text(sec))
 		var streak_txt: String = ("연속 %d일" % st) if st > 0 else "오늘부터 시작"
-		v.add_child(UI.colored("%s · %s · 보호권 %d개" % [goal_txt, streak_txt, tk], Pal.on(lang), "Strong"))
+		var rest_txt: String = (" · " + TXT_REST_CHIP % int(info.get("rest_left", 0))) if StudyLog.rest_per_week() > 0 else ""
+		v.add_child(UI.colored("%s · %s · 보호권 %d개%s" % [goal_txt, streak_txt, tk, rest_txt], Pal.on(lang), "Strong"))
 		if goal > 0:
 			v.add_child(UI.progress_bar(frac, _bar_color(acc, reached), 8.0))
 		panel.add_child(v)
@@ -81,8 +84,10 @@ func _build() -> void:
 	var chips := UI.flow(8, 6)
 	chips.add_child(UI.chip_kind(("연속 %d일" % st) if st > 0 else "연속 기록 없음", "lang_" + lang))
 	chips.add_child(UI.chip_kind("보호권 %d개" % tk, "warn"))
+	if StudyLog.rest_per_week() > 0:
+		chips.add_child(UI.chip_kind(TXT_REST_CHIP % int(info.get("rest_left", 0)), "info"))
 	card.body.add_child(chips)
-	card.body.add_child(UI.label("하루를 놓쳐도 보호권이 있으면 연속 기록이 이어져요. 7일 연속할 때마다 1개를 받고, 최대 2개까지 모아요. 보호권 개수보다 많은 날을 놓치면(1개일 때 2일 이상) 연속 기록이 이어지지 않고 보호권은 그대로 남아요.", "Small"))
+	card.body.add_child(UI.label(EXPLAIN, "Small"))
 	card.body.add_child(UI.label("하루 목표", "Small", false))
 	var row := UI.flow(8, 8)
 	for m in CHOICES:

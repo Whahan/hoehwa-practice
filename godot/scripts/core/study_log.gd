@@ -11,7 +11,7 @@ extends RefCounted
 ##   {"v":1, "saved":unix,
 ##    "days": {"2026-10-16": {"en": {"sec":840, "by":{"lesson":300}, "n":{"lessons":1}, "lesson":[ok,total], "score":[count,sum]}}},
 ##    "phon": {"en": {"θ": {"h":"0110", "heard":{"s":5}}}},
-##    "freeze": {"en": {"tokens":1, "frozen":["2026-10-14"], "awarded":0, "last":740000}},
+##    "freeze": {"en": {"tokens":1, "frozen":["2026-10-14"], "rest":["2026-10-14"], "awarded":0, "last":740000}},   (rest = 쉬는 날: frozen 중 보호권 없이 이은 날. 옛 파일엔 없음)
 ##    "missions": {"cafe_order": {"stars":2, "plays":3, "last":"2026-10-16", "done_goals":2}},
 ##    "kana": {"c": {"あ": [맞힌, 틀린], "ア": [3, 1]}, "runs":4, "ok":31, "total":40, "last":"2026-10-16"}}   (가나 익히기, 처음 풀 때 생긴다)
 ## "kana" 는 이 기기에만 저장된다: SyncDoc 는 days / phon / missions 만 주고받아서 기기 사이에 동기화되지 않는다.
@@ -44,6 +44,8 @@ const MAX_SPEED_SCORE := 100000
 const MAX_SPEED_COUNT := 1000 ## best.correct / best.total / best.combo, and the most answers one run may report
 const PATH_VIEWS := ["lesson", "review", "talk", "practice", "reading", "song"] ## screens that note_resume() accepts
 const MAX_PATH_DONE := 9999 ## finished lessons counted per path cell
+const TXT_REST_CHIP := "쉬는 날 %d일 남음" ## 연속 카드·목표 카드 칩
+const TXT_REST_USED := "쉬는 날 %d일을 써서 연속 기록이 이어졌어요" ## 주를 가로질러도 맞는 문구(주 한도와 어긋나지 않게 "이번 주" 를 쓰지 않는다)
 const RESUME_SAME_SEC := 60 ## note_resume(): the same view + language again within this many seconds changes nothing
 
 static var path := "user://studylog.json"
@@ -56,6 +58,8 @@ static var open_hook: Callable = Callable()
 
 ## Tests only: pretend "now" is this unix time for note_resume(). -1 = system clock.
 static var unix_override: int = -1
+## Tests only: rest days per week used by settle(). -1 = StreakCalc.REST_PER_WEEK (set 0 to test the old, no-rest rule).
+static var rest_per_week_override: int = -1
 
 static var _data: Dictionary = {}
 static var _loaded: bool = false
@@ -225,12 +229,17 @@ static func _prune_for_save() -> void:
 			if _iso_days(str(iso)) >= oldest:
 				keep.append(iso)
 		fz["frozen"] = keep
+		var keep_rest: Array = []
+		for iso in (fz.get("rest", []) as Array):
+			if _iso_days(str(iso)) >= oldest:
+				keep_rest.append(iso)
+		fz["rest"] = keep_rest
 
 
 # ---------------------------------------------------------------- normalizing (anything read from disk)
 
 static func _blank_freeze() -> Dictionary:
-	return {"tokens": 1, "frozen": [], "awarded": 0, "last": 0}
+	return {"tokens": 1, "frozen": [], "rest": [], "awarded": 0, "last": 0}
 
 
 static func _blank() -> Dictionary:
@@ -394,9 +403,19 @@ static func _norm_freeze(v: Variant) -> Dictionary:
 				seen[iso] = true
 				frozen.append(iso)
 		frozen.sort()
+	var rest: Array = []
+	var rseen := {}
+	var rv: Variant = d.get("rest", null)
+	if rv is Array:
+		for iso in rv:
+			if iso is String and _iso_days(iso) >= 0 and seen.has(iso) and not rseen.has(iso): ## a rest day is always also a frozen day
+				rseen[iso] = true
+				rest.append(iso)
+		rest.sort()
 	return {
 		"tokens": _n(d.get("tokens", 1), 0, StreakCalc.MAX_TOKENS) if d.has("tokens") else 1,
 		"frozen": frozen,
+		"rest": rest,
 		"awarded": _n(d.get("awarded", 0), 0, 100000),
 		"last": _n(d.get("last", 0), 0, 100000000),
 	}
@@ -1144,6 +1163,43 @@ static func frozen_days(lang: String) -> Dictionary:
 	return out
 
 
+## Rest days per calendar week (Mon-Sun). Tests set rest_per_week_override (-1 = StreakCalc.REST_PER_WEEK).
+static func rest_per_week() -> int:
+	return rest_per_week_override if rest_per_week_override >= 0 else StreakCalc.REST_PER_WEEK
+
+
+## Days (day number -> true) bridged as rest days for `lang` (freeze.<lang>.rest; always also in frozen). {} when none.
+## A day that was studied since (a sync can bring one in) is not a rest day any more, even before the next settle() cleans the file.
+static func rest_days(lang: String) -> Dictionary:
+	var out := _stored_rest(lang)
+	if out.is_empty():
+		return out
+	var done: Dictionary = _done_days(lang)
+	for d in out.keys():
+		if done.has(d):
+			out.erase(d)
+	return out
+
+
+## The rest days as stored (freeze.<lang>.rest), studied days included. settle() needs them to free the week's quota.
+static func _stored_rest(lang: String) -> Dictionary:
+	var out := {}
+	if not _valid_lang(lang):
+		return out
+	for iso in ((_freeze(lang).get("rest", []) as Array)):
+		var d: int = _iso_days(str(iso))
+		if d >= 0:
+			out[d] = true
+	return out
+
+
+## Rest days still free in the week (Mon-Sun) that holds today. Reads only (settle() is what spends them).
+static func rest_left(lang: String) -> int:
+	if not _valid_lang(lang):
+		return 0
+	return StreakCalc.rest_left(rest_days(lang), today(), rest_per_week())
+
+
 static func _unix_now() -> int:
 	return unix_override if unix_override >= 0 else int(Time.get_unix_time_from_system())
 
@@ -1211,38 +1267,51 @@ static func _done_days(lang: String) -> Dictionary:
 	return done
 
 
-## Applies streak protection for today (idempotent) and returns {streak, tokens, used, gained}.
+## Applies streak protection for today (idempotent) and returns {streak, tokens, used, gained, rest_used, rest_left}.
+## Rest days (v2.0.2): per calendar week up to rest_per_week() empty days are bridged before a token is spent (StreakCalc).
 ## Clock rewind guard: `freeze.<lang>.last` is the latest day settle() ever applied. When today is earlier than that
 ## (the clock was set back after having been set forward) nothing is changed, spent or paid -- the streak is only
 ## calculated for display -- so tokens cannot be granted a second time for a run that was already paid.
 static func settle(lang: String) -> Dictionary:
 	if not _valid_lang(lang):
-		return {"streak": 0, "tokens": 0, "used": 0, "gained": 0}
+		return {"streak": 0, "tokens": 0, "used": 0, "gained": 0, "rest_used": 0, "rest_left": 0}
 	var fz: Dictionary = _freeze(lang)
 	var frozen := {}
 	for iso in fz["frozen"]:
 		var fd: int = _iso_days(str(iso))
 		if fd >= 0:
 			frozen[fd] = true
+	var rest := _stored_rest(lang)
+	var rpw: int = rest_per_week()
 	var t: int = today()
-	var res: Dictionary = StreakCalc.settle(_done_days(lang), frozen, int(fz["tokens"]), int(fz["awarded"]), t)
+	var res: Dictionary = StreakCalc.settle(_done_days(lang), frozen, int(fz["tokens"]), int(fz["awarded"]), t, rest, rpw)
 	if t < int(fz["last"]):
-		return {"streak": int(res["streak"]), "tokens": int(fz["tokens"]), "used": 0, "gained": 0}
+		return {"streak": int(res["streak"]), "tokens": int(fz["tokens"]), "used": 0, "gained": 0,
+			"rest_used": 0, "rest_left": rest_left(lang)}
 	var list: Array = []
 	for d in (res["frozen"] as Dictionary).keys():
 		list.append(Plan.days_to_iso(int(d)))
 	list.sort()
+	var rest_list: Array = []
+	for d in (res["rest"] as Dictionary).keys():
+		rest_list.append(Plan.days_to_iso(int(d)))
+	rest_list.sort()
 	fz["last"] = t ## saved together with the next real change (advancing it alone does not make the log dirty)
-	if int(res["tokens"]) != int(fz["tokens"]) or int(res["awarded"]) != int(fz["awarded"]) or list != fz["frozen"]:
+	if int(res["tokens"]) != int(fz["tokens"]) or int(res["awarded"]) != int(fz["awarded"]) or list != fz["frozen"] \
+			or rest_list != fz.get("rest", []):
 		fz["tokens"] = int(res["tokens"])
 		fz["awarded"] = int(res["awarded"])
 		fz["frozen"] = list
+		fz["rest"] = rest_list
 		_dirty = true
+	if int(res["rest_used"]) > 0:
+		Toast.info(TXT_REST_USED % int(res["rest_used"]))
 	if int(res["used"]) > 0:
 		Toast.info("연속 기록 보호권 %d개를 써서 연속 기록을 지켰어요" % int(res["used"]))
 	if int(res["gained"]) > 0:
 		Toast.ok("연속 %d일! 보호권 %d개를 받았어요" % [int(res["streak"]), int(res["gained"])])
-	return {"streak": int(res["streak"]), "tokens": int(res["tokens"]), "used": int(res["used"]), "gained": int(res["gained"])}
+	return {"streak": int(res["streak"]), "tokens": int(res["tokens"]), "used": int(res["used"]), "gained": int(res["gained"]),
+		"rest_used": int(res["rest_used"]), "rest_left": StreakCalc.rest_left(res["rest"], t, rpw)}
 
 
 static func streak(lang: String) -> int:
