@@ -12,7 +12,8 @@
 # 환경 변수: MODEL_GODOT (Godot console exe), MODEL_PY (python.exe), MODEL_ONLY (쉼표로 구분한 `이름` 또는 `이름 모드`만 실행),
 #           MODEL_TIMEOUT (한 시험의 제한 시간 초, 기본 300),
 #           MODEL_SRV_LOGDELAY (ms, 변이 확인용: 카드 시험 stt_model_card_test 의 서버에만 로그 줄 지연을 건다. 기본 러너에서는 꺼져 있고
-#           model_store_test 의 서버에는 절대 적용되지 않는다).
+#           model_store_test 의 서버에는 절대 적용되지 않는다),
+#           MODEL_SRV_LOGDELAY_STORE (ms, 기본 0: model_store_test 의 서버에만 같은 로그 줄 지연을 건다. 부재 단언의 정착 대기를 확인하는 용도).
 # 끝: 요약 표, 마지막 줄 `남은 프로세스·열린 포트 없음`(서버 PID 종료와 18791~18799 닫힘을 확인했을 때). 하나라도 실패면 종료 코드 1.
 param()
 
@@ -116,6 +117,7 @@ $null = New-Item -ItemType Directory -Path $fakeAppData -ErrorAction Stop
 $realAppData = $env:APPDATA
 
 $logDelay = 0; if ($env:MODEL_SRV_LOGDELAY) { $logDelay = [int]$env:MODEL_SRV_LOGDELAY }
+$logDelayStore = 0; if ($env:MODEL_SRV_LOGDELAY_STORE) { $logDelayStore = [int]$env:MODEL_SRV_LOGDELAY_STORE }
 $script:srvProc = $null
 $script:srvPids = @()
 
@@ -173,7 +175,9 @@ try {
         $label = "{0} {1}" -f $t.name, $t.mode
         if ($only.Count -gt 0 -and -not ($only -contains $t.name) -and -not ($only -contains $label)) { continue }
         $srv = Join-Path $work ("srv_{0}_{1}" -f $t.name, $t.mode)
-        $srvDelay = 0; if ($t.name -eq 'stt_model_card_test') { $srvDelay = $logDelay }
+        $srvDelay = 0
+        if ($t.name -eq 'stt_model_card_test') { $srvDelay = $logDelay }
+        elseif ($t.name -eq 'model_store_test') { $srvDelay = $logDelayStore }
         $port = Start-FakeServer $srv ("{0}_{1}" -f $t.name, $t.mode) $srvDelay
         $a = @('--headless', '--path', $godotDir)
         if ($t.mode -like 'phone*') { $a += @('--resolution', '412x915') }

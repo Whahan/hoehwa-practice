@@ -10,6 +10,8 @@ extends Node
 const DIR := "user://test_models_pa3"
 const HOSTS := ["github.com", "githubusercontent.com", "huggingface.co", "hf.co"]
 const SIZE := 3000000
+const SETTLE_MS := 400
+const SETTLE_LIMIT_MS := 8000
 
 var passed: int = 0
 var failed: int = 0
@@ -25,6 +27,7 @@ var _payloads: Dictionary = {}
 var _old_prefs: String = ""
 var _normal_tok: String = ""
 var _cap: LogCap = null
+var _settle_timeouts: int = 0
 
 
 func ok(cond: bool, name: String) -> void:
@@ -83,6 +86,7 @@ func _ready() -> void:
 	_manifest_real()
 	_helpers()
 	await _prefs_and_picks()
+	await _settle_selfcheck()
 	await _d_normal()
 	await _d_already_ready()
 	await _d_frames()
@@ -102,6 +106,7 @@ func _ready() -> void:
 	await _d_stall_and_close()
 	await _d_remove()
 	await _d_misc()
+	ok(_settle_timeouts == 0, "every settled wait ended by itself, none by the time limit (%d)" % _settle_timeouts)
 	_finish()
 
 
@@ -209,6 +214,49 @@ func _log_wait(tok: String, n: int, sec: float = 5.0) -> Array:
 		await get_tree().process_frame
 		l = _log(tok)
 	return l
+
+
+## The fake server writes a request's log line when that connection ENDS (the runner may delay it on purpose), so a
+## line can arrive well after the client has moved on. The server publishes <srv-root>/inflight.txt (atomic replace) =
+## requests still being handled + log lines not yet written, and <srv-root>/inflight.err if publishing failed.
+## An absence check ("no new request", "only the first one is logged") therefore waits until that number is 0 and
+## the count for its token has not changed for SETTLE_MS, then returns the lines: no guessed number of frames.
+## Anything else is NOT settled: no file, a file that cannot be read, not a plain number, a negative number, or
+## inflight.err present. Such a wait ends only by the time limit, which counts in _settle_timeouts and fails the run.
+func _inflight() -> int:
+	if FileAccess.file_exists(_root.path_join("inflight.err")):
+		return -1
+	var p: String = _root.path_join("inflight.txt")
+	if not FileAccess.file_exists(p):
+		return -1
+	var f := FileAccess.open(p, FileAccess.READ)
+	if f == null:
+		return -1
+	var t: String = f.get_as_text().strip_edges()
+	f.close()
+	if not t.is_valid_int():
+		return -1
+	return maxi(int(t), -1) # a negative number is a server bug: -1 keeps it "not settled"
+
+
+func _settled_log(tok: String) -> Array:
+	var last: Array = _log(tok)
+	var t_change: int = Time.get_ticks_msec()
+	var t0: int = t_change
+	while true:
+		await get_tree().process_frame
+		var cur: Array = _log(tok)
+		if cur.size() != last.size():
+			t_change = Time.get_ticks_msec()
+		last = cur
+		if _inflight() != 0:
+			t_change = Time.get_ticks_msec()
+		if Time.get_ticks_msec() - t_change >= SETTLE_MS:
+			break
+		if Time.get_ticks_msec() - t0 > SETTLE_LIMIT_MS:
+			_settle_timeouts += 1
+			break
+	return last
 
 
 func _wait_fin(id: String, sec: float = 25.0) -> Dictionary:
@@ -421,6 +469,23 @@ func _prefs_and_picks() -> void:
 	Store.prefs = {}
 
 
+# ---------------------------------------------------------------- settled log selfcheck
+
+## One download, then the OLD way (a few frames, then count) against the NEW way (settled). With a delayed log line
+## (MODEL_SRV_LOGDELAY_STORE) the old way sees 0 and the new way must still see exactly 1.
+func _settle_selfcheck() -> void:
+	var c: Dictionary = _single("settlesc", [""])
+	var r: Dictionary = await _run(c["id"])
+	ok(bool(r["start"]["ok"]) and bool(r["ok"]), "selfcheck: the settle probe download finished")
+	await _frames(5)
+	var n_old: int = _log(c["tok"]).size()
+	var n_new: int = (await _settled_log(c["tok"])).size()
+	ok(n_new == 1, "selfcheck: the settled wait sees the probe request's log line (old way saw %d, settled saw %d)" % [n_old, n_new])
+	if n_old == 0:
+		print("selfcheck FAIL-as-expected late_line (a few frames missed a log line that the settled wait found)")
+	ModelStore.remove(c["id"])
+
+
 # ---------------------------------------------------------------- downloads
 
 func _d_normal() -> void:
@@ -456,11 +521,12 @@ func _d_normal() -> void:
 func _d_already_ready() -> void:
 	var id := "m_normal"
 	var c: Dictionary = {"tok": _normal_tok}
-	var before: int = (_log(c["tok"])).size()
+	var before: int = (await _settled_log(c["tok"])).size() # the first download's line must be in before the baseline
 	var r: Dictionary = await _run(id)
 	ok(bool(r["start"]["ok"]) and bool(r["ok"]), "ready: start again is a quiet success")
-	await _frames(5)
-	ok(_log(c["tok"]).size() == before, "ready: no new request")
+	var after_ready: Array = await _settled_log(c["tok"])
+	print("absence: settled ready")
+	ok(after_ready.size() == before, "ready: no new request")
 	ok(ModelStore.state(id) == "ready", "ready: still ready")
 
 
@@ -596,14 +662,16 @@ func _d_part_cases() -> void:
 	f.store_buffer(data)
 	f.close()
 	var r2: Dictionary = await _run(c2["id"])
-	await _frames(10)
-	ok(bool(r2["ok"]) and _log(c2["tok"]).size() == 0 and ModelStore.state(c2["id"]) == "ready", "fullpart: a complete .part is only verified (0 requests), then ready")
+	var l2: Array = await _settled_log(c2["tok"])
+	print("absence: settled fullpart")
+	ok(bool(r2["ok"]) and l2.size() == 0 and ModelStore.state(c2["id"]) == "ready", "fullpart: a complete .part is only verified (0 requests), then ready")
 	# a complete .part with wrong content is corrupt
 	var c3: Dictionary = _single("badpart", [""])
 	_put_part(c3["file"], SIZE)
 	var r3: Dictionary = await _run(c3["id"])
-	await _frames(10)
-	ok(not bool(r3["ok"]) and str(r3["err"]) == "model_corrupt" and _log(c3["tok"]).size() == 0, "badpart: a complete but wrong .part -> model_corrupt, 0 requests")
+	var l3: Array = await _settled_log(c3["tok"])
+	print("absence: settled badpart")
+	ok(not bool(r3["ok"]) and str(r3["err"]) == "model_corrupt" and l3.size() == 0, "badpart: a complete but wrong .part -> model_corrupt, 0 requests")
 	ok(ModelStore.state(c3["id"]) == "corrupt" and not FileAccess.file_exists(_abs(c3["file"], ".part")), "badpart: state corrupt, .part removed")
 
 
@@ -629,8 +697,9 @@ func _d_space() -> void:
 	var r: Dictionary = ModelStore.start(id)
 	ok(not bool(r["ok"]) and str(r["err_code"]) == "no_space", "space: 10 MB free -> no_space")
 	ok(int(r.get("need_mb", 0)) >= 100, "space: the answer says how many MB are needed")
-	await _frames(15)
-	ok(_log(c["tok"]).size() == 0, "space: 0 requests were sent")
+	var l_sp: Array = await _settled_log(c["tok"])
+	print("absence: settled space")
+	ok(l_sp.size() == 0, "space: 0 requests were sent")
 	ok(ModelStore.state(id) == "missing", "space: state stays missing")
 	free[0] = 50 * 1000000
 	var r2: Dictionary = ModelStore.start(id)
@@ -643,8 +712,9 @@ func _d_space() -> void:
 	free[0] = -1
 	var r4: Dictionary = ModelStore.start(id)
 	ok(not bool(r4["ok"]) and str(r4["err_code"]) == "space_unknown", "space: unknown free space asks first (space_unknown)")
-	await _frames(15)
-	ok(_log(c["tok"]).size() == 1, "space: space_unknown sent no request (only the earlier success is in the log)")
+	var l_su: Array = await _settled_log(c["tok"])
+	print("absence: settled space_unknown")
+	ok(l_su.size() == 1, "space: space_unknown sent no request (only the earlier success is in the log)")
 	var r5: Dictionary = await _run(id, true)
 	ok(bool(r5["start"]["ok"]) and bool(r5["ok"]), "space: confirmed with space_unknown goes on and finishes")
 	ModelStore.remove(id)
@@ -703,14 +773,16 @@ func _d_hosts() -> void:
 	}
 	var ce: Dictionary = _single("evil", ["?redir=1&kind=evil"])
 	var re: Dictionary = await _run(ce["id"])
-	await _frames(20)
+	var l_ev: Array = await _settled_log(ce["tok"])
+	print("absence: settled hosts evil")
 	ok(not bool(re["ok"]) and str(re["err"]) == "dl_host", "hosts: a redirect to evilgithub.com -> dl_host")
-	ok(_log(ce["tok"]).size() == 1, "hosts: 0 requests reached the refused host (only the first 302 is logged)")
+	ok(l_ev.size() == 1, "hosts: 0 requests reached the refused host (only the first 302 is logged)")
 	ok(ModelStore.state(ce["id"]) == "missing", "hosts: nothing stored")
 	var cp: Dictionary = _single("plainhttp", ["?redir=1&kind=plainhttp"])
 	var rp: Dictionary = await _run(cp["id"])
-	await _frames(20)
-	ok(not bool(rp["ok"]) and str(rp["err"]) == "dl_host" and _log(cp["tok"]).size() == 1, "hosts: a redirect to http://github.com -> dl_host, 0 requests to it")
+	var l_pl: Array = await _settled_log(cp["tok"])
+	print("absence: settled hosts plainhttp")
+	ok(not bool(rp["ok"]) and str(rp["err"]) == "dl_host" and l_pl.size() == 1, "hosts: a redirect to http://github.com -> dl_host, 0 requests to it")
 	var cx: Dictionary = _single("suffix", ["?redir=1&kind=suffix"])
 	var rx: Dictionary = await _run(cx["id"])
 	ok(bool(rx["ok"]), "hosts: release-assets.githubusercontent.com is allowed by the suffix rule")
@@ -719,9 +791,10 @@ func _d_hosts() -> void:
 	ModelStore.allow_http_loopback = false
 	var ch: Dictionary = _single("httpoff", [""])
 	var rh: Dictionary = await _run(ch["id"])
-	await _frames(20)
+	var l_of: Array = await _settled_log(ch["tok"])
+	print("absence: settled hosts httpoff")
 	ok(not bool(rh["ok"]) and str(rh["err"]) == "dl_host", "hosts: http:// with the test switch off -> dl_host")
-	ok(_log(ch["tok"]).size() == 0, "hosts: http:// with the switch off sent 0 requests")
+	ok(l_of.size() == 0, "hosts: http:// with the switch off sent 0 requests")
 	ModelStore.allow_http_loopback = true
 	ModelStore.test_host_map = {}
 
@@ -918,10 +991,11 @@ func _d_hardening() -> void:
 		var c: Dictionary = _single("sch_" + kind, ["?redir=1&kind=" + kind])
 		ModelStore.test_host_map = {"github.com": {"host": "127.0.0.1", "port": _port}}
 		var r: Dictionary = await _run(c["id"])
-		await _frames(15)
+		var l_sc: Array = await _settled_log(c["tok"])
+		print("absence: settled location scheme %s" % kind)
 		ModelStore.test_host_map = {}
 		ok(not bool(r["ok"]) and str(r["err"]) == "dl_host", "location scheme %s -> dl_host" % kind)
-		ok(_log(c["tok"]).size() == 1, "location scheme %s: 0 requests after the redirect" % kind)
+		ok(l_sc.size() == 1, "location scheme %s: 0 requests after the redirect" % kind)
 		ok(ModelStore.state(c["id"]) == "missing" and not FileAccess.file_exists(_abs(c["file"], ".part")), "location scheme %s: nothing stored" % kind)
 	var csr: Dictionary = _single("schemerel", ["?redir=1&kind=schemerel"])
 	var rsr: Dictionary = await _run(csr["id"])
