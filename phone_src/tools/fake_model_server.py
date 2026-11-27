@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Fake model server for the ModelStore tests (docs/v201_design.md 2.2, 5.3 PA3-1..PA3-11).
 
-Usage:   python -I -X utf8 fake_model_server.py --port 18791 --root <dir> [--ttl 900]
+Usage:   python -I -X utf8 fake_model_server.py --port 18791 --root <dir> [--ttl 900] [--logdelay MS]
+         --logdelay MS  test aid: every log line is written MS ms late (a slow log, like a connection that ends late)
          (--port 0 lets the OS choose the port; the chosen port is written to <root>/port.txt)
 
 It listens on 127.0.0.1 only, serves payload files from <root> and appends one JSON line per request to
-<root>/requests.jsonl. Nothing here talks to the network. The Godot test writes the payload files itself and
+<root>/requests.jsonl (and keeps <root>/inflight.txt = running requests + unwritten log lines). Nothing here talks to the network. The Godot test writes the payload files itself and
 reads the log file (the test code has no HTTP client of its own).
 
 Request path:   /f/<token>/<payload file name>?<behaviour switches>
@@ -53,12 +54,72 @@ SEQ = [0]
 ARGS = None
 
 
-def log_line(rec):
+ACTIVE = [0]  # requests being handled + log lines not written yet (the number in <root>/inflight.txt)
+
+
+def _publish_inflight(value):
+    """Publish the number atomically: write inflight.txt.tmp, then os.replace it over inflight.txt, so a reader sees the old
+    or the new complete number and never a half-written one. A failed replace (e.g. a reader holds the file without delete
+    sharing on Windows) is retried briefly. If it still fails, <root>/inflight.err is written and stays: a test must then
+    treat the log as NOT settled (it must never trust a stale number)."""
+    final = os.path.join(ARGS.root, "inflight.txt")
+    tmp = final + ".tmp"
+    last = None
+    for _ in range(10):
+        try:
+            with open(tmp, "w", encoding="ascii") as f:
+                f.write(str(value))
+            os.replace(tmp, final)
+            return True
+        except OSError as e:
+            last = e
+            time.sleep(0.01)
+    why = ascii(last)  # ascii(): the OS message may be Korean; the marker must never raise
+    try:
+        sys.stderr.write("inflight publish failed: %s\n" % why)
+        sys.stderr.flush()
+    except Exception:
+        pass
+    try:
+        with open(os.path.join(ARGS.root, "inflight.err"), "w", encoding="ascii") as f:
+            f.write("publish failed at %s: %s" % (value, why))
+    except Exception:
+        os._exit(3)  # neither the number nor the failure marker can be published: stop loudly, never leave a stale number
+    return False
+
+
+def _bump(d):
+    """Keep <root>/inflight.txt = handlers running + delayed log lines still pending. A test that wants to know
+    'has every request I made reached the log?' waits for 0 here instead of guessing a sleep."""
+    with STATE_LOCK:
+        ACTIVE[0] += d
+        _publish_inflight(ACTIVE[0])
+
+
+def _write_line(rec):
     with STATE_LOCK:
         SEQ[0] += 1
         rec["seq"] = SEQ[0]
         with open(os.path.join(ARGS.root, "requests.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _late_line(rec):
+    try:
+        _write_line(rec)
+    finally:
+        _bump(-1)
+
+
+def log_line(rec):
+    d = ARGS.logdelay if ARGS is not None else 0
+    if d > 0:
+        _bump(1)  # counted as pending until the timer has written the line
+        t = threading.Timer(d / 1000.0, _late_line, args=(dict(rec),))
+        t.daemon = True
+        t.start()
+    else:
+        _write_line(rec)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -80,6 +141,13 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def do_GET(self):
+        _bump(1)
+        try:
+            self._do_get()
+        finally:
+            _bump(-1)
+
+    def _do_get(self):
         sp = urlsplit(self.path)
         if sp.path == "/_ping":
             self._send(200, b"ok")
@@ -242,8 +310,10 @@ def main():
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--root", required=True)
     ap.add_argument("--ttl", type=int, default=900, help="stop by itself after this many seconds")
+    ap.add_argument("--logdelay", type=int, default=0, help="test aid: write every log line this many ms late")
     ARGS = ap.parse_args()
     os.makedirs(ARGS.root, exist_ok=True)
+    _bump(0)
     srv = ThreadingHTTPServer(("127.0.0.1", ARGS.port), Handler)
     srv.daemon_threads = True
     with open(os.path.join(ARGS.root, "port.txt"), "w", encoding="utf-8") as f:

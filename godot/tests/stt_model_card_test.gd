@@ -8,6 +8,8 @@
 
 const DIR := "user://test_models_card"
 const SIZE := 3000000
+const SETTLE_MS := 400
+const SETTLE_LIMIT_MS := 10000
 const WIFI_FMT := "음성 인식 모델(%s)을 받아요. 와이파이에 연결돼 있나요?"
 
 var passed: int = 0
@@ -24,6 +26,8 @@ var _card: SttModelCard = null
 var _old_prefs: String = ""
 var _sha: String = ""
 var _cap: LogCap = null
+var _fin: Array = []
+var _settle_timeouts: int = 0
 
 
 func ok(cond: bool, name: String) -> void:
@@ -89,6 +93,7 @@ func _ready() -> void:
 		return
 	ok(true, "fake server arguments given (--port, --srv-root)")
 	var ev: Node = ModelStore.events()
+	ev.connect("finished", func(id: String, okv: bool, err: String) -> void: _fin.append([id, okv, err]))
 	await _frames(2)
 	ModelStore.allow_http_loopback = true
 	ModelStore.base_dir = DIR + "/store/"
@@ -108,6 +113,7 @@ func _ready() -> void:
 	await _flow_sheet()
 	_source_checks()
 	ok(presses >= 12, "at least 12 real button presses (%d)" % presses)
+	ok(_settle_timeouts == 0, "the request log always settled in time (%d timeouts)" % _settle_timeouts)
 	_finish()
 
 
@@ -168,7 +174,9 @@ func _url(file: String, q: String) -> String:
 
 ## Two models: the default one (3 MB, slow so that the progress can be seen) and a small one with a WRONG sha256.
 func _write_manifest() -> void:
-	_tok = "card%d" % int(Time.get_ticks_msec() % 1000000)
+	# The token must be unique per RUN: requests.jsonl is shared by all modes of one runner pass, and Time.get_ticks_msec()
+	# counts from this process's start, so two modes could draw the same number and count each other's old log lines.
+	_tok = "card%d_%d" % [OS.get_process_id(), int(Time.get_unix_time_from_system() * 1000.0)]
 	var models: Array = [
 		{"id": "card_base", "kind": "stt", "langs": ["en"], "file": "card_base.bin", "bytes": SIZE, "sha256": _sha, "min_free_mb": 0, "default": true,
 			"ram_hint_mb": 400, "label_ko": "기본 모델", "urls": [_url("card3m.bin", "?slow=40")], "license": "t"},
@@ -291,6 +299,61 @@ func _log_count() -> int:
 	return n
 
 
+## The fake server writes a request's log line when that connection ENDS (and the runner may delay it on purpose),
+## so a line can arrive well after the client has moved on. The server also publishes <srv-root>/inflight.txt (atomic
+## replace) = requests still being handled + log lines not yet written, and <srv-root>/inflight.err if publishing failed.
+## A baseline or a "nothing new" check therefore waits until that number is 0 and the count has not changed for
+## SETTLE_MS, then returns the count: no guessed sleep. Anything else is NOT settled: no file, a file that cannot be
+## read, not a plain number, a negative number, or inflight.err present. Such a wait ends only by the time limit,
+## which counts in _settle_timeouts and fails the run.
+func _inflight() -> int:
+	if FileAccess.file_exists(_root.path_join("inflight.err")):
+		return -1
+	var p: String = _root.path_join("inflight.txt")
+	if not FileAccess.file_exists(p):
+		return -1
+	var f := FileAccess.open(p, FileAccess.READ)
+	if f == null:
+		return -1
+	var t: String = f.get_as_text().strip_edges()
+	f.close()
+	if not t.is_valid_int():
+		return -1
+	return maxi(int(t), -1) # a negative number is a server bug: -1 keeps it "not settled"
+
+
+func _settled_count() -> int:
+	var last: int = _log_count()
+	var t_change: int = Time.get_ticks_msec()
+	var t0: int = t_change
+	while true:
+		await get_tree().process_frame
+		var c: int = _log_count()
+		if c != last:
+			last = c
+			t_change = Time.get_ticks_msec()
+		if _inflight() != 0:
+			t_change = Time.get_ticks_msec()
+		if Time.get_ticks_msec() - t_change >= SETTLE_MS:
+			break
+		if Time.get_ticks_msec() - t0 > SETTLE_LIMIT_MS:
+			_settle_timeouts += 1
+			break
+	return last
+
+
+## True when the card shows the finished state: this is what the user sees, so it is only true after the card has handled the signals.
+func _card_ready_ui() -> bool:
+	return ModelStore.state("card_base") == "ready" and _card.status_label.text.begins_with("준비됐어요") 		and _shown(_card.delete_btn) and not _shown(_card.get_btn) and not _shown(_card.resume_btn) and not _shown(_card.cancel_btn) and not _card.bar.visible
+
+
+func _fin_ok(id: String) -> bool:
+	for e in _fin:
+		if str(e[0]) == id and bool(e[1]):
+			return true
+	return false
+
+
 func _shown(b: Button) -> bool:
 	return b != null and b.visible
 
@@ -359,12 +422,14 @@ func _flow_main() -> void:
 	ok(_card.status_label.text.contains("약 3 MB"), "missing: the status line says the size in MB")
 	ok(_card.pick_box.visible and _card.get_node("ModelPicks").get_child_count() == 2, "missing: two model rows")
 	# [나중에] starts nothing
+	var n_later: int = await _settled_count() # this run's token: the first request of this run only comes after [받기]
 	await _press(_card.get_btn, "ModelGetBtn")
 	var s: Sheet = _top_sheet()
 	ok(_sheet_text(s) == WIFI_FMT % "약 3 MB", "wifi sheet text carries the model size")
 	await _press(s.buttons["cancel"], "나중에")
 	await _frames(15)
-	ok(ModelStore.state("card_base") == "missing" and _log_count() == 0, "[나중에]: nothing started, 0 requests")
+	var n_later_after: int = await _settled_count()
+	ok(ModelStore.state("card_base") == "missing" and n_later == 0 and n_later_after == 0, "[나중에]: nothing started, 0 requests (%d -> %d)" % [n_later, n_later_after])
 	# [받기] -> progress
 	await _press(_card.get_btn, "ModelGetBtn")
 	s = _top_sheet()
@@ -390,21 +455,24 @@ func _flow_main() -> void:
 	await _press(_card.cancel_btn, "ModelCancelBtn")
 	var stopped: bool = await _until(func() -> bool: return ModelStore.state("card_base") == "partial")
 	ok(stopped, "[취소]: state partial")
-	await _frames(3)
+	await _until(func() -> bool: return _card.status_label.text.begins_with("받다가 멈췄어요.") and _shown(_card.resume_btn), 10.0) # the card has handled the signals
 	ok(_card.status_label.text.begins_with("받다가 멈췄어요."), "[취소]: the status line says it stopped")
 	ok(_shown(_card.resume_btn) and _shown(_card.delete_btn) and not _shown(_card.get_btn) and not _shown(_card.cancel_btn), "[취소]: [이어받기] and [모델 지우기] show")
 	ok(_card.note_label.text == "", "[취소]: no error note for a cancel")
 	await _layout_ok("partial")
 	# [이어받기] -> ready
-	var before: int = _log_count()
+	var before: int = await _settled_count() # the cancelled request's line must be in before the resume starts
 	await _press(_card.resume_btn, "ModelResumeBtn")
 	s = _top_sheet()
 	ok(_sheet_text(s) == WIFI_FMT % "약 3 MB", "resume: the same Wi-Fi question")
 	await _press(s.buttons["ok"], "받기")
 	var done: bool = await _until(func() -> bool: return ModelStore.state("card_base") == "ready", 30.0)
 	ok(done, "resume: state ready")
-	await _frames(3)
-	ok(_log_count() > before, "resume: a second request was made")
+	# the card must have received the finished signal and redrawn before its screen is judged
+	var shown: bool = await _until(func() -> bool: return _fin_ok("card_base") and _card_ready_ui(), 10.0)
+	ok(shown, "resume: the card got the finished signal and shows the ready state")
+	var after_resume: int = await _settled_count() # the server's line for this connection is written when it ends
+	ok(after_resume > before, "resume: a second request was made (%d -> %d)" % [before, after_resume])
 	ok(FileAccess.get_sha256(_g(ModelStore.base_dir).path_join("card_base.bin")) == _sha, "resume: the file matches the sha256")
 	ok(_card.status_label.text.begins_with("준비됐어요") and _card.status_label.text.contains("약 3 MB"), "ready: the status line says 준비됐어요")
 	ok(_shown(_card.delete_btn) and not _shown(_card.get_btn) and not _shown(_card.resume_btn) and not _shown(_card.cancel_btn) and not _card.bar.visible, "ready: only [모델 지우기] shows, no bar")
@@ -445,14 +513,15 @@ func _flow_space() -> void:
 	await _frames(3)
 	# not enough space
 	ModelStore.free_space_hook = func() -> int: return 10 * 1000000
-	await _frames(30) # the server writes its log line when a connection ends
-	var n0: int = _log_count()
+	var n0: int = await _settled_count() # the server writes its log line when a connection ends: wait until the cancelled ones are in
+	await _frames(3)
 	await _press(_card.get_btn, "ModelGetBtn")
 	s = _top_sheet()
 	await _press(s.buttons["ok"], "받기")
 	ok(ModelStore.state("card_base") == "missing", "no space: nothing started")
 	ok(_card.note_label.visible and _card.note_label.text.begins_with("저장 공간이 모자라요."), "no space: the note says so in Korean (%s)" % _card.note_label.text)
-	ok(_log_count() == n0, "no space: 0 new requests")
+	var n1: int = await _settled_count()
+	ok(n1 == n0, "no space: 0 new requests (%d -> %d)" % [n0, n1])
 	await _layout_ok("no_space")
 	ModelStore.free_space_hook = Callable()
 
@@ -469,7 +538,7 @@ func _flow_corrupt() -> void:
 	await _press(s.buttons["ok"], "받기")
 	var bad: bool = await _until(func() -> bool: return ModelStore.state("card_tiny") == "corrupt", 20.0)
 	ok(bad, "corrupt: a wrong sha256 ends as corrupt")
-	await _frames(4)
+	await _until(func() -> bool: return _card.note_label.visible and _shown(_card.delete_btn), 10.0) # the card has handled the signals
 	ok(_card.note_label.visible and _card.note_label.text == str(ModelStore.ERR_TEXT["model_corrupt"]), "corrupt: the note is the Korean model_corrupt sentence")
 	ok(_shown(_card.get_btn) and _card.get_btn.text == "다시 받기" and _shown(_card.delete_btn), "corrupt: [다시 받기] and [모델 지우기] show")
 	await _layout_ok("corrupt")
