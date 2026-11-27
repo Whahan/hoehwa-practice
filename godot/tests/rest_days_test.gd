@@ -2,7 +2,7 @@ extends Node
 ## 연속 기록 '쉬는 날'(v2.0.2): StreakCalc 규범 표·옛 알고리즘과 R=0 동등·저장/호환·화면·배지·잘못된 입력.
 ##   godot --headless --path <project> res://tests/rest_days_test.tscn [-- --phone]
 ## 종료 코드 0 = 전부 통과. 마지막 줄: "== rest_days result: N passed, 0 failed =="
-## 실제 user://studylog.json / progress.json / prefs.json 은 읽지도 쓰지도 않는다(user://t_rest_* 로 바꿨다가 되돌림).
+## 실제 user://studylog.json / progress.json / prefs.json 은 읽지도 쓰지도 않는다(user://test_rest_days_* 로 바꿨다가 되돌림 (CourseStore.path 포함)).
 
 const LOG_PATH := "user://test_rest_days_studylog.json"
 const PROG_PATH := "user://test_rest_days_progress.json"
