@@ -141,6 +141,16 @@ function Update-Tools {
 }
 
 # ---------------------------------------------------------------- 릴리스 정보
+# 앱 릴리스의 태그는 v2.0.1 처럼 v 와 숫자(ASCII 0-9) 점 숫자로 끝까지 맞아야 한다(v2.0.2-rc1 처럼 - 뒤 글자는 허용). 같은 저장소의 models-1,
+# v2docs, v١(아라비아 숫자) 같은 태그는 앱 업데이트가 아니다. 대문자 V 는 Parse-Ver 와 같이 받는다(소문자 접미사 구분은 -cmatch).
+function Test-AppTag([string]$tag) { return ("" + $tag) -cmatch '^[vV][0-9]+(\.[0-9]+){1,3}(-[0-9A-Za-z.]+)?\z' }
+function Test-TagVersion([string]$tag) { try { [void](Parse-Ver $tag); return $true } catch { return $false } }   # v2147483648 은 [version] 변환이 안 된다
+function Select-UpdateRelease([object[]]$list) {                                  # 비안정 채널: draft 아님 + 앱 태그 + 버전 변환 되는 첫 릴리스, 없으면 $null
+    foreach ($r in @($list)) {
+        if ($null -ne $r -and -not $r.draft -and (Test-AppTag $r.tag_name) -and (Test-TagVersion $r.tag_name)) { return $r }
+    }
+    return $null
+}
 function Get-LatestRelease([string]$repo, [string]$channel) {
     if ($Source) {
         Info "로컬 업데이트 원본을 사용합니다: $Source"
@@ -171,7 +181,8 @@ function Get-LatestRelease([string]$repo, [string]$channel) {
         throw ("GitHub 에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요. (" + $_.Exception.Message + ")")
     }
     $j = [System.Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) | ConvertFrom-Json
-    if ($channel -ne "stable") { $j = @($j | Where-Object { -not $_.draft }) | Select-Object -First 1 }
+    if ($channel -ne "stable") { $j = Select-UpdateRelease @($j) }
+    elseif (-not ((Test-AppTag $j.tag_name) -and (Test-TagVersion $j.tag_name))) { throw "GitHub 의 최신 릴리스가 앱 버전이 아니에요 ($($j.tag_name)). 잠시 뒤 다시 시도해 주세요. 설치된 프로그램은 그대로 쓸 수 있어요." }
     return $j
 }
 function Save-Asset($asset, [string]$dest) {
